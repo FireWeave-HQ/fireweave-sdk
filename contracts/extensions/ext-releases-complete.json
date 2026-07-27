@@ -10,16 +10,18 @@
       "releases": true
     },
     "releaseContext": {
-      "rolloutId": "rollout_01HZXREL0000000000000003",
-      "changeId": "chg_01HZXREL0000000000000003",
-      "stampId": "stmp_01HZXREL0000000000000003"
+      "rolloutId": "rollout_01HZXRE0000000000000000003",
+      "changeId": "chg_01HZXRE0000000000000000003",
+      "stampIds": [
+        "stmp_01HZXRE0000000000000000003"
+      ]
     },
     "releaseStatus": "in_progress"
   },
   "when": {
     "operation": "complete",
     "release": {
-      "rolloutId": "rollout_01HZXREL0000000000000003"
+      "rolloutId": "rollout_01HZXRE0000000000000000003"
     }
   },
   "expect": {

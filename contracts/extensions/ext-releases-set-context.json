@@ -13,17 +13,21 @@
   "when": {
     "operation": "setContext",
     "release": {
-      "rolloutId": "rollout_01HZXREL0000000000000001",
-      "changeId": "chg_01HZXREL0000000000000001",
-      "stampId": "stmp_01HZXREL0000000000000001"
+      "rolloutId": "rollout_01HZXRE0000000000000000001",
+      "changeId": "chg_01HZXRE0000000000000000001",
+      "stampIds": [
+        "stmp_01HZXRE0000000000000000001"
+      ]
     }
   },
   "expect": {
     "ok": true,
     "releaseContext": {
-      "rolloutId": "rollout_01HZXREL0000000000000001",
-      "changeId": "chg_01HZXREL0000000000000001",
-      "stampId": "stmp_01HZXREL0000000000000001"
+      "rolloutId": "rollout_01HZXRE0000000000000000001",
+      "changeId": "chg_01HZXRE0000000000000000001",
+      "stampIds": [
+        "stmp_01HZXRE0000000000000000001"
+      ]
     },
     "errorCode": null
   },

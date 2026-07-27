@@ -1,5 +1,5 @@
 {
-  "description": "Flag payload is exposed via flagMetadata / object evaluation path",
+  "description": "Flag payload is exposed via flagMetadata as a JSON-string serialization (deterministic sorted-key order); structured payloads are otherwise delivered as object-flag values",
   "tags": [
     "payload",
     "metadata"
@@ -47,10 +47,7 @@
     "errorMessage": null,
     "flagMetadata": {
       "fireweave.flagVersion": 3,
-      "fireweave.payload": {
-        "rolloutId": "rollout_01HZXRL00000000000000001",
-        "maxRetries": 2
-      }
+      "fireweave.payload": "{\"maxRetries\":2,\"rolloutId\":\"rollout_01HZXRL00000000000000001\"}"
     }
   },
   "schemaVersion": 1,

@@ -10,16 +10,18 @@
       "releases": true
     },
     "releaseContext": {
-      "rolloutId": "rollout_01HZXREL0000000000000004",
-      "changeId": "chg_01HZXREL0000000000000004",
-      "stampId": "stmp_01HZXREL0000000000000004"
+      "rolloutId": "rollout_01HZXRE0000000000000000004",
+      "changeId": "chg_01HZXRE0000000000000000004",
+      "stampIds": [
+        "stmp_01HZXRE0000000000000000004"
+      ]
     },
     "releaseStatus": "in_progress"
   },
   "when": {
     "operation": "fail",
     "release": {
-      "rolloutId": "rollout_01HZXREL0000000000000004",
+      "rolloutId": "rollout_01HZXRE0000000000000000004",
       "reason": "guardrail_breach"
     }
   },

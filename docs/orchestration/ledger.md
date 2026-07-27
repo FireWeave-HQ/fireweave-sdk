@@ -62,3 +62,6 @@ Phase 2 exit checklist: **8/8 PASS** (see reconciliation report). Phase 3 author
 7. **Release identifiers:** `spec/release-context.schema.json` is canonical — `stampIds` is an ARRAY of `stmp_<26-char Crockford ULID>`; `changeId` uses the 26-char pattern. The four `ext-releases-*` fixtures are regenerated with valid 26-char ULIDs and the array shape.
 8. **flagMetadata scalars:** OpenFeature's scalar-only flagMetadata contract is canonical (`decision.schema.json` unchanged). `eval-payload-attached` expects `fireweave.payload` as a JSON-*string* serialization of the payload; structured payloads are otherwise delivered as the object-flag value itself.
 9. **Typed ID naming:** accepted — extension/release shapes use the established `rolloutId`/`changeId`/`stampId` names (not generic releaseId/deploymentId).
+
+- **Phase 2** (complete, commit pending): D + E delivered; rulings 1–9 applied; exit checklist 8/8 PASS; spec/ ↔ contracts/ fully consistent and machine-validated.
+- **Phase 3** (in progress): Agents F (Node), G (Python), H (Go), I (Java) launched in parallel. Each owns only `sdks/<lang>/` + `examples/<lang>/` (F additionally implements `test-server/implementation/` per E's plan). Canonical schema/fixture changes remain orchestrator-gated.
