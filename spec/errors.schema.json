@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fireweave.ai/spec/0.1.0/errors.schema.json",
+  "title": "FireweaveErrors",
+  "description": "Fireweave error taxonomy and mapping to OpenFeature error codes. Used by adapters, providers, and Agent E fixtures.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["taxonomy", "openFeatureMapping"],
+  "properties": {
+    "taxonomy": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/errorDefinition" }
+    },
+    "openFeatureMapping": {
+      "type": "object",
+      "description": "Map Fireweave code → OpenFeature ErrorCode.",
+      "additionalProperties": {
+        "type": "string",
+        "enum": [
+          "PROVIDER_NOT_READY",
+          "PROVIDER_FATAL",
+          "FLAG_NOT_FOUND",
+          "PARSE_ERROR",
+          "TYPE_MISMATCH",
+          "TARGETING_KEY_MISSING",
+          "INVALID_CONTEXT",
+          "GENERAL"
+        ]
+      },
+      "properties": {
+        "NOT_READY": { "const": "PROVIDER_NOT_READY" },
+        "FATAL": { "const": "PROVIDER_FATAL" },
+        "FLAG_NOT_FOUND": { "const": "FLAG_NOT_FOUND" },
+        "PARSE_ERROR": { "const": "PARSE_ERROR" },
+        "TYPE_MISMATCH": { "const": "TYPE_MISMATCH" },
+        "TARGETING_KEY_MISSING": { "const": "TARGETING_KEY_MISSING" },
+        "INVALID_CONTEXT": { "const": "INVALID_CONTEXT" },
+        "QUOTA_LIMITED": { "const": "FLAG_NOT_FOUND" },
+        "TRANSPORT": { "const": "GENERAL" },
+        "TIMEOUT": { "const": "GENERAL" },
+        "SHUTDOWN": { "const": "PROVIDER_NOT_READY" },
+        "UNKNOWN": { "const": "GENERAL" }
+      },
+      "required": [
+        "NOT_READY",
+        "FATAL",
+        "FLAG_NOT_FOUND",
+        "PARSE_ERROR",
+        "TYPE_MISMATCH",
+        "TARGETING_KEY_MISSING",
+        "INVALID_CONTEXT",
+        "QUOTA_LIMITED",
+        "TRANSPORT",
+        "TIMEOUT",
+        "SHUTDOWN",
+        "UNKNOWN"
+      ]
+    }
+  },
+  "$defs": {
+    "errorCode": {
+      "type": "string",
+      "enum": [
+        "NOT_READY",
+        "FATAL",
+        "FLAG_NOT_FOUND",
+        "PARSE_ERROR",
+        "TYPE_MISMATCH",
+        "TARGETING_KEY_MISSING",
+        "INVALID_CONTEXT",
+        "QUOTA_LIMITED",
+        "TRANSPORT",
+        "TIMEOUT",
+        "SHUTDOWN",
+        "UNKNOWN"
+      ]
+    },
+    "errorInstance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "$ref": "#/$defs/errorCode" },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "Human-readable; MUST NOT contain raw API secrets (phc_/phs_/phx_)."
+        },
+        "retryable": { "type": "boolean" },
+        "cause": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "Optional sanitized cause class/name; no stack traces in wire fixtures."
+        }
+      }
+    },
+    "errorDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "description", "openFeature", "evaluationBehavior"],
+      "properties": {
+        "code": { "$ref": "#/$defs/errorCode" },
+        "description": { "type": "string" },
+        "openFeature": {
+          "type": "string",
+          "enum": [
+            "PROVIDER_NOT_READY",
+            "PROVIDER_FATAL",
+            "FLAG_NOT_FOUND",
+            "PARSE_ERROR",
+            "TYPE_MISMATCH",
+            "TARGETING_KEY_MISSING",
+            "INVALID_CONTEXT",
+            "GENERAL"
+          ]
+        },
+        "evaluationBehavior": {
+          "type": "string",
+          "enum": ["return_default", "fail_init", "fail_extension"],
+          "description": "OF evaluation paths always return_default; fail_init applies to initialize; fail_extension to FireweaveClient APIs."
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "taxonomy": [
+        {
+          "code": "TARGETING_KEY_MISSING",
+          "description": "No targetingKey / distinct_id supplied; SDK does not invent one.",
+          "openFeature": "TARGETING_KEY_MISSING",
+          "evaluationBehavior": "return_default"
+        },
+        {
+          "code": "QUOTA_LIMITED",
+          "description": "Backend reported quotaLimited for feature flags; serve default as FLAG_NOT_FOUND.",
+          "openFeature": "FLAG_NOT_FOUND",
+          "evaluationBehavior": "return_default"
+        },
+        {
+          "code": "TRANSPORT",
+          "description": "Network/HTTP failure talking to backend.",
+          "openFeature": "GENERAL",
+          "evaluationBehavior": "return_default"
+        }
+      ],
+      "openFeatureMapping": {
+        "NOT_READY": "PROVIDER_NOT_READY",
+        "FATAL": "PROVIDER_FATAL",
+        "FLAG_NOT_FOUND": "FLAG_NOT_FOUND",
+        "PARSE_ERROR": "PARSE_ERROR",
+        "TYPE_MISMATCH": "TYPE_MISMATCH",
+        "TARGETING_KEY_MISSING": "TARGETING_KEY_MISSING",
+        "INVALID_CONTEXT": "INVALID_CONTEXT",
+        "QUOTA_LIMITED": "FLAG_NOT_FOUND",
+        "TRANSPORT": "GENERAL",
+        "TIMEOUT": "GENERAL",
+        "SHUTDOWN": "PROVIDER_NOT_READY",
+        "UNKNOWN": "GENERAL"
+      }
+    }
+  ]
+}

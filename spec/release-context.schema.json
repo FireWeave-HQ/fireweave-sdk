@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fireweave.ai/spec/0.1.0/release-context.schema.json",
+  "title": "FireweaveReleaseContext",
+  "description": "Release / rollout context for attest beacon and extension APIs. Wire-compatible in spirit with deploy-sdk / contracts; re-specified here (never copied from proprietary sources).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["stampIds"],
+  "properties": {
+    "stampIds": {
+      "type": "array",
+      "description": "Deploy stamp identifiers (typed ULIDs).",
+      "items": {
+        "type": "string",
+        "pattern": "^stmp_[0-9A-HJKMNP-TV-Z]{26}$"
+      },
+      "minItems": 1,
+      "maxItems": 64,
+      "uniqueItems": true
+    },
+    "surfaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["surfaceId"],
+        "properties": {
+          "surfaceId": {
+            "type": "string",
+            "pattern": "^sfc_[0-9A-HJKMNP-TV-Z]{26}$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "ts-server",
+              "node-server",
+              "python",
+              "go",
+              "java",
+              "web",
+              "other"
+            ]
+          }
+        }
+      },
+      "maxItems": 64
+    },
+    "rolloutId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "changeId": {
+      "type": "string",
+      "pattern": "^chg_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "projectApiKeyEnv": {
+      "type": "string",
+      "const": "FW_PROJECT_API_KEY",
+      "description": "Documentary: attest auth env var name."
+    },
+    "attestUrlEnv": {
+      "type": "string",
+      "const": "FW_ATTEST_URL",
+      "description": "Documentary: attest endpoint env var name."
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string", "maxLength": 1024 },
+          { "type": "number" },
+          { "type": "boolean" }
+        ]
+      },
+      "maxProperties": 32
+    }
+  }
+}

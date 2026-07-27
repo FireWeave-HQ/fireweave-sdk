@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fireweave.ai/spec/0.1.0/decision.schema.json",
+  "title": "FireweaveDecision",
+  "description": "Canonical flag evaluation decision produced by BackendAdapter / FireweaveRuntime. Mapped to OpenFeature ResolutionDetails at the provider boundary. No PostHog types.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["flagKey", "value", "reason"],
+  "properties": {
+    "flagKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "value": {
+      "description": "Resolved value. On error paths this MUST be the caller-supplied default.",
+      "$ref": "#/$defs/jsonValue"
+    },
+    "variant": {
+      "type": ["string", "null"],
+      "maxLength": 256,
+      "description": "Multivariate variant key when applicable."
+    },
+    "reason": {
+      "type": "string",
+      "description": "OpenFeature reason (open string). Prefer standard reasons.",
+      "examples": [
+        "STATIC",
+        "DEFAULT",
+        "TARGETING_MATCH",
+        "SPLIT",
+        "CACHED",
+        "DISABLED",
+        "UNKNOWN",
+        "STALE",
+        "ERROR"
+      ]
+    },
+    "error": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "https://fireweave.ai/spec/0.1.0/errors.schema.json#/$defs/errorInstance" }
+      ]
+    },
+    "flagMetadata": {
+      "type": "object",
+      "description": "OF flagMetadata: string keys → bool | string | number. Fireweave enrichment uses fireweave.* keys.",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "boolean" },
+          { "type": "string", "maxLength": 2048 },
+          { "type": "number" }
+        ]
+      },
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "maxProperties": 32
+    },
+    "payload": {
+      "description": "JSON payload associated with the flag variant, if any.",
+      "$ref": "#/$defs/jsonValue"
+    },
+    "exposure": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "emitted": {
+          "type": "boolean",
+          "description": "Whether an exposure side effect was emitted for this evaluation."
+        },
+        "suppressed": {
+          "type": "boolean",
+          "description": "True when caller requested sendExposure=false or payload-only path."
+        }
+      }
+    },
+    "evaluatedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "jsonValue": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "string", "maxLength": 16384 },
+        {
+          "type": "number",
+          "description": "Cross-language int flags are reliable within ±(2^53−1)."
+        },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/jsonValue" },
+          "maxItems": 128
+        },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" },
+          "maxProperties": 128
+        }
+      ]
+    },
+    "standardMetadataKeys": {
+      "description": "Recommended fireweave.* metadata keys.",
+      "type": "object",
+      "properties": {
+        "fireweave.requestId": { "type": "string" },
+        "fireweave.quotaLimited": { "type": "boolean" },
+        "fireweave.backend": {
+          "type": "string",
+          "enum": ["posthog", "inmemory", "other"]
+        },
+        "fireweave.reasonCode": { "type": "string" },
+        "fireweave.flagVersion": { "type": "number" }
+      }
+    }
+  }
+}

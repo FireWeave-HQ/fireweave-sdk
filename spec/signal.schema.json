@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fireweave.ai/spec/0.1.0/signal.schema.json",
+  "title": "FireweaveSignal",
+  "description": "Canonical signal / metric observation envelope for release-safety extensions. Distinct from PostHog capture; adapters may bridge to capture when configured.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "timestamp"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Signal / metric name. Empty names MUST be rejected before any backend track/capture (Java OF throws on empty track names)."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "targetingKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Optional identity for the signal. Not auto-generated."
+    },
+    "role": {
+      "type": "string",
+      "enum": ["adoption", "guard", "quality", "custom"],
+      "default": "custom"
+    },
+    "direction": {
+      "type": "string",
+      "enum": ["up-good", "up-bad", "neutral"]
+    },
+    "value": {
+      "oneOf": [
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "string", "maxLength": 2048 }
+      ]
+    },
+    "properties": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "null" },
+          { "type": "boolean" },
+          { "type": "string", "maxLength": 2048 },
+          { "type": "number" }
+        ]
+      },
+      "maxProperties": 64,
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "rolloutId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "flagKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    }
+  }
+}

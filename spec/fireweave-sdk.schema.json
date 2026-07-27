@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fireweave.ai/spec/0.1.0/fireweave-sdk.schema.json",
+  "title": "FireweaveSdkSpec",
+  "description": "Root meta-schema for Fireweave SDK canonical models (spec v0.1.0). Implementations and Agent E fixtures MUST conform to referenced component schemas.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "components"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "0.1.0"
+    },
+    "openFeatureSpecFloor": {
+      "type": "string",
+      "const": "0.8.0"
+    },
+    "architecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "option": {
+          "type": "string",
+          "const": "openfeature-provider-plus-client-shared-runtime",
+          "description": "ADR-0001 Option 2."
+        },
+        "serverOnly": { "type": "boolean", "const": true },
+        "backendsPhaseOne": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["posthog", "inmemory"]
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true
+        },
+        "noPostHogTypesInPublicApi": { "type": "boolean", "const": true },
+        "noCustomFlagEvaluator": { "type": "boolean", "const": true },
+        "noAnonymousIdPerEvaluation": { "type": "boolean", "const": true }
+      }
+    },
+    "components": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evaluationContext",
+        "decision",
+        "releaseContext",
+        "signal",
+        "capabilities",
+        "errors"
+      ],
+      "properties": {
+        "evaluationContext": {
+          "$ref": "https://fireweave.ai/spec/0.1.0/evaluation-context.schema.json"
+        },
+        "decision": {
+          "$ref": "https://fireweave.ai/spec/0.1.0/decision.schema.json"
+        },
+        "releaseContext": {
+          "$ref": "https://fireweave.ai/spec/0.1.0/release-context.schema.json"
+        },
+        "signal": {
+          "$ref": "https://fireweave.ai/spec/0.1.0/signal.schema.json"
+        },
+        "capabilities": {
+          "$ref": "https://fireweave.ai/spec/0.1.0/capabilities.schema.json"
+        },
+        "errors": {
+          "$ref": "https://fireweave.ai/spec/0.1.0/errors.schema.json"
+        }
+      }
+    },
+    "packageNames": {
+      "type": "object",
+      "description": "Working package names — company ratification open.",
+      "additionalProperties": false,
+      "properties": {
+        "npm": { "type": "string", "const": "@fireweaveai/sdk" },
+        "pypi": { "type": "string", "const": "fireweave" },
+        "pypiExtraPosthog": { "type": "string", "const": "fireweave[posthog]" },
+        "goModule": {
+          "type": "string",
+          "const": "github.com/FireWeave-HQ/fireweave-sdk/sdks/go"
+        },
+        "mavenGroupId": { "type": "string", "const": "ai.fireweave" },
+        "mavenArtifactId": { "type": "string", "const": "sdk" },
+        "licenseAssumed": { "type": "string", "const": "MIT" }
+      }
+    }
+  }
+}

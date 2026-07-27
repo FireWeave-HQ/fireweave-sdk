@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fireweave.ai/spec/0.1.0/capabilities.schema.json",
+  "title": "FireweaveCapabilities",
+  "description": "Static (package compile-time) and runtime (adapter/config) capability matrix. Returned by FireweaveClient.capabilities().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["static", "runtime"],
+  "properties": {
+    "static": {
+      "type": "object",
+      "description": "Capabilities always true for this package build / language binding.",
+      "additionalProperties": false,
+      "required": ["language", "openFeature", "features"],
+      "properties": {
+        "language": {
+          "type": "string",
+          "enum": ["node", "python", "go", "java"]
+        },
+        "sdkVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "specVersion": {
+          "type": "string",
+          "const": "0.1.0"
+        },
+        "openFeature": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["specFloor", "providerName"],
+          "properties": {
+            "specFloor": { "type": "string", "const": "0.8.0" },
+            "providerName": { "type": "string", "const": "fireweave" },
+            "serverOnly": { "type": "boolean", "const": true }
+          }
+        },
+        "features": {
+          "type": "object",
+          "additionalProperties": { "type": "boolean" },
+          "properties": {
+            "flags": { "type": "boolean", "const": true },
+            "releases": { "type": "boolean" },
+            "exposures": { "type": "boolean" },
+            "signals": { "type": "boolean" },
+            "guardrails": { "type": "boolean" },
+            "telemetryOptIn": { "type": "boolean" },
+            "inMemoryAdapter": { "type": "boolean", "const": true },
+            "posthogAdapter": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "description": "Capabilities that depend on adapter selection and configuration at runtime.",
+      "additionalProperties": false,
+      "required": ["backend", "lifecycle"],
+      "properties": {
+        "backend": {
+          "type": "string",
+          "enum": ["posthog", "inmemory", "none", "other"]
+        },
+        "lifecycle": {
+          "type": "string",
+          "enum": [
+            "UNINITIALIZED",
+            "INITIALIZING",
+            "READY",
+            "STALE",
+            "ERROR",
+            "FATAL",
+            "SHUTDOWN"
+          ]
+        },
+        "features": {
+          "type": "object",
+          "additionalProperties": { "type": "boolean" },
+          "properties": {
+            "remoteEvaluation": {
+              "type": "boolean",
+              "description": "True when phc_ configured and backend can call /flags."
+            },
+            "localEvaluation": {
+              "type": "boolean",
+              "description": "True when secret key present and local mode enabled."
+            },
+            "localOnly": { "type": "boolean" },
+            "exposureEmission": { "type": "boolean" },
+            "sideEffectFreeReads": { "type": "boolean" },
+            "groupAnalytics": { "type": "boolean" },
+            "evaluationContextTags": { "type": "boolean" },
+            "staleRemoteCache": {
+              "type": "boolean",
+              "description": "True on Java PostHog adapter (per-user remote cache)."
+            },
+            "distributedDefinitionCache": { "type": "boolean" },
+            "attest": { "type": "boolean" }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "intSafeMaxAbs": {
+              "type": "integer",
+              "const": 9007199254740991,
+              "description": "2^53−1 cross-language safe integer bound."
+            },
+            "shutdownTimeoutMsDefault": {
+              "type": "integer",
+              "const": 10000
+            }
+          }
+        }
+      }
+    }
+  }
+}
