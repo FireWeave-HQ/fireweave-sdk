@@ -1,0 +1,9 @@
+# Known pyflakes-level (ruff --select F) findings in sdks/python, recorded by
+# Agent K (CI). These are pre-existing hygiene defects reported to the
+# orchestrator for Agent G; CI fails only on NEW findings not listed here.
+# Format: normalized ruff concise output with line:col stripped
+# (see tools/lint/check-python.sh). Remove entries as Agent G fixes them.
+sdks/python/conformance/runner.py: F841 Local variable `limits` is assigned to but never used
+sdks/python/src/fireweave/runtime.py: F401 [*] `.errors.ErrorKind` imported but unused
+sdks/python/tests/test_posthog_adapter.py: F401 [*] `fireweave.adapters.posthog.SnapshotData` imported but unused
+sdks/python/tests/test_posthog_adapter.py: F401 [*] `fireweave.adapters.posthog.VendorFlagRecord` imported but unused

@@ -1,0 +1,81 @@
+name: Bug report
+description: Something behaves incorrectly in one of the Fireweave SDKs
+title: "[bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Before filing, check [docs/troubleshooting.md](../../docs/troubleshooting.md) —
+        many "always get the default" cases are explained by the `errorCode` / `fireweave.errorKind` on the evaluation details.
+
+        **Security vulnerabilities: do NOT file an issue** — see [SECURITY.md](../../SECURITY.md).
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language SDK
+      multiple: true
+      options:
+        - Node
+        - Python
+        - Go
+        - Java
+        - spec / contracts / test-server
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: SDK version / commit
+      description: Packages are unpublished, so a git commit SHA is best.
+      placeholder: "0.1.0 @ 3c4e004"
+    validations:
+      required: true
+  - type: dropdown
+    id: adapter
+    attributes:
+      label: Adapter and mode
+      options:
+        - InMemoryAdapter
+        - PostHog — remote evaluation (phc_ key)
+        - PostHog — local evaluation (phs_/phx_ key)
+        - PostHog — local-only mode
+        - test-server stub
+        - Other / not adapter-related
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime versions
+      placeholder: "Node 20.20 / Python 3.12 / Go 1.25 / Temurin 21; OpenFeature SDK version"
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+      description: |
+        Include the full evaluation details if relevant — value, `reason`, `errorCode`,
+        `errorMessage`, `flagMetadata` (especially `fireweave.errorKind`) — and the
+        runtime lifecycle state. **Redact any real API keys.**
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: |
+        Ideally a snippet against the `InMemoryAdapter` or the `test-server/` stub, so no
+        PostHog account is needed to reproduce (see docs/testing.md). Failing test cases
+        get fixed fastest.
+      render: shell
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for duplicates.
+          required: true
+        - label: This report contains no real API keys or other secrets.
+          required: true

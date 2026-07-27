@@ -1,0 +1,147 @@
+# Fireweave polyglot SDK — security & supply-chain checks.
+#
+#   - secret scanning        : gitleaks CLI (pinned release binary; the
+#                              gitleaks-action requires an org license key,
+#                              the CLI does not)
+#   - dependency review      : PRs only — diff-based vuln + license gate
+#   - vulnerability scanning : osv-scanner over all four ecosystems
+#   - license checks         : per-ecosystem allowlist (OSI-compatible,
+#                              permissive); copyleft fails the job so it is
+#                              explicitly flagged for human review
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: '17 6 * * 1' # weekly re-scan so new advisories surface without a push
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # SPDX allowlist: permissive OSI licenses. Copyleft (GPL/LGPL/AGPL/MPL/EPL)
+  # is intentionally ABSENT so it fails loudly and gets human review.
+  FW_LICENSE_ALLOWLIST: 'MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;BlueOak-1.0.0;CC0-1.0;Unlicense;Python-2.0;PSF-2.0;Zlib'
+
+jobs:
+  gitleaks:
+    name: secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # scan full history, not just the tip
+      - name: Install gitleaks (pinned)
+        run: |
+          curl -fsSL -o /tmp/gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo install /tmp/gitleaks /usr/local/bin/gitleaks
+      - name: Scan repository history
+        run: gitleaks git --redact --no-banner --verbose .
+
+  dependency-review:
+    name: dependency review (PR diff)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: low
+          # Copyleft licenses fail the check -> flagged for human review.
+          deny-licenses: >-
+            GPL-2.0-only, GPL-2.0-or-later, GPL-3.0-only, GPL-3.0-or-later,
+            AGPL-3.0-only, AGPL-3.0-or-later, LGPL-2.1-only, LGPL-2.1-or-later,
+            LGPL-3.0-only, LGPL-3.0-or-later, MPL-2.0, EPL-1.0, EPL-2.0,
+            EUPL-1.2, SSPL-1.0, BUSL-1.1
+          comment-summary-in-pr: on-failure
+
+  osv-scan:
+    name: vulnerability scan (osv-scanner)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - name: Install osv-scanner (pinned)
+        run: |
+          curl -fsSL -o /tmp/osv-scanner \
+            https://github.com/google/osv-scanner/releases/download/v2.2.4/osv-scanner_linux_amd64
+          sudo install /tmp/osv-scanner /usr/local/bin/osv-scanner
+      - name: Export resolved python dependency set (pyproject has no lockfile)
+        run: |
+          python -m pip install --quiet -e './sdks/python[dev]'
+          python -m pip freeze --exclude-editable > /tmp/requirements-osv.txt
+          cat /tmp/requirements-osv.txt
+      - name: Scan all ecosystems
+        run: |
+          osv-scanner scan source \
+            --lockfile sdks/node/package-lock.json \
+            --lockfile examples/node/package-lock.json \
+            --lockfile sdks/go/go.mod \
+            --lockfile examples/go/go.mod \
+            --lockfile 'requirements.txt:/tmp/requirements-osv.txt' \
+            --lockfile sdks/java/pom.xml
+
+  licenses:
+    name: license allowlist (flag copyleft)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: sdks/node/package-lock.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: sdks/go/go.mod
+          cache-dependency-path: sdks/go/go.sum
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: node — license-checker (fails on anything off-allowlist)
+        working-directory: sdks/node
+        run: |
+          npm ci
+          npx --yes license-checker-rseidelsohn@4 --production --excludePrivatePackages \
+            --onlyAllow "$FW_LICENSE_ALLOWLIST"
+      - name: python — pip-licenses (fails on anything off-allowlist)
+        run: |
+          python -m pip install --quiet -e './sdks/python[posthog,openfeature]' pip-licenses
+          # pip-licenses uses classifier/metadata names, not SPDX ids.
+          pip-licenses --partial-match --allow-only \
+            'MIT;MIT License;Apache-2.0;Apache Software License;BSD;BSD License;ISC;ISC License;Python Software Foundation License;Zlib;Public Domain;The Unlicense;CC0'
+      - name: go — go-licenses (fails on anything off-allowlist)
+        working-directory: sdks/go
+        run: |
+          go install github.com/google/go-licenses@v1.6.0
+          "$(go env GOPATH)/bin/go-licenses" check ./... \
+            --allowed_licenses=MIT,Apache-2.0,BSD-2-Clause,BSD-3-Clause,ISC,0BSD,Unlicense,CC0-1.0
+      - name: java — license-maven-plugin third-party report (advisory listing)
+        working-directory: sdks/java
+        run: |
+          mvn -B -ntp -DskipTests install
+          mvn -B -ntp org.codehaus.mojo:license-maven-plugin:2.4.0:aggregate-add-third-party \
+            -Dlicense.excludedScopes=test \
+            -Dlicense.failOnMissing=true
+          echo '## Java third-party licenses' >> "$GITHUB_STEP_SUMMARY"
+          cat target/generated-sources/license/THIRD-PARTY.txt >> "$GITHUB_STEP_SUMMARY" || true
+          # Hard-fail on copyleft in the runtime dependency tree.
+          if grep -Ei 'GPL|EPL|MPL|EUPL' target/generated-sources/license/THIRD-PARTY.txt; then
+            echo 'Copyleft-licensed Java dependency detected — flagged for human review.' >&2
+            exit 1
+          fi

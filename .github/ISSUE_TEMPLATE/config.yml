@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/FireWeave-HQ/fireweave-sdk/blob/master/SECURITY.md
+    about: Please report vulnerabilities privately — never as a public issue.
+  - name: Usage question
+    url: https://github.com/FireWeave-HQ/fireweave-sdk/blob/master/SUPPORT.md
+    about: Check the docs and support guide first.

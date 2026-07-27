@@ -1,0 +1,316 @@
+# Fireweave polyglot SDK — main CI (GitHub-hosted runners).
+#
+# Lint/typecheck/test per language (min-supported + latest-stable matrix),
+# conformance runners, cross-language differential comparison (fails on
+# undeclared divergence), test-server integration smoke, offline examples,
+# docs link check, and package build DRY RUNS (artifacts only — publishing is
+# hard-disabled everywhere; see release.yml + RELEASE.md).
+#
+# Lint policy (matches the code as written — no invented configs):
+#   node   : tsc --noEmit only (no eslint/prettier config exists)
+#   python : ruff --select F (pyflakes-level; no ruff/black config exists),
+#            baseline-gated via tools/lint/check-python.sh
+#   go     : gofmt -l + go vet
+#   java   : none beyond javac (no checkstyle config exists)
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # ---------------------------------------------------------------- node
+  node:
+    name: node (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '24'] # minimum supported (engines >=20.20) + latest stable LTS
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: sdks/node/package-lock.json
+      - name: Install workspace dependencies
+        working-directory: sdks/node
+        run: npm ci
+      - name: Typecheck (tsc — lint-equivalent; no eslint/prettier configs in repo)
+        working-directory: sdks/node
+        run: npm run typecheck
+      - name: Unit + integration tests
+        working-directory: sdks/node
+        run: npm test
+      - name: Conformance runner (per-version sanity; differential job is the gate)
+        working-directory: sdks/node
+        run: npm run conformance
+
+  # ---------------------------------------------------------------- python
+  python:
+    name: python (${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.14'] # minimum supported + latest stable
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install SDK with dev extras + ruff
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e './sdks/python[dev]' ruff
+      - name: Pyflakes-level lint (ruff --select F, baseline-gated)
+        run: bash tools/lint/check-python.sh python
+      - name: Pytest
+        working-directory: sdks/python
+        run: python -m pytest
+      - name: Conformance runner
+        run: python sdks/python/conformance/run_conformance.py --contracts contracts --out /tmp/compatibility-report.python.json
+
+  # ---------------------------------------------------------------- go
+  go:
+    name: go (${{ matrix.go }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ['1.25.x', 'stable'] # go.mod minimum + latest stable
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go }}
+          cache-dependency-path: sdks/go/go.sum
+      - name: gofmt check
+        working-directory: sdks/go
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt: files need formatting:" >&2
+            echo "$unformatted" >&2
+            exit 1
+          fi
+      - name: go vet
+        working-directory: sdks/go
+        run: go vet ./...
+      - name: go build
+        working-directory: sdks/go
+        run: go build ./...
+      - name: go test -race
+        working-directory: sdks/go
+        run: go test -race ./...
+      - name: Conformance runner
+        working-directory: sdks/go
+        run: go run ./cmd/conformance -contracts ../../contracts -out /tmp/compatibility-report.go.json
+
+  # ---------------------------------------------------------------- java
+  java:
+    name: java (JDK ${{ matrix.java }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['11', '25'] # release target (compiler.release=11) + latest LTS
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+      - name: Build + unit tests + conformance JUnit gate
+        working-directory: sdks/java
+        run: mvn -B -ntp clean install
+
+  # -------------------------------------------- cross-language differential
+  differential:
+    name: cross-language differential (comparator)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: sdks/node/package-lock.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: sdks/go/go.mod
+          cache-dependency-path: sdks/go/go.sum
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Run all four conformance runners + comparator
+        run: bash scripts/conformance-all.sh
+      - name: Publish comparator summary
+        if: always()
+        run: |
+          if [ -f build/conformance/summary.md ]; then
+            cat build/conformance/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload compatibility report artifact
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: compatibility-report
+          path: build/conformance/
+          if-no-files-found: error
+
+  # ---------------------------------------------------------- integration
+  integration:
+    name: integration (test-server stub)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: sdks/node/package-lock.json
+      - name: Start test-server stub (zero-dep)
+        run: |
+          node test-server/implementation/server.mjs --port 3901 &
+          echo "TEST_SERVER_PID=$!" >> "$GITHUB_ENV"
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:3901/health >/dev/null 2>&1; then break; fi
+            sleep 0.5
+          done
+          curl -fsS http://127.0.0.1:3901/health
+      - name: Protocol smoke (flags endpoint answers)
+        run: |
+          code="$(curl -s -o /tmp/flags.json -w '%{http_code}' -X POST 'http://127.0.0.1:3901/flags?v=2' \
+            -H 'Content-Type: application/json' \
+            -d '{"api_key":"phc_test","distinct_id":"ci-smoke"}')"
+          echo "POST /flags -> HTTP $code"
+          cat /tmp/flags.json
+          test "$code" != "404"
+      - name: Node SDK integration tests (exercise the stub protocol via injected fetch)
+        working-directory: sdks/node
+        run: |
+          npm ci
+          npm run test:integration
+      - name: Stop test-server
+        if: always()
+        run: kill "$TEST_SERVER_PID" 2>/dev/null || true
+
+  # -------------------------------------------------------------- examples
+  examples:
+    name: examples (offline)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '20' # examples must work at the minimum supported version
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: examples/go/go.mod
+          cache-dependency-path: examples/go/go.sum
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+      - name: Build node SDK dist (examples/node consumes it via file:)
+        working-directory: sdks/node
+        run: |
+          npm ci
+          npm run build
+      - name: Run node example (offline)
+        working-directory: examples/node
+        run: |
+          npm install --no-audit --no-fund
+          npm start
+      - name: Run python example (offline)
+        run: |
+          python -m pip install -e './sdks/python[posthog,openfeature]'
+          cd examples/python
+          python service.py
+      - name: Run go example (offline)
+        working-directory: examples/go
+        run: go run .
+      - name: Install java SDK modules, run java example (offline)
+        run: |
+          mvn -B -ntp -f sdks/java/pom.xml -DskipTests install
+          mvn -B -ntp -f examples/java/pom.xml compile exec:java
+
+  # ---------------------------------------------------------- package dry runs
+  package-dry-run:
+    name: package build dry runs (never publish)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: sdks/node/package-lock.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: sdks/go/go.mod
+          cache-dependency-path: sdks/go/go.sum
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: npm pack / python -m build / go mod verify / mvn package
+        run: bash scripts/build-all.sh
+      - name: Upload package artifacts (dry run — NOT published)
+        uses: actions/upload-artifact@v5
+        with:
+          name: package-dry-run
+          path: build/packages/
+          if-no-files-found: error
+
+  # ------------------------------------------------------------- docs links
+  docs-links:
+    name: docs link check (internal links)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # --offline: verify every local file/anchor link in Markdown resolves.
+      # External URLs are deliberately not checked in CI (flaky/nondeterministic).
+      - uses: lycheeverse/lychee-action@v2
+        with:
+          args: --offline --include-fragments --no-progress --root-dir ${{ github.workspace }} './**/*.md'
+          fail: true
+
+  # ----------------------------------------------------------- workflow lint
+  actionlint:
+    name: actionlint (workflow self-check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run actionlint
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash)
+          ./actionlint -color

@@ -1,0 +1,55 @@
+name: Feature request
+description: Propose new functionality or an API change
+title: "[feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Note: this SDK keeps **behavioral parity across Node, Python, Go, and Java** — a feature
+        normally lands in all four languages (with contract fixtures) or not at all. Cross-cutting
+        design changes go through an ADR (see [GOVERNANCE.md](../../GOVERNANCE.md)).
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What can't you do today, or what is awkward? Concrete use case beats abstract capability.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: |
+        Sketch the API you'd want. Note where it belongs: OpenFeature surface (probably not — that's
+        spec-defined), FireweaveClient extension, adapter option, or spec/contract change.
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      multiple: true
+      options:
+        - All languages (cross-language behavior)
+        - Node only
+        - Python only
+        - Go only
+        - Java only
+        - spec / contracts
+        - test-server / tooling
+        - docs
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Including "do it in app code with the current API" — why isn't that enough?
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and docs (especially docs/extensions.md and docs/compatibility.md) for this capability.
+          required: true

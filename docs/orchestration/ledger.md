@@ -89,3 +89,11 @@ Security review: **0 release blockers, 2 HIGH, 5 MEDIUM, 6 LOW** (see docs/secur
 - Secure defaults: enforced shutdown deadline from config in Node/Python/Java; Node telemetry allowlist default-on; exposure-dedup clear-on-flush everywhere (adopt Python's lifecycle); explicit vendor retry/queue caps in Python.
 
 13. **`fireweave.*` carve-out enforcement (extends ruling 12):** ALL four languages must accept exactly `fireweave.groups` + `fireweave.groupProperties` and reject other `fireweave.*` keys. Python's unratified `fireweave.evaluationContexts` is REJECTED — remove it. A conformance fixture should pin this (contracts change via orchestrated review).
+
+## Agent K results (Phase 4)
+
+CI/packaging/release delivered and locally verified: test-all (Node 82, Python 196, Go -race, Java 71, 4 offline examples), conformance-all 63-fixture matrix with comparator (0 undeclared divergences), build-all dry-run artifacts + SHA256SUMS. Publishing HARD-DISABLED. Phase 5 fix queue additions:
+- Python: 4 pyflakes findings (baselined in tools/lint/python-baseline.txt — fix and remove baseline entries).
+- Python: remove committed src/fireweave.egg-info/ and gitignore it.
+- Go: delete committed binary examples/go/go and gitignore it.
+- Reconcile .github/ISSUE_TEMPLATE ownership: K created templates while L was also assigned them — merge at L completion.

@@ -1,0 +1,267 @@
+# Fireweave polyglot SDK — release automation (workflow_dispatch only).
+#
+# DRY-RUN BY DEFAULT. This workflow builds, changelogs, SBOMs, checksums and
+# (optionally) attests + tags one component. Every registry publishing step is
+# HARD-DISABLED with `if: false` and must not be enabled without explicit
+# written authorization from the Fireweave release owner AND the credential /
+# trusted-publisher provisioning documented in .github/RELEASE.md.
+#
+# Tag convention (org): <component>/v<semver>
+#   node   -> node/v0.1.0
+#   python -> python/v0.1.0
+#   java   -> java/v0.1.0
+#   go     -> sdks/go/v0.1.0   (Go REQUIRES the tag to equal the module
+#                               subdirectory path; see RELEASE.md)
+name: Release (dry-run by default)
+
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: 'SDK component to release'
+        required: true
+        type: choice
+        options: [node, python, go, java]
+      version:
+        description: 'Semver WITHOUT leading v (e.g. 0.1.0 or 0.2.0-rc.1)'
+        required: true
+        type: string
+      channel:
+        description: 'Distribution channel (staging = npm dist-tag next / TestPyPI / Maven staging)'
+        required: true
+        type: choice
+        options: [staging, production]
+        default: staging
+      dry_run:
+        description: 'Dry run (no tag push, no attestation). Publishing itself is hard-disabled regardless.'
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate:
+    name: validate inputs
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.compute.outputs.tag }}
+    steps:
+      - name: Validate semver + compute tag
+        id: compute
+        env:
+          COMPONENT: ${{ inputs.component }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+            echo "version '$VERSION' is not valid semver (no leading v)" >&2
+            exit 1
+          fi
+          case "$COMPONENT" in
+            go) tag="sdks/go/v${VERSION}" ;;
+            *)  tag="${COMPONENT}/v${VERSION}" ;;
+          esac
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Release tag: $tag (channel=${{ inputs.channel }}, dry_run=${{ inputs.dry_run }})"
+
+  build:
+    name: build, changelog, SBOM, checksums
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # tag push (gated on dry_run == false)
+      id-token: write      # build provenance attestation
+      attestations: write  # build provenance attestation
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # full history for changelog + tag ancestry
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: sdks/node/package-lock.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: sdks/go/go.mod
+          cache-dependency-path: sdks/go/go.sum
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build all package artifacts (dry-run packaging + SHA256SUMS)
+        run: bash scripts/build-all.sh
+
+      - name: Generate conventional-commits changelog
+        run: |
+          bash tools/release/changelog.sh "${{ inputs.component }}" "${{ inputs.version }}" \
+            build/packages/CHANGELOG-${{ inputs.component }}-v${{ inputs.version }}.md
+          cat "build/packages/CHANGELOG-${{ inputs.component }}-v${{ inputs.version }}.md" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate SBOM (syft via anchore/sbom-action)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: build/packages/sbom-${{ inputs.component }}-v${{ inputs.version }}.spdx.json
+          upload-artifact: false
+
+      - name: Refresh checksums (includes changelog + SBOM)
+        working-directory: build/packages
+        run: |
+          : > SHA256SUMS
+          for f in *; do
+            [ "$f" = "SHA256SUMS" ] && continue
+            sha256sum "$f" >> SHA256SUMS
+          done
+          cat SHA256SUMS
+
+      - name: Attest build provenance (skipped in dry runs)
+        # Requires repo setting "Allow GitHub Actions to create attestations"
+        # (see RELEASE.md provisioning). Dry runs skip so the workflow works
+        # before provisioning is complete.
+        if: ${{ inputs.dry_run == false }}
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: |
+            build/packages/*.tgz
+            build/packages/*.whl
+            build/packages/*.tar.gz
+            build/packages/*.jar
+
+      - name: Upload release candidate artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: release-${{ inputs.component }}-v${{ inputs.version }}-${{ inputs.channel }}
+          path: build/packages/
+          if-no-files-found: error
+
+      - name: Create + push tag (skipped in dry runs)
+        # NOTE ON SIGNED TAGS: GitHub-hosted runners have no org signing key.
+        # Org convention is a SIGNED annotated tag; until a signing identity is
+        # provisioned (RELEASE.md "Signed tags"), the release owner should
+        # re-create this tag locally with `git tag -s` or enable gitsign here.
+        if: ${{ inputs.dry_run == false }}
+        env:
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          git config user.name "fireweave-release-bot"
+          git config user.email "releases@fireweave.ai"
+          git tag -a "$TAG" -m "Release ${TAG} (channel: ${{ inputs.channel }})"
+          git push origin "refs/tags/${TAG}"
+
+  # =========================================================================
+  # PUBLISHING — HARD-DISABLED. Every job below carries `if: false`.
+  # DO NOT flip these to true without: (1) explicit written authorization from
+  # the Fireweave release owner, and (2) the registry provisioning in
+  # .github/RELEASE.md (npm trusted publisher, PyPI trusted publisher, Maven
+  # Central namespace + secrets). The steps are kept real so enabling them is
+  # a one-line, reviewed change — never an improvised script.
+  # =========================================================================
+
+  publish-npm:
+    name: publish npm (HARD-DISABLED)
+    needs: [validate, build]
+    if: ${{ false }} # HARD-DISABLED — requires explicit release-owner authorization + npm trusted publishing (RELEASE.md)
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # npm OIDC trusted publishing — no NPM_TOKEN secret needed once provisioned
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - name: Build and publish @fireweaveai/sdk
+        working-directory: sdks/node
+        run: |
+          npm ci
+          npm run build
+          cd packages/sdk
+          # staging channel -> dist-tag "next"; production -> "latest"
+          if [ "${{ inputs.channel }}" = "staging" ]; then DIST_TAG=next; else DIST_TAG=latest; fi
+          npm publish --provenance --access public --tag "$DIST_TAG"
+
+  publish-pypi:
+    name: publish PyPI (HARD-DISABLED)
+    needs: [validate, build]
+    if: ${{ false }} # HARD-DISABLED — requires explicit release-owner authorization + PyPI/TestPyPI trusted publisher (RELEASE.md)
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # PyPI OIDC trusted publishing
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - name: Build sdist + wheel
+        run: |
+          python -m pip install build
+          python -m build --outdir dist/ sdks/python
+      - name: Publish to TestPyPI (staging channel)
+        if: ${{ inputs.channel == 'staging' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/
+      - name: Publish to PyPI (production channel)
+        if: ${{ inputs.channel == 'production' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+  publish-maven:
+    name: publish Maven Central (HARD-DISABLED)
+    needs: [validate, build]
+    if: ${{ false }} # HARD-DISABLED — requires explicit release-owner authorization + Central namespace (ai.fireweave pending), GPG key + portal tokens (RELEASE.md)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          server-id: central
+          server-username: MAVEN_CENTRAL_USERNAME
+          server-password: MAVEN_CENTRAL_PASSWORD
+          gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+      - name: Deploy to Central portal (staging channel stops at validated staging repo)
+        working-directory: sdks/java
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: |
+          # staging: deploy without auto-release (stays in the portal staging
+          # area for manual validation); production: full release.
+          if [ "${{ inputs.channel }}" = "staging" ]; then AUTO=false; else AUTO=true; fi
+          mvn -B -ntp -DskipTests deploy -DautoReleaseAfterClose="$AUTO"
+
+  publish-go:
+    name: publish Go module (HARD-DISABLED)
+    needs: [validate, build]
+    if: ${{ false }} # HARD-DISABLED — Go "publishing" is just the pushed tag; this job only warms the module proxy after an authorized tag push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - name: Warm proxy.golang.org for the new version
+        env:
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          VERSION="${TAG#sdks/go/}"
+          GOPROXY=proxy.golang.org \
+            go list -m "github.com/FireWeave-HQ/fireweave-sdk/sdks/go@${VERSION}"

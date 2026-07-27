@@ -1,0 +1,42 @@
+name: Documentation issue
+description: Wrong, missing, or confusing documentation
+title: "[docs]: "
+labels: ["documentation", "needs-triage"]
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Which document?
+      description: Path and section, e.g. `docs/posthog.md` → "Per-language initialization".
+      placeholder: docs/quickstart.md
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Problem type
+      options:
+        - Incorrect — the docs don't match actual SDK behavior
+        - Missing — behavior/API exists but isn't documented
+        - Confusing / misleading
+        - Broken code snippet
+        - Broken link / formatting
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: What's wrong, and what should it say?
+      description: |
+        For "incorrect": show the doc's claim and the actual behavior (snippet + output).
+        Doc snippets are validated against the real SDKs, so a mismatch is a real bug either
+        in the docs or in the code — we want to know which.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I checked this against the latest commit on the default branch.
+          required: true
