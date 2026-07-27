@@ -15,8 +15,8 @@
 
 | Agent | Mission | Owned paths | Branch | Depends on | Required outputs | Status | Merge order |
 |---|---|---|---|---|---|---|---|
-| A — Repository archaeologist | Assess existing Fireweave repos; recommend SDK repo location/packaging | `docs/research/repository-assessment.md` | `research/repo-assessment` | — | Repo map, conventions, constraints, ownership boundaries, risks | pending | 1 (research, no code) |
-| B — OpenFeature standards researcher | Current OpenFeature spec + official SDKs for TS/Python/Go/Java | `docs/research/openfeature-compatibility.md` | `research/openfeature` | — | Feature matrix, provider contract, stable baseline, conformance strategy, version pins | pending | 1 |
+| A — Repository archaeologist | Assess existing Fireweave repos; recommend SDK repo location/packaging | `docs/research/repository-assessment.md` | `research/repo-assessment` | — | Repo map, conventions, constraints, ownership boundaries, risks | **complete** | 1 (research, no code) |
+| B — OpenFeature standards researcher | Current OpenFeature spec + official SDKs for TS/Python/Go/Java | `docs/research/openfeature-compatibility.md` | `research/openfeature` | — | Feature matrix, provider contract, stable baseline, conformance strategy, version pins | **complete** | 1 |
 | C — PostHog platform researcher | Official PostHog SDKs + OpenFeature providers for 4 languages | `docs/research/posthog-sdk-matrix.md` | `research/posthog` | — | Capability matrix, per-language wrap-vs-delegate recommendation, lifecycle/testing/security notes | pending | 1 |
 | D — Architecture & API lead | ADRs, architecture, public API, spec schemas | `docs/architecture.md`, `docs/adr/`, `spec/` | `design/architecture` | A, B, C | ADRs 0001–0004, `spec/*.schema.json` | pending | 2 |
 | E — Contract & conformance lead | Fixtures, error taxonomy, conformance harness | `contracts/`, `test-server/` | `design/contracts` | A, B, C (parallel w/ D) | Canonical fixtures, error taxonomy, harness spec | pending | 3 |
