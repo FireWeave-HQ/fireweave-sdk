@@ -30,7 +30,7 @@ Sources: `docs/research/repository-assessment.md`, `docs/research/openfeature-co
 | Node | `@openfeature/server-sdk` **1.22.0** (peer `@openfeature/core` ^1.11) | `posthog-node` **5.46.1** (note rxjs peer dep) |
 | Python | `openfeature-sdk` **0.10.0**, pin `<0.11` (pre-1.0) | `posthog` **7.31.0** |
 | Go | `github.com/open-feature/go-sdk` **v1.17.2** | `posthog-go` **v1.22.0** |
-| Java | `dev.openfeature:sdk` **1.21.0** | `com.posthog:posthog-server` **2.9.0** (NEW SDK; replaces posthog-java 1.x which lacks local eval) |
+| Java | `dev.openfeature:sdk` **1.15.1** (CORRECTED — ruling 10; 1.21.0 does not exist) | **none published** (CORRECTED — ruling 10: `com.posthog:posthog-server` unpublished; adapter ships behind a client seam) |
 
 Spec compliance floor: OpenFeature spec **v0.8.0**. All PostHog SDKs MIT. Exact pins recommended because PostHog is mid-migration from per-flag calls to the `evaluateFlags()` snapshot API.
 

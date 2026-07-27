@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>ai.fireweave.examples</groupId>
+  <artifactId>fireweave-java-example</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+
+  <name>Fireweave Java example</name>
+  <description>
+    Minimal runnable example: OpenFeature provider registration backed by Fireweave, boolean
+    evaluation, detailed resolution, targeting context, releases/signals extensions, in-memory
+    testing, clean shutdown. OFFLINE BY DEFAULT — the PostHog wiring uses an injected offline
+    stub client (com.posthog:posthog-server:2.9.0 is not yet on Maven Central; see
+    sdks/java/README.md).
+
+    Prerequisite: run `mvn -q install` in sdks/java first (installs the 0.1.0-SNAPSHOT modules
+    to the local repository).
+
+    Run: mvn -q compile exec:java
+  </description>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>11</maven.compiler.release>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>ai.fireweave</groupId>
+      <artifactId>fireweave-sdk</artifactId>
+      <version>0.1.0-SNAPSHOT</version>
+    </dependency>
+    <dependency>
+      <groupId>ai.fireweave</groupId>
+      <artifactId>fireweave-openfeature</artifactId>
+      <version>0.1.0-SNAPSHOT</version>
+    </dependency>
+    <dependency>
+      <groupId>ai.fireweave</groupId>
+      <artifactId>fireweave-adapter-posthog</artifactId>
+      <version>0.1.0-SNAPSHOT</version>
+    </dependency>
+    <dependency>
+      <groupId>ai.fireweave</groupId>
+      <artifactId>fireweave-testing</artifactId>
+      <version>0.1.0-SNAPSHOT</version>
+    </dependency>
+    <dependency>
+      <groupId>dev.openfeature</groupId>
+      <artifactId>sdk</artifactId>
+      <version>1.15.1</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.2.0</version>
+        <configuration>
+          <mainClass>ai.fireweave.examples.ExampleApp</mainClass>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

@@ -1,0 +1,63 @@
+package ai.fireweave.sdk;
+
+import java.util.Collections;
+import java.util.Map;
+
+/**
+ * Vendor seam. Implementations: {@code InMemoryAdapter} (fireweave-testing, deterministic
+ * fixtures) and {@code PostHogAdapter} (fireweave-adapter-posthog).
+ *
+ * <p><b>Thread-safety:</b> implementations MUST be safe for concurrent {@link #evaluate} calls
+ * after {@link #initialize} returns. {@link #initialize} and {@link #shutdown} are invoked at most
+ * once each by {@link FireweaveRuntime}, never concurrently with each other.
+ *
+ * <p>No adapter (vendor) types may leak through this interface — enforced by a reflective
+ * signature scan test in fireweave-sdk.
+ */
+public interface BackendAdapter extends AutoCloseable {
+
+    /** Canonical backend name: "inmemory" | "posthog" | "other". */
+    String name();
+
+    /**
+     * Connect / load definitions. Throws {@link FireweaveException} with kind
+     * {@code Configuration} (fatal) or a transient kind (Network, Timeout, ...) on failure.
+     */
+    void initialize(FireweaveConfig config) throws FireweaveException;
+
+    /**
+     * Resolve a flag. Returns a successful (or STALE) {@link Decision}, or throws
+     * {@link FireweaveException} (FlagNotFound, TypeMismatch, transport kinds, ...). The runtime —
+     * never the adapter — converts exceptions into default-valued error decisions.
+     */
+    Decision evaluate(EvaluationRequest request) throws FireweaveException;
+
+    /** Deliver a flushed exposure event. Default: drop (adapters without capture). */
+    default void deliverExposure(Exposure exposure) throws FireweaveException {
+    }
+
+    /** Deliver a recorded signal. Default: drop. */
+    default void deliverSignal(Signal signal) throws FireweaveException {
+    }
+
+    /** Adapter-specific runtime capability flags (merged into {@link Capabilities}). */
+    default Map<String, Boolean> runtimeFeatures() {
+        return Collections.emptyMap();
+    }
+
+    /**
+     * True when the adapter is serving from a stale snapshot/cache (e.g. PostHog per-user remote
+     * cache past its freshness window, or last-good local definitions after a failed poll).
+     */
+    default boolean isStale() {
+        return false;
+    }
+
+    /** Idempotent release of resources. Never throws. */
+    void shutdown();
+
+    @Override
+    default void close() {
+        shutdown();
+    }
+}

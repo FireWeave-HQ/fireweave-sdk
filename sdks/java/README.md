@@ -1,0 +1,94 @@
+# Fireweave Java SDK
+
+Java implementation of the Fireweave polyglot SDK (OpenFeature-compatible, server-first,
+PostHog-backed per ADR-0002). Java 11+ source/target, Maven multi-module.
+
+## Modules
+
+| Module | Contents |
+| --- | --- |
+| `fireweave-sdk` | Vendor-neutral core: `FireweaveRuntime` (lifecycle state machine), `FireweaveClient` (+ releases / exposures / signals / guardrails / capabilities facades), canonical types (`EvaluationContext`, `Decision`, `JsonValue`, `ErrorKind`/`FireweaveException`), `BackendAdapter` seam, context validation, secret redaction. Zero runtime dependencies. |
+| `fireweave-openfeature` | `FireweaveProvider` implementing `dev.openfeature.sdk.FeatureProvider`: all five resolvers, initialize/shutdown, error-code mapping, `targetingKey` → `distinct_id`. |
+| `fireweave-adapter-posthog` | `PostHogAdapter` (ADR-0002 semantics) over the internal `PostHogClientApi` seam. **Real vendor binding blocked** — see deviations. |
+| `fireweave-testing` | `InMemoryAdapter` (deterministic fixture resolution + in-process fault simulation) and the conformance runner. |
+
+## Build / test / conformance
+
+```bash
+cd sdks/java
+mvn install                      # build + all unit tests + JUnit conformance run
+mvn -pl fireweave-testing exec:java   # standalone conformance runner
+#   writes target/compatibility-report.java.json (relative to CWD; pass args to override:
+#   -Dexec.args="<contracts-dir> <output-file>")
+cd ../../examples/java && mvn -q compile exec:java   # runnable example (offline)
+```
+
+## Thread-safety guarantees
+
+- **`FireweaveRuntime`** — fully thread-safe. Lifecycle transitions (`initialize`, `shutdown`)
+  are serialized on an internal lock; `evaluate` reads the volatile state without locking, so
+  concurrent evaluations never contend. An evaluation racing a shutdown either completes
+  normally or returns an `AlreadyClosed` default decision — it never throws.
+- **`FireweaveClient`** — fully thread-safe. Exposure queue mutations synchronize on the queue;
+  release status uses `ConcurrentHashMap`; extension facades return `ExtensionResult` and never
+  throw on the normal path.
+- **`FireweaveProvider`** — stateless facade over the runtime; safe for concurrent resolution.
+- **Configuration and contexts** (`FireweaveConfig`, `EvaluationContext`, `ContextLimits`,
+  `ReleaseContext`, `Signal`, `Decision`, `JsonValue`) are deeply immutable.
+- **Adapters** must be safe for concurrent `evaluate` after `initialize` returns (documented on
+  `BackendAdapter`); `InMemoryAdapter` and `PostHogAdapter` comply.
+- **No static global clients** — everything is constructed and injected explicitly
+  (plain constructors + builders; no Spring or any DI framework required).
+
+## Error model
+
+The 15 PascalCase kinds live in `ErrorKind` (validated 1:1 against `contracts/errors.json` by
+`ErrorTaxonomyTest`), carried by enum-kinded `FireweaveException`. Defaults are never thrown on
+the normal evaluation path; causes are preserved; all messages pass `Redaction` (phc_/phs_/phx_,
+`Bearer` tokens, `FW_PROJECT_API_KEY` assignments → `[REDACTED]`). `AlreadyClosed` maps to
+OpenFeature `PROVIDER_NOT_READY`.
+
+## Context handling
+
+Merge order (later wins): config global → client → invocation. Ratified bounds enforced before
+any adapter/network call: 128 attributes, 256 B keys, 4 KiB values, depth 6, 64 KiB serialized.
+`fireweave.*` attribute keys are reserved; additional reserved keys are configurable.
+
+## Deviations & blockers (for orchestrator arbitration)
+
+1. **`dev.openfeature:sdk` pinned 1.21.0 → built against 1.15.1.** 1.15.1 is the newest version
+   on Maven Central (verified 2026-07-27 via search.maven.org). No API gaps encountered for the
+   features used.
+2. **`com.posthog:posthog-server:2.9.0` does not exist on Maven Central** (verified 2026-07-27;
+   only `com.posthog:posthog` 3.x Android/Kotlin and legacy `com.posthog.java:posthog` 1.2.0 —
+   the latter explicitly prohibited). `PostHogAdapter` is fully implemented and tested against
+   the Fireweave-owned `PostHogClientApi` transport seam (snapshot evaluation, explicit context
+   passing — no ThreadLocal); binding the real SDK is one adapter-internal class once published.
+   `PostHogAdapter.create(config)` fails with a clear `UnsupportedCapability` until then.
+3. **test-server stub not runnable** (`test-server/implementation/` contains planning docs
+   only). Fault fixtures (`contracts/faults/*`) are simulated deterministically in-process by
+   `InMemoryAdapter` (delay compares against configured timeout — no sleeping); marked as
+   adapter-simulated rather than transport-level. Re-run against the HTTP stub when Agent F lands.
+4. **`ctx-reserved-keys-rejected`** is exercised through the Fireweave detailed API instead of
+   the OF client: the Java OpenFeature SDK stores the targeting key in the attribute map, so an
+   OF context cannot carry a literal `targetingKey` attribute distinct from the targeting key.
+   Annotated in the conformance report message.
+5. **groupId `ai.fireweave`** remains a working assumption pending Maven Central namespace
+   verification (decision brief risk 4). DO NOT PUBLISH.
+
+## Known limitations (documented per fixtures)
+
+- **Long-clamp:** the Java OF integer resolver is 32-bit `Integer`. Integral flag values outside
+  `Integer` range resolve as `TYPE_MISMATCH` + default (never silent truncation). Cross-language
+  integer reliability is documented to 2^53−1; `eval-int-beyond-safe-integer` is
+  skipped-with-documented-limitation for Java (as the fixture declares).
+- **Stale remote cache:** the vendor Java SDK caches per-user remote flag results up to 5
+  minutes and keeps last-good local definitions after failed polls. `PostHogAdapter` surfaces
+  snapshot age: stale results resolve with reason `STALE` + `fireweave.fromCache` metadata and
+  flip `isStale()`, which the runtime reflects as lifecycle `STALE` — stale data is never
+  reported fresh.
+- Detailed metadata enrichment (`fireweave.vendorFlagId`, `fireweave.reasonCode`) is emitted
+  only when the vendor response carries **both** a flag id and a condition index — inferred from
+  the fixture matrix (`eval-detailed-fields` emits them; `eval-multivariate-string` and
+  `eval-payload-attached`, each having only one of the two, do not). Flagging for arbitration:
+  an explicit rule in `contracts/README.md` would remove the inference.

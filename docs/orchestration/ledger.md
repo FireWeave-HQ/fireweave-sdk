@@ -65,3 +65,10 @@ Phase 2 exit checklist: **8/8 PASS** (see reconciliation report). Phase 3 author
 
 - **Phase 2** (complete, commit pending): D + E delivered; rulings 1–9 applied; exit checklist 8/8 PASS; spec/ ↔ contracts/ fully consistent and machine-validated.
 - **Phase 3** (in progress): Agents F (Node), G (Python), H (Go), I (Java) launched in parallel. Each owns only `sdks/<lang>/` + `examples/<lang>/` (F additionally implements `test-server/implementation/` per E's plan). Canonical schema/fixture changes remain orchestrator-gated.
+
+## Orchestrator ruling 10 (Phase 3, research correction)
+
+Verified against Maven Central (2026-07-27, live query): `dev.openfeature:sdk` latest is **1.15.1** (research's 1.21.0 does not exist) and **`com.posthog:posthog-server` is not published** (only `com.posthog:posthog`/`posthog-android` 3.19.1 for Android). Agent B/C's Java-column pins were incorrect; decision brief §3 amended. Rulings:
+- Java builds against `dev.openfeature:sdk:1.15.1`.
+- PostHogAdapter (Java) ships behind Agent I's `PostHogClientApi` seam with a clear `UnsupportedCapability` on `create(config)` until PostHog publishes a server SDK with local evaluation; whether to interim-bind legacy `com.posthog.java:posthog` 1.2.0 (remote-only) is deferred to Phase 5 + adversarial review as a known limitation.
+- Node/Python/Go pins stand — they were validated by real installs during Phase 3.

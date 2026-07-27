@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>ai.fireweave</groupId>
+    <artifactId>fireweave-java-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>fireweave-adapter-posthog</artifactId>
+  <name>Fireweave PostHog adapter</name>
+  <description>
+    PostHog-backed BackendAdapter per ADR-0002. BLOCKED DEPENDENCY: the decision brief pins
+    com.posthog:posthog-server:2.9.0, which does not exist on Maven Central (verified 2026-07-27;
+    only com.posthog:posthog 3.x Android and legacy com.posthog.java:posthog 1.2.0 exist — the
+    latter is explicitly prohibited). The adapter is implemented against the internal
+    PostHogClientApi transport seam (snapshot flag evaluation, explicit context passing — no
+    ThreadLocal); binding the real SDK is a one-class task once the artifact is published.
+    Reported for orchestrator arbitration.
+  </description>
+
+  <dependencies>
+    <dependency>
+      <groupId>ai.fireweave</groupId>
+      <artifactId>fireweave-sdk</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

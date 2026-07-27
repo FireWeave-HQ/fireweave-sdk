@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>ai.fireweave</groupId>
+  <artifactId>fireweave-java-parent</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>Fireweave Java SDK (parent)</name>
+  <description>
+    Fireweave polyglot SDK - Java implementation. OpenFeature-compatible, server-first.
+    GroupId ai.fireweave is a working assumption pending Maven Central namespace verification
+    (decision brief, risk 4). DO NOT PUBLISH.
+  </description>
+
+  <modules>
+    <module>fireweave-sdk</module>
+    <module>fireweave-openfeature</module>
+    <module>fireweave-adapter-posthog</module>
+    <module>fireweave-testing</module>
+  </modules>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>11</maven.compiler.release>
+    <!--
+      Decision brief pins dev.openfeature:sdk 1.21.0, but the newest version published to
+      Maven Central (verified 2026-07-27 via search.maven.org) is 1.15.1. Deviation reported
+      for orchestrator arbitration; see sdks/java/README.md.
+    -->
+    <openfeature.version>1.15.1</openfeature.version>
+    <junit.version>5.10.2</junit.version>
+    <jackson.version>2.17.1</jackson.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>dev.openfeature</groupId>
+        <artifactId>sdk</artifactId>
+        <version>${openfeature.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>${jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter</artifactId>
+        <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>3.2.5</version>
+        </plugin>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>exec-maven-plugin</artifactId>
+          <version>3.2.0</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+</project>
