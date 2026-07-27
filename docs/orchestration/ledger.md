@@ -56,3 +56,9 @@ Resolving Agent D (spec/) vs Agent E (contracts/) divergences. Canonical rule: `
 6. **Extension API surface (final):** canonical shapes are `releases.setContext/start/complete/fail`, `exposures.record/flush`, `signals.recordHealth/recordError/recordMetric/recordOutcome`, `capabilities.get` (per project brief candidates; already encoded in the 13 extension fixtures). `docs/architecture.md` §6 must be updated to these shapes (replacing attest/current, track/setPolicy, emit); deploy-attestation semantics are carried by `releases.setContext` + `releases.start`. `spec/signal.schema.json` must be reconciled to the fixture signal model (kind: health|error|metric|outcome, status, optional timestamp for deterministic fixtures). Capability strings updated to match final method names and include `capabilities.get`.
 
 Phase 2 exit checklist: **8/8 PASS** (see reconciliation report). Phase 3 authorized upon ruling-6 application.
+
+## Orchestrator rulings 7–9 (Phase 2 close-out)
+
+7. **Release identifiers:** `spec/release-context.schema.json` is canonical — `stampIds` is an ARRAY of `stmp_<26-char Crockford ULID>`; `changeId` uses the 26-char pattern. The four `ext-releases-*` fixtures are regenerated with valid 26-char ULIDs and the array shape.
+8. **flagMetadata scalars:** OpenFeature's scalar-only flagMetadata contract is canonical (`decision.schema.json` unchanged). `eval-payload-attached` expects `fireweave.payload` as a JSON-*string* serialization of the payload; structured payloads are otherwise delivered as the object-flag value itself.
+9. **Typed ID naming:** accepted — extension/release shapes use the established `rolloutId`/`changeId`/`stampId` names (not generic releaseId/deploymentId).

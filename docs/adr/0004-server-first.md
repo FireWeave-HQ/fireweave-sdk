@@ -26,7 +26,7 @@ Fireweave's product surface includes server, web, and future mobile/harness surf
 - `@openfeature/server-sdk` / server OF SDKs only
 - PostHog **server** SDKs (`posthog-node`, `posthog`, `posthog-go`, `posthog-server`)
 - Remote and local evaluation modes on trusted servers
-- InMemory adapter, conformance, attest/beacon client APIs suitable for server boot
+- InMemory adapter, conformance, deploy-attestation/beacon client APIs (`releases.setContext` + `releases.start`) suitable for server boot
 
 ### Out of scope (phase one)
 

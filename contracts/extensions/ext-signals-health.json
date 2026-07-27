@@ -1,5 +1,5 @@
 {
-  "description": "signals.emit health signal",
+  "description": "signals.recordHealth records a health signal",
   "tags": [
     "signals",
     "health"
@@ -13,7 +13,7 @@
   "when": {
     "operation": "emitSignal",
     "signal": {
-      "type": "health",
+      "kind": "health",
       "name": "provider",
       "status": "ok",
       "rolloutId": "rollout_01HZXSIG000000000000001"

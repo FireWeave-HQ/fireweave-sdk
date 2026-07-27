@@ -23,10 +23,11 @@
       "releases.fail",
       "exposures.record",
       "exposures.flush",
-      "signals.health",
-      "signals.error",
-      "signals.metric",
-      "signals.outcome"
+      "signals.recordHealth",
+      "signals.recordError",
+      "signals.recordMetric",
+      "signals.recordOutcome",
+      "capabilities.get"
     ],
     "errorCode": null
   },

@@ -121,7 +121,7 @@ Flag payloads are returned as Fireweave `JsonValue` (JSON-compatible: null/bool/
 
 ### 11. Capabilities
 
-`capabilities` is a static + runtime matrix: package declares compile-time capabilities (`flags`, `localEvaluation`, `exposures`, `releases`, …); runtime reports adapter-backed availability (e.g. local eval requires secret key). Exposed via `FireweaveClient.capabilities()` and schema `capabilities.schema.json`. Used by harness/profile tooling; not an OF API.
+`capabilities` is a static + runtime matrix: package declares compile-time capabilities (`flags`, `localEvaluation`, `exposures`, `releases`, …); runtime reports adapter-backed availability (e.g. local eval requires secret key). Exposed via `FireweaveClient.capabilities.get()` and schema `capabilities.schema.json`. Used by harness/profile tooling; not an OF API.
 
 ### 12. Error mapping
 

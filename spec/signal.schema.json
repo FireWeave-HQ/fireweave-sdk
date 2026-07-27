@@ -2,26 +2,88 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://fireweave.ai/spec/0.1.0/signal.schema.json",
   "title": "FireweaveSignal",
-  "description": "Canonical signal / metric observation envelope for release-safety extensions. Distinct from PostHog capture; adapters may bridge to capture when configured.",
+  "description": "Canonical signal envelope for release-safety extensions, recorded via signals.recordHealth / recordError / recordMetric / recordOutcome (dispatched by kind). Distinct from PostHog capture; adapters may bridge to capture when configured. Matches contracts/extensions/ext-signals-* fixtures.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["name", "timestamp"],
+  "required": ["kind", "name"],
   "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["health", "error", "metric", "outcome"],
+      "description": "Signal kind; selects the recording API (recordHealth / recordError / recordMetric / recordOutcome)."
+    },
     "name": {
       "type": "string",
       "minLength": 1,
       "maxLength": 256,
       "description": "Signal / metric name. Empty names MUST be rejected before any backend track/capture (Java OF throws on empty track names)."
     },
+    "status": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Status for health / outcome signals.",
+      "examples": ["ok", "degraded", "completed", "failed"]
+    },
+    "errorKind": {
+      "$ref": "https://fireweave.ai/spec/0.1.0/errors.schema.json#/$defs/errorKind",
+      "description": "Canonical Fireweave error kind; applicable when kind=error."
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "description": "Human-readable detail (error signals). MUST NOT contain raw API secrets (phc_/phs_/phx_), bearer tokens, or PII."
+    },
+    "value": {
+      "oneOf": [
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "string", "maxLength": 2048 }
+      ],
+      "description": "Observation value for metric signals."
+    },
     "timestamp": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "description": "OPTIONAL. Deterministic fixtures omit it; conformance comparators exclude it."
     },
     "targetingKey": {
       "type": "string",
       "minLength": 1,
       "maxLength": 512,
       "description": "Optional identity for the signal. Not auto-generated."
+    },
+    "rolloutId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "changeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "stampId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "flagKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "variant": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "traceId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Optional correlation id; conformance comparators exclude it as nondeterministic unless fixture-declared."
     },
     "role": {
       "type": "string",
@@ -32,14 +94,7 @@
       "type": "string",
       "enum": ["up-good", "up-bad", "neutral"]
     },
-    "value": {
-      "oneOf": [
-        { "type": "number" },
-        { "type": "boolean" },
-        { "type": "string", "maxLength": 2048 }
-      ]
-    },
-    "properties": {
+    "attributes": {
       "type": "object",
       "additionalProperties": {
         "oneOf": [
@@ -55,16 +110,34 @@
         "minLength": 1,
         "maxLength": 128
       }
-    },
-    "rolloutId": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 128
-    },
-    "flagKey": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 256
     }
-  }
+  },
+  "examples": [
+    {
+      "kind": "health",
+      "name": "provider",
+      "status": "ok",
+      "rolloutId": "rollout_01HZXSIG000000000000001"
+    },
+    {
+      "kind": "error",
+      "name": "evaluation",
+      "errorKind": "Timeout",
+      "message": "request timed out"
+    },
+    {
+      "kind": "metric",
+      "name": "rollout.adoption",
+      "value": 1,
+      "rolloutId": "rollout_01HZXSIG000000000000002",
+      "stampId": "stmp_01HZXSIG000000000000002"
+    },
+    {
+      "kind": "outcome",
+      "name": "release",
+      "status": "completed",
+      "rolloutId": "rollout_01HZXSIG000000000000003",
+      "changeId": "chg_01HZXSIG000000000000003"
+    }
+  ]
 }

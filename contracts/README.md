@@ -101,7 +101,7 @@ Each fixture is a single JSON file:
 | `replaceProvider` | lifecycle | Swap provider under a domain |
 | `setContext` / `start` / `complete` / `fail` | extensions | Release lifecycle |
 | `recordExposure` / `flushExposures` | extensions | Exposure telemetry |
-| `emitSignal` | extensions | health / error / metric / outcome |
+| `emitSignal` | extensions | signals.recordHealth / recordError / recordMetric / recordOutcome (dispatched by `signal.kind`) |
 | `getCapabilities` | extensions | Capability discovery |
 | `invokeCapability` | extensions | Call a named capability (may degrade) |
 

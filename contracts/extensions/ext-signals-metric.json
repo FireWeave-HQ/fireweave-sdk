@@ -1,5 +1,5 @@
 {
-  "description": "signals.emit metric signal with deterministic fields",
+  "description": "signals.recordMetric records a metric signal with deterministic fields",
   "tags": [
     "signals",
     "metric"
@@ -13,7 +13,7 @@
   "when": {
     "operation": "emitSignal",
     "signal": {
-      "type": "metric",
+      "kind": "metric",
       "name": "rollout.adoption",
       "value": 1,
       "rolloutId": "rollout_01HZXSIG000000000000002",

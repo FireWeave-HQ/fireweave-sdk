@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://fireweave.ai/spec/0.1.0/release-context.schema.json",
   "title": "FireweaveReleaseContext",
-  "description": "Release / rollout context for attest beacon and extension APIs. Wire-compatible in spirit with deploy-sdk / contracts; re-specified here (never copied from proprietary sources).",
+  "description": "Release / rollout context for deploy-attestation (beacon; carried by releases.setContext + releases.start) and extension APIs. Wire-compatible in spirit with deploy-sdk / contracts; re-specified here (never copied from proprietary sources).",
   "type": "object",
   "additionalProperties": false,
   "required": ["stampIds"],

@@ -153,25 +153,30 @@ client.flags.evaluateMany(keys, context, options) → map<key, Decision>
 ### 6.4 Releases
 
 ```
-client.releases.attest(releaseContext) → result     // boot beacon / stamp liveness
-client.releases.current() → ReleaseContext | null
+client.releases.setContext(releaseContext) → result   // bind rollout identity (rolloutId, changeId, stampId)
+client.releases.start(release) → result               // mark release in_progress
+client.releases.complete(release) → result            // mark release completed
+client.releases.fail(release, reason) → result        // mark release failed (safe reason; no secrets)
 ```
 
-Wire-compatible with `FW_ATTEST_URL` / `FW_PROJECT_API_KEY` (re-specified; not copied from deploy-sdk).
+Deploy-attestation (boot beacon / stamp liveness) semantics are carried by `releases.setContext` + `releases.start`. Wire-compatible with `FW_ATTEST_URL` / `FW_PROJECT_API_KEY` (re-specified; not copied from deploy-sdk).
 
 ### 6.5 Exposures
 
 ```
-client.exposures.track(flag, decision, context)?   // explicit; rare — prefer OF path
-client.exposures.setPolicy(policy)
+client.exposures.record(exposure) → result   // explicit; rare — prefer OF path
+client.exposures.flush() → result            // drain queued exposures
 ```
 
-Normally PostHog SDK emits `$feature_flag_called` through adapter accessors.
+Normally PostHog SDK emits `$feature_flag_called` through adapter accessors. Exposure policy is set at construction (`exposurePolicy`, §6.1).
 
 ### 6.6 Signals
 
 ```
-client.signals.emit(signal)   // adoption/guard metrics observations
+client.signals.recordHealth(signal)    // provider/component health
+client.signals.recordError(signal)     // error observations (no secrets)
+client.signals.recordMetric(signal)    // adoption/guard metric observations
+client.signals.recordOutcome(signal)   // release outcome
 ```
 
 ### 6.7 Guardrails
@@ -185,7 +190,7 @@ Phase one may ship types + no-op/local evaluation only; server-side ramp remains
 ### 6.8 Capabilities
 
 ```
-client.capabilities() → Capabilities  // static ∪ runtime
+client.capabilities.get() → Capabilities  // static ∪ runtime
 ```
 
 ### 6.9 Telemetry

@@ -1,5 +1,5 @@
 {
-  "description": "signals.emit outcome signal for release result",
+  "description": "signals.recordOutcome records an outcome signal for release result",
   "tags": [
     "signals",
     "outcome"
@@ -13,7 +13,7 @@
   "when": {
     "operation": "emitSignal",
     "signal": {
-      "type": "outcome",
+      "kind": "outcome",
       "name": "release",
       "status": "completed",
       "rolloutId": "rollout_01HZXSIG000000000000003",

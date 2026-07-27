@@ -1,5 +1,5 @@
 {
-  "description": "signals.emit error signal without secrets",
+  "description": "signals.recordError records an error signal without secrets",
   "tags": [
     "signals",
     "error"
@@ -13,7 +13,7 @@
   "when": {
     "operation": "emitSignal",
     "signal": {
-      "type": "error",
+      "kind": "error",
       "name": "evaluation",
       "errorKind": "Timeout",
       "message": "request timed out"

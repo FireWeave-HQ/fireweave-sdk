@@ -25,7 +25,7 @@ Fireweave must be a well-behaved OpenFeature provider while also offering Firewe
 |---|---|
 | Bool/string/number/object flag evaluation | `FireweaveProvider` via OF Client |
 | Hooks, domains, events, status | OpenFeature SDK |
-| Releases, beacon/attest, signals, guardrails, capabilities, detailed decisions, group identify | `FireweaveClient` |
+| Releases (incl. deploy-attestation beacon via `setContext`/`start`), signals, guardrails, capabilities, detailed decisions, group identify | `FireweaveClient` |
 | Exposure policy / side-effect control | Runtime options + optional FireweaveClient detailed eval; OF path documents default side effects |
 | Tracking (spec §6 experimental) | Provider `track` implemented no-op-safe, marked `@experimental`; not required for core flags |
 
