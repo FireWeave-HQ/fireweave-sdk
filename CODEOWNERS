@@ -1,0 +1,42 @@
+# Fireweave SDK code ownership.
+# Team handles are placeholders pending org setup (ADR-0001 package-naming caveat applies).
+# GitHub semantics: for overlapping paths, the LAST matching rule wins, so
+# broad rules come first and specific carve-outs come after.
+
+# Default: SDK maintainers group.
+*                           @FireWeave-HQ/sdk-maintainers
+
+# User docs & community files (broad rule; carve-outs below).
+/docs/                      @FireWeave-HQ/sdk-docs
+/README.md                  @FireWeave-HQ/sdk-docs
+/CONTRIBUTING.md            @FireWeave-HQ/sdk-docs
+
+# Architecture decisions require spec owners + maintainers (override /docs/).
+/docs/adr/                  @FireWeave-HQ/sdk-spec @FireWeave-HQ/sdk-maintainers
+/docs/architecture.md       @FireWeave-HQ/sdk-spec @FireWeave-HQ/sdk-maintainers
+
+# Security & privacy docs (override /docs/).
+/docs/security/             @FireWeave-HQ/sdk-security
+/docs/privacy.md            @FireWeave-HQ/sdk-security
+/SECURITY.md                @FireWeave-HQ/sdk-security
+
+# Language SDKs + their examples.
+/sdks/node/                 @FireWeave-HQ/sdk-node
+/examples/node/             @FireWeave-HQ/sdk-node
+/sdks/python/               @FireWeave-HQ/sdk-python
+/examples/python/           @FireWeave-HQ/sdk-python
+/sdks/go/                   @FireWeave-HQ/sdk-go
+/examples/go/               @FireWeave-HQ/sdk-go
+/sdks/java/                 @FireWeave-HQ/sdk-java
+/examples/java/             @FireWeave-HQ/sdk-java
+
+# Canonical contract: schema + fixtures + protocol stub. Changes are
+# orchestrated-review-only (see CONTRIBUTING.md).
+/spec/                      @FireWeave-HQ/sdk-spec
+/contracts/                 @FireWeave-HQ/sdk-spec
+/test-server/               @FireWeave-HQ/sdk-spec
+
+# CI, release automation, and repo tooling.
+/.github/                   @FireWeave-HQ/sdk-infra
+/scripts/                   @FireWeave-HQ/sdk-infra
+/tools/                     @FireWeave-HQ/sdk-infra

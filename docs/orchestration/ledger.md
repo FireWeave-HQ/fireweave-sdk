@@ -97,3 +97,16 @@ CI/packaging/release delivered and locally verified: test-all (Node 82, Python 1
 - Python: remove committed src/fireweave.egg-info/ and gitignore it.
 - Go: delete committed binary examples/go/go and gitignore it.
 - Reconcile .github/ISSUE_TEMPLATE ownership: K created templates while L was also assigned them — merge at L completion.
+
+## Agent L results + orchestrator rulings 14–18 (Phase 4 close, Phase 5 open)
+
+Docs/DX delivered: 9 root community files, 12 user docs, templates; all snippets executed against real SDKs; 10/10 acceptance criteria pass (Java criterion 2 honestly seam-qualified). Discrepancy rulings:
+
+14. **Groups representation:** canonical context keys are `fireweave.groups` / `fireweave.groupProperties` (per spec + rulings 12–13). All four languages must accept them; idiomatic accessors (Java `.group()` builder, Go typed fields) are permitted sugar that MUST map onto the canonical keys; plain top-level `groups` is not canon (may remain as documented alias only if already public — prefer removal pre-release). New conformance fixture pins canonical-key acceptance in all languages.
+15. **`releases.setContext` validation:** `spec/release-context.schema.json` required fields are canon; all four languages enforce exactly those (rolloutId required; stampIds per schema).
+16. **Detailed-eval surface:** every language exposes detailed (Decision-returning) evaluation on the public client surface; naming is idiomatic (`client.flags.evaluate` / equivalent); Node must not require reaching into runtime. `docs/architecture.md` §6.3 amended to state behavioral—not lexical—requirement. `flags.evaluateMany` and `telemetry.configure` are REMOVED from the §6 sketch → follow-up backlog (unimplemented everywhere; scope stays bounded).
+17. **Extension gating:** canonical behavior = Go/Java model: extension calls are lifecycle-gated and delivered to the adapter sink; pre-ready/post-shutdown calls degrade predictably (UnsupportedCapability/AlreadyClosed results, never throw). Node/Python align. Fixture pins it.
+18. **`capabilities.get` shape:** `spec/capabilities.schema.json` structured matrix is canon; Python/Go align.
+
+- **Phase 4** (complete): J (0 blockers, 2 HIGH queued), K (CI green locally, publish hard-disabled), L (docs complete).
+- **Phase 5** (in progress): canon-update agent (contracts/spec/architecture per rulings 11–18) + four language fix agents in parallel; final verification wave after.
