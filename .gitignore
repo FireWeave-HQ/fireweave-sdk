@@ -1,0 +1,12 @@
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+dist/
+build/
+.gradle/
+target/
+*.class
+.DS_Store
+results.*.json

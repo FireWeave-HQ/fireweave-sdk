@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fireweave"
+version = "0.1.0"
+description = "Fireweave polyglot SDK for Python — OpenFeature-compatible, server-first flag evaluation and release-safety extensions (spec v0.1.0)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Fireweave" }]
+keywords = ["feature-flags", "openfeature", "posthog", "rollout", "release"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+# Core has NO runtime dependencies: the OpenFeature provider and the PostHog
+# adapter are optional integrations behind extras. `import fireweave` plus the
+# InMemory adapter work with the standard library only.
+dependencies = []
+
+[project.optional-dependencies]
+# ADR-0002 pin: PostHog snapshot API (`evaluate_flags`) — exact pin to absorb
+# the in-flight /flags migration.
+posthog = ["posthog==7.31.0"]
+# Pre-1.0 OpenFeature SDK: pin below 0.11 (decision brief §3 / ADR-0003).
+openfeature = ["openfeature-sdk>=0.10.0,<0.11"]
+dev = [
+    "posthog==7.31.0",
+    "openfeature-sdk>=0.10.0,<0.11",
+    "pytest>=8",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+fireweave = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
