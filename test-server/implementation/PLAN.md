@@ -100,4 +100,4 @@ Acceptance: exposure flush integration assertions.
 
 - Exact local-evaluation URL path + auth header names per pinned PostHog SDK (fill `PATHS.md`).
 - Whether snapshot types expose `reason`/`requestId` publicly (affects how rich `/flags` needs to be for unit vs I&T).
-- Ratified context limits superseding provisional bounds in contracts.
+- ~~Ratified context limits superseding provisional bounds in contracts~~ — resolved 2026-07-27: orchestrator ratified 128 attrs / 256 B keys / 4 KiB values / depth 6 / 64 KiB serialized (see `contracts/README.md`).

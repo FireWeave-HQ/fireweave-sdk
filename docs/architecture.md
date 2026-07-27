@@ -200,9 +200,9 @@ Default: off (aside from PostHog exposure when enabled).
 
 1. OF merges context (API→transaction→client→invocation→before-hooks).
 2. Provider validates targetingKey; maps to canonical `EvaluationContext`.
-3. Runtime checks lifecycle (else default + NOT_READY).
+3. Runtime checks lifecycle (else default + `NotReady` / `AlreadyClosed`).
 4. Adapter `evaluateFlags(snapshot)` with person/group properties.
-5. Extract typed value; coerce or TYPE_MISMATCH → default.
+5. Extract typed value; coerce or `TypeMismatch` (OF `TYPE_MISMATCH`) → default.
 6. Build `Decision` (reason/metadata/quota); map errors.
 7. Return OF `ResolutionDetails` / `ProviderEvaluation`.
 8. Exposure per policy (side effect inside adapter accessors when enabled).

@@ -1,10 +1,9 @@
 {
-  "description": "Serialized context larger than 64KiB rejected (provisional)",
+  "description": "Serialized context larger than 64 KiB rejected",
   "tags": [
-    "bounds",
-    "provisional"
+    "bounds"
   ],
-  "provisional": true,
+  "provisional": false,
   "given": {
     "providerState": "READY",
     "flags": {

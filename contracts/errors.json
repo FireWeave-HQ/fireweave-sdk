@@ -45,7 +45,7 @@
       "retryable": false,
       "class": "permanent",
       "defaultMessage": "invalid evaluation context",
-      "description": "Context failed validation: missing targeting key, reserved key misuse, or provisional size/depth/count bounds"
+      "description": "Context failed validation: missing targeting key, reserved key misuse, or size/depth/count bounds"
     },
     {
       "kind": "Authentication",
@@ -69,7 +69,7 @@
       "retryable": true,
       "class": "transient",
       "defaultMessage": "rate limited",
-      "description": "HTTP 429 or soft quota limit; evaluations still return defaults"
+      "description": "HTTP 429 from the backend; evaluations still return defaults. Quota-limited flag responses resolve as FlagNotFound with fireweave.quotaLimited metadata"
     },
     {
       "kind": "Timeout",
@@ -122,11 +122,11 @@
     },
     {
       "kind": "AlreadyClosed",
-      "openFeatureErrorCode": "GENERAL",
+      "openFeatureErrorCode": "PROVIDER_NOT_READY",
       "retryable": false,
       "class": "permanent",
       "defaultMessage": "provider already closed",
-      "description": "Operation invoked after shutdown/close"
+      "description": "Operation invoked after shutdown/close; Fireweave kind preserved in flagMetadata fireweave.errorKind"
     },
     {
       "kind": "Internal",

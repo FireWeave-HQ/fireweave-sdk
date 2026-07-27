@@ -1,11 +1,10 @@
 {
-  "description": "Over-deep nesting rejected (provisional depth 8)",
+  "description": "Over-deep nesting rejected (depth > 6)",
   "tags": [
     "bounds",
-    "depth",
-    "provisional"
+    "depth"
   ],
-  "provisional": true,
+  "provisional": false,
   "given": {
     "providerState": "READY",
     "flags": {
@@ -18,7 +17,7 @@
     },
     "config": {
       "limits": {
-        "maxNestingDepth": 8
+        "maxNestingDepth": 6
       },
       "assertNoNetwork": true
     }

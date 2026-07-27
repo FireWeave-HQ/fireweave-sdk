@@ -1,11 +1,10 @@
 {
-  "description": "Nesting deeper than 8 rejected (provisional)",
+  "description": "Nesting deeper than 6 rejected",
   "tags": [
     "bounds",
-    "depth",
-    "provisional"
+    "depth"
   ],
-  "provisional": true,
+  "provisional": false,
   "given": {
     "providerState": "READY",
     "flags": {
@@ -18,7 +17,7 @@
     },
     "config": {
       "limits": {
-        "maxNestingDepth": 8
+        "maxNestingDepth": 6
       }
     }
   },

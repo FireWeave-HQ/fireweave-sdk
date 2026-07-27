@@ -88,7 +88,7 @@ UNINITIALIZED → INITIALIZING → READY
 | `fireweave.groupProperties` | `group_properties` |
 | `fireweave.evaluationContexts` | `evaluation_contexts` / `evaluationContexts` when supported |
 
-Never invent `distinct_id`. Missing key → Fireweave `TARGETING_KEY_MISSING`.
+Never invent `distinct_id`. Missing key → Fireweave `InvalidContext` (OF `TARGETING_KEY_MISSING`).
 
 ### Exposure policy
 
@@ -100,8 +100,8 @@ Never invent `distinct_id`. Missing key → Fireweave `TARGETING_KEY_MISSING`.
 ### Error & quota normalization
 
 - Go `(flags, err)` and Node/Python/Java absent-value styles map to one Fireweave taxonomy (ADR-0001 §12).
-- `quotaLimited` present with empty flags → `QUOTA_LIMITED` → OF `FLAG_NOT_FOUND` + default (not TRANSPORT).
-- Missing distinct id: normalize Java empty snapshot and Go `ErrNoDistinctID` to `TARGETING_KEY_MISSING`.
+- `quotaLimited` present with empty flags → `FlagNotFound` → OF `FLAG_NOT_FOUND` + default with metadata `fireweave.quotaLimited: true` (not `Network`/`BackendUnavailable`).
+- Missing distinct id: normalize Java empty snapshot and Go `ErrNoDistinctID` to `InvalidContext` (OF `TARGETING_KEY_MISSING`).
 
 ## Cross-SDK mismatch normalization (decision brief §5 / Agent C §15)
 
@@ -110,7 +110,7 @@ Never invent `distinct_id`. Missing key → Fireweave `TARGETING_KEY_MISSING`.
 | Error surface (Go err vs absent) | Single taxonomy at adapter boundary |
 | Polling default (Go 5m vs 30s) | Adapter sets polling interval default **30s** where the SDK allows override |
 | Java remote result cache (5m) | Document; set cache max-age as low as SDK allows for parity; expose capability `staleRemoteCache: true` on Java |
-| Missing distinct_id shapes | Always `TARGETING_KEY_MISSING` |
+| Missing distinct_id shapes | Always `InvalidContext` (OF `TARGETING_KEY_MISSING`) |
 | Exposure dedup cache sizes | Document skew; no Fireweave attempt to equalize PostHog LRU sizes in phase one |
 | Queue overflow (Go drops) | Map capture failures to extension errors; flag eval unaffected |
 | Shutdown blocking semantics | Unified deadline wrapper |

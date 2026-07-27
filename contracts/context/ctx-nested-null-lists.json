@@ -1,11 +1,11 @@
 {
-  "description": "Nested structures, nulls, and lists are accepted within provisional depth",
+  "description": "Nested structures, nulls, and lists are accepted within depth bounds",
   "tags": [
     "nested",
     "null",
     "lists"
   ],
-  "provisional": true,
+  "provisional": false,
   "given": {
     "providerState": "READY",
     "flags": {

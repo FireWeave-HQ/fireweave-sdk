@@ -109,7 +109,7 @@ Before the adapter is READY (local-eval: at least one definitions fetch or expli
 
 ### 8. Identity
 
-OpenFeature `targetingKey` **is** the cohort key and maps 1:1 to PostHog `distinct_id`. Fireweave **never auto-generates** an anonymous id per evaluation. Missing `targetingKey` → `TARGETING_KEY_MISSING` + default. Callers must supply a stable key (e.g. `orgId`) for sticky ramps (`verify_cohort_keying`).
+OpenFeature `targetingKey` **is** the cohort key and maps 1:1 to PostHog `distinct_id`. Fireweave **never auto-generates** an anonymous id per evaluation. Missing `targetingKey` → `InvalidContext` (OF `TARGETING_KEY_MISSING`) + default. Callers must supply a stable key (e.g. `orgId`) for sticky ramps (`verify_cohort_keying`).
 
 ### 9. Groups
 
@@ -127,17 +127,16 @@ Flag payloads are returned as Fireweave `JsonValue` (JSON-compatible: null/bool/
 
 Adapter errors normalize to Fireweave error taxonomy (`errors.schema.json`), then to OF error codes at the provider boundary:
 
-| Fireweave | OpenFeature |
+| Fireweave kind | OpenFeature |
 |---|---|
-| `NOT_READY` | `PROVIDER_NOT_READY` |
-| `FATAL` | `PROVIDER_FATAL` |
-| `FLAG_NOT_FOUND` | `FLAG_NOT_FOUND` |
-| `PARSE_ERROR` | `PARSE_ERROR` |
-| `TYPE_MISMATCH` | `TYPE_MISMATCH` |
-| `TARGETING_KEY_MISSING` | `TARGETING_KEY_MISSING` |
-| `INVALID_CONTEXT` | `INVALID_CONTEXT` |
-| `QUOTA_LIMITED` | `FLAG_NOT_FOUND` (serve default; metadata notes quota) |
-| `TRANSPORT` / `TIMEOUT` / `UNKNOWN` | `GENERAL` |
+| `NotReady` | `PROVIDER_NOT_READY` |
+| `FlagNotFound` | `FLAG_NOT_FOUND` (incl. quota-limited empty snapshots; metadata `fireweave.quotaLimited: true`) |
+| `TypeMismatch` | `TYPE_MISMATCH` |
+| `InvalidContext` | `INVALID_CONTEXT` (`TARGETING_KEY_MISSING` when targeting key required/missing) |
+| `MalformedResponse` | `PARSE_ERROR` |
+| `Configuration` | `PROVIDER_FATAL` (init-fatal) / `GENERAL` (runtime) |
+| `AlreadyClosed` | `PROVIDER_NOT_READY` (kind preserved in `fireweave.errorKind` metadata) |
+| `Authentication` / `Authorization` / `RateLimited` / `Timeout` / `Network` / `BackendUnavailable` / `UnsupportedCapability` / `Internal` | `GENERAL` |
 
 Client OF paths never throw (spec §1.4.10). Extension APIs may return Result/error types idiomatically per language.
 
@@ -167,7 +166,7 @@ Runtime and adapter MUST be safe for concurrent evaluations on one instance. Doc
 
 ### 19. After-shutdown
 
-Post-shutdown evaluations return defaults with `PROVIDER_NOT_READY` (or FATAL if shutdown failed hard — prefer NOT_READY). Extension calls fail fast with `NOT_READY`/`FATAL`. Shutdown is idempotent; double-close is a no-op success.
+Post-shutdown evaluations return defaults with `AlreadyClosed` (OF `PROVIDER_NOT_READY`; kind preserved in `fireweave.errorKind` metadata). Extension calls fail fast with `AlreadyClosed` (or `Configuration` if shutdown failed hard). Shutdown is idempotent; double-close is a no-op success.
 
 ### 20. Default telemetry / PII
 

@@ -1,10 +1,9 @@
 {
-  "description": "Attribute value larger than 8KiB rejected (provisional)",
+  "description": "Attribute value larger than 4 KiB rejected",
   "tags": [
-    "bounds",
-    "provisional"
+    "bounds"
   ],
-  "provisional": true,
+  "provisional": false,
   "given": {
     "providerState": "READY",
     "flags": {
@@ -17,7 +16,7 @@
     },
     "config": {
       "limits": {
-        "maxValueBytes": 8192
+        "maxValueBytes": 4096
       }
     }
   },

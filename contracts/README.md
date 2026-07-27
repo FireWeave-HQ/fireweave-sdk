@@ -2,7 +2,7 @@
 
 Canonical cross-language fixtures, error taxonomy, and harness contract for the Fireweave polyglot OpenFeature providers (`sdks/{node,python,go,java}`).
 
-Language agents **consume** this tree; they must not edit it. Spec schemas live in `spec/` (Agent D). When schemas are missing, fixtures use the **provisional limits** below.
+Language agents **consume** this tree; they must not edit it. Spec schemas live in `spec/` (Agent D) and are the **source of truth**; fixtures conform to spec. Context bounds were ratified by orchestrator arbitration (Phase 2 exit) — see the ratified limits table below.
 
 ## Layout
 
@@ -89,7 +89,7 @@ Each fixture is a single JSON file:
 | `expect.errorCode` | OpenFeature code string or `null` (see `errors.md`) |
 | `compatibility.<lang>` | `pass` \| `fail` \| `skipped-with-documented-limitation` |
 | `limitations.<lang>` | Required when status is `skipped-with-documented-limitation`; free-text reason |
-| `provisional` | `true` when the fixture depends on unratified `spec/` bounds |
+| `provisional` | `true` when the fixture depends on unratified `spec/` bounds (currently none — Phase 2 bounds are ratified) |
 
 ### Operations
 
@@ -207,33 +207,19 @@ Harnesses write (or CI aggregates) a report:
 
 CI gate: `fail == 0`. Skips are allowed only when the fixture declares the same status + limitation text (semantic match; harness may copy fixture limitation verbatim).
 
-## Provisional limits (Agent E fixtures)
+## Ratified context limits
 
-Fixtures tagged `provisional: true` currently encode:
+Canonical bounds ratified by orchestrator arbitration (Phase 2 exit, 2026-07-27), matching `spec/evaluation-context.schema.json`:
 
-| Limit | Agent E fixture value |
+| Limit | Canonical value |
 | --- | --- |
-| Max attribute count (context) | **64** |
+| Max attribute count (context) | **128** |
 | Max key size (UTF-8 bytes) | **256** |
-| Max value size (UTF-8 bytes / serialized scalar) | **8 KiB** (8192) |
-| Max nesting depth | **8** |
+| Max value size (UTF-8 bytes / serialized scalar) | **4 KiB** (4096) |
+| Max nesting depth | **6** |
 | Max serialized evaluation context | **64 KiB** (65536) |
 
 Oversized / over-deep inputs must yield `InvalidContext` (OF `INVALID_CONTEXT`) and the **default value**, never a throw from the client evaluation API.
-
-### Divergence vs emerging `spec/evaluation-context.schema.json` (arbitrate)
-
-Agent D’s schema (observed in-tree) currently states different bounds — fixtures have **not** been silently rewritten:
-
-| Limit | contracts/ (E) | spec/ (D) |
-| --- | --- | --- |
-| Max attribute keys | 64 | 128 (`maxAttributeKeys` / `maxProperties`) |
-| Max key size | 256 | 256 |
-| Max string value | 8192 | 4096 (`maxStringLength`) |
-| Max nesting depth | 8 | 6 (`maxDepth`) |
-| Max serialized context | 65536 | 65536 |
-
-Orchestrator must pick one table; Agent E will retarget provisional fixtures after the decision.
 
 ## Related docs
 

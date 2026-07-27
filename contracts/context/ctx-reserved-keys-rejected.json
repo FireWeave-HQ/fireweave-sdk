@@ -3,7 +3,7 @@
   "tags": [
     "reserved-keys"
   ],
-  "provisional": true,
+  "provisional": false,
   "given": {
     "providerState": "READY",
     "flags": {

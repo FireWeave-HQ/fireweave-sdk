@@ -1,10 +1,9 @@
 {
   "description": "Oversized context rejected without sending to network",
   "tags": [
-    "bounds",
-    "provisional"
+    "bounds"
   ],
-  "provisional": true,
+  "provisional": false,
   "given": {
     "providerState": "READY",
     "flags": {
@@ -17,7 +16,7 @@
     },
     "config": {
       "limits": {
-        "maxValueBytes": 8192
+        "maxValueBytes": 4096
       },
       "assertNoNetwork": true
     }

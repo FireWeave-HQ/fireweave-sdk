@@ -2,93 +2,113 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://fireweave.ai/spec/0.1.0/errors.schema.json",
   "title": "FireweaveErrors",
-  "description": "Fireweave error taxonomy and mapping to OpenFeature error codes. Used by adapters, providers, and Agent E fixtures.",
+  "description": "Fireweave canonical 15-kind error taxonomy (PascalCase kinds; languages map idiomatically) and mapping to OpenFeature error codes. Validates the machine-readable instance at contracts/errors.json. Quota-limited flag responses are not a distinct kind: they resolve to the default with FlagNotFound / OF FLAG_NOT_FOUND plus flagMetadata fireweave.quotaLimited: true. AlreadyClosed maps to PROVIDER_NOT_READY (not GENERAL); the Fireweave kind is preserved in decision metadata (flagMetadata fireweave.errorKind).",
   "type": "object",
   "additionalProperties": false,
-  "required": ["taxonomy", "openFeatureMapping"],
+  "required": ["schemaVersion", "errors"],
   "properties": {
-    "taxonomy": {
-      "type": "array",
-      "minItems": 1,
-      "items": { "$ref": "#/$defs/errorDefinition" }
-    },
-    "openFeatureMapping": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "description": { "type": "string" },
+    "rules": {
       "type": "object",
-      "description": "Map Fireweave code → OpenFeature ErrorCode.",
-      "additionalProperties": {
-        "type": "string",
-        "enum": [
-          "PROVIDER_NOT_READY",
-          "PROVIDER_FATAL",
-          "FLAG_NOT_FOUND",
-          "PARSE_ERROR",
-          "TYPE_MISMATCH",
-          "TARGETING_KEY_MISSING",
-          "INVALID_CONTEXT",
-          "GENERAL"
-        ]
-      },
+      "additionalProperties": false,
+      "required": ["defaultsDoNotThrow", "noSecretsInMessages"],
       "properties": {
-        "NOT_READY": { "const": "PROVIDER_NOT_READY" },
-        "FATAL": { "const": "PROVIDER_FATAL" },
-        "FLAG_NOT_FOUND": { "const": "FLAG_NOT_FOUND" },
-        "PARSE_ERROR": { "const": "PARSE_ERROR" },
-        "TYPE_MISMATCH": { "const": "TYPE_MISMATCH" },
-        "TARGETING_KEY_MISSING": { "const": "TARGETING_KEY_MISSING" },
-        "INVALID_CONTEXT": { "const": "INVALID_CONTEXT" },
-        "QUOTA_LIMITED": { "const": "FLAG_NOT_FOUND" },
-        "TRANSPORT": { "const": "GENERAL" },
-        "TIMEOUT": { "const": "GENERAL" },
-        "SHUTDOWN": { "const": "PROVIDER_NOT_READY" },
-        "UNKNOWN": { "const": "GENERAL" }
-      },
-      "required": [
-        "NOT_READY",
-        "FATAL",
-        "FLAG_NOT_FOUND",
-        "PARSE_ERROR",
-        "TYPE_MISMATCH",
-        "TARGETING_KEY_MISSING",
-        "INVALID_CONTEXT",
-        "QUOTA_LIMITED",
-        "TRANSPORT",
-        "TIMEOUT",
-        "SHUTDOWN",
-        "UNKNOWN"
+        "defaultsDoNotThrow": {
+          "type": "boolean",
+          "const": true,
+          "description": "OF evaluation paths never throw; abnormal execution returns the caller-supplied default with reason=ERROR and errorCode set."
+        },
+        "noSecretsInMessages": { "type": "boolean", "const": true },
+        "secretPatterns": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "flagMetadataErrorKindKey": {
+          "type": "string",
+          "const": "fireweave.errorKind",
+          "description": "flagMetadata key carrying the canonical Fireweave kind on error decisions."
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "minItems": 15,
+      "maxItems": 15,
+      "items": { "$ref": "#/$defs/errorDefinition" },
+      "allOf": [
+        { "contains": { "type": "object", "properties": { "kind": { "const": "NotReady" }, "openFeatureErrorCode": { "const": "PROVIDER_NOT_READY" }, "retryable": { "const": true }, "class": { "const": "transient" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "FlagNotFound" }, "openFeatureErrorCode": { "const": "FLAG_NOT_FOUND" }, "retryable": { "const": false }, "class": { "const": "permanent" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "TypeMismatch" }, "openFeatureErrorCode": { "const": "TYPE_MISMATCH" }, "retryable": { "const": false }, "class": { "const": "permanent" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "InvalidContext" }, "openFeatureErrorCode": { "const": "INVALID_CONTEXT" }, "retryable": { "const": false }, "class": { "const": "permanent" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "Authentication" }, "openFeatureErrorCode": { "const": "GENERAL" }, "retryable": { "const": false }, "class": { "const": "permanent" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "Authorization" }, "openFeatureErrorCode": { "const": "GENERAL" }, "retryable": { "const": false }, "class": { "const": "permanent" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "RateLimited" }, "openFeatureErrorCode": { "const": "GENERAL" }, "retryable": { "const": true }, "class": { "const": "transient" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "Timeout" }, "openFeatureErrorCode": { "const": "GENERAL" }, "retryable": { "const": true }, "class": { "const": "transient" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "Network" }, "openFeatureErrorCode": { "const": "GENERAL" }, "retryable": { "const": true }, "class": { "const": "transient" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "BackendUnavailable" }, "openFeatureErrorCode": { "const": "GENERAL" }, "retryable": { "const": true }, "class": { "const": "transient" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "MalformedResponse" }, "openFeatureErrorCode": { "const": "PARSE_ERROR" }, "retryable": { "const": false }, "class": { "const": "permanent" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "UnsupportedCapability" }, "openFeatureErrorCode": { "const": "GENERAL" }, "retryable": { "const": false }, "class": { "const": "permanent" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "Configuration" }, "openFeatureErrorCode": { "const": "PROVIDER_FATAL" }, "retryable": { "const": false }, "class": { "const": "permanent" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "AlreadyClosed" }, "openFeatureErrorCode": { "const": "PROVIDER_NOT_READY" }, "retryable": { "const": false }, "class": { "const": "permanent" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "Internal" }, "openFeatureErrorCode": { "const": "GENERAL" }, "retryable": { "const": false }, "class": { "const": "permanent" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } }
       ]
     }
   },
   "$defs": {
-    "errorCode": {
+    "errorKind": {
+      "type": "string",
+      "description": "Canonical Fireweave error kind (PascalCase).",
+      "enum": [
+        "NotReady",
+        "FlagNotFound",
+        "TypeMismatch",
+        "InvalidContext",
+        "Authentication",
+        "Authorization",
+        "RateLimited",
+        "Timeout",
+        "Network",
+        "BackendUnavailable",
+        "MalformedResponse",
+        "UnsupportedCapability",
+        "Configuration",
+        "AlreadyClosed",
+        "Internal"
+      ]
+    },
+    "openFeatureErrorCode": {
       "type": "string",
       "enum": [
-        "NOT_READY",
-        "FATAL",
+        "PROVIDER_NOT_READY",
+        "PROVIDER_FATAL",
         "FLAG_NOT_FOUND",
         "PARSE_ERROR",
         "TYPE_MISMATCH",
         "TARGETING_KEY_MISSING",
         "INVALID_CONTEXT",
-        "QUOTA_LIMITED",
-        "TRANSPORT",
-        "TIMEOUT",
-        "SHUTDOWN",
-        "UNKNOWN"
+        "GENERAL"
       ]
     },
     "errorInstance": {
+      "description": "A concrete error occurrence carried on a Decision.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["code", "message"],
+      "required": ["kind", "message"],
       "properties": {
-        "code": { "$ref": "#/$defs/errorCode" },
+        "kind": { "$ref": "#/$defs/errorKind" },
         "message": {
           "type": "string",
           "minLength": 1,
           "maxLength": 2048,
-          "description": "Human-readable; MUST NOT contain raw API secrets (phc_/phs_/phx_)."
+          "description": "Human-readable; MUST NOT contain raw API secrets (phc_/phs_/phx_), bearer tokens, or PII from context attributes."
         },
         "retryable": { "type": "boolean" },
+        "class": {
+          "type": "string",
+          "enum": ["transient", "permanent"],
+          "description": "Failure durability classification for adapters and signals."
+        },
         "cause": {
           "type": "string",
           "maxLength": 1024,
@@ -97,69 +117,60 @@
       }
     },
     "errorDefinition": {
+      "description": "One taxonomy entry: canonical kind plus OF mapping, retryability, and durability class.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["code", "description", "openFeature", "evaluationBehavior"],
+      "required": ["kind", "openFeatureErrorCode", "retryable", "class", "defaultMessage", "description"],
       "properties": {
-        "code": { "$ref": "#/$defs/errorCode" },
-        "description": { "type": "string" },
-        "openFeature": {
-          "type": "string",
-          "enum": [
-            "PROVIDER_NOT_READY",
-            "PROVIDER_FATAL",
-            "FLAG_NOT_FOUND",
-            "PARSE_ERROR",
-            "TYPE_MISMATCH",
-            "TARGETING_KEY_MISSING",
-            "INVALID_CONTEXT",
-            "GENERAL"
-          ]
+        "kind": { "$ref": "#/$defs/errorKind" },
+        "openFeatureErrorCode": { "$ref": "#/$defs/openFeatureErrorCode" },
+        "openFeatureErrorCodeAlternates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/openFeatureErrorCode" },
+          "description": "Secondary OF codes for documented subtypes (InvalidContext → TARGETING_KEY_MISSING when targeting key required/missing; Configuration → GENERAL on non-init runtime paths)."
         },
+        "retryable": {
+          "type": "boolean",
+          "description": "A later identical call may succeed without config change."
+        },
+        "class": {
+          "type": "string",
+          "enum": ["transient", "permanent"]
+        },
+        "defaultMessage": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "description": { "type": "string" },
         "evaluationBehavior": {
           "type": "string",
           "enum": ["return_default", "fail_init", "fail_extension"],
-          "description": "OF evaluation paths always return_default; fail_init applies to initialize; fail_extension to FireweaveClient APIs."
+          "description": "OF evaluation paths always return_default (defaults don't throw); fail_init applies to initialize; fail_extension to FireweaveClient APIs."
         }
       }
     }
   },
   "examples": [
     {
-      "taxonomy": [
+      "schemaVersion": 1,
+      "description": "Excerpt of the canonical taxonomy (full instance in contracts/errors.json)",
+      "rules": {
+        "defaultsDoNotThrow": true,
+        "noSecretsInMessages": true,
+        "secretPatterns": ["phc_", "phx_", "phs_", "Bearer ", "FW_PROJECT_API_KEY"],
+        "flagMetadataErrorKindKey": "fireweave.errorKind"
+      },
+      "errors": [
         {
-          "code": "TARGETING_KEY_MISSING",
-          "description": "No targetingKey / distinct_id supplied; SDK does not invent one.",
-          "openFeature": "TARGETING_KEY_MISSING",
-          "evaluationBehavior": "return_default"
-        },
-        {
-          "code": "QUOTA_LIMITED",
-          "description": "Backend reported quotaLimited for feature flags; serve default as FLAG_NOT_FOUND.",
-          "openFeature": "FLAG_NOT_FOUND",
-          "evaluationBehavior": "return_default"
-        },
-        {
-          "code": "TRANSPORT",
-          "description": "Network/HTTP failure talking to backend.",
-          "openFeature": "GENERAL",
-          "evaluationBehavior": "return_default"
+          "kind": "AlreadyClosed",
+          "openFeatureErrorCode": "PROVIDER_NOT_READY",
+          "retryable": false,
+          "class": "permanent",
+          "defaultMessage": "provider already closed",
+          "description": "Operation invoked after shutdown/close; Fireweave kind preserved in flagMetadata fireweave.errorKind"
         }
-      ],
-      "openFeatureMapping": {
-        "NOT_READY": "PROVIDER_NOT_READY",
-        "FATAL": "PROVIDER_FATAL",
-        "FLAG_NOT_FOUND": "FLAG_NOT_FOUND",
-        "PARSE_ERROR": "PARSE_ERROR",
-        "TYPE_MISMATCH": "TYPE_MISMATCH",
-        "TARGETING_KEY_MISSING": "TARGETING_KEY_MISSING",
-        "INVALID_CONTEXT": "INVALID_CONTEXT",
-        "QUOTA_LIMITED": "FLAG_NOT_FOUND",
-        "TRANSPORT": "GENERAL",
-        "TIMEOUT": "GENERAL",
-        "SHUTDOWN": "PROVIDER_NOT_READY",
-        "UNKNOWN": "GENERAL"
-      }
+      ]
     }
   ]
 }

@@ -21,14 +21,14 @@ Machine-readable twin: [`errors.json`](./errors.json).
 | `InvalidContext` | `INVALID_CONTEXT` or `TARGETING_KEY_MISSING` | no | permanent | Bad/oversized context; missing targeting key when required |
 | `Authentication` | `GENERAL` | no | permanent | 401 / invalid project or secret key |
 | `Authorization` | `GENERAL` | no | permanent | 403 / key lacks flag permission |
-| `RateLimited` | `GENERAL` | yes | transient | 429 or `/flags` `quotaLimited` surfaced as soft-limit (still serve defaults) |
+| `RateLimited` | `GENERAL` | yes | transient | HTTP 429 from the backend (still serve defaults; `/flags` `quotaLimited` is `FlagNotFound`, see quota note) |
 | `Timeout` | `GENERAL` | yes | transient | Flag-request or init deadline exceeded |
 | `Network` | `GENERAL` | yes | transient | DNS/connect/reset/TLS transport failure |
 | `BackendUnavailable` | `GENERAL` | yes | transient | 5xx / upstream unavailable |
 | `MalformedResponse` | `PARSE_ERROR` | no | permanent* | Non-JSON or schema-invalid `/flags` or definitions body |
 | `UnsupportedCapability` | `GENERAL` | no | permanent | Extension/capability not implemented in this SDK build |
 | `Configuration` | `PROVIDER_FATAL` (init) / `GENERAL` (runtime) | no | permanent | Invalid host, mutually exclusive options, missing required config |
-| `AlreadyClosed` | `GENERAL` | no | permanent | Call after shutdown / close |
+| `AlreadyClosed` | `PROVIDER_NOT_READY` | no | permanent | Call after shutdown / close (Fireweave kind preserved in `flagMetadata["fireweave.errorKind"]`) |
 | `Internal` | `GENERAL` | no† | permanent | Unexpected invariant violation |
 
 \* Malformed payloads are treated permanent for a given response; a later poll may succeed — adapters MAY retry the **transport** but MUST NOT invent flag values.  
@@ -40,14 +40,14 @@ All eight OF codes are reachable:
 
 | OF code | Fireweave kind(s) |
 | --- | --- |
-| `PROVIDER_NOT_READY` | `NotReady` |
+| `PROVIDER_NOT_READY` | `NotReady`, `AlreadyClosed` (post-shutdown) |
 | `PROVIDER_FATAL` | `Configuration` (init-fatal path) |
 | `FLAG_NOT_FOUND` | `FlagNotFound` |
 | `PARSE_ERROR` | `MalformedResponse` |
 | `TYPE_MISMATCH` | `TypeMismatch` |
 | `TARGETING_KEY_MISSING` | `InvalidContext` (subtype when targeting key required/missing) |
 | `INVALID_CONTEXT` | `InvalidContext` |
-| `GENERAL` | `Authentication`, `Authorization`, `RateLimited`, `Timeout`, `Network`, `BackendUnavailable`, `UnsupportedCapability`, `AlreadyClosed`, `Internal`, non-fatal `Configuration` |
+| `GENERAL` | `Authentication`, `Authorization`, `RateLimited`, `Timeout`, `Network`, `BackendUnavailable`, `UnsupportedCapability`, `Internal`, non-fatal `Configuration` |
 
 Fireweave may attach `flagMetadata["fireweave.errorKind"]` with the canonical `kind` for diagnostics (never secrets).
 
@@ -58,7 +58,7 @@ Fireweave may attach `flagMetadata["fireweave.errorKind"]` with the canonical `k
 
 ### Quota limiting note
 
-PostHog `/flags?v=2` may return HTTP 200 with `quotaLimited: ["feature_flags"]` and empty `flags`. Evaluation MUST return the **default** with `FlagNotFound` / `FLAG_NOT_FOUND` (or documented soft `RateLimited` metadata). Do not treat as outage/`BackendUnavailable`.
+PostHog `/flags?v=2` may return HTTP 200 with `quotaLimited: ["feature_flags"]` and empty `flags`. Evaluation MUST return the **default** with `FlagNotFound` / `FLAG_NOT_FOUND` and set `flagMetadata["fireweave.quotaLimited"] = true`. Do not treat as outage/`BackendUnavailable`.
 
 ### Message guidelines
 

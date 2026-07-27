@@ -50,3 +50,9 @@ Resolving Agent D (spec/) vs Agent E (contracts/) divergences. Canonical rule: `
 3. **AlreadyClosed → OpenFeature `PROVIDER_NOT_READY`** (not GENERAL); Fireweave kind preserved in decision metadata. E fixtures updated.
 4. **quotaLimited:** confirmed — treated as flag-not-found default resolution with metadata key `fireweave.quotaLimited: true`.
 5. **Extension API shapes:** `contracts/extensions/*` fixtures must match the public API sketch in `docs/architecture.md` (releases.setContext/start/complete/fail; exposures.record/flush; signals.recordHealth/recordError/recordMetric/recordOutcome; capabilities.get). Divergences fixed on the fixtures side unless the sketch is ambiguous — then flagged.
+
+## Orchestrator ruling 6 (Phase 2 exit, follow-up)
+
+6. **Extension API surface (final):** canonical shapes are `releases.setContext/start/complete/fail`, `exposures.record/flush`, `signals.recordHealth/recordError/recordMetric/recordOutcome`, `capabilities.get` (per project brief candidates; already encoded in the 13 extension fixtures). `docs/architecture.md` §6 must be updated to these shapes (replacing attest/current, track/setPolicy, emit); deploy-attestation semantics are carried by `releases.setContext` + `releases.start`. `spec/signal.schema.json` must be reconciled to the fixture signal model (kind: health|error|metric|outcome, status, optional timestamp for deterministic fixtures). Capability strings updated to match final method names and include `capabilities.get`.
+
+Phase 2 exit checklist: **8/8 PASS** (see reconciliation report). Phase 3 authorized upon ruling-6 application.

@@ -27,7 +27,7 @@
     "value": false,
     "variant": null,
     "reason": "ERROR",
-    "errorCode": "GENERAL",
+    "errorCode": "PROVIDER_NOT_READY",
     "errorMessage": "provider already closed",
     "flagMetadata": {
       "fireweave.errorKind": "AlreadyClosed"

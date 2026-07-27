@@ -137,7 +137,16 @@
           "description": "Approximate max UTF-8 JSON size for a single evaluation context."
         },
         "maxAttributeKeys": { "type": "integer", "const": 128 },
-        "maxStringLength": { "type": "integer", "const": 4096 }
+        "maxKeyBytes": {
+          "type": "integer",
+          "const": 256,
+          "description": "Maximum UTF-8 size of a single attribute key."
+        },
+        "maxStringLength": {
+          "type": "integer",
+          "const": 4096,
+          "description": "Maximum UTF-8 size (4 KiB) of a single string attribute value."
+        }
       }
     },
     "reservedKeys": {

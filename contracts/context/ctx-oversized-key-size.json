@@ -1,10 +1,9 @@
 {
-  "description": "Attribute key longer than 256 bytes rejected (provisional)",
+  "description": "Attribute key longer than 256 bytes rejected",
   "tags": [
-    "bounds",
-    "provisional"
+    "bounds"
   ],
-  "provisional": true,
+  "provisional": false,
   "given": {
     "providerState": "READY",
     "flags": {
