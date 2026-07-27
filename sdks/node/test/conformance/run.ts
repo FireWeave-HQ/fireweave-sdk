@@ -62,6 +62,13 @@ interface Fixture {
   };
   when: Record<string, JsonValue> & { operation: string };
   expect: Record<string, JsonValue>;
+  /** Multi-case fixtures (contracts/README.md): each case runs fresh. */
+  cases?: Array<{
+    name: string;
+    given?: Partial<Fixture['given']>;
+    when: Record<string, JsonValue> & { operation: string };
+    expect: Record<string, JsonValue>;
+  }>;
   compatibility: Record<string, string>;
   limitations: Record<string, string>;
 }
@@ -146,8 +153,32 @@ function deepEqual(a: unknown, b: unknown): boolean {
 
 const META_EXPECT_KEYS = new Set(['errorMessageMustNotContain', 'recordedMessageMustNotContain']);
 
+/**
+ * Subset match (harness.md, getCapabilities exception): every declared key
+ * must match exactly; undeclared keys in `actual` are permitted.
+ */
+function subsetMatch(expected: unknown, actual: unknown): boolean {
+  if (
+    expected !== null &&
+    actual !== null &&
+    typeof expected === 'object' &&
+    typeof actual === 'object' &&
+    !Array.isArray(expected) &&
+    !Array.isArray(actual)
+  ) {
+    return Object.entries(expected as Record<string, unknown>).every(([k, v]) =>
+      subsetMatch(v, (actual as Record<string, unknown>)[k]),
+    );
+  }
+  return deepEqual(expected, actual);
+}
+
 /** Compare expect vs actual per the normative comparator (contracts/README.md). */
-function diff(expected: Record<string, JsonValue>, actual: ActualOutput): string[] {
+function diff(
+  expected: Record<string, JsonValue>,
+  actual: ActualOutput,
+  subsetKeys: readonly string[] = [],
+): string[] {
   const failures: string[] = [];
   for (const [key, expectedValue] of Object.entries(expected)) {
     if (META_EXPECT_KEYS.has(key)) continue;
@@ -155,6 +186,14 @@ function diff(expected: Record<string, JsonValue>, actual: ActualOutput): string
     if (expectedValue === null) {
       if (actualValue !== null && actualValue !== undefined) {
         failures.push(`${key}: expected null, got ${JSON.stringify(actualValue)}`);
+      }
+      continue;
+    }
+    if (subsetKeys.includes(key)) {
+      if (!subsetMatch(expectedValue, actualValue)) {
+        failures.push(
+          `${key}: expected subset ${JSON.stringify(expectedValue)}, got ${JSON.stringify(actualValue)}`,
+        );
       }
       continue;
     }
@@ -520,8 +559,19 @@ async function runExtensionFixture(fixture: Fixture): Promise<ActualOutput> {
   });
 
   switch (when.operation) {
-    case 'getCapabilities':
-      return { capabilities: [...client.capabilities.list()], errorCode: null };
+    case 'getCapabilities': {
+      // Ruling 18: the structured static/runtime matrix, never a flat list.
+      const matrix = client.capabilities.get();
+      const failures: string[] = [];
+      if (typeof matrix.static?.language !== 'string') failures.push('static.language missing');
+      if (typeof matrix.static?.openFeature?.specFloor !== 'string') failures.push('static.openFeature.specFloor missing');
+      if (typeof matrix.runtime?.backend !== 'string') failures.push('runtime.backend missing');
+      if (typeof matrix.runtime?.lifecycle !== 'string') failures.push('runtime.lifecycle missing');
+      if (failures.length > 0) {
+        throw new Error(`capabilities matrix shape invalid: ${failures.join(', ')}`);
+      }
+      return { capabilities: matrix as unknown as JsonValue, errorCode: null };
+    }
     case 'invokeCapability': {
       const result = client.invokeCapability(when['capability'] as string, when['args'] as Record<string, JsonValue>);
       return withErrorFields(result);
@@ -664,6 +714,28 @@ async function runFaultFixture(fixture: Fixture): Promise<ActualOutput> {
 // ---------------------------------------------------------------------------
 // main
 
+/** Run one fully-resolved when/expect pair; returns comparator failures. */
+async function executeOne(fixture: Fixture): Promise<string[]> {
+  let actual: ActualOutput;
+  if (fixture.suite === 'faults') {
+    actual = await runFaultFixture(fixture);
+  } else if (fixture.when.operation === 'evaluate') {
+    actual = await runEvaluateFixture(fixture);
+  } else if (
+    fixture.when.operation === 'initialize' ||
+    fixture.when.operation === 'shutdown' ||
+    fixture.when.operation === 'replaceProvider'
+  ) {
+    actual = await runLifecycleOpFixture(fixture);
+  } else {
+    actual = await runExtensionFixture(fixture);
+  }
+  // getCapabilities exception (harness.md): expect.capabilities compares as a
+  // subset of the structured matrix; all other keys stay strict.
+  const subsetKeys = fixture.when.operation === 'getCapabilities' ? ['capabilities'] : [];
+  return diff(fixture.expect, actual, subsetKeys);
+}
+
 async function main(): Promise<void> {
   const fixtures = loadFixtures();
   const rows: ReportRow[] = [];
@@ -682,32 +754,37 @@ async function main(): Promise<void> {
       continue;
     }
 
+    // Multi-case fixtures run every case against a fresh setup; the fixture
+    // passes only when all cases pass (one report row per fixture).
+    const runs: Array<{ label: string | null; fixture: Fixture }> =
+      fixture.cases !== undefined
+        ? fixture.cases.map((c) => ({
+            label: c.name,
+            fixture: {
+              ...fixture,
+              given: { ...fixture.given, ...(c.given ?? {}) },
+              when: c.when,
+              expect: c.expect,
+            },
+          }))
+        : [{ label: null, fixture }];
+
     let status: ReportRow['status'] = 'pass';
-    let message: string | null = null;
-    try {
-      let actual: ActualOutput;
-      if (fixture.suite === 'faults') {
-        actual = await runFaultFixture(fixture);
-      } else if (fixture.when.operation === 'evaluate') {
-        actual = await runEvaluateFixture(fixture);
-      } else if (
-        fixture.when.operation === 'initialize' ||
-        fixture.when.operation === 'shutdown' ||
-        fixture.when.operation === 'replaceProvider'
-      ) {
-        actual = await runLifecycleOpFixture(fixture);
-      } else {
-        actual = await runExtensionFixture(fixture);
-      }
-      const failures = diff(fixture.expect, actual);
-      if (failures.length > 0) {
+    const messages: string[] = [];
+    for (const run of runs) {
+      const prefix = run.label !== null ? `[${run.label}] ` : '';
+      try {
+        const failures = await executeOne(run.fixture);
+        if (failures.length > 0) {
+          status = 'fail';
+          messages.push(`${prefix}${failures.join('; ')}`);
+        }
+      } catch (err) {
         status = 'fail';
-        message = failures.join('; ');
+        messages.push(`${prefix}harness error: ${err instanceof Error ? err.message : String(err)}`);
       }
-    } catch (err) {
-      status = 'fail';
-      message = `harness error: ${err instanceof Error ? err.message : String(err)}`;
     }
+    const message = messages.length > 0 ? messages.join(' | ') : null;
     rows.push({ fixtureId: fixture.id, suite: fixture.suite, language: 'node', status, limitation: null, message });
   }
 

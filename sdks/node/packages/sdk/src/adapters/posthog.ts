@@ -15,13 +15,17 @@
  * the client is accepted via the structural {@link PostHogClientLike} interface.
  */
 import { FireweaveError } from '../errors.js';
+import { assertHostAllowed } from '../hosts.js';
 import type {
   AdapterResolution,
   AdapterRuntimeFeatures,
   BackendAdapter,
   ResolveOptions,
 } from '../adapter.js';
-import type { CanonicalContext, Exposure, JsonValue } from '../types.js';
+import type { CanonicalContext, Exposure, JsonValue, Signal } from '../types.js';
+
+/** Default bound on client shutdown (mirrors DEFAULT_SHUTDOWN_TIMEOUT_MS). */
+const DEFAULT_ADAPTER_SHUTDOWN_TIMEOUT_MS = 10000;
 
 /** Minimal structural view of a posthog-node client (no vendor types leaked). */
 export interface PostHogClientLike {
@@ -66,6 +70,13 @@ export interface PostHogAdapterOptions {
   projectApiKey?: string;
   /** PostHog host (e.g. the test-server stub or us.i.posthog.com). */
   host?: string;
+  /**
+   * SSRF allowlist override. Empty/undefined ⇒ the canonical PostHog default
+   * allowlist + loopback; ['*'] opts out (self-hosted at your own risk).
+   */
+  allowedHosts?: readonly string[];
+  /** Deadline handed to the vendor client's shutdown (default 10 000 ms). */
+  shutdownTimeoutMs?: number;
   /** Secret/personal key (phs_/phx_) enabling local evaluation. */
   secretApiKey?: string;
   /** Evaluate exclusively from local definitions (no /flags fallback). */
@@ -202,6 +213,11 @@ export class PostHogAdapter implements BackendAdapter {
       if (this.options.projectApiKey === undefined || this.options.projectApiKey.length === 0) {
         throw new FireweaveError('Configuration');
       }
+      // Default-on host allowlist (H-1): the adapter is the egress point, so
+      // it validates independently of the runtime-level config check.
+      if (this.options.host !== undefined) {
+        assertHostAllowed(this.options.host, this.options.allowedHosts);
+      }
       // posthog-node is an optional peer dependency: load lazily so the main
       // entrypoint never depends on it.
       const mod = (await import('posthog-node')) as {
@@ -251,10 +267,16 @@ export class PostHogAdapter implements BackendAdapter {
 
     const personProperties: Record<string, string> = {};
     for (const [k, v] of Object.entries(context.attributes)) {
-      if (k === 'groups' || k === 'groupProperties' || k.startsWith('$')) continue;
+      // groups/groupProperties (plain aliases), fireweave.* carriers (ruling 13)
+      // and $-prefixed system directives are not person properties.
+      if (k === 'groups' || k === 'groupProperties' || k.startsWith('$') || k.startsWith('fireweave.')) {
+        continue;
+      }
       personProperties[k] = typeof v === 'string' ? v : JSON.stringify(v);
     }
-    const groupProperties = this.extractGroupProperties(context.attributes['groupProperties']);
+    const groupProperties = this.extractGroupProperties(
+      context.groupProperties ?? context.attributes['groupProperties'],
+    );
 
     this.flagsObservations.delete(distinctId);
     const evalOptions: Parameters<PostHogClientLike['evaluateFlags']>[1] = {
@@ -345,7 +367,9 @@ export class PostHogAdapter implements BackendAdapter {
     return resolution;
   }
 
-  private extractGroupProperties(value: JsonValue | undefined): Record<string, Record<string, string>> | undefined {
+  private extractGroupProperties(
+    value: Record<string, JsonValue> | JsonValue | undefined,
+  ): Record<string, Record<string, string>> | undefined {
     if (value === undefined || value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
     const out: Record<string, Record<string, string>> = {};
     for (const [group, props] of Object.entries(value)) {
@@ -385,12 +409,37 @@ export class PostHogAdapter implements BackendAdapter {
     }
   }
 
+  recordSignal(signal: Signal): void {
+    if (this.client === undefined || this.closed) return;
+    const properties: Record<string, unknown> = {
+      'fireweave.signal': true,
+      kind: signal.kind,
+      name: signal.name,
+    };
+    if (signal.status !== undefined) properties['status'] = signal.status;
+    if (signal.errorKind !== undefined) properties['errorKind'] = signal.errorKind;
+    if (signal.message !== undefined) properties['message'] = signal.message;
+    if (signal.value !== undefined) properties['value'] = signal.value;
+    if (signal.rolloutId !== undefined) properties['fireweave.rolloutId'] = signal.rolloutId;
+    if (signal.changeId !== undefined) properties['fireweave.changeId'] = signal.changeId;
+    if (signal.stampId !== undefined) properties['fireweave.stampId'] = signal.stampId;
+    if (signal.flagKey !== undefined) properties['flagKey'] = signal.flagKey;
+    if (signal.variant !== undefined) properties['variant'] = signal.variant;
+    this.client.capture({
+      distinctId: signal.targetingKey ?? signal.rolloutId ?? 'fireweave-sdk',
+      event: `$fw_signal_${signal.kind}`,
+      properties,
+    });
+  }
+
   async shutdown(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
     if (this.client !== undefined && this.ownsClient) {
       try {
-        await this.client.shutdown(2000);
+        // Configured deadline (M-1/L-4): no more hardcoded 2 s — the vendor
+        // client gets the same bound the config/capabilities advertise.
+        await this.client.shutdown(this.options.shutdownTimeoutMs ?? DEFAULT_ADAPTER_SHUTDOWN_TIMEOUT_MS);
       } catch {
         // never throw from shutdown
       }

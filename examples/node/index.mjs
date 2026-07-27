@@ -88,12 +88,19 @@ const fallback = await flags.getStringValue('checkout-theme', 'classic', {
 });
 console.log(`checkout-theme for non-beta user: ${fallback}`);
 
-// 5. Fireweave extensions: releases, signals, exposures.
+// 5. Fireweave extensions: detailed evaluation, releases, signals, exposures.
 const fireweave = new FireweaveClient(runtime);
+
+// Detailed Decision-returning evaluation on the public client surface:
+const decision = await fireweave.flags.evaluate('new-checkout', 'boolean', false, context);
+console.log(`flags.evaluate reason: ${decision.reason}`);
+
+// Ratified ID shapes: stmp_/chg_/sfc_ + 26-char Crockford ULIDs.
 const release = fireweave.releases.setContext({
-  stampIds: ['stamp_01HZXEXAMPLE000000000001'],
-  rolloutId: 'rollout_01HZXEXAMPLE00000000001',
-  surfaces: [{ surfaceId: 'checkout-api', kind: 'node-server' }],
+  stampIds: ['stmp_01HZXEXAMPE000000000000001'],
+  rolloutId: 'rollout_01HZXEXAMPE000000000000001',
+  changeId: 'chg_01HZXEXAMPE000000000000001',
+  surfaces: [{ surfaceId: 'sfc_01HZXEXAMPE000000000000001', kind: 'node-server' }],
 });
 console.log('release context set:', release.ok);
 

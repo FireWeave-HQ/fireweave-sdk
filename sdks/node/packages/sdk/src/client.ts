@@ -4,10 +4,12 @@
  * capabilities. Facade methods degrade instead of throwing.
  */
 import { FireweaveError, redactSecrets, type FireweaveErrorKind } from './errors.js';
-import { stableStringify } from './runtime.js';
-import type { FireweaveRuntime } from './runtime.js';
+import { DEFAULT_SHUTDOWN_TIMEOUT_MS, stableStringify } from './runtime.js';
+import type { EvaluateOptions, ExpectedFlagType, FireweaveRuntime } from './runtime.js';
+import type { ContextInput } from './context.js';
 import type {
   Capabilities,
+  Decision,
   Exposure,
   JsonValue,
   ReleaseContext,
@@ -43,9 +45,33 @@ export interface SignalResult extends ExtensionResult {
   accepted?: boolean;
 }
 
+/**
+ * Canonical telemetry attribute allowlist (M-3; matches Python/Go): applied
+ * by default so arbitrary PII cannot ride along on signal attributes.
+ */
+export const DEFAULT_SIGNAL_ATTRIBUTE_ALLOWLIST: readonly string[] = Object.freeze([
+  'name',
+  'kind',
+  'status',
+  'value',
+  'unit',
+  'rolloutId',
+  'changeId',
+  'stampId',
+  'errorKind',
+  'message',
+  'flagKey',
+  'variant',
+  'environment',
+  'service',
+]);
+
 /** Attribute allowlist applied to signal attributes before recording. */
 export interface TelemetryPolicy {
-  /** Attribute keys allowed on signals/exposures. Undefined ⇒ all non-secret keys. */
+  /**
+   * Attribute keys allowed on signals/exposures.
+   * Undefined ⇒ DEFAULT_SIGNAL_ATTRIBUTE_ALLOWLIST (allowlist is ON by default).
+   */
   attributeAllowlist?: readonly string[];
 }
 
@@ -57,15 +83,41 @@ const failure = (err: FireweaveError, degraded = false): ExtensionResult => ({
   ...(degraded ? { degraded: true } : {}),
 });
 
+/**
+ * Lifecycle gate for extension calls (ruling 17, Go/Java model; fixture
+ * ext-lifecycle-gating): READY/STALE proceed; post-shutdown degrades
+ * AlreadyClosed; pre-ready degrades UnsupportedCapability. Gated methods never
+ * throw — failures come back as structured, degraded results.
+ */
+const lifecycleGate = (runtime: FireweaveRuntime): FireweaveError | undefined => {
+  switch (runtime.getState()) {
+    case 'READY':
+    case 'STALE':
+      return undefined;
+    case 'SHUTDOWN':
+      return new FireweaveError('AlreadyClosed');
+    default:
+      return new FireweaveError('UnsupportedCapability');
+  }
+};
+
 class ReleasesApi {
   private state: ReleaseState | undefined;
+  private readonly runtime: FireweaveRuntime;
   private readonly signals: SignalsApi;
 
-  constructor(signals: SignalsApi) {
+  constructor(runtime: FireweaveRuntime, signals: SignalsApi) {
+    this.runtime = runtime;
     this.signals = signals;
   }
 
   setContext(context: ReleaseContext): ReleaseResult {
+    const gateError = lifecycleGate(this.runtime);
+    if (gateError !== undefined) return failure(gateError, true);
+    // Ruling 15: exactly the spec's required set — rolloutId + stampIds.
+    if (typeof context.rolloutId !== 'string' || context.rolloutId.length === 0) {
+      return failure(new FireweaveError('InvalidContext', { message: 'release context requires rolloutId' }));
+    }
     if (!Array.isArray(context.stampIds) || context.stampIds.length === 0) {
       return failure(new FireweaveError('InvalidContext', { message: 'release context requires stampIds' }));
     }
@@ -94,6 +146,8 @@ class ReleasesApi {
   }
 
   start(args: { rolloutId?: string } = {}): ReleaseResult {
+    const gateError = lifecycleGate(this.runtime);
+    if (gateError !== undefined) return failure(gateError, true);
     const state = this.requireRelease(args.rolloutId);
     if (state instanceof FireweaveError) return failure(state);
     state.status = 'in_progress';
@@ -101,6 +155,8 @@ class ReleasesApi {
   }
 
   complete(args: { rolloutId?: string } = {}): ReleaseResult {
+    const gateError = lifecycleGate(this.runtime);
+    if (gateError !== undefined) return failure(gateError, true);
     const state = this.requireRelease(args.rolloutId);
     if (state instanceof FireweaveError) return failure(state);
     state.status = 'completed';
@@ -114,6 +170,8 @@ class ReleasesApi {
   }
 
   fail(args: { rolloutId?: string; reason?: string } = {}): ReleaseResult {
+    const gateError = lifecycleGate(this.runtime);
+    if (gateError !== undefined) return failure(gateError, true);
     const state = this.requireRelease(args.rolloutId);
     if (state instanceof FireweaveError) return failure(state);
     state.status = 'failed';
@@ -144,6 +202,8 @@ class ExposuresApi {
   }
 
   record(exposure: Exposure): ExposureResult {
+    const gateError = lifecycleGate(this.runtime);
+    if (gateError !== undefined) return failure(gateError, true);
     if (typeof exposure.targetingKey !== 'string' || exposure.targetingKey.length === 0 ||
         typeof exposure.flagKey !== 'string' || exposure.flagKey.length === 0) {
       return failure(new FireweaveError('InvalidContext', { message: 'exposure requires targetingKey and flagKey' }));
@@ -170,11 +230,16 @@ class ExposuresApi {
   }
 
   async flush(signal?: AbortSignal): Promise<ExposureResult> {
+    const gateError = lifecycleGate(this.runtime);
+    if (gateError !== undefined) return failure(gateError, true);
     if (signal?.aborted) {
       return failure(new FireweaveError('Timeout', { message: 'flush aborted' }));
     }
     const draining = this.queue;
     this.queue = [];
+    // Ratified dedup lifecycle (M-2, Python's model): the dedup window is one
+    // flush cycle, so the seen-set cannot grow without bound.
+    this.seen.clear();
     for (const exposure of draining) {
       this.runtime.adapter.recordExposure?.(exposure);
     }
@@ -191,13 +256,18 @@ class ExposuresApi {
 
 class SignalsApi {
   private readonly recorded: Signal[] = [];
-  private readonly policy: TelemetryPolicy;
+  private readonly runtime: FireweaveRuntime;
+  private readonly attributeAllowlist: readonly string[];
 
-  constructor(policy: TelemetryPolicy = {}) {
-    this.policy = policy;
+  constructor(runtime: FireweaveRuntime, policy: TelemetryPolicy = {}) {
+    this.runtime = runtime;
+    // Allowlist is ON by default (M-3): callers may extend/override explicitly.
+    this.attributeAllowlist = policy.attributeAllowlist ?? DEFAULT_SIGNAL_ATTRIBUTE_ALLOWLIST;
   }
 
   record(signal: Signal): SignalResult {
+    const gateError = lifecycleGate(this.runtime);
+    if (gateError !== undefined) return failure(gateError, true);
     if (typeof signal.name !== 'string' || signal.name.length === 0) {
       return failure(new FireweaveError('InvalidContext', { message: 'signal name must be non-empty' }));
     }
@@ -206,14 +276,14 @@ class SignalsApi {
     if (clean.attributes !== undefined) {
       const attrs: Record<string, string | number | boolean | null> = {};
       for (const [k, v] of Object.entries(clean.attributes)) {
-        if (this.policy.attributeAllowlist !== undefined && !this.policy.attributeAllowlist.includes(k)) {
-          continue;
-        }
+        if (!this.attributeAllowlist.includes(k)) continue;
         attrs[k] = typeof v === 'string' ? redactSecrets(v) : v;
       }
       clean.attributes = attrs;
     }
     this.recorded.push(clean);
+    // Ruling 17: signals are delivered to the adapter sink when it has one.
+    this.runtime.adapter.recordSignal?.(clean);
     return { ok: true, accepted: true };
   }
 
@@ -235,6 +305,50 @@ class SignalsApi {
 
   getRecorded(kind?: SignalKind): readonly Signal[] {
     return kind === undefined ? this.recorded : this.recorded.filter((s) => s.kind === kind);
+  }
+}
+
+/**
+ * Detailed evaluation on the public client surface (ruling 16): Decision-returning
+ * evaluation without reaching into the runtime. Never throws — errors surface
+ * as ERROR decisions, exactly like the OpenFeature path.
+ */
+class FlagsApi {
+  private readonly runtime: FireweaveRuntime;
+
+  constructor(runtime: FireweaveRuntime) {
+    this.runtime = runtime;
+  }
+
+  /** Evaluate a flag to a canonical Decision (detailed evaluation). */
+  evaluate(
+    flagKey: string,
+    expectedType: ExpectedFlagType,
+    defaultValue: JsonValue,
+    context?: ContextInput,
+    options?: EvaluateOptions,
+  ): Promise<Decision> {
+    return this.runtime.evaluate(flagKey, expectedType, defaultValue, context, options ?? {});
+  }
+
+  async getBooleanValue(flagKey: string, defaultValue: boolean, context?: ContextInput): Promise<boolean> {
+    const decision = await this.evaluate(flagKey, 'boolean', defaultValue, context);
+    return decision.value as boolean;
+  }
+
+  async getStringValue(flagKey: string, defaultValue: string, context?: ContextInput): Promise<string> {
+    const decision = await this.evaluate(flagKey, 'string', defaultValue, context);
+    return decision.value as string;
+  }
+
+  async getNumberValue(flagKey: string, defaultValue: number, context?: ContextInput): Promise<number> {
+    const decision = await this.evaluate(flagKey, 'number', defaultValue, context);
+    return decision.value as number;
+  }
+
+  async getObjectValue(flagKey: string, defaultValue: JsonValue, context?: ContextInput): Promise<JsonValue> {
+    const decision = await this.evaluate(flagKey, 'object', defaultValue, context);
+    return decision.value;
   }
 }
 
@@ -302,7 +416,11 @@ class CapabilitiesApi {
           sideEffectFreeReads: adapterFeatures.sideEffectFreeReads ?? false,
           groupAnalytics: adapterFeatures.groupAnalytics ?? false,
         },
-        limits: { intSafeMaxAbs: 9007199254740991, shutdownTimeoutMsDefault: 10000 },
+        limits: {
+          intSafeMaxAbs: 9007199254740991,
+          // Effective configured shutdown bound (single source of truth, L-4).
+          shutdownTimeoutMsDefault: this.runtime.config.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS,
+        },
       },
     };
   }
@@ -314,6 +432,7 @@ export interface FireweaveClientOptions {
 
 export class FireweaveClient {
   readonly runtime: FireweaveRuntime;
+  readonly flags: FlagsApi;
   readonly releases: ReleasesApi;
   readonly exposures: ExposuresApi;
   readonly signals: SignalsApi;
@@ -322,8 +441,9 @@ export class FireweaveClient {
 
   constructor(runtime: FireweaveRuntime, options: FireweaveClientOptions = {}) {
     this.runtime = runtime;
-    this.signals = new SignalsApi(options.telemetry ?? {});
-    this.releases = new ReleasesApi(this.signals);
+    this.flags = new FlagsApi(runtime);
+    this.signals = new SignalsApi(runtime, options.telemetry ?? {});
+    this.releases = new ReleasesApi(runtime, this.signals);
     this.exposures = new ExposuresApi(runtime);
     this.guardrails = new GuardrailsApi();
     this.capabilities = new CapabilitiesApi(runtime);
@@ -332,10 +452,15 @@ export class FireweaveClient {
   /**
    * Dynamic capability dispatch. Unknown capabilities degrade with
    * UnsupportedCapability — never throws (fixture ext-unsupported-capability-degrade).
+   * Known capabilities are lifecycle-gated like the namespaced APIs (ruling 17).
    */
   invokeCapability(capability: string, _args?: Record<string, JsonValue>): ExtensionResult {
     if (!SUPPORTED_CAPABILITIES.includes(capability)) {
       return failure(new FireweaveError('UnsupportedCapability'), true);
+    }
+    if (capability !== 'capabilities.get') {
+      const gateError = lifecycleGate(this.runtime);
+      if (gateError !== undefined) return failure(gateError, true);
     }
     return { ok: true };
   }

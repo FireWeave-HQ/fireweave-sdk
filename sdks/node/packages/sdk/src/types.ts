@@ -34,8 +34,16 @@ export interface CanonicalContext {
   targetingKey?: string;
   /** All non-reserved attributes (targetingKey excluded). */
   attributes: Record<string, JsonValue>;
-  /** groups extracted from `groups` attribute when shaped as Record<string,string>. */
+  /**
+   * Group memberships extracted from `fireweave.groups` (canonical, ruling 13)
+   * or the plain `groups` alias, when shaped as Record<string,string>.
+   */
   groups?: Record<string, string>;
+  /**
+   * Group properties extracted from `fireweave.groupProperties` (canonical)
+   * or the plain `groupProperties` alias.
+   */
+  groupProperties?: Record<string, JsonValue>;
 }
 
 export type LifecycleState =
@@ -70,10 +78,10 @@ export interface Signal {
   attributes?: Record<string, string | number | boolean | null>;
 }
 
-/** Release / rollout context (spec/release-context.schema.json). */
+/** Release / rollout context (spec/release-context.schema.json; ruling 15: rolloutId + stampIds required). */
 export interface ReleaseContext {
   stampIds: string[];
-  rolloutId?: string;
+  rolloutId: string;
   changeId?: string;
   surfaces?: Array<{
     surfaceId: string;

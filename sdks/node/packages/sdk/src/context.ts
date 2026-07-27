@@ -29,6 +29,17 @@ export const DEFAULT_RESERVED_ATTRIBUTE_KEYS: readonly string[] = Object.freeze(
   'kind',
 ]);
 
+/**
+ * Sanctioned fireweave.* carriers (orchestrator rulings 12–14): the ONLY
+ * `fireweave.*` context keys callers may set. They are the canonical spelling
+ * for group memberships / group properties; plain `groups`/`groupProperties`
+ * remain accepted as a documented alias.
+ */
+export const ALLOWED_FIREWEAVE_CONTEXT_KEYS: readonly string[] = Object.freeze([
+  'fireweave.groups',
+  'fireweave.groupProperties',
+]);
+
 export interface ContextPolicy {
   limits: ContextLimits;
   reservedAttributeKeys: readonly string[];
@@ -161,7 +172,12 @@ export function canonicalizeContext(
     throw invalidContext('serialized context exceeds maximum size');
   }
   for (const key of keys) {
-    if (policy.reservedAttributeKeys.includes(key) || key.startsWith('fireweave.')) {
+    if (policy.reservedAttributeKeys.includes(key)) {
+      throw invalidContext('invalid evaluation context');
+    }
+    // Ruling 13: exactly fireweave.groups + fireweave.groupProperties are
+    // permitted in the reserved namespace; every other fireweave.* key is rejected.
+    if (key.startsWith('fireweave.') && !ALLOWED_FIREWEAVE_CONTEXT_KEYS.includes(key)) {
       throw invalidContext('invalid evaluation context');
     }
   }
@@ -175,8 +191,10 @@ export function canonicalizeContext(
   const canonical: CanonicalContext = { attributes };
   if (merged.targetingKey !== undefined) canonical.targetingKey = merged.targetingKey;
 
-  const groups = attributes['groups'];
-  if (groups !== null && typeof groups === 'object' && !Array.isArray(groups)) {
+  // Group memberships: canonical carrier `fireweave.groups` (rulings 13–14),
+  // with plain `groups` retained as a documented alias.
+  const groups = attributes['fireweave.groups'] ?? attributes['groups'];
+  if (groups !== null && groups !== undefined && typeof groups === 'object' && !Array.isArray(groups)) {
     const g: Record<string, string> = {};
     let allStrings = true;
     for (const [k, v] of Object.entries(groups)) {
@@ -184,6 +202,17 @@ export function canonicalizeContext(
       else allStrings = false;
     }
     if (allStrings) canonical.groups = g;
+  }
+  // Group properties: canonical carrier `fireweave.groupProperties`,
+  // plain `groupProperties` retained as alias.
+  const groupProps = attributes['fireweave.groupProperties'] ?? attributes['groupProperties'];
+  if (
+    groupProps !== null &&
+    groupProps !== undefined &&
+    typeof groupProps === 'object' &&
+    !Array.isArray(groupProps)
+  ) {
+    canonical.groupProperties = groupProps as Record<string, JsonValue>;
   }
   return canonical;
 }

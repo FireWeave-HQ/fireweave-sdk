@@ -4,7 +4,8 @@
  * context policy, and decision construction. Defaults never throw: evaluation
  * always returns a Decision.
  */
-import { FireweaveError, isFireweaveError, redactSecrets } from './errors.js';
+import { FireweaveError, isFireweaveError } from './errors.js';
+import { assertHostAllowed } from './hosts.js';
 import {
   DEFAULT_CONTEXT_LIMITS,
   DEFAULT_RESERVED_ATTRIBUTE_KEYS,
@@ -28,9 +29,13 @@ export type ExpectedFlagType = 'boolean' | 'string' | 'number' | 'object';
 export interface FireweaveRuntimeConfig {
   /** PostHog project API key (phc_...) — required only for the PostHog adapter. */
   projectApiKey?: string;
-  /** Backend host (must be http(s) and pass the allowlist when configured). */
+  /** Backend host (must be http(s) and pass the allowlist). */
   host?: string;
-  /** SSRF allowlist: hostnames the SDK may talk to. Empty/undefined ⇒ any http(s) host. */
+  /**
+   * SSRF allowlist: hostnames the SDK may talk to. Empty/undefined ⇒ the
+   * canonical PostHog default allowlist + loopback (DEFAULT_ALLOWED_HOSTS).
+   * Custom/self-hosted endpoints must be listed explicitly; ['*'] opts out.
+   */
   allowedHosts?: readonly string[];
   /** Require targetingKey on every evaluation. */
   requireTargetingKey?: boolean;
@@ -38,18 +43,18 @@ export interface FireweaveRuntimeConfig {
   limits?: Partial<ContextLimits>;
   /** Additional reserved attribute keys. */
   reservedAttributeKeys?: readonly string[];
-  /** Shutdown flush timeout. */
+  /** Shutdown flush deadline (ms). Default DEFAULT_SHUTDOWN_TIMEOUT_MS. */
   shutdownTimeoutMs?: number;
 }
+
+/** Default bound on shutdown/flush (matches capabilities.get()). */
+export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10000;
 
 export interface EvaluateOptions {
   /** Attach flag payload as fireweave.payload metadata (sorted-key JSON string). */
   includePayload?: boolean;
   signal?: AbortSignal;
 }
-
-const isLoopback = (hostname: string): boolean =>
-  hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]';
 
 function validateConfig(config: FireweaveRuntimeConfig, adapterName: string): void {
   if (adapterName === 'posthog') {
@@ -58,23 +63,9 @@ function validateConfig(config: FireweaveRuntimeConfig, adapterName: string): vo
     }
   }
   if (config.host !== undefined) {
-    let url: URL;
-    try {
-      url = new URL(config.host);
-    } catch {
-      throw new FireweaveError('Configuration');
-    }
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-      throw new FireweaveError('Configuration');
-    }
-    if (config.allowedHosts !== undefined && config.allowedHosts.length > 0) {
-      const allowed = config.allowedHosts.some(
-        (h) => url.hostname === h || (h === 'localhost' && isLoopback(url.hostname)),
-      );
-      if (!allowed) {
-        throw new FireweaveError('Configuration');
-      }
-    }
+    // Allowlist is ON by default (release-blockers H-1): undefined/empty
+    // allowedHosts falls back to the canonical PostHog + loopback list.
+    assertHostAllowed(config.host, config.allowedHosts);
   }
   if (config.limits !== undefined) {
     for (const value of Object.values(config.limits)) {
@@ -194,17 +185,31 @@ export class FireweaveRuntime {
 
   async shutdown(): Promise<void> {
     if (this.state === 'SHUTDOWN') return; // idempotent
+    // The configured deadline bounds the whole flush+close sequence (M-1/L-4):
+    // a wedged vendor client must not hang process exit.
+    const timeoutMs = this.config.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, timeoutMs);
+    });
+    const close = (async () => {
+      try {
+        await this.adapter.flush?.();
+      } catch {
+        // best-effort flush; never throw from shutdown
+      }
+      try {
+        await this.adapter.shutdown();
+      } catch {
+        // swallow: shutdown must not throw
+      }
+    })();
     try {
-      await this.adapter.flush?.();
-    } catch {
-      // best-effort flush; never throw from shutdown
+      await Promise.race([close, deadline]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      this.setState('SHUTDOWN');
     }
-    try {
-      await this.adapter.shutdown();
-    } catch {
-      // swallow: shutdown must not throw
-    }
-    this.setState('SHUTDOWN');
   }
 
   /** Canonicalize + validate the merged context (throws FireweaveError). */
@@ -241,9 +246,10 @@ export class FireweaveRuntime {
       const resolveOpts = options.signal !== undefined ? { signal: options.signal } : {};
       resolution = await this.adapter.resolve(flagKey, context, resolveOpts);
     } catch (err) {
-      const fw = isFireweaveError(err)
-        ? err
-        : new FireweaveError('Internal', { cause: err, message: redactSecrets(String(err)) });
+      // H-2: non-Fireweave (vendor/internal) exception text never reaches the
+      // outward errorMessage — the fixed taxonomy message is used and the
+      // original error is preserved on `cause` only.
+      const fw = isFireweaveError(err) ? err : new FireweaveError('Internal', { cause: err });
       return this.errorDecision(flagKey, defaultValue, fw);
     }
 

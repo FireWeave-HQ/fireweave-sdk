@@ -143,6 +143,94 @@ test('adapter throw surfaces mapped error decision without throwing', async () =
   assert.ok(!String(decision.errorMessage).includes('phc_SECRET'));
 });
 
+test('H-2: non-Fireweave adapter errors surface the fixed taxonomy message only', async () => {
+  const vendorText = 'vendor exploded: https://internal.example/?token=abc person=jane@example.com';
+  const adapter: BackendAdapter = {
+    name: 'other',
+    initialize: async () => {},
+    resolve: async () => {
+      throw new Error(vendorText);
+    },
+    shutdown: async () => {},
+    features: () => ({}),
+  };
+  const runtime = new FireweaveRuntime(adapter);
+  await runtime.initialize();
+  const decision = await runtime.evaluate('fw-a', 'boolean', false);
+  assert.equal(decision.errorKind, 'Internal');
+  // Outward message is exactly the taxonomy safeMessage; vendor text is cause-only.
+  assert.equal(decision.errorMessage, 'internal error');
+  assert.ok(!String(decision.errorMessage).includes('internal.example'));
+  assert.ok(!String(decision.errorMessage).includes('jane@example.com'));
+});
+
+test('H-1: host allowlist is ON by default — unlisted host is Configuration/FATAL', async () => {
+  const runtime = new FireweaveRuntime(adapterWith(BOOL_ON), { host: 'https://169.254.169.254' });
+  await assert.rejects(
+    () => runtime.initialize(),
+    (err: unknown) => err instanceof FireweaveError && err.kind === 'Configuration',
+  );
+  assert.equal(runtime.getState(), 'FATAL');
+});
+
+test('H-1: canonical PostHog hosts pass the default allowlist over https', async () => {
+  for (const host of [
+    'https://app.posthog.com',
+    'https://us.posthog.com',
+    'https://eu.posthog.com',
+    'https://us.i.posthog.com',
+    'https://eu.i.posthog.com',
+  ]) {
+    const runtime = new FireweaveRuntime(adapterWith(BOOL_ON), { host });
+    await runtime.initialize();
+    assert.equal(runtime.getState(), 'READY');
+  }
+});
+
+test('H-1/L-3: http is loopback-only; https required for non-loopback hosts', async () => {
+  // http on loopback (test stub) is fine:
+  const loop = new FireweaveRuntime(adapterWith(BOOL_ON), { host: 'http://127.0.0.1:3901' });
+  await loop.initialize();
+  assert.equal(loop.getState(), 'READY');
+  // http on an otherwise-allowlisted host is rejected:
+  const insecure = new FireweaveRuntime(adapterWith(BOOL_ON), { host: 'http://us.posthog.com' });
+  await assert.rejects(
+    () => insecure.initialize(),
+    (err: unknown) => err instanceof FireweaveError && err.kind === 'Configuration',
+  );
+});
+
+test('H-1: custom hosts require explicit allowedHosts config', async () => {
+  const denied = new FireweaveRuntime(adapterWith(BOOL_ON), { host: 'https://posthog.internal.example' });
+  await assert.rejects(() => denied.initialize());
+
+  const allowed = new FireweaveRuntime(adapterWith(BOOL_ON), {
+    host: 'https://posthog.internal.example',
+    allowedHosts: ['posthog.internal.example'],
+  });
+  await allowed.initialize();
+  assert.equal(allowed.getState(), 'READY');
+});
+
+test('shutdown honors the configured deadline even when the adapter wedges', async () => {
+  const never = new Promise<void>(() => undefined);
+  const adapter: BackendAdapter = {
+    name: 'other',
+    initialize: async () => {},
+    resolve: async (): Promise<AdapterResolution> => ({ found: false }),
+    flush: () => never,
+    shutdown: () => never,
+    features: () => ({}),
+  };
+  const runtime = new FireweaveRuntime(adapter, { shutdownTimeoutMs: 50 });
+  await runtime.initialize();
+  const started = Date.now();
+  await runtime.shutdown();
+  const elapsed = Date.now() - started;
+  assert.ok(elapsed < 2000, `shutdown took ${elapsed}ms; deadline not enforced`);
+  assert.equal(runtime.getState(), 'SHUTDOWN');
+});
+
 test('merge order: global -> client -> invocation is honored in resolveContext', async () => {
   const runtime = new FireweaveRuntime(adapterWith(BOOL_ON));
   await runtime.initialize();

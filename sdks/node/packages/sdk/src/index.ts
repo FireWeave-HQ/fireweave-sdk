@@ -26,6 +26,7 @@ export type {
 export {
   DEFAULT_CONTEXT_LIMITS,
   DEFAULT_RESERVED_ATTRIBUTE_KEYS,
+  ALLOWED_FIREWEAVE_CONTEXT_KEYS,
   mergeContexts,
   normalizeContextInput,
   canonicalizeContext,
@@ -43,13 +44,15 @@ export type {
 export { InMemoryAdapter } from './adapters/inmemory.js';
 export type { InMemoryAdapterOptions, InMemoryFlagDefinition, InMemoryFault } from './adapters/inmemory.js';
 
-export { FireweaveRuntime, stableStringify } from './runtime.js';
+export { DEFAULT_ALLOWED_HOSTS, assertHostAllowed, isLoopbackHostname } from './hosts.js';
+
+export { FireweaveRuntime, stableStringify, DEFAULT_SHUTDOWN_TIMEOUT_MS } from './runtime.js';
 export type { FireweaveRuntimeConfig, EvaluateOptions, ExpectedFlagType } from './runtime.js';
 
 export { FireweaveProvider } from './provider.js';
 export type { FireweaveProviderOptions } from './provider.js';
 
-export { FireweaveClient } from './client.js';
+export { FireweaveClient, DEFAULT_SIGNAL_ATTRIBUTE_ALLOWLIST } from './client.js';
 export type {
   FireweaveClientOptions,
   ExtensionResult,

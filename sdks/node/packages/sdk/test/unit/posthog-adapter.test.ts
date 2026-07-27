@@ -257,6 +257,84 @@ test('exposure capture emits $feature_flag_called via the client', async () => {
   assert.equal(captured[0]?.properties?.['fireweave.rolloutId'], 'rollout_01HZX0000000000000000001');
 });
 
+test('adapter enforces the default host allowlist at initialize (H-1)', async () => {
+  const denied = new PostHogAdapter({
+    projectApiKey: 'phc_unit_test_key',
+    host: 'https://169.254.169.254',
+  });
+  await rejectsWithKind(denied.initialize(), 'Configuration');
+
+  // https required off-loopback even for a custom-allowlisted host spelling:
+  const insecure = new PostHogAdapter({
+    projectApiKey: 'phc_unit_test_key',
+    host: 'http://posthog.internal.example',
+    allowedHosts: ['posthog.internal.example'],
+  });
+  await rejectsWithKind(insecure.initialize(), 'Configuration');
+});
+
+test('shutdown passes the configured deadline to the vendor client (no hardcoded 2s)', async () => {
+  const timeouts: Array<number | undefined> = [];
+  const fakeClient = {
+    evaluateFlags: async () => ({
+      isEnabled: () => true,
+      getFlag: () => true as const,
+      getFlagPayload: () => undefined,
+      keys: [],
+    }),
+    capture: () => {},
+    flush: async () => {},
+    shutdown: async (ms?: number) => {
+      timeouts.push(ms);
+    },
+  };
+  // The injected-client path never shuts the client down, so drive the owned
+  // path by intercepting the module-level behavior via a wrapper adapter.
+  class OwnedClientAdapter extends PostHogAdapter {}
+  const adapter = new OwnedClientAdapter({
+    projectApiKey: 'phc_unit_test_key',
+    host: 'http://localhost:9',
+    shutdownTimeoutMs: 1234,
+    fetch: makeFetch({ kind: 'respond', response: { status: 200, body: flagsBody() } }) as never,
+  });
+  await adapter.initialize();
+  // Swap in the observable client before shutdown (ownsClient stays true).
+  (adapter as unknown as { client: typeof fakeClient }).client = fakeClient;
+  await adapter.shutdown();
+  assert.deepEqual(timeouts, [1234]);
+});
+
+test('fireweave.* carve-out keys and aliases never leak into person_properties', async (t) => {
+  const calls: FetchCall[] = [];
+  const adapter = await adapterWithBehavior(
+    { kind: 'respond', response: { status: 200, body: flagsBody() } },
+    calls,
+  );
+  t.after(() => adapter.shutdown());
+  const ctx: CanonicalContext = {
+    targetingKey: 'user-42',
+    attributes: {
+      plan: 'pro',
+      'fireweave.groups': { organization: 'org_1' },
+      'fireweave.groupProperties': { organization: { tier: 'enterprise' } },
+    },
+    groups: { organization: 'org_1' },
+    groupProperties: { organization: { tier: 'enterprise' } },
+  };
+  const res = await adapter.resolve('fw-x', ctx);
+  assert.equal(res.found, true);
+  const flagsCall = calls.find((c) => c.url.includes('/flags') && !c.url.includes('definitions'));
+  const body = JSON.parse(flagsCall?.body ?? '{}') as {
+    person_properties: Record<string, string>;
+    groups?: Record<string, string>;
+    group_properties?: Record<string, Record<string, string>>;
+  };
+  assert.deepEqual(Object.keys(body.person_properties).filter((k) => !k.startsWith('$')), ['plan']);
+  assert.deepEqual(body.groups, { organization: 'org_1' });
+  // posthog-node adds a $group_key directive; our property must ride along.
+  assert.equal(body.group_properties?.organization?.tier, 'enterprise');
+});
+
 test('end-to-end through runtime: quotaLimited becomes FlagNotFound + metadata', async (t) => {
   const adapter = await adapterWithBehavior({
     kind: 'respond',

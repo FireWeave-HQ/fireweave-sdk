@@ -55,11 +55,50 @@ test('rejects values above 4KiB serialized and depth above 6', () => {
   canonicalizeContext(merged({ deep: { a: { b: { c: { d: { e: 1 } } } } } }), POLICY);
 });
 
-test('rejects reserved fireweave.* namespace keys', () => {
+test('rejects reserved fireweave.* namespace keys outside the ruling-13 carve-out', () => {
   assert.throws(
     () => canonicalizeContext(merged({ 'fireweave.internal': true }), POLICY),
     isInvalidContext,
   );
+  // Python's unratified third key is rejected too (ruling 13).
+  assert.throws(
+    () => canonicalizeContext(merged({ 'fireweave.evaluationContexts': {} }), POLICY),
+    isInvalidContext,
+  );
+});
+
+test('ruling 13/14: fireweave.groups + fireweave.groupProperties are accepted and mapped', () => {
+  const canonical = canonicalizeContext(
+    merged({
+      plan: 'pro',
+      'fireweave.groups': { organization: 'org_1' },
+      'fireweave.groupProperties': { organization: { tier: 'enterprise' } },
+    }),
+    POLICY,
+  );
+  assert.deepEqual(canonical.groups, { organization: 'org_1' });
+  assert.deepEqual(canonical.groupProperties, { organization: { tier: 'enterprise' } });
+});
+
+test('plain groups/groupProperties aliases still map; canonical keys win on conflict', () => {
+  const aliasOnly = canonicalizeContext(
+    merged({
+      groups: { team: 'team_1' },
+      groupProperties: { team: { size: '10' } },
+    }),
+    POLICY,
+  );
+  assert.deepEqual(aliasOnly.groups, { team: 'team_1' });
+  assert.deepEqual(aliasOnly.groupProperties, { team: { size: '10' } });
+
+  const both = canonicalizeContext(
+    merged({
+      'fireweave.groups': { org: 'canonical' },
+      groups: { org: 'alias' },
+    }),
+    POLICY,
+  );
+  assert.deepEqual(both.groups, { org: 'canonical' });
 });
 
 test('TARGETING_KEY_MISSING when policy requires targetingKey', () => {

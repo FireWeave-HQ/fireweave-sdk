@@ -117,6 +117,14 @@
       "message": null
     },
     {
+      "fixtureId": "ctx-fireweave-groups-carveout",
+      "suite": "context",
+      "language": "node",
+      "status": "pass",
+      "limitation": null,
+      "message": null
+    },
+    {
       "fixtureId": "ctx-immutability",
       "suite": "context",
       "language": "node",
@@ -437,6 +445,14 @@
       "message": null
     },
     {
+      "fixtureId": "ext-lifecycle-gating",
+      "suite": "extensions",
+      "language": "node",
+      "status": "pass",
+      "limitation": null,
+      "message": null
+    },
+    {
       "fixtureId": "ext-releases-complete",
       "suite": "extensions",
       "language": "node",
@@ -510,7 +526,7 @@
     }
   ],
   "summary": {
-    "pass": 61,
+    "pass": 63,
     "fail": 0,
     "skipped-with-documented-limitation": 2
   }

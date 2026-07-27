@@ -1,4 +1,4 @@
-import type { CanonicalContext, DecisionReason, Exposure, FlagValueType, JsonValue } from './types.js';
+import type { CanonicalContext, DecisionReason, Exposure, FlagValueType, JsonValue, Signal } from './types.js';
 
 /** Result of a backend flag resolution (success path; faults throw FireweaveError). */
 export interface AdapterResolution {
@@ -52,6 +52,8 @@ export interface BackendAdapter {
   resolve(flagKey: string, context: CanonicalContext, options?: ResolveOptions): Promise<AdapterResolution>;
   /** Record an exposure event (optional capability). */
   recordExposure?(exposure: Exposure): void;
+  /** Deliver a telemetry signal to the backend sink (optional capability, ruling 17). */
+  recordSignal?(signal: Signal): void;
   /** Flush buffered telemetry/exposures. */
   flush?(): Promise<void>;
   /** Release resources; must be idempotent. */

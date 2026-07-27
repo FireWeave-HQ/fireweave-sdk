@@ -6,7 +6,7 @@
  */
 import { FireweaveError, type FireweaveErrorKind } from '../errors.js';
 import type { AdapterResolution, AdapterRuntimeFeatures, BackendAdapter, ResolveOptions } from '../adapter.js';
-import type { CanonicalContext, DecisionReason, Exposure, JsonValue } from '../types.js';
+import type { CanonicalContext, DecisionReason, Exposure, JsonValue, Signal } from '../types.js';
 
 export interface InMemoryFlagDefinition {
   type: 'boolean' | 'string' | 'integer' | 'float' | 'object';
@@ -68,6 +68,7 @@ export class InMemoryAdapter implements BackendAdapter {
   private readonly initError: FireweaveErrorKind | undefined;
   private readonly initGate: { promise: Promise<void> } | undefined;
   private readonly exposures: Exposure[] = [];
+  private readonly signals: Signal[] = [];
   private closed = false;
 
   constructor(options: InMemoryAdapterOptions = {}) {
@@ -152,6 +153,14 @@ export class InMemoryAdapter implements BackendAdapter {
 
   getExposures(): readonly Exposure[] {
     return this.exposures;
+  }
+
+  recordSignal(signal: Signal): void {
+    this.signals.push(signal);
+  }
+
+  getSignals(): readonly Signal[] {
+    return this.signals;
   }
 
   async flush(): Promise<void> {
