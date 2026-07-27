@@ -17,9 +17,9 @@
 |---|---|---|---|---|---|---|---|
 | A — Repository archaeologist | Assess existing Fireweave repos; recommend SDK repo location/packaging | `docs/research/repository-assessment.md` | `research/repo-assessment` | — | Repo map, conventions, constraints, ownership boundaries, risks | **complete** | 1 (research, no code) |
 | B — OpenFeature standards researcher | Current OpenFeature spec + official SDKs for TS/Python/Go/Java | `docs/research/openfeature-compatibility.md` | `research/openfeature` | — | Feature matrix, provider contract, stable baseline, conformance strategy, version pins | **complete** | 1 |
-| C — PostHog platform researcher | Official PostHog SDKs + OpenFeature providers for 4 languages | `docs/research/posthog-sdk-matrix.md` | `research/posthog` | — | Capability matrix, per-language wrap-vs-delegate recommendation, lifecycle/testing/security notes | pending | 1 |
-| D — Architecture & API lead | ADRs, architecture, public API, spec schemas | `docs/architecture.md`, `docs/adr/`, `spec/` | `design/architecture` | A, B, C | ADRs 0001–0004, `spec/*.schema.json` | pending | 2 |
-| E — Contract & conformance lead | Fixtures, error taxonomy, conformance harness | `contracts/`, `test-server/` | `design/contracts` | A, B, C (parallel w/ D) | Canonical fixtures, error taxonomy, harness spec | pending | 3 |
+| C — PostHog platform researcher | Official PostHog SDKs + OpenFeature providers for 4 languages | `docs/research/posthog-sdk-matrix.md` | `research/posthog` | — | Capability matrix, per-language wrap-vs-delegate recommendation, lifecycle/testing/security notes | **complete** | 1 |
+| D — Architecture & API lead | ADRs, architecture, public API, spec schemas | `docs/architecture.md`, `docs/adr/`, `spec/` | `design/architecture` | A, B, C | ADRs 0001–0004, `spec/*.schema.json` | **in progress** | 2 |
+| E — Contract & conformance lead | Fixtures, error taxonomy, conformance harness | `contracts/`, `test-server/` | `design/contracts` | A, B, C (parallel w/ D) | Canonical fixtures, error taxonomy, harness spec | **in progress** | 3 |
 | F — TypeScript/Node | Node runtime, provider, adapters, extensions | `sdks/node/`, `examples/node/` | `impl/node` | D, E | Passing contract+conformance tests | pending | 4 |
 | G — Python | Python runtime, provider, adapters, extensions | `sdks/python/`, `examples/python/` | `impl/python` | D, E | Passing contract+conformance tests | pending | 5 |
 | H — Go | Go runtime, provider, adapters, extensions | `sdks/go/`, `examples/go/` | `impl/go` | D, E | Passing contract+conformance tests | pending | 6 |
@@ -38,4 +38,5 @@
 ## Phase log
 
 - **Phase 0** (complete): baseline recorded; ledger created; initial commit made.
-- **Phase 1** (in progress): Agents A, B, C launched in parallel. No implementation permitted.
+- **Phase 1** (complete): Agents A, B, C delivered research; orchestrator decision brief at `docs/orchestration/decision-brief.md` (commit a272c64).
+- **Phase 2** (in progress): Agents D (architecture/ADRs/spec) and E (contracts/fixtures/test-server) running in parallel with disjoint ownership.
