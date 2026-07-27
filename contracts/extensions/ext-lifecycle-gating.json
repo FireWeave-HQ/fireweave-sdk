@@ -1,0 +1,90 @@
+{
+  "description": "Extension calls are lifecycle-gated: structured UnsupportedCapability before READY, structured AlreadyClosed after shutdown (never throw), delivered to the adapter sink when READY (ruling 17)",
+  "tags": [
+    "lifecycle-gating",
+    "signals",
+    "degradation"
+  ],
+  "given": {
+    "providerState": "READY",
+    "extensions": {
+      "signals": true
+    }
+  },
+  "cases": [
+    {
+      "name": "before-ready-unsupported",
+      "given": {
+        "providerState": "NOT_READY"
+      },
+      "when": {
+        "operation": "emitSignal",
+        "signal": {
+          "kind": "health",
+          "name": "provider",
+          "status": "ok",
+          "rolloutId": "rollout_01HZXGATE00000000000001"
+        }
+      },
+      "expect": {
+        "ok": false,
+        "accepted": false,
+        "errorCode": "GENERAL",
+        "errorMessage": "unsupported capability",
+        "errorKind": "UnsupportedCapability",
+        "degraded": true
+      }
+    },
+    {
+      "name": "ready-delivered-to-sink",
+      "when": {
+        "operation": "emitSignal",
+        "signal": {
+          "kind": "health",
+          "name": "provider",
+          "status": "ok",
+          "rolloutId": "rollout_01HZXGATE00000000000001"
+        }
+      },
+      "expect": {
+        "ok": true,
+        "accepted": true,
+        "errorCode": null
+      }
+    },
+    {
+      "name": "after-shutdown-closed",
+      "given": {
+        "providerState": "CLOSED"
+      },
+      "when": {
+        "operation": "emitSignal",
+        "signal": {
+          "kind": "health",
+          "name": "provider",
+          "status": "ok",
+          "rolloutId": "rollout_01HZXGATE00000000000001"
+        }
+      },
+      "expect": {
+        "ok": false,
+        "accepted": false,
+        "errorCode": "PROVIDER_NOT_READY",
+        "errorMessage": "provider already closed",
+        "errorKind": "AlreadyClosed",
+        "degraded": true
+      }
+    }
+  ],
+  "schemaVersion": 1,
+  "id": "ext-lifecycle-gating",
+  "suite": "extensions",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

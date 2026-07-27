@@ -1,0 +1,94 @@
+{
+  "description": "fireweave.groups + fireweave.groupProperties are the only permitted fireweave.* context keys; any other fireweave.* key yields INVALID_CONTEXT (rulings 12-14)",
+  "tags": [
+    "reserved-keys",
+    "groups",
+    "carve-out"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-carveout": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true,
+        "matchGroups": {
+          "organization": "org_01HZXCTX000000000000014"
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "permitted-fireweave-keys-accepted",
+      "when": {
+        "operation": "evaluate",
+        "flagKey": "fw-carveout",
+        "flagType": "boolean",
+        "defaultValue": false,
+        "invocationContext": {
+          "targetingKey": "user_01HZXCTX000000000000014",
+          "attributes": {
+            "fireweave.groups": {
+              "organization": "org_01HZXCTX000000000000014"
+            },
+            "fireweave.groupProperties": {
+              "organization": {
+                "plan": "enterprise"
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "value": true,
+        "variant": "on",
+        "reason": "TARGETING_MATCH",
+        "errorCode": null,
+        "errorMessage": null
+      }
+    },
+    {
+      "name": "other-fireweave-key-rejected",
+      "when": {
+        "operation": "evaluate",
+        "flagKey": "fw-carveout",
+        "flagType": "boolean",
+        "defaultValue": false,
+        "invocationContext": {
+          "targetingKey": "user_01HZXCTX000000000000014",
+          "attributes": {
+            "fireweave.groups": {
+              "organization": "org_01HZXCTX000000000000014"
+            },
+            "fireweave.evaluationContexts": [
+              "production"
+            ]
+          }
+        }
+      },
+      "expect": {
+        "value": false,
+        "variant": null,
+        "reason": "ERROR",
+        "errorCode": "INVALID_CONTEXT",
+        "errorMessage": "invalid evaluation context",
+        "flagMetadata": {
+          "fireweave.errorKind": "InvalidContext"
+        }
+      }
+    }
+  ],
+  "schemaVersion": 1,
+  "id": "ctx-fireweave-groups-carveout",
+  "suite": "context",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

@@ -11,13 +11,15 @@ contracts/
   README.md                 # this file
   errors.md / errors.json   # Fireweave error taxonomy ↔ OpenFeature codes
   harness.md                # per-language runners, comparator, OF Gherkin slot-in
-  evaluation/               # typed evaluation success & failure
-  context/                  # targeting key, merge, identity, bounds
-  lifecycle/                # init / shutdown / replace / domains
-  faults/                   # transport, auth, quota, cache, offline
-  security/                 # PII, secrets, SSRF, size/depth reject
-  extensions/               # releases, exposures, signals, capabilities
+  evaluation/               # typed evaluation success & failure (14 fixtures)
+  context/                  # targeting key, merge, identity, bounds (14 fixtures)
+  lifecycle/                # init / shutdown / replace / domains (9 fixtures)
+  faults/                   # transport, auth, quota, cache, offline (9 fixtures)
+  security/                 # PII, secrets, SSRF, size/depth reject (5 fixtures)
+  extensions/               # releases, exposures, signals, capabilities (14 fixtures)
 ```
+
+Canonical fixture inventory: **65** fixtures (Phase 5: 63 + `ctx-fireweave-groups-carveout` + `ext-lifecycle-gating`).
 
 ## Fixture format
 
@@ -90,6 +92,23 @@ Each fixture is a single JSON file:
 | `compatibility.<lang>` | `pass` \| `fail` \| `skipped-with-documented-limitation` |
 | `limitations.<lang>` | Required when status is `skipped-with-documented-limitation`; free-text reason |
 | `provisional` | `true` when the fixture depends on unratified `spec/` bounds (currently none — Phase 2 bounds are ratified) |
+| `cases` | Optional array (see below); when present the fixture has no top-level `when`/`expect` |
+
+### Multi-case fixtures (`cases`)
+
+A fixture MAY replace the single top-level `when`/`expect` pair with a `cases` array when one ratified rule requires pinning multiple related behaviors atomically (e.g. an accept path and its reject path). Each case is:
+
+```json
+{ "name": "kebab-case-case-name", "given": { "providerState": "READY" }, "when": { ... }, "expect": { ... } }
+```
+
+Rules:
+
+1. `cases[].name` is unique within the fixture; report rows use `fixtureId` (per-case detail goes in `message`).
+2. `cases[].given` is optional and shallow-merges over (overrides keys of) the fixture-level `given`.
+3. Each case runs against a **fresh** setup (no state leaks between cases).
+4. A language passes the fixture only when **all** cases pass; any case failure is a fixture `fail`.
+5. All determinism and normalization rules apply per case. Currently used by: `ctx-fireweave-groups-carveout`, `ext-lifecycle-gating`.
 
 ### Operations
 
@@ -125,6 +144,10 @@ Before comparing actual vs `expect`, harnesses **MUST** strip or rewrite nondete
 - Normalized `errorMessage` (see secrets rule)
 - Declared `flagMetadata` keys that are fixture-stable (e.g. `fireweave.flagVersion`)
 - Typed IDs present in the fixture itself (`stmp_*`, `chg_*`, `rolloutId`, `sfc_*`)
+
+### Vendor-metadata gating (ruling 11, ratified)
+
+`fireweave.vendorFlagId` and `fireweave.reasonCode` are emitted in `flagMetadata` **only when the backend reports BOTH a vendor flag id AND a condition index** for the evaluation (e.g. `metadata.id` + `reason.condition_index` in `eval-detailed-fields`). If either is absent, **neither** key is emitted — implementations MUST NOT emit one without the other, and the comparator treats a lone `fireweave.vendorFlagId` or `fireweave.reasonCode` as undeclared metadata drift (fail). Canonical wording also lives in `spec/decision.schema.json` (`standardMetadataKeys`).
 
 ### Error message normalization
 
@@ -220,6 +243,10 @@ Canonical bounds ratified by orchestrator arbitration (Phase 2 exit, 2026-07-27)
 | Max serialized evaluation context | **64 KiB** (65536) |
 
 Oversized / over-deep inputs must yield `InvalidContext` (OF `INVALID_CONTEXT`) and the **default value**, never a throw from the client evaluation API.
+
+### `fireweave.*` context-key carve-out (rulings 12–14, ratified)
+
+`fireweave.groups` and `fireweave.groupProperties` are the **only** permitted `fireweave.*` context keys (flattened form of `reserved.groups` / `reserved.groupProperties`); any other `fireweave.*` key (e.g. `fireweave.evaluationContexts`) MUST be rejected as `InvalidContext` (OF `INVALID_CONTEXT`) with the default value. Pinned by `ctx-fireweave-groups-carveout`; canonical wording in `spec/evaluation-context.schema.json`.
 
 ## Related docs
 

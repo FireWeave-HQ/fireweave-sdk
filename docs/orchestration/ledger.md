@@ -110,3 +110,9 @@ Docs/DX delivered: 9 root community files, 12 user docs, templates; all snippets
 
 - **Phase 4** (complete): J (0 blockers, 2 HIGH queued), K (CI green locally, publish hard-disabled), L (docs complete).
 - **Phase 5** (in progress): canon-update agent (contracts/spec/architecture per rulings 11–18) + four language fix agents in parallel; final verification wave after.
+
+## Canon agent results + ruling 19 (Phase 5)
+
+Rulings 11–18 codified; fixture inventory now **65** (new: ctx-fireweave-groups-carveout, ext-lifecycle-gating; multi-case `cases` format introduced — language runners must support it). release-context required set clarified to ["rolloutId","stampIds"].
+
+19. **Plain `groups`/`groupProperties` alias RETAINED for phase one:** `ctx-person-and-groups` stands unchanged; canonical `fireweave.groups`/`fireweave.groupProperties` keys are the primary documented path, plain-alias removal is deferred to the follow-up backlog (avoids cross-language breakage mid-wave). No language may remove the alias in this wave.

@@ -15,7 +15,7 @@
     },
     "attributes": {
       "type": "object",
-      "description": "OpenFeature context attributes. Non-reserved keys map to PostHog person_properties. Values are JSON-compatible (boolean, string, number, datetime-as-string, or nested structure).",
+      "description": "OpenFeature context attributes. Non-reserved keys map to PostHog person_properties. Values are JSON-compatible (boolean, string, number, datetime-as-string, or nested structure). fireweave.* carve-out (orchestrator rulings 12-14, ratified): `fireweave.groups` and `fireweave.groupProperties` are the ONLY `fireweave.*` keys permitted in a flattened OpenFeature context; they are lifted into `reserved.groups` / `reserved.groupProperties` and are never treated as person properties. Any other `fireweave.*` key (e.g. `fireweave.evaluationContexts`) MUST be rejected with InvalidContext (OF INVALID_CONTEXT) and default-value behavior.",
       "additionalProperties": {
         "$ref": "#/$defs/attributeValue"
       },
@@ -23,15 +23,22 @@
         "type": "string",
         "minLength": 1,
         "maxLength": 256,
-        "not": {
-          "pattern": "^fireweave\\."
-        }
+        "anyOf": [
+          {
+            "not": {
+              "pattern": "^fireweave\\."
+            }
+          },
+          {
+            "enum": ["fireweave.groups", "fireweave.groupProperties"]
+          }
+        ]
       },
       "maxProperties": 128
     },
     "reserved": {
       "type": "object",
-      "description": "Fireweave-reserved context extensions. Prefer top-level reserved object in canonical JSON; language SDKs may flatten as fireweave.* keys in OF attributes.",
+      "description": "Fireweave-reserved context extensions. Prefer top-level reserved object in canonical JSON; language SDKs may flatten as fireweave.* keys in OF attributes. Per orchestrator rulings 12-14, `groups` and `groupProperties` (flattened: `fireweave.groups`, `fireweave.groupProperties`) are the ONLY reserved extensions; `fireweave.evaluationContexts` is not ratified and MUST be rejected as InvalidContext like any other `fireweave.*` key.",
       "additionalProperties": false,
       "properties": {
         "groups": {
@@ -65,17 +72,6 @@
             "maxLength": 128
           },
           "maxProperties": 32
-        },
-        "evaluationContexts": {
-          "type": "array",
-          "description": "PostHog evaluation context tags (evaluation_contexts).",
-          "items": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 128
-          },
-          "maxItems": 32,
-          "uniqueItems": true
         }
       }
     }
@@ -150,14 +146,13 @@
       }
     },
     "reservedKeys": {
-      "description": "Keys that MUST NOT appear as ordinary person attribute names when flattened into OF context. Flattened form uses fireweave. prefix.",
+      "description": "Keys that MUST NOT appear as ordinary person attribute names when flattened into OF context. Flattened form uses fireweave. prefix. Carve-out (rulings 12-14): `fireweave.groups` and `fireweave.groupProperties` are the ONLY permitted `fireweave.*` context keys and map to reserved.groups / reserved.groupProperties; every other `fireweave.*` key MUST be rejected with InvalidContext (OF INVALID_CONTEXT) and the default value.",
       "type": "array",
       "items": {
         "type": "string",
         "enum": [
           "fireweave.groups",
           "fireweave.groupProperties",
-          "fireweave.evaluationContexts",
           "targetingKey"
         ]
       }
@@ -230,8 +225,7 @@
         "groups": { "organization": "org_01HZXEXAMPLE" },
         "groupProperties": {
           "organization": { "tier": "enterprise" }
-        },
-        "evaluationContexts": ["production"]
+        }
       }
     }
   ]

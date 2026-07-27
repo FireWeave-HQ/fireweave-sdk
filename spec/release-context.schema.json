@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://fireweave.ai/spec/0.1.0/release-context.schema.json",
   "title": "FireweaveReleaseContext",
-  "description": "Release / rollout context for deploy-attestation (beacon; carried by releases.setContext + releases.start) and extension APIs. Wire-compatible in spirit with deploy-sdk / contracts; re-specified here (never copied from proprietary sources).",
+  "description": "Release / rollout context for deploy-attestation (beacon; carried by releases.setContext + releases.start) and extension APIs. Wire-compatible in spirit with deploy-sdk / contracts; re-specified here (never copied from proprietary sources). Validation contract (orchestrator ruling 15, ratified): `releases.setContext` enforces EXACTLY this schema's required set — `rolloutId` and `stampIds` are required (stampIds a non-empty array of typed stamp ULIDs per this schema); no implementation may require additional fields or relax these.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["stampIds"],
+  "required": ["rolloutId", "stampIds"],
   "properties": {
     "stampIds": {
       "type": "array",

@@ -1,7 +1,8 @@
 {
-  "description": "capabilities.get returns negotiated capability set",
+  "description": "capabilities.get returns the structured static/runtime capability matrix (spec/capabilities.schema.json; ruling 18) — never a flat capability-string list",
   "tags": [
-    "capabilities"
+    "capabilities",
+    "matrix"
   ],
   "given": {
     "providerState": "READY",
@@ -16,19 +17,25 @@
     "operation": "getCapabilities"
   },
   "expect": {
-    "capabilities": [
-      "releases.setContext",
-      "releases.start",
-      "releases.complete",
-      "releases.fail",
-      "exposures.record",
-      "exposures.flush",
-      "signals.recordHealth",
-      "signals.recordError",
-      "signals.recordMetric",
-      "signals.recordOutcome",
-      "capabilities.get"
-    ],
+    "capabilities": {
+      "static": {
+        "openFeature": {
+          "specFloor": "0.8.0",
+          "providerName": "fireweave"
+        },
+        "features": {
+          "flags": true,
+          "releases": true,
+          "exposures": true,
+          "signals": true,
+          "inMemoryAdapter": true
+        }
+      },
+      "runtime": {
+        "backend": "inmemory",
+        "lifecycle": "READY"
+      }
+    },
     "errorCode": null
   },
   "schemaVersion": 1,

@@ -105,7 +105,7 @@
       ]
     },
     "standardMetadataKeys": {
-      "description": "Recommended fireweave.* metadata keys.",
+      "description": "Recommended fireweave.* metadata keys. Vendor-metadata gating (orchestrator ruling 11, ratified): `fireweave.vendorFlagId` and `fireweave.reasonCode` are emitted only when the backend reports BOTH a vendor flag id AND a condition index for the evaluation; if either is absent, NEITHER key is emitted.",
       "type": "object",
       "properties": {
         "fireweave.requestId": { "type": "string" },
@@ -114,7 +114,14 @@
           "type": "string",
           "enum": ["posthog", "inmemory", "other"]
         },
-        "fireweave.reasonCode": { "type": "string" },
+        "fireweave.vendorFlagId": {
+          "type": "number",
+          "description": "Backend vendor flag id. Gated per ruling 11: emitted only together with fireweave.reasonCode, and only when the backend reported both a vendor flag id and a condition index."
+        },
+        "fireweave.reasonCode": {
+          "type": "string",
+          "description": "Backend condition/reason code (e.g. condition_match). Gated per ruling 11: emitted only together with fireweave.vendorFlagId, and only when the backend reported both a vendor flag id and a condition index."
+        },
         "fireweave.flagVersion": { "type": "number" }
       }
     }

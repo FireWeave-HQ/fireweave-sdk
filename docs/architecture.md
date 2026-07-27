@@ -145,10 +145,13 @@ Provider resolvers → `runtime.evaluate(flag, type, default, context, options) 
 
 ### 6.3 Detailed / side-effect control (FireweaveClient)
 
+Requirement (orchestrator ruling 16) is **behavioral, not lexical**: every language MUST expose detailed evaluation — a Decision-returning call with side-effect control (e.g. `sendExposure: false`) — on the **public client surface**, under idiomatic naming for that language. `client.flags.evaluate(...)` below is illustrative; a language need not spell it that way, but callers must never have to reach into runtime internals to get a Decision.
+
 ```
 client.flags.evaluate(flag, type, default, context, { sendExposure: false }) → Decision
-client.flags.evaluateMany(keys, context, options) → map<key, Decision>
 ```
+
+`flags.evaluateMany` (batch Decision map) is deferred to backlog per ruling 16 — removed from this sketch; unimplemented everywhere, scope stays bounded.
 
 ### 6.4 Releases
 
@@ -195,11 +198,7 @@ client.capabilities.get() → Capabilities  // static ∪ runtime
 
 ### 6.9 Telemetry
 
-```
-client.telemetry.configure({ otel: true | hooks })  // opt-in
-```
-
-Default: off (aside from PostHog exposure when enabled).
+`telemetry.configure` is deferred to backlog per orchestrator ruling 16 — removed from this sketch (unimplemented everywhere). Telemetry default remains: off (aside from PostHog exposure when enabled).
 
 ## 7. Evaluation path (happy path)
 

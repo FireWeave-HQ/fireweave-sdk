@@ -38,6 +38,9 @@ Comparator library responsibilities (one per language, same rules):
 3. For `pass` fixtures, assert normalized equality with `expect`.
 4. Write `compatibility-report.<lang>.json` (schema in README).
 5. Exit non-zero on any `fail`.
+6. Multi-case fixtures (`cases` array; see README): run every case against a fresh setup, shallow-merging `cases[].given` over fixture-level `given`; the fixture passes only when all cases pass. One report row per fixture (case detail in `message`).
+
+The canonical inventory is **65** fixtures; the aggregate report must contain 65 × 4 cells.
 
 ### Lifecycle fixtures
 
@@ -63,6 +66,8 @@ compare(actual, expect):
     else → strict equality
   extra keys in actual that are not excluded → fail (prevents silent metadata drift)
 ```
+
+**Exception — `getCapabilities` (ruling 18):** the actual result MUST be the structured `{ static, runtime }` matrix of `spec/capabilities.schema.json` (never a flat capability-string list). Comparison is two-part: (1) validate the full actual `capabilities` object against `spec/capabilities.schema.json`; (2) compare `expect.capabilities` as a **subset** — every declared key must match exactly, but undeclared capability keys (e.g. `static.language`, `static.sdkVersion`, additional feature booleans) are language/build-dependent and do not fail the extra-key rule. The strict extra-key rule still applies to all other operations and to the non-`capabilities` keys of the result envelope.
 
 `EXCLUDE_SET` baseline: `timestamp`, `evaluatedAt`, `ts`, `createdAt`, `updatedAt`, `stack`, `stackTrace`, `requestId`, `uuid`, `traceId`, `spanId`, `messageId`, `latencyMs`, `durationMs`, `pid`, `hostname`.
 

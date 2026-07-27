@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://fireweave.ai/spec/0.1.0/capabilities.schema.json",
   "title": "FireweaveCapabilities",
-  "description": "Static (package compile-time) and runtime (adapter/config) capability matrix. Returned by FireweaveClient.capabilities.get().",
+  "description": "Static (package compile-time) and runtime (adapter/config) capability matrix. Returned by FireweaveClient.capabilities.get(). Canonical shape (orchestrator ruling 18, ratified): capabilities.get MUST return this structured { static, runtime } matrix — never a flat list of capability strings.",
   "type": "object",
   "additionalProperties": false,
   "required": ["static", "runtime"],
