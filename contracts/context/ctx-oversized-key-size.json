@@ -1,0 +1,56 @@
+{
+  "description": "Attribute key longer than 256 bytes rejected (provisional)",
+  "tags": [
+    "bounds",
+    "provisional"
+  ],
+  "provisional": true,
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-any": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true
+      }
+    },
+    "config": {
+      "limits": {
+        "maxKeyBytes": 256
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-any",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXCTX000000000000008",
+      "attributes": {
+        "KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK": "x"
+      }
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "INVALID_CONTEXT",
+    "errorMessage": "context key exceeds maximum size",
+    "flagMetadata": {
+      "fireweave.errorKind": "InvalidContext"
+    }
+  },
+  "schemaVersion": 1,
+  "id": "ctx-oversized-key-size",
+  "suite": "context",
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

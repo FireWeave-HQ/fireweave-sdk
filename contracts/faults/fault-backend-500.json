@@ -1,0 +1,52 @@
+{
+  "description": "HTTP 500 maps to BackendUnavailable",
+  "tags": [
+    "500",
+    "BackendUnavailable"
+  ],
+  "given": {
+    "providerState": "READY",
+    "fault": {
+      "mode": "httpStatus",
+      "status": 500
+    },
+    "flags": {
+      "fw-t": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-t",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXFLT000000000000007"
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "GENERAL",
+    "errorMessage": "backend unavailable",
+    "flagMetadata": {
+      "fireweave.errorKind": "BackendUnavailable"
+    }
+  },
+  "schemaVersion": 1,
+  "id": "fault-backend-500",
+  "suite": "faults",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

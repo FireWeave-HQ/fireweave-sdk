@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "description": "Maps contract fault fixtures to test-server fault modes",
+  "scenarios": [
+    {
+      "id": "remote-success",
+      "fault": "none",
+      "flagsFixture": "flags-v2-success.json",
+      "contracts": ["eval-bool-success", "eval-multivariate-string"]
+    },
+    {
+      "id": "quota-limited",
+      "fault": "quota_limited",
+      "flagsFixture": "flags-v2-quota-limited.json",
+      "contracts": ["fault-quota-limited-flags"]
+    },
+    {
+      "id": "auth-401",
+      "fault": "401",
+      "responseFixture": "fault-401.json",
+      "contracts": ["fault-auth-401", "sec-secrets-not-in-errors"]
+    },
+    {
+      "id": "rate-429",
+      "fault": "429",
+      "responseFixture": "fault-429.json",
+      "contracts": ["fault-rate-limit-429"]
+    },
+    {
+      "id": "server-500",
+      "fault": "500",
+      "responseFixture": "fault-500.json",
+      "contracts": ["fault-backend-500", "sec-pii-redaction-in-messages"]
+    },
+    {
+      "id": "invalid-json",
+      "fault": "invalid_json",
+      "responseFixture": "invalid-json.body.txt",
+      "contracts": ["fault-malformed-json"]
+    },
+    {
+      "id": "delay-timeout",
+      "fault": "delay",
+      "delayMs": 10000,
+      "contracts": ["fault-timeout"]
+    },
+    {
+      "id": "definitions-default",
+      "fault": "none",
+      "definitionsFixture": "definitions.json",
+      "contracts": ["life-cold-start-local-eval", "fault-stale-cache"]
+    }
+  ]
+}

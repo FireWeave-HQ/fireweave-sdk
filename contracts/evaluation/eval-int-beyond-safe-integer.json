@@ -1,0 +1,55 @@
+{
+  "description": "Integer beyond 2^53-1 documents Node/Java numeric limitations",
+  "tags": [
+    "integer",
+    "numeric-coercion",
+    "limitation"
+  ],
+  "provisional": false,
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-big-int": {
+        "type": "integer",
+        "enabled": true,
+        "variant": "huge",
+        "value": 9007199254740993,
+        "metadata": {
+          "version": 1
+        }
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-big-int",
+    "flagType": "integer",
+    "defaultValue": 0,
+    "invocationContext": {
+      "targetingKey": "org_01HZXEVAL000000000000012"
+    }
+  },
+  "expect": {
+    "value": 9007199254740993,
+    "variant": "huge",
+    "reason": "TARGETING_MATCH",
+    "errorCode": null,
+    "errorMessage": null,
+    "flagMetadata": {
+      "fireweave.flagVersion": 1
+    }
+  },
+  "compatibility": {
+    "node": "skipped-with-documented-limitation",
+    "python": "pass",
+    "go": "pass",
+    "java": "skipped-with-documented-limitation"
+  },
+  "limitations": {
+    "node": "Node single number resolver and Java default Long-via-double path cannot losslessly represent integers beyond 2^53-1; Fireweave documents int reliability within Number.MAX_SAFE_INTEGER cross-language.",
+    "java": "Node single number resolver and Java default Long-via-double path cannot losslessly represent integers beyond 2^53-1; Fireweave documents int reliability within Number.MAX_SAFE_INTEGER cross-language."
+  },
+  "schemaVersion": 1,
+  "id": "eval-int-beyond-safe-integer",
+  "suite": "evaluation"
+}

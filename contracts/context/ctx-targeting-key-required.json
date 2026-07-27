@@ -1,0 +1,53 @@
+{
+  "description": "Missing targetingKey when required yields TARGETING_KEY_MISSING and default",
+  "tags": [
+    "targetingKey",
+    "InvalidContext"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-needs-key": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true
+      }
+    },
+    "config": {
+      "requireTargetingKey": true
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-needs-key",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "attributes": {
+        "plan": "pro"
+      }
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "TARGETING_KEY_MISSING",
+    "errorMessage": "targeting key missing",
+    "flagMetadata": {
+      "fireweave.errorKind": "InvalidContext"
+    }
+  },
+  "schemaVersion": 1,
+  "id": "ctx-targeting-key-required",
+  "suite": "context",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

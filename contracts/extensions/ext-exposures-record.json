@@ -1,0 +1,39 @@
+{
+  "description": "exposures.record accepts a deterministic exposure event",
+  "tags": [
+    "exposures",
+    "record"
+  ],
+  "given": {
+    "providerState": "READY",
+    "extensions": {
+      "exposures": true
+    }
+  },
+  "when": {
+    "operation": "recordExposure",
+    "exposure": {
+      "targetingKey": "org_01HZXEXP000000000000001",
+      "flagKey": "fw-exp",
+      "variant": "on",
+      "value": true,
+      "rolloutId": "rollout_01HZXEXP000000000000001"
+    }
+  },
+  "expect": {
+    "ok": true,
+    "queued": 1,
+    "errorCode": null
+  },
+  "schemaVersion": 1,
+  "id": "ext-exposures-record",
+  "suite": "extensions",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

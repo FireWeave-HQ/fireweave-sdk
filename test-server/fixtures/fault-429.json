@@ -1,0 +1,5 @@
+{
+  "type": "rate_limit_error",
+  "code": "rate_limited",
+  "detail": "rate limited"
+}

@@ -1,0 +1,51 @@
+{
+  "description": "Transport network failure returns default with Network/GENERAL",
+  "tags": [
+    "network"
+  ],
+  "given": {
+    "providerState": "READY",
+    "fault": {
+      "mode": "networkError",
+      "error": "connection_reset"
+    },
+    "flags": {
+      "fw-t": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-t",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXFLT000000000000005"
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "GENERAL",
+    "errorMessage": "network error",
+    "flagMetadata": {
+      "fireweave.errorKind": "Network"
+    }
+  },
+  "schemaVersion": 1,
+  "id": "fault-network-error",
+  "suite": "faults",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

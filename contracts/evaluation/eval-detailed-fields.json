@@ -1,0 +1,59 @@
+{
+  "description": "Detailed evaluation returns value, variant, reason, and stable metadata fields",
+  "tags": [
+    "detailed",
+    "metadata"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-detailed": {
+        "type": "string",
+        "enabled": true,
+        "variant": "blue",
+        "value": "blue",
+        "reason": {
+          "code": "condition_match",
+          "condition_index": 0,
+          "description": "Condition set 1 matched"
+        },
+        "metadata": {
+          "version": 9,
+          "id": 1001
+        }
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-detailed",
+    "flagType": "string",
+    "defaultValue": "red",
+    "invocationContext": {
+      "targetingKey": "org_01HZXEVAL000000000000011"
+    }
+  },
+  "expect": {
+    "value": "blue",
+    "variant": "blue",
+    "reason": "TARGETING_MATCH",
+    "errorCode": null,
+    "errorMessage": null,
+    "flagMetadata": {
+      "fireweave.flagVersion": 9,
+      "fireweave.vendorFlagId": 1001,
+      "fireweave.reasonCode": "condition_match"
+    }
+  },
+  "schemaVersion": 1,
+  "id": "eval-detailed-fields",
+  "suite": "evaluation",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

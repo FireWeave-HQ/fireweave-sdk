@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "description": "Fireweave canonical error taxonomy mapped to OpenFeature error codes",
+  "rules": {
+    "defaultsDoNotThrow": true,
+    "noSecretsInMessages": true,
+    "secretPatterns": [
+      "phc_",
+      "phx_",
+      "phs_",
+      "Bearer ",
+      "FW_PROJECT_API_KEY"
+    ],
+    "flagMetadataErrorKindKey": "fireweave.errorKind"
+  },
+  "errors": [
+    {
+      "kind": "NotReady",
+      "openFeatureErrorCode": "PROVIDER_NOT_READY",
+      "retryable": true,
+      "class": "transient",
+      "defaultMessage": "provider not ready",
+      "description": "Evaluation attempted before successful initialization or while cold-start gate is active"
+    },
+    {
+      "kind": "FlagNotFound",
+      "openFeatureErrorCode": "FLAG_NOT_FOUND",
+      "retryable": false,
+      "class": "permanent",
+      "defaultMessage": "flag not found",
+      "description": "Flag absent from evaluation snapshot or definitions; also used when quotaLimited yields empty flags"
+    },
+    {
+      "kind": "TypeMismatch",
+      "openFeatureErrorCode": "TYPE_MISMATCH",
+      "retryable": false,
+      "class": "permanent",
+      "defaultMessage": "flag type mismatch",
+      "description": "Requested typed getter does not match stored flag value type"
+    },
+    {
+      "kind": "InvalidContext",
+      "openFeatureErrorCode": "INVALID_CONTEXT",
+      "openFeatureErrorCodeAlternates": ["TARGETING_KEY_MISSING"],
+      "retryable": false,
+      "class": "permanent",
+      "defaultMessage": "invalid evaluation context",
+      "description": "Context failed validation: missing targeting key, reserved key misuse, or provisional size/depth/count bounds"
+    },
+    {
+      "kind": "Authentication",
+      "openFeatureErrorCode": "GENERAL",
+      "retryable": false,
+      "class": "permanent",
+      "defaultMessage": "authentication failed",
+      "description": "HTTP 401 or invalid project/secret API key; message must not echo the key"
+    },
+    {
+      "kind": "Authorization",
+      "openFeatureErrorCode": "GENERAL",
+      "retryable": false,
+      "class": "permanent",
+      "defaultMessage": "authorization failed",
+      "description": "HTTP 403 or key lacks required flag permissions"
+    },
+    {
+      "kind": "RateLimited",
+      "openFeatureErrorCode": "GENERAL",
+      "retryable": true,
+      "class": "transient",
+      "defaultMessage": "rate limited",
+      "description": "HTTP 429 or soft quota limit; evaluations still return defaults"
+    },
+    {
+      "kind": "Timeout",
+      "openFeatureErrorCode": "GENERAL",
+      "retryable": true,
+      "class": "transient",
+      "defaultMessage": "request timed out",
+      "description": "Flag request or initialization deadline exceeded"
+    },
+    {
+      "kind": "Network",
+      "openFeatureErrorCode": "GENERAL",
+      "retryable": true,
+      "class": "transient",
+      "defaultMessage": "network error",
+      "description": "DNS, connection, reset, or TLS failure talking to backend"
+    },
+    {
+      "kind": "BackendUnavailable",
+      "openFeatureErrorCode": "GENERAL",
+      "retryable": true,
+      "class": "transient",
+      "defaultMessage": "backend unavailable",
+      "description": "HTTP 5xx or upstream unavailable"
+    },
+    {
+      "kind": "MalformedResponse",
+      "openFeatureErrorCode": "PARSE_ERROR",
+      "retryable": false,
+      "class": "permanent",
+      "defaultMessage": "malformed backend response",
+      "description": "Non-JSON or schema-invalid /flags or definitions response body"
+    },
+    {
+      "kind": "UnsupportedCapability",
+      "openFeatureErrorCode": "GENERAL",
+      "retryable": false,
+      "class": "permanent",
+      "defaultMessage": "unsupported capability",
+      "description": "Requested Fireweave extension/capability is not available in this SDK"
+    },
+    {
+      "kind": "Configuration",
+      "openFeatureErrorCode": "PROVIDER_FATAL",
+      "openFeatureErrorCodeAlternates": ["GENERAL"],
+      "retryable": false,
+      "class": "permanent",
+      "defaultMessage": "invalid configuration",
+      "description": "Invalid host, missing required config, or mutually exclusive options; init-fatal uses PROVIDER_FATAL"
+    },
+    {
+      "kind": "AlreadyClosed",
+      "openFeatureErrorCode": "GENERAL",
+      "retryable": false,
+      "class": "permanent",
+      "defaultMessage": "provider already closed",
+      "description": "Operation invoked after shutdown/close"
+    },
+    {
+      "kind": "Internal",
+      "openFeatureErrorCode": "GENERAL",
+      "retryable": false,
+      "class": "permanent",
+      "defaultMessage": "internal error",
+      "description": "Unexpected invariant violation; no secret or PII in message"
+    }
+  ]
+}

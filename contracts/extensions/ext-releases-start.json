@@ -1,0 +1,40 @@
+{
+  "description": "releases.start marks release in_progress",
+  "tags": [
+    "releases",
+    "start"
+  ],
+  "given": {
+    "providerState": "READY",
+    "extensions": {
+      "releases": true
+    },
+    "releaseContext": {
+      "rolloutId": "rollout_01HZXREL0000000000000002",
+      "changeId": "chg_01HZXREL0000000000000002",
+      "stampId": "stmp_01HZXREL0000000000000002"
+    }
+  },
+  "when": {
+    "operation": "start",
+    "release": {
+      "rolloutId": "rollout_01HZXREL0000000000000002"
+    }
+  },
+  "expect": {
+    "ok": true,
+    "status": "in_progress",
+    "errorCode": null
+  },
+  "schemaVersion": 1,
+  "id": "ext-releases-start",
+  "suite": "extensions",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

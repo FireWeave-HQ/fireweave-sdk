@@ -1,0 +1,29 @@
+{
+  "description": "Second shutdown is idempotent (no throw / no error)",
+  "tags": [
+    "shutdown",
+    "idempotent"
+  ],
+  "given": {
+    "providerState": "CLOSED"
+  },
+  "when": {
+    "operation": "shutdown"
+  },
+  "expect": {
+    "providerState": "CLOSED",
+    "errorCode": null,
+    "errorMessage": null
+  },
+  "schemaVersion": 1,
+  "id": "life-shutdown-idempotent",
+  "suite": "lifecycle",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

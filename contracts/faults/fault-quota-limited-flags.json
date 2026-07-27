@@ -1,0 +1,47 @@
+{
+  "description": "quotaLimited in /flags body serves default as FlagNotFound",
+  "tags": [
+    "quotaLimited"
+  ],
+  "given": {
+    "providerState": "READY",
+    "fault": {
+      "mode": "quotaLimited",
+      "quotaLimited": [
+        "feature_flags"
+      ]
+    },
+    "flags": {}
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-t",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXFLT000000000000004"
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "FLAG_NOT_FOUND",
+    "errorMessage": "flag not found",
+    "flagMetadata": {
+      "fireweave.errorKind": "FlagNotFound",
+      "fireweave.quotaLimited": true
+    }
+  },
+  "schemaVersion": 1,
+  "id": "fault-quota-limited-flags",
+  "suite": "faults",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

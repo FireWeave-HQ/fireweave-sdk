@@ -1,0 +1,58 @@
+{
+  "description": "401 authentication failure returns default without echoing secrets",
+  "tags": [
+    "auth",
+    "401"
+  ],
+  "given": {
+    "providerState": "READY",
+    "fault": {
+      "mode": "httpStatus",
+      "status": 401
+    },
+    "flags": {
+      "fw-t": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-t",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXFLT000000000000002"
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "GENERAL",
+    "errorMessage": "authentication failed",
+    "flagMetadata": {
+      "fireweave.errorKind": "Authentication"
+    },
+    "errorMessageMustNotContain": [
+      "phc_",
+      "phx_",
+      "phs_",
+      "Bearer "
+    ]
+  },
+  "schemaVersion": 1,
+  "id": "fault-auth-401",
+  "suite": "faults",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

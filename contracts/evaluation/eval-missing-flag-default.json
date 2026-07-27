@@ -1,0 +1,42 @@
+{
+  "description": "Missing flag returns default with FLAG_NOT_FOUND",
+  "tags": [
+    "missing",
+    "default",
+    "FLAG_NOT_FOUND"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {}
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-does-not-exist",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXEVAL000000000000006"
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "FLAG_NOT_FOUND",
+    "errorMessage": "flag not found",
+    "flagMetadata": {
+      "fireweave.errorKind": "FlagNotFound"
+    }
+  },
+  "schemaVersion": 1,
+  "id": "eval-missing-flag-default",
+  "suite": "evaluation",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

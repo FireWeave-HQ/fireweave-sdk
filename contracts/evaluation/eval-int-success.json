@@ -1,0 +1,55 @@
+{
+  "description": "Integer flag resolves within safe integer range",
+  "tags": [
+    "integer",
+    "success"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-int-limit": {
+        "type": "integer",
+        "enabled": true,
+        "variant": "fifty",
+        "value": 50,
+        "reason": {
+          "code": "condition_match",
+          "description": "Condition set 1 matched"
+        },
+        "metadata": {
+          "version": 1
+        }
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-int-limit",
+    "flagType": "integer",
+    "defaultValue": 0,
+    "invocationContext": {
+      "targetingKey": "org_01HZXEVAL000000000000003"
+    }
+  },
+  "expect": {
+    "value": 50,
+    "variant": "fifty",
+    "reason": "TARGETING_MATCH",
+    "errorCode": null,
+    "errorMessage": null,
+    "flagMetadata": {
+      "fireweave.flagVersion": 1
+    }
+  },
+  "schemaVersion": 1,
+  "id": "eval-int-success",
+  "suite": "evaluation",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

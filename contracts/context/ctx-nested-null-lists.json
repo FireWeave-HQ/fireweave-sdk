@@ -1,0 +1,64 @@
+{
+  "description": "Nested structures, nulls, and lists are accepted within provisional depth",
+  "tags": [
+    "nested",
+    "null",
+    "lists"
+  ],
+  "provisional": true,
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-nested": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true,
+        "matchAttribute": {
+          "labels": [
+            "a",
+            "b"
+          ]
+        }
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-nested",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXCTX000000000000003",
+      "attributes": {
+        "labels": [
+          "a",
+          "b"
+        ],
+        "meta": {
+          "child": {
+            "ok": true
+          }
+        },
+        "optional": null
+      }
+    }
+  },
+  "expect": {
+    "value": true,
+    "variant": "on",
+    "reason": "TARGETING_MATCH",
+    "errorCode": null,
+    "errorMessage": null
+  },
+  "schemaVersion": 1,
+  "id": "ctx-nested-null-lists",
+  "suite": "context",
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

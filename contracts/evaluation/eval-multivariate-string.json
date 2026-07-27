@@ -1,0 +1,61 @@
+{
+  "description": "Multivariate flag returns matched variant string",
+  "tags": [
+    "multivariate",
+    "string"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-mv-checkout": {
+        "type": "string",
+        "enabled": true,
+        "variant": "treatment-b",
+        "value": "treatment-b",
+        "variants": [
+          "control",
+          "treatment-a",
+          "treatment-b"
+        ],
+        "reason": {
+          "code": "condition_match",
+          "condition_index": 1,
+          "description": "Condition set 2 matched"
+        },
+        "metadata": {
+          "version": 7
+        }
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-mv-checkout",
+    "flagType": "string",
+    "defaultValue": "control",
+    "invocationContext": {
+      "targetingKey": "org_01HZXEVAL000000000000009"
+    }
+  },
+  "expect": {
+    "value": "treatment-b",
+    "variant": "treatment-b",
+    "reason": "TARGETING_MATCH",
+    "errorCode": null,
+    "errorMessage": null,
+    "flagMetadata": {
+      "fireweave.flagVersion": 7
+    }
+  },
+  "schemaVersion": 1,
+  "id": "eval-multivariate-string",
+  "suite": "evaluation",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

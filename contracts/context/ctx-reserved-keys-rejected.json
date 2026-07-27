@@ -1,0 +1,56 @@
+{
+  "description": "Reserved evaluation keys used incorrectly yield INVALID_CONTEXT",
+  "tags": [
+    "reserved-keys"
+  ],
+  "provisional": true,
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-any": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true
+      }
+    },
+    "config": {
+      "reservedAttributeKeys": [
+        "targetingKey",
+        "kind"
+      ]
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-any",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXCTX000000000000006",
+      "attributes": {
+        "targetingKey": "duplicate-illegal"
+      }
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "INVALID_CONTEXT",
+    "errorMessage": "invalid evaluation context",
+    "flagMetadata": {
+      "fireweave.errorKind": "InvalidContext"
+    }
+  },
+  "schemaVersion": 1,
+  "id": "ctx-reserved-keys-rejected",
+  "suite": "context",
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

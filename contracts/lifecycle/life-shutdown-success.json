@@ -1,0 +1,28 @@
+{
+  "description": "Shutdown from READY completes without error",
+  "tags": [
+    "shutdown"
+  ],
+  "given": {
+    "providerState": "READY"
+  },
+  "when": {
+    "operation": "shutdown"
+  },
+  "expect": {
+    "providerState": "CLOSED",
+    "errorCode": null,
+    "errorMessage": null
+  },
+  "schemaVersion": 1,
+  "id": "life-shutdown-success",
+  "suite": "lifecycle",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

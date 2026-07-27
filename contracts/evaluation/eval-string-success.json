@@ -1,0 +1,55 @@
+{
+  "description": "String flag resolves to configured variant string",
+  "tags": [
+    "string",
+    "success"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-string-theme": {
+        "type": "string",
+        "enabled": true,
+        "variant": "dark",
+        "value": "dark",
+        "reason": {
+          "code": "condition_match",
+          "description": "Condition set 1 matched"
+        },
+        "metadata": {
+          "version": 2
+        }
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-string-theme",
+    "flagType": "string",
+    "defaultValue": "light",
+    "invocationContext": {
+      "targetingKey": "org_01HZXEVAL000000000000002"
+    }
+  },
+  "expect": {
+    "value": "dark",
+    "variant": "dark",
+    "reason": "TARGETING_MATCH",
+    "errorCode": null,
+    "errorMessage": null,
+    "flagMetadata": {
+      "fireweave.flagVersion": 2
+    }
+  },
+  "schemaVersion": 1,
+  "id": "eval-string-success",
+  "suite": "evaluation",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

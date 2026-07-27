@@ -1,0 +1,46 @@
+{
+  "description": "Local-eval cold start before first definitions poll behaves as NOT_READY or remote-fallback per config",
+  "tags": [
+    "cold-start",
+    "local-eval"
+  ],
+  "given": {
+    "providerState": "NOT_READY",
+    "config": {
+      "localEvaluation": true,
+      "onlyEvaluateLocally": true,
+      "definitionsLoaded": false
+    },
+    "flags": {}
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-cold",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXLIFE00000000000003"
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "PROVIDER_NOT_READY",
+    "errorMessage": "provider not ready",
+    "flagMetadata": {
+      "fireweave.errorKind": "NotReady"
+    }
+  },
+  "schemaVersion": 1,
+  "id": "life-cold-start-local-eval",
+  "suite": "lifecycle",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

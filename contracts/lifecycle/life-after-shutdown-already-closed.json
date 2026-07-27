@@ -1,0 +1,47 @@
+{
+  "description": "Evaluation after shutdown returns default with AlreadyClosed",
+  "tags": [
+    "AlreadyClosed"
+  ],
+  "given": {
+    "providerState": "CLOSED",
+    "flags": {
+      "fw-life": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-life",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXLIFE00000000000002"
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "GENERAL",
+    "errorMessage": "provider already closed",
+    "flagMetadata": {
+      "fireweave.errorKind": "AlreadyClosed"
+    }
+  },
+  "schemaVersion": 1,
+  "id": "life-after-shutdown-already-closed",
+  "suite": "lifecycle",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

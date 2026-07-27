@@ -1,0 +1,22 @@
+{
+  "flags": {
+    "fw-bool-on": {
+      "key": "fw-bool-on",
+      "enabled": true,
+      "variant": null,
+      "reason": {
+        "code": "condition_match",
+        "condition_index": 0,
+        "description": "Condition set 1 matched"
+      },
+      "metadata": {
+        "id": 1,
+        "version": 1,
+        "payload": null
+      }
+    }
+  },
+  "errorsWhileComputingFlags": true,
+  "requestId": "00000000-0000-4000-8000-000000000004",
+  "quotaLimited": null
+}

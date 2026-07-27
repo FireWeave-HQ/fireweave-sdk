@@ -1,0 +1,57 @@
+{
+  "description": "Replacing provider shuts down previous and serves new flags",
+  "tags": [
+    "replaceProvider"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-old": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true
+      }
+    },
+    "replacement": {
+      "flags": {
+        "fw-new": {
+          "type": "boolean",
+          "enabled": true,
+          "variant": "on",
+          "value": true
+        }
+      }
+    }
+  },
+  "when": {
+    "operation": "replaceProvider",
+    "thenEvaluate": {
+      "flagKey": "fw-new",
+      "flagType": "boolean",
+      "defaultValue": false,
+      "invocationContext": {
+        "targetingKey": "org_01HZXLIFE00000000000004"
+      }
+    }
+  },
+  "expect": {
+    "providerState": "READY",
+    "value": true,
+    "variant": "on",
+    "reason": "TARGETING_MATCH",
+    "errorCode": null,
+    "errorMessage": null
+  },
+  "schemaVersion": 1,
+  "id": "life-provider-replace",
+  "suite": "lifecycle",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

@@ -1,0 +1,62 @@
+{
+  "description": "Structured/object flag resolves to JSON object payload value",
+  "tags": [
+    "object",
+    "success",
+    "structured"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-obj-config": {
+        "type": "object",
+        "enabled": true,
+        "variant": "v1",
+        "value": {
+          "mode": "safe",
+          "threshold": 3
+        },
+        "reason": {
+          "code": "condition_match",
+          "description": "Condition set 1 matched"
+        },
+        "metadata": {
+          "version": 4
+        }
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-obj-config",
+    "flagType": "object",
+    "defaultValue": {},
+    "invocationContext": {
+      "targetingKey": "org_01HZXEVAL000000000000005"
+    }
+  },
+  "expect": {
+    "value": {
+      "mode": "safe",
+      "threshold": 3
+    },
+    "variant": "v1",
+    "reason": "TARGETING_MATCH",
+    "errorCode": null,
+    "errorMessage": null,
+    "flagMetadata": {
+      "fireweave.flagVersion": 4
+    }
+  },
+  "schemaVersion": 1,
+  "id": "eval-object-success",
+  "suite": "evaluation",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

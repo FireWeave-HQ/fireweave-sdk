@@ -1,0 +1,52 @@
+{
+  "description": "HTTP 429 maps to RateLimited; default returned",
+  "tags": [
+    "429",
+    "RateLimited"
+  ],
+  "given": {
+    "providerState": "READY",
+    "fault": {
+      "mode": "httpStatus",
+      "status": 429
+    },
+    "flags": {
+      "fw-t": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-t",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXFLT000000000000003"
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "GENERAL",
+    "errorMessage": "rate limited",
+    "flagMetadata": {
+      "fireweave.errorKind": "RateLimited"
+    }
+  },
+  "schemaVersion": 1,
+  "id": "fault-rate-limit-429",
+  "suite": "faults",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

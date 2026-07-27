@@ -1,0 +1,75 @@
+{
+  "description": "Over-deep nesting rejected (provisional depth 8)",
+  "tags": [
+    "bounds",
+    "depth",
+    "provisional"
+  ],
+  "provisional": true,
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-sec": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true
+      }
+    },
+    "config": {
+      "limits": {
+        "maxNestingDepth": 8
+      },
+      "assertNoNetwork": true
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-sec",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXSEC000000000000004",
+      "attributes": {
+        "d1": {
+          "d2": {
+            "d3": {
+              "d4": {
+                "d5": {
+                  "d6": {
+                    "d7": {
+                      "d8": {
+                        "d9": "x"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "INVALID_CONTEXT",
+    "errorMessage": "context exceeds maximum nesting depth",
+    "flagMetadata": {
+      "fireweave.errorKind": "InvalidContext"
+    },
+    "networkCalls": 0
+  },
+  "schemaVersion": 1,
+  "id": "sec-deep-nesting-reject",
+  "suite": "security",
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

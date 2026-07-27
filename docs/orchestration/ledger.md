@@ -19,7 +19,7 @@
 | B — OpenFeature standards researcher | Current OpenFeature spec + official SDKs for TS/Python/Go/Java | `docs/research/openfeature-compatibility.md` | `research/openfeature` | — | Feature matrix, provider contract, stable baseline, conformance strategy, version pins | **complete** | 1 |
 | C — PostHog platform researcher | Official PostHog SDKs + OpenFeature providers for 4 languages | `docs/research/posthog-sdk-matrix.md` | `research/posthog` | — | Capability matrix, per-language wrap-vs-delegate recommendation, lifecycle/testing/security notes | **complete** | 1 |
 | D — Architecture & API lead | ADRs, architecture, public API, spec schemas | `docs/architecture.md`, `docs/adr/`, `spec/` | `design/architecture` | A, B, C | ADRs 0001–0004, `spec/*.schema.json` | **complete** | 2 |
-| E — Contract & conformance lead | Fixtures, error taxonomy, conformance harness | `contracts/`, `test-server/` | `design/contracts` | A, B, C (parallel w/ D) | Canonical fixtures, error taxonomy, harness spec | **in progress** | 3 |
+| E — Contract & conformance lead | Fixtures, error taxonomy, conformance harness | `contracts/`, `test-server/` | `design/contracts` | A, B, C (parallel w/ D) | Canonical fixtures, error taxonomy, harness spec | **complete** | 3 |
 | F — TypeScript/Node | Node runtime, provider, adapters, extensions | `sdks/node/`, `examples/node/` | `impl/node` | D, E | Passing contract+conformance tests | pending | 4 |
 | G — Python | Python runtime, provider, adapters, extensions | `sdks/python/`, `examples/python/` | `impl/python` | D, E | Passing contract+conformance tests | pending | 5 |
 | H — Go | Go runtime, provider, adapters, extensions | `sdks/go/`, `examples/go/` | `impl/go` | D, E | Passing contract+conformance tests | pending | 6 |
@@ -40,3 +40,13 @@
 - **Phase 0** (complete): baseline recorded; ledger created; initial commit made.
 - **Phase 1** (complete): Agents A, B, C delivered research; orchestrator decision brief at `docs/orchestration/decision-brief.md` (commit a272c64).
 - **Phase 2** (in progress): Agents D (architecture/ADRs/spec) and E (contracts/fixtures/test-server) running in parallel with disjoint ownership.
+
+## Orchestrator arbitration (Phase 2 exit, 2026-07-27)
+
+Resolving Agent D (spec/) vs Agent E (contracts/) divergences. Canonical rule: `spec/` schemas are the source of truth; fixtures conform to spec.
+
+1. **Context bounds (canonical):** attr count **128**, key **256 B**, value **4 KiB**, nesting depth **6**, serialized context **64 KiB** (adopt D's spec values; E fixtures updated).
+2. **Error taxonomy (canonical):** the full 15-kind PascalCase taxonomy required by the project brief §11 (NotReady, FlagNotFound, TypeMismatch, InvalidContext, Authentication, Authorization, RateLimited, Timeout, Network, BackendUnavailable, MalformedResponse, UnsupportedCapability, Configuration, AlreadyClosed, Internal) — spec/errors.schema.json updated to E's richer set; kind names PascalCase, languages map idiomatically.
+3. **AlreadyClosed → OpenFeature `PROVIDER_NOT_READY`** (not GENERAL); Fireweave kind preserved in decision metadata. E fixtures updated.
+4. **quotaLimited:** confirmed — treated as flag-not-found default resolution with metadata key `fireweave.quotaLimited: true`.
+5. **Extension API shapes:** `contracts/extensions/*` fixtures must match the public API sketch in `docs/architecture.md` (releases.setContext/start/complete/fail; exposures.record/flush; signals.recordHealth/recordError/recordMetric/recordOutcome; capabilities.get). Divergences fixed on the fixtures side unless the sketch is ambiguous — then flagged.

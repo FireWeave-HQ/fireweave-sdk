@@ -1,0 +1,62 @@
+{
+  "description": "Provider must not mutate caller evaluation context object",
+  "tags": [
+    "immutability"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-immut": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-immut",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXCTX000000000000012",
+      "attributes": {
+        "plan": "pro",
+        "nested": {
+          "a": 1
+        }
+      }
+    },
+    "assertions": [
+      "contextUnchangedAfterEvaluation"
+    ]
+  },
+  "expect": {
+    "value": true,
+    "variant": "on",
+    "reason": "TARGETING_MATCH",
+    "errorCode": null,
+    "errorMessage": null,
+    "contextSnapshotAfter": {
+      "targetingKey": "org_01HZXCTX000000000000012",
+      "attributes": {
+        "plan": "pro",
+        "nested": {
+          "a": 1
+        }
+      }
+    }
+  },
+  "schemaVersion": 1,
+  "id": "ctx-immutability",
+  "suite": "context",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

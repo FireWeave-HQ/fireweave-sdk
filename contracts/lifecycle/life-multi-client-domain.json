@@ -1,0 +1,61 @@
+{
+  "description": "Two domains can bind providers independently",
+  "tags": [
+    "domains",
+    "multi-client"
+  ],
+  "given": {
+    "domains": {
+      "payments": {
+        "providerState": "READY",
+        "flags": {
+          "fw-pay": {
+            "type": "boolean",
+            "enabled": true,
+            "variant": "on",
+            "value": true
+          }
+        }
+      },
+      "search": {
+        "providerState": "READY",
+        "flags": {
+          "fw-search": {
+            "type": "string",
+            "enabled": true,
+            "variant": "v2",
+            "value": "v2"
+          }
+        }
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "domain": "search",
+    "flagKey": "fw-search",
+    "flagType": "string",
+    "defaultValue": "v1",
+    "invocationContext": {
+      "targetingKey": "org_01HZXLIFE00000000000005"
+    }
+  },
+  "expect": {
+    "value": "v2",
+    "variant": "v2",
+    "reason": "TARGETING_MATCH",
+    "errorCode": null,
+    "errorMessage": null
+  },
+  "schemaVersion": 1,
+  "id": "life-multi-client-domain",
+  "suite": "lifecycle",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

@@ -1,0 +1,56 @@
+{
+  "description": "Percentage rollout surfaces SPLIT reason when vendor indicates split",
+  "tags": [
+    "reason",
+    "split"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-split": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true,
+        "reason": {
+          "code": "condition_match",
+          "description": "Percentage split matched"
+        },
+        "metadata": {
+          "version": 2
+        },
+        "fireweaveReason": "SPLIT"
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-split",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXEVAL000000000000014"
+    }
+  },
+  "expect": {
+    "value": true,
+    "variant": "on",
+    "reason": "SPLIT",
+    "errorCode": null,
+    "errorMessage": null,
+    "flagMetadata": {
+      "fireweave.flagVersion": 2
+    }
+  },
+  "schemaVersion": 1,
+  "id": "eval-split-reason",
+  "suite": "evaluation",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

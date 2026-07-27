@@ -1,0 +1,58 @@
+{
+  "description": "After poll failure, last-good definitions may serve with STALE reason",
+  "tags": [
+    "stale",
+    "cache"
+  ],
+  "given": {
+    "providerState": "STALE",
+    "config": {
+      "localEvaluation": true,
+      "definitionsAgeMs": 600000
+    },
+    "flags": {
+      "fw-stale": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true,
+        "fromCache": true
+      }
+    },
+    "fault": {
+      "mode": "httpStatus",
+      "status": 500,
+      "applyTo": "definitions"
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-stale",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXFLT000000000000008"
+    }
+  },
+  "expect": {
+    "value": true,
+    "variant": "on",
+    "reason": "STALE",
+    "errorCode": null,
+    "errorMessage": null,
+    "flagMetadata": {
+      "fireweave.fromCache": true
+    }
+  },
+  "schemaVersion": 1,
+  "id": "fault-stale-cache",
+  "suite": "faults",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

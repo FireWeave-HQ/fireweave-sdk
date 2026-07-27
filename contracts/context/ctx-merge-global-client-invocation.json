@@ -1,0 +1,68 @@
+{
+  "description": "Later context layers win: global \u2192 client \u2192 invocation",
+  "tags": [
+    "merge"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-merge": {
+        "type": "string",
+        "enabled": true,
+        "variant": "from-invocation",
+        "value": "from-invocation",
+        "matchAttribute": {
+          "tier": "gold"
+        }
+      }
+    },
+    "globalContext": {
+      "targetingKey": "org_01HZXCTX000000000000002",
+      "attributes": {
+        "tier": "bronze",
+        "region": "us"
+      }
+    },
+    "clientContext": {
+      "attributes": {
+        "tier": "silver"
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-merge",
+    "flagType": "string",
+    "defaultValue": "none",
+    "invocationContext": {
+      "attributes": {
+        "tier": "gold"
+      }
+    }
+  },
+  "expect": {
+    "value": "from-invocation",
+    "variant": "from-invocation",
+    "reason": "TARGETING_MATCH",
+    "errorCode": null,
+    "errorMessage": null,
+    "resolvedContext": {
+      "targetingKey": "org_01HZXCTX000000000000002",
+      "attributes": {
+        "tier": "gold",
+        "region": "us"
+      }
+    }
+  },
+  "schemaVersion": 1,
+  "id": "ctx-merge-global-client-invocation",
+  "suite": "context",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

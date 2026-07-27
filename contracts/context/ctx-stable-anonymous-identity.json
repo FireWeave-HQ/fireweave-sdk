@@ -1,0 +1,55 @@
+{
+  "description": "Explicit stable anonymous identity is honored (not regenerated)",
+  "tags": [
+    "anonymous",
+    "identity"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-anon": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true,
+        "matchTargetingKey": "anon_01HZXCTX000000000000005"
+      }
+    },
+    "config": {
+      "allowAnonymous": true
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-anon",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "anon_01HZXCTX000000000000005",
+      "attributes": {
+        "$process_person_profile": false
+      }
+    }
+  },
+  "expect": {
+    "value": true,
+    "variant": "on",
+    "reason": "TARGETING_MATCH",
+    "errorCode": null,
+    "errorMessage": null,
+    "resolvedContext": {
+      "targetingKey": "anon_01HZXCTX000000000000005"
+    }
+  },
+  "schemaVersion": 1,
+  "id": "ctx-stable-anonymous-identity",
+  "suite": "context",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

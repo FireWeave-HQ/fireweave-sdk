@@ -1,0 +1,34 @@
+{
+  "description": "Successful initialize transitions to READY",
+  "tags": [
+    "initialize",
+    "READY"
+  ],
+  "given": {
+    "providerState": "NOT_READY",
+    "config": {
+      "projectApiKey": "phc_TESTKEY0000000000000000000001",
+      "host": "http://127.0.0.1:3901"
+    }
+  },
+  "when": {
+    "operation": "initialize",
+    "invocationContext": {}
+  },
+  "expect": {
+    "providerState": "READY",
+    "errorCode": null,
+    "errorMessage": null
+  },
+  "schemaVersion": 1,
+  "id": "life-init-success",
+  "suite": "lifecycle",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

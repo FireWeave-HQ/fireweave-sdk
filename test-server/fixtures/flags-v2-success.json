@@ -1,0 +1,67 @@
+{
+  "flags": {
+    "fw-bool-on": {
+      "key": "fw-bool-on",
+      "enabled": true,
+      "variant": null,
+      "reason": {
+        "code": "condition_match",
+        "condition_index": 0,
+        "description": "Condition set 1 matched"
+      },
+      "metadata": {
+        "id": 1,
+        "version": 1,
+        "payload": null
+      }
+    },
+    "fw-string-theme": {
+      "key": "fw-string-theme",
+      "enabled": true,
+      "variant": "dark",
+      "reason": {
+        "code": "condition_match",
+        "condition_index": 0,
+        "description": "Condition set 1 matched"
+      },
+      "metadata": {
+        "id": 2,
+        "version": 2,
+        "payload": null
+      }
+    },
+    "fw-mv-checkout": {
+      "key": "fw-mv-checkout",
+      "enabled": true,
+      "variant": "treatment-b",
+      "reason": {
+        "code": "condition_match",
+        "condition_index": 1,
+        "description": "Condition set 2 matched"
+      },
+      "metadata": {
+        "id": 3,
+        "version": 7,
+        "payload": "{\"rolloutId\":\"rollout_01HZXRL00000000000000001\"}"
+      }
+    },
+    "fw-disabled": {
+      "key": "fw-disabled",
+      "enabled": false,
+      "variant": null,
+      "reason": {
+        "code": "no_condition_match",
+        "condition_index": null,
+        "description": "Flag disabled"
+      },
+      "metadata": {
+        "id": 4,
+        "version": 1,
+        "payload": null
+      }
+    }
+  },
+  "errorsWhileComputingFlags": false,
+  "requestId": "00000000-0000-4000-8000-000000000001",
+  "quotaLimited": null
+}

@@ -1,0 +1,46 @@
+{
+  "description": "targetingKey is the cohort/distinct_id used for evaluation",
+  "tags": [
+    "targetingKey",
+    "distinct_id"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-cohort": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true,
+        "matchTargetingKey": "org_01HZXCTX000000000000001"
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-cohort",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXCTX000000000000001"
+    }
+  },
+  "expect": {
+    "value": true,
+    "variant": "on",
+    "reason": "TARGETING_MATCH",
+    "errorCode": null,
+    "errorMessage": null
+  },
+  "schemaVersion": 1,
+  "id": "ctx-targeting-key-maps-distinct-id",
+  "suite": "context",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

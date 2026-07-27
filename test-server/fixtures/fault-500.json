@@ -1,0 +1,5 @@
+{
+  "type": "server_error",
+  "code": "server_error",
+  "detail": "backend unavailable"
+}

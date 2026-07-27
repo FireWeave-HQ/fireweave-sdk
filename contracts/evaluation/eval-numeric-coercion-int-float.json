@@ -1,0 +1,54 @@
+{
+  "description": "Integral float 2.0 requested as integer \u2014 Node limitation documented",
+  "tags": [
+    "numeric-coercion",
+    "integer",
+    "float"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-numeric-two": {
+        "type": "float",
+        "enabled": true,
+        "variant": "two",
+        "value": 2.0,
+        "metadata": {
+          "version": 1
+        }
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-numeric-two",
+    "flagType": "integer",
+    "defaultValue": 0,
+    "invocationContext": {
+      "targetingKey": "org_01HZXEVAL000000000000013"
+    }
+  },
+  "expect": {
+    "value": 0,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "TYPE_MISMATCH",
+    "errorMessage": "flag type mismatch",
+    "flagMetadata": {
+      "fireweave.errorKind": "TypeMismatch"
+    }
+  },
+  "compatibility": {
+    "node": "skipped-with-documented-limitation",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {
+    "node": "Node OpenFeature exposes a single number resolver; int vs float discrimination is not available at the provider boundary."
+  },
+  "schemaVersion": 1,
+  "id": "eval-numeric-coercion-int-float",
+  "suite": "evaluation",
+  "provisional": false
+}

@@ -1,0 +1,73 @@
+{
+  "description": "Nesting deeper than 8 rejected (provisional)",
+  "tags": [
+    "bounds",
+    "depth",
+    "provisional"
+  ],
+  "provisional": true,
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-any": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true
+      }
+    },
+    "config": {
+      "limits": {
+        "maxNestingDepth": 8
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-any",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXCTX000000000000010",
+      "attributes": {
+        "d1": {
+          "d2": {
+            "d3": {
+              "d4": {
+                "d5": {
+                  "d6": {
+                    "d7": {
+                      "d8": {
+                        "d9": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "INVALID_CONTEXT",
+    "errorMessage": "context exceeds maximum nesting depth",
+    "flagMetadata": {
+      "fireweave.errorKind": "InvalidContext"
+    }
+  },
+  "schemaVersion": 1,
+  "id": "ctx-nesting-depth-exceeded",
+  "suite": "context",
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

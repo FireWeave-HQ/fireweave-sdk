@@ -1,0 +1,55 @@
+{
+  "description": "Float flag resolves to fractional number",
+  "tags": [
+    "float",
+    "success"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-float-ratio": {
+        "type": "float",
+        "enabled": true,
+        "variant": "half",
+        "value": 0.5,
+        "reason": {
+          "code": "condition_match",
+          "description": "Condition set 1 matched"
+        },
+        "metadata": {
+          "version": 1
+        }
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-float-ratio",
+    "flagType": "float",
+    "defaultValue": 0.0,
+    "invocationContext": {
+      "targetingKey": "org_01HZXEVAL000000000000004"
+    }
+  },
+  "expect": {
+    "value": 0.5,
+    "variant": "half",
+    "reason": "TARGETING_MATCH",
+    "errorCode": null,
+    "errorMessage": null,
+    "flagMetadata": {
+      "fireweave.flagVersion": 1
+    }
+  },
+  "schemaVersion": 1,
+  "id": "eval-float-success",
+  "suite": "evaluation",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

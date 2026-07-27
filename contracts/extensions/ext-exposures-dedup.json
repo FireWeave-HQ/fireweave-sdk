@@ -1,0 +1,47 @@
+{
+  "description": "Duplicate exposures for same distinct_id/flag/value are deduped",
+  "tags": [
+    "exposures",
+    "dedup"
+  ],
+  "given": {
+    "providerState": "READY",
+    "extensions": {
+      "exposures": true
+    },
+    "exposureQueue": [
+      {
+        "targetingKey": "org_01HZXEXP000000000000002",
+        "flagKey": "fw-exp",
+        "variant": "on",
+        "value": true
+      }
+    ]
+  },
+  "when": {
+    "operation": "recordExposure",
+    "exposure": {
+      "targetingKey": "org_01HZXEXP000000000000002",
+      "flagKey": "fw-exp",
+      "variant": "on",
+      "value": true
+    }
+  },
+  "expect": {
+    "ok": true,
+    "queued": 1,
+    "deduped": true,
+    "errorCode": null
+  },
+  "schemaVersion": 1,
+  "id": "ext-exposures-dedup",
+  "suite": "extensions",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

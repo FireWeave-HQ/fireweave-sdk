@@ -1,0 +1,67 @@
+{
+  "description": "Flag payload is exposed via flagMetadata / object evaluation path",
+  "tags": [
+    "payload",
+    "metadata"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-payload-flag": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true,
+        "payload": {
+          "rolloutId": "rollout_01HZXRL00000000000000001",
+          "maxRetries": 2
+        },
+        "reason": {
+          "code": "condition_match",
+          "description": "Condition set 1 matched"
+        },
+        "metadata": {
+          "version": 3,
+          "id": 42
+        }
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-payload-flag",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXEVAL000000000000010"
+    },
+    "options": {
+      "includePayload": true
+    }
+  },
+  "expect": {
+    "value": true,
+    "variant": "on",
+    "reason": "TARGETING_MATCH",
+    "errorCode": null,
+    "errorMessage": null,
+    "flagMetadata": {
+      "fireweave.flagVersion": 3,
+      "fireweave.payload": {
+        "rolloutId": "rollout_01HZXRL00000000000000001",
+        "maxRetries": 2
+      }
+    }
+  },
+  "schemaVersion": 1,
+  "id": "eval-payload-attached",
+  "suite": "evaluation",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

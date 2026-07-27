@@ -1,0 +1,36 @@
+{
+  "description": "Unknown capability degrades with UnsupportedCapability; no throw from facade",
+  "tags": [
+    "UnsupportedCapability",
+    "degradation"
+  ],
+  "given": {
+    "providerState": "READY",
+    "extensions": {
+      "capabilities": true
+    }
+  },
+  "when": {
+    "operation": "invokeCapability",
+    "capability": "releases.teleport",
+    "args": {}
+  },
+  "expect": {
+    "ok": false,
+    "errorCode": "GENERAL",
+    "errorMessage": "unsupported capability",
+    "errorKind": "UnsupportedCapability",
+    "degraded": true
+  },
+  "schemaVersion": 1,
+  "id": "ext-unsupported-capability-degrade",
+  "suite": "extensions",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

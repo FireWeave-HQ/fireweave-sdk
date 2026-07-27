@@ -1,0 +1,61 @@
+{
+  "flags": [
+    {
+      "id": 1,
+      "key": "fw-bool-on",
+      "name": "FW Bool On",
+      "active": true,
+      "is_simple_flag": true,
+      "rollout_percentage": 100,
+      "filters": {
+        "groups": [
+          {
+            "properties": [],
+            "rollout_percentage": 100
+          }
+        ],
+        "multivariate": null,
+        "payloads": {}
+      },
+      "version": 1
+    },
+    {
+      "id": 3,
+      "key": "fw-mv-checkout",
+      "name": "FW MV Checkout",
+      "active": true,
+      "is_simple_flag": false,
+      "filters": {
+        "groups": [
+          {
+            "properties": [
+              {
+                "key": "plan",
+                "type": "person",
+                "value": ["enterprise"],
+                "operator": "exact"
+              }
+            ],
+            "rollout_percentage": 100,
+            "variant": "treatment-b"
+          }
+        ],
+        "multivariate": {
+          "variants": [
+            {"key": "control", "name": "Control", "rollout_percentage": 34},
+            {"key": "treatment-a", "name": "A", "rollout_percentage": 33},
+            {"key": "treatment-b", "name": "B", "rollout_percentage": 33}
+          ]
+        },
+        "payloads": {
+          "treatment-b": "{\"rolloutId\":\"rollout_01HZXRL00000000000000001\"}"
+        }
+      },
+      "version": 7
+    }
+  ],
+  "group_type_mapping": {
+    "organization": 0
+  },
+  "cohorts": {}
+}

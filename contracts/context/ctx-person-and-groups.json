@@ -1,0 +1,62 @@
+{
+  "description": "Person properties and groups map through evaluation context",
+  "tags": [
+    "person",
+    "groups"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-groups": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true,
+        "matchGroups": {
+          "organization": "org_01HZXCTX000000000000004"
+        },
+        "matchPerson": {
+          "email_domain": "example.com"
+        }
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-groups",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "user_01HZXCTX000000000000004",
+      "attributes": {
+        "email_domain": "example.com",
+        "groups": {
+          "organization": "org_01HZXCTX000000000000004"
+        },
+        "groupProperties": {
+          "organization": {
+            "plan": "enterprise"
+          }
+        }
+      }
+    }
+  },
+  "expect": {
+    "value": true,
+    "variant": "on",
+    "reason": "TARGETING_MATCH",
+    "errorCode": null,
+    "errorMessage": null
+  },
+  "schemaVersion": 1,
+  "id": "ctx-person-and-groups",
+  "suite": "context",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

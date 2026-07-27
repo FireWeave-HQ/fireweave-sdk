@@ -1,0 +1,50 @@
+{
+  "description": "Requesting string for boolean flag yields TYPE_MISMATCH and default",
+  "tags": [
+    "type-mismatch"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-bool-only": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true,
+        "metadata": {
+          "version": 1
+        }
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-bool-only",
+    "flagType": "string",
+    "defaultValue": "fallback",
+    "invocationContext": {
+      "targetingKey": "org_01HZXEVAL000000000000007"
+    }
+  },
+  "expect": {
+    "value": "fallback",
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "TYPE_MISMATCH",
+    "errorMessage": "flag type mismatch",
+    "flagMetadata": {
+      "fireweave.errorKind": "TypeMismatch"
+    }
+  },
+  "schemaVersion": 1,
+  "id": "eval-type-mismatch-bool-as-string",
+  "suite": "evaluation",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

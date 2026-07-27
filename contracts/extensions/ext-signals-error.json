@@ -1,0 +1,43 @@
+{
+  "description": "signals.emit error signal without secrets",
+  "tags": [
+    "signals",
+    "error"
+  ],
+  "given": {
+    "providerState": "READY",
+    "extensions": {
+      "signals": true
+    }
+  },
+  "when": {
+    "operation": "emitSignal",
+    "signal": {
+      "type": "error",
+      "name": "evaluation",
+      "errorKind": "Timeout",
+      "message": "request timed out"
+    }
+  },
+  "expect": {
+    "ok": true,
+    "accepted": true,
+    "errorCode": null,
+    "recordedMessageMustNotContain": [
+      "phc_",
+      "phx_",
+      "phs_"
+    ]
+  },
+  "schemaVersion": 1,
+  "id": "ext-signals-error",
+  "suite": "extensions",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

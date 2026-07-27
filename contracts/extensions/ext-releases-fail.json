@@ -1,0 +1,48 @@
+{
+  "description": "releases.fail marks release failed with safe reason",
+  "tags": [
+    "releases",
+    "fail"
+  ],
+  "given": {
+    "providerState": "READY",
+    "extensions": {
+      "releases": true
+    },
+    "releaseContext": {
+      "rolloutId": "rollout_01HZXREL0000000000000004",
+      "changeId": "chg_01HZXREL0000000000000004",
+      "stampId": "stmp_01HZXREL0000000000000004"
+    },
+    "releaseStatus": "in_progress"
+  },
+  "when": {
+    "operation": "fail",
+    "release": {
+      "rolloutId": "rollout_01HZXREL0000000000000004",
+      "reason": "guardrail_breach"
+    }
+  },
+  "expect": {
+    "ok": true,
+    "status": "failed",
+    "reason": "guardrail_breach",
+    "errorCode": null,
+    "errorMessageMustNotContain": [
+      "phc_",
+      "phx_",
+      "phs_"
+    ]
+  },
+  "schemaVersion": 1,
+  "id": "ext-releases-fail",
+  "suite": "extensions",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

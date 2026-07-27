@@ -1,0 +1,41 @@
+{
+  "description": "releases.setContext binds rollout identity for subsequent release ops",
+  "tags": [
+    "releases",
+    "setContext"
+  ],
+  "given": {
+    "providerState": "READY",
+    "extensions": {
+      "releases": true
+    }
+  },
+  "when": {
+    "operation": "setContext",
+    "release": {
+      "rolloutId": "rollout_01HZXREL0000000000000001",
+      "changeId": "chg_01HZXREL0000000000000001",
+      "stampId": "stmp_01HZXREL0000000000000001"
+    }
+  },
+  "expect": {
+    "ok": true,
+    "releaseContext": {
+      "rolloutId": "rollout_01HZXREL0000000000000001",
+      "changeId": "chg_01HZXREL0000000000000001",
+      "stampId": "stmp_01HZXREL0000000000000001"
+    },
+    "errorCode": null
+  },
+  "schemaVersion": 1,
+  "id": "ext-releases-set-context",
+  "suite": "extensions",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

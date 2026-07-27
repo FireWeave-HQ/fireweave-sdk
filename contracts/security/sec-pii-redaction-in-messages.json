@@ -1,0 +1,53 @@
+{
+  "description": "Error paths must not leak PII attribute values in errorMessage",
+  "tags": [
+    "PII",
+    "redaction"
+  ],
+  "given": {
+    "providerState": "READY",
+    "fault": {
+      "mode": "httpStatus",
+      "status": 500
+    },
+    "flags": {}
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-sec",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "user_01HZXSEC000000000000001",
+      "attributes": {
+        "email": "alice@example.com",
+        "phone": "+1-555-0100"
+      }
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "GENERAL",
+    "errorMessage": "backend unavailable",
+    "errorMessageMustNotContain": [
+      "alice@example.com",
+      "+1-555-0100"
+    ],
+    "flagMetadata": {
+      "fireweave.errorKind": "BackendUnavailable"
+    }
+  },
+  "schemaVersion": 1,
+  "id": "sec-pii-redaction-in-messages",
+  "suite": "security",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

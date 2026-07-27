@@ -1,0 +1,52 @@
+{
+  "description": "Invalid JSON body maps to PARSE_ERROR / MalformedResponse",
+  "tags": [
+    "malformed",
+    "PARSE_ERROR"
+  ],
+  "given": {
+    "providerState": "READY",
+    "fault": {
+      "mode": "invalidJson",
+      "body": "{not-json"
+    },
+    "flags": {
+      "fw-t": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-t",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXFLT000000000000006"
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "PARSE_ERROR",
+    "errorMessage": "malformed backend response",
+    "flagMetadata": {
+      "fireweave.errorKind": "MalformedResponse"
+    }
+  },
+  "schemaVersion": 1,
+  "id": "fault-malformed-json",
+  "suite": "faults",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

@@ -1,0 +1,43 @@
+{
+  "description": "Non-allowlisted host rejected as Configuration (SSRF allowlist)",
+  "tags": [
+    "SSRF",
+    "allowlist"
+  ],
+  "given": {
+    "providerState": "NOT_READY",
+    "config": {
+      "projectApiKey": "phc_TESTKEY0000000000000000000002",
+      "host": "http://169.254.169.254",
+      "allowedHosts": [
+        "127.0.0.1",
+        "localhost",
+        "us.i.posthog.com",
+        "eu.i.posthog.com"
+      ]
+    }
+  },
+  "when": {
+    "operation": "initialize"
+  },
+  "expect": {
+    "providerState": "FATAL",
+    "errorCode": "PROVIDER_FATAL",
+    "errorMessage": "invalid configuration",
+    "errorKind": "Configuration",
+    "errorMessageMustNotContain": [
+      "phc_"
+    ]
+  },
+  "schemaVersion": 1,
+  "id": "sec-endpoint-ssrf-allowlist",
+  "suite": "security",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

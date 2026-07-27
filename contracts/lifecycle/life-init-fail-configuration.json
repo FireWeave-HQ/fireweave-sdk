@@ -1,0 +1,36 @@
+{
+  "description": "Invalid configuration fails init with PROVIDER_FATAL",
+  "tags": [
+    "initialize",
+    "Configuration",
+    "FATAL"
+  ],
+  "given": {
+    "providerState": "NOT_READY",
+    "config": {
+      "projectApiKey": "",
+      "host": "not-a-uri"
+    }
+  },
+  "when": {
+    "operation": "initialize",
+    "invocationContext": {}
+  },
+  "expect": {
+    "providerState": "FATAL",
+    "errorCode": "PROVIDER_FATAL",
+    "errorMessage": "invalid configuration",
+    "errorKind": "Configuration"
+  },
+  "schemaVersion": 1,
+  "id": "life-init-fail-configuration",
+  "suite": "lifecycle",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

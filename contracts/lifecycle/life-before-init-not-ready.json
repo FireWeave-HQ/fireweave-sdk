@@ -1,0 +1,48 @@
+{
+  "description": "Evaluation before init returns default with PROVIDER_NOT_READY",
+  "tags": [
+    "NOT_READY",
+    "initialize"
+  ],
+  "given": {
+    "providerState": "NOT_READY",
+    "flags": {
+      "fw-life": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-life",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXLIFE00000000000001"
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "PROVIDER_NOT_READY",
+    "errorMessage": "provider not ready",
+    "flagMetadata": {
+      "fireweave.errorKind": "NotReady"
+    }
+  },
+  "schemaVersion": 1,
+  "id": "life-before-init-not-ready",
+  "suite": "lifecycle",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

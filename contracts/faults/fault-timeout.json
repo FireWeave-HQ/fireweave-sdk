@@ -1,0 +1,54 @@
+{
+  "description": "Flag request timeout returns default with Timeout/GENERAL",
+  "tags": [
+    "timeout"
+  ],
+  "given": {
+    "providerState": "READY",
+    "fault": {
+      "mode": "delay",
+      "delayMs": 10000
+    },
+    "config": {
+      "featureFlagsRequestTimeoutMs": 50
+    },
+    "flags": {
+      "fw-t": {
+        "type": "boolean",
+        "enabled": true,
+        "variant": "on",
+        "value": true
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-t",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXFLT000000000000001"
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "GENERAL",
+    "errorMessage": "request timed out",
+    "flagMetadata": {
+      "fireweave.errorKind": "Timeout"
+    }
+  },
+  "schemaVersion": 1,
+  "id": "fault-timeout",
+  "suite": "faults",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

@@ -1,0 +1,46 @@
+{
+  "description": "Offline mode with no cache returns Network/default",
+  "tags": [
+    "offline"
+  ],
+  "given": {
+    "providerState": "READY",
+    "fault": {
+      "mode": "offline"
+    },
+    "config": {
+      "localEvaluation": false
+    },
+    "flags": {}
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-off",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": {
+      "targetingKey": "org_01HZXFLT000000000000009"
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": null,
+    "reason": "ERROR",
+    "errorCode": "GENERAL",
+    "errorMessage": "network error",
+    "flagMetadata": {
+      "fireweave.errorKind": "Network"
+    }
+  },
+  "schemaVersion": 1,
+  "id": "fault-offline",
+  "suite": "faults",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

@@ -1,0 +1,41 @@
+{
+  "description": "exposures.flush drains queued exposures",
+  "tags": [
+    "exposures",
+    "flush"
+  ],
+  "given": {
+    "providerState": "READY",
+    "extensions": {
+      "exposures": true
+    },
+    "exposureQueue": [
+      {
+        "targetingKey": "org_01HZXEXP000000000000003",
+        "flagKey": "fw-exp",
+        "variant": "on",
+        "value": true
+      }
+    ]
+  },
+  "when": {
+    "operation": "flushExposures"
+  },
+  "expect": {
+    "ok": true,
+    "flushed": 1,
+    "queued": 0,
+    "errorCode": null
+  },
+  "schemaVersion": 1,
+  "id": "ext-exposures-flush",
+  "suite": "extensions",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

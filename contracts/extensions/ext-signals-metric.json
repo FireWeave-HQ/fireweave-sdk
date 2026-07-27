@@ -1,0 +1,39 @@
+{
+  "description": "signals.emit metric signal with deterministic fields",
+  "tags": [
+    "signals",
+    "metric"
+  ],
+  "given": {
+    "providerState": "READY",
+    "extensions": {
+      "signals": true
+    }
+  },
+  "when": {
+    "operation": "emitSignal",
+    "signal": {
+      "type": "metric",
+      "name": "rollout.adoption",
+      "value": 1,
+      "rolloutId": "rollout_01HZXSIG000000000000002",
+      "stampId": "stmp_01HZXSIG000000000000002"
+    }
+  },
+  "expect": {
+    "ok": true,
+    "accepted": true,
+    "errorCode": null
+  },
+  "schemaVersion": 1,
+  "id": "ext-signals-metric",
+  "suite": "extensions",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

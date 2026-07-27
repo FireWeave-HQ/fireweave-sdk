@@ -1,0 +1,55 @@
+{
+  "description": "Disabled flag returns default with DISABLED reason",
+  "tags": [
+    "variant",
+    "disabled"
+  ],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "fw-disabled": {
+        "type": "boolean",
+        "enabled": false,
+        "variant": "off",
+        "value": false,
+        "reason": {
+          "code": "no_condition_match",
+          "description": "Flag disabled"
+        },
+        "metadata": {
+          "version": 1
+        }
+      }
+    }
+  },
+  "when": {
+    "operation": "evaluate",
+    "flagKey": "fw-disabled",
+    "flagType": "boolean",
+    "defaultValue": true,
+    "invocationContext": {
+      "targetingKey": "org_01HZXEVAL000000000000008"
+    }
+  },
+  "expect": {
+    "value": false,
+    "variant": "off",
+    "reason": "DISABLED",
+    "errorCode": null,
+    "errorMessage": null,
+    "flagMetadata": {
+      "fireweave.flagVersion": 1
+    }
+  },
+  "schemaVersion": 1,
+  "id": "eval-variant-disabled",
+  "suite": "evaluation",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}

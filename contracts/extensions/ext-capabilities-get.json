@@ -1,0 +1,44 @@
+{
+  "description": "capabilities.get returns negotiated capability set",
+  "tags": [
+    "capabilities"
+  ],
+  "given": {
+    "providerState": "READY",
+    "extensions": {
+      "releases": true,
+      "exposures": true,
+      "signals": true,
+      "capabilities": true
+    }
+  },
+  "when": {
+    "operation": "getCapabilities"
+  },
+  "expect": {
+    "capabilities": [
+      "releases.setContext",
+      "releases.start",
+      "releases.complete",
+      "releases.fail",
+      "exposures.record",
+      "exposures.flush",
+      "signals.health",
+      "signals.error",
+      "signals.metric",
+      "signals.outcome"
+    ],
+    "errorCode": null
+  },
+  "schemaVersion": 1,
+  "id": "ext-capabilities-get",
+  "suite": "extensions",
+  "provisional": false,
+  "compatibility": {
+    "node": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass"
+  },
+  "limitations": {}
+}
