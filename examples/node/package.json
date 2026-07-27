@@ -1,0 +1,19 @@
+{
+  "name": "fireweave-example-node",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Minimal Fireweave SDK example — runs offline against the in-memory adapter by default; pass --posthog to use a PostHog-protocol backend (e.g. the local test-server stub).",
+  "type": "module",
+  "engines": {
+    "node": ">=20.20"
+  },
+  "scripts": {
+    "start": "node index.mjs",
+    "start:posthog": "node index.mjs --posthog"
+  },
+  "dependencies": {
+    "@fireweaveai/sdk": "file:../../sdks/node/packages/sdk",
+    "@openfeature/server-sdk": "1.22.0",
+    "posthog-node": "5.46.1"
+  }
+}

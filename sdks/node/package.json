@@ -1,0 +1,28 @@
+{
+  "name": "fireweave-sdk-node-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Fireweave polyglot SDK — Node workspace (packages, tests, conformance)",
+  "type": "module",
+  "engines": {
+    "node": ">=20.20"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @fireweaveai/sdk",
+    "typecheck": "tsc -p packages/sdk/tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "node --test \"packages/sdk/test/unit/*.test.ts\"",
+    "test:integration": "node --test \"packages/sdk/test/integration/*.test.ts\"",
+    "conformance": "node test/conformance/run.ts",
+    "verify": "npm run typecheck && npm run test && npm run conformance"
+  },
+  "devDependencies": {
+    "@openfeature/server-sdk": "1.22.0",
+    "@types/node": "^24.0.0",
+    "posthog-node": "5.46.1",
+    "typescript": "^5.6.0"
+  }
+}

@@ -72,3 +72,11 @@ Verified against Maven Central (2026-07-27, live query): `dev.openfeature:sdk` l
 - Java builds against `dev.openfeature:sdk:1.15.1`.
 - PostHogAdapter (Java) ships behind Agent I's `PostHogClientApi` seam with a clear `UnsupportedCapability` on `create(config)` until PostHog publishes a server SDK with local evaluation; whether to interim-bind legacy `com.posthog.java:posthog` 1.2.0 (remote-only) is deferred to Phase 5 + adversarial review as a known limitation.
 - Node/Python/Go pins stand — they were validated by real installs during Phase 3.
+
+## Orchestrator rulings 11–12 (Phase 3 close-out)
+
+11. **Vendor-metadata gating RATIFIED:** `fireweave.vendorFlagId` and `fireweave.reasonCode` are emitted only when the backend reports BOTH a vendor flag id and a condition index (independently converged on by Agents F, G, I from fixture triangulation). To be codified in `contracts/README.md` + `spec/decision.schema.json` description during Phase 5 integration.
+12. **Reserved-key carve-out RATIFIED:** `fireweave.groups` and `fireweave.groupProperties` are the only permitted `fireweave.*` context keys; spec to name them explicitly in Phase 5.
+
+- **Phase 3** (complete): F/G/H/I all green. Node: 67 unit + 15 integration, conformance 61/63 (2 pre-ratified skips). Python: 196 tests, 63/63. Go: 64 tests + 80 subtests (-race), 63/63. Java: 71 tests, 62/63 (1 pre-ratified skip). test-server stub implemented (Node, zero-dep). Phase 5 queue: re-run G/H/I fault fixtures against the HTTP stub; codify rulings 11–12; Java interim PostHog binding decision; H's $-prefix stripping + WithIncludePayload documentation.
+- **Phase 4** (in progress): Agents J (security/privacy), K (CI/packaging/release), L (docs/DX) launched in parallel.

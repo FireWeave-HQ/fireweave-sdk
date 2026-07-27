@@ -1,0 +1,44 @@
+{
+  "name": "@fireweaveai/sdk",
+  "version": "0.1.0",
+  "description": "Fireweave OpenFeature provider + client for Node servers (PostHog-backed, phase one). Working npm name pending company ratification (ADR-0001).",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20.20"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./posthog": {
+      "types": "./dist/adapters/posthog.d.ts",
+      "default": "./dist/adapters/posthog.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "@openfeature/server-sdk": "^1.22.0",
+    "posthog-node": "^5.46.1"
+  },
+  "peerDependenciesMeta": {
+    "posthog-node": {
+      "optional": true
+    }
+  },
+  "keywords": [
+    "openfeature",
+    "feature-flags",
+    "fireweave",
+    "posthog",
+    "server"
+  ]
+}

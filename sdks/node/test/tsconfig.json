@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "..",
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": [
+    "./**/*.ts",
+    "../packages/sdk/test/**/*.ts"
+  ]
+}
