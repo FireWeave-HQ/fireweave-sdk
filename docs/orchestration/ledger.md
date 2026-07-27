@@ -80,3 +80,12 @@ Verified against Maven Central (2026-07-27, live query): `dev.openfeature:sdk` l
 
 - **Phase 3** (complete): F/G/H/I all green. Node: 67 unit + 15 integration, conformance 61/63 (2 pre-ratified skips). Python: 196 tests, 63/63. Go: 64 tests + 80 subtests (-race), 63/63. Java: 71 tests, 62/63 (1 pre-ratified skip). test-server stub implemented (Node, zero-dep). Phase 5 queue: re-run G/H/I fault fixtures against the HTTP stub; codify rulings 11–12; Java interim PostHog binding decision; H's $-prefix stripping + WithIncludePayload documentation.
 - **Phase 4** (in progress): Agents J (security/privacy), K (CI/packaging/release), L (docs/DX) launched in parallel.
+
+## Agent J results + ruling 13 (Phase 4)
+
+Security review: **0 release blockers, 2 HIGH, 5 MEDIUM, 6 LOW** (see docs/security/release-blockers.md). Per project policy, HIGH findings must be fixed before final acceptance. Phase 5 fix queue (assigned to integration wave):
+- H-1: default-on host allowlist in Node + Python, ONE canonical default list across all four languages, https-only for non-loopback.
+- H-2: Node fixed outward error messages (use safeMessage; no vendor-text interpolation).
+- Secure defaults: enforced shutdown deadline from config in Node/Python/Java; Node telemetry allowlist default-on; exposure-dedup clear-on-flush everywhere (adopt Python's lifecycle); explicit vendor retry/queue caps in Python.
+
+13. **`fireweave.*` carve-out enforcement (extends ruling 12):** ALL four languages must accept exactly `fireweave.groups` + `fireweave.groupProperties` and reject other `fireweave.*` keys. Python's unratified `fireweave.evaluationContexts` is REJECTED — remove it. A conformance fixture should pin this (contracts change via orchestrated review).
