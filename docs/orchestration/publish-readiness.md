@@ -1,0 +1,103 @@
+# Public publish readiness checklist
+
+Status as of 2026-07-27 (live checks from this machine).  
+Goal: unblock **staging** publish of `0.1.0` without shipping broken claims (Java PostHog remains seam-only).
+
+## Live status (verified)
+
+| Gate | Status | Evidence |
+| --- | --- | --- |
+| License file | ✅ MIT already in repo | `LICENSE` — Copyright (c) 2026 Fireweave AI, Inc. |
+| CI / dry-run packaging | ✅ | `scripts/build-all.sh`, `release.yml` dry-run path |
+| Publish jobs | 🔒 hard-disabled | `.github/workflows/release.yml` `if: false` |
+| GitHub repo `FireWeave-HQ/fireweave-sdk` | ❌ **missing** | `gh repo view` → cannot resolve; local git has **no remote** |
+| npm scope `@fireweaveai` | ✅ exists | `@fireweaveai/deploy-sdk@0.2.0` published |
+| npm `@fireweaveai/sdk` | ✅ name free | registry 404 (ready to create on first publish) |
+| PyPI `fireweave` / `fireweave-sdk` | ✅ both free | pypi.org + test.pypi.org 404 |
+| Maven `ai.fireweave` | ❌ unclaimed | Maven Central search numFound=0 |
+| Local `npm whoami` | ❌ not logged in | expected — use OIDC in CI, not local token |
+
+## Decision log (company / you)
+
+Check each box when decided. Suggested defaults in parentheses.
+
+- [ ] **D1. License ratification** — Confirm MIT for this OSS SDK (file already says MIT).  
+- [ ] **D2. Repo visibility** — Public `FireWeave-HQ/fireweave-sdk` (required for Go module + OIDC trusted publishing).  
+- [ ] **D3. npm package name** — Ratify `@fireweaveai/sdk` (matches architecture.md; does not collide with `deploy-sdk`).  
+- [ ] **D4. PyPI name** — Prefer `fireweave` (short); fallback `fireweave-sdk` if contested.  
+- [ ] **D5. Maven groupId** — Ratify `ai.fireweave` and start Central namespace verification (DNS TXT on `fireweave.ai`).  
+- [ ] **D6. First publish channel** — Staging only first (`npm` dist-tag `next`, TestPyPI, Maven portal staging, Go `-rc.1` or skip Go until public).  
+- [ ] **D7. Java PostHog honesty** — Confirm shipping Java **without** live PostHog `create(config)` is acceptable for 0.1.0 (current design: injection/seam only).  
+- [ ] **D8. Explicit publish authorization** — Written OK to flip specific `release.yml` jobs off `if: false` for staging only.
+
+## Ordered unblock plan
+
+### Phase A — Foundations (blocks everything else)
+
+1. **Create and push the GitHub repo** (public under `FireWeave-HQ`).  
+   - Suggested: `gh repo create FireWeave-HQ/fireweave-sdk --public --source=. --remote=origin --push`  
+   - After push: enable Actions attestations; optionally add protected `release` environment with required reviewers.
+2. **Ratify D1–D5** (license + names). No registry work without these.
+
+### Phase B — Registry provisioning (manual UI + secrets)
+
+3. **npm Trusted Publisher** (OIDC — same pattern as `publish-deploy-sdk.yml`):  
+   - npmjs.com → org `@fireweaveai` → Trusted Publisher for package `@fireweaveai/sdk`  
+   - Repository: `FireWeave-HQ/fireweave-sdk`  
+   - Workflow: `release.yml`  
+   - Environment: optional `release`  
+   - Note: first publish of a *new* package may need a one-time granular token + 2FA; thereafter OIDC only.  
+   - Must use **GitHub-hosted** runners for npm OIDC (already true in this repo’s workflows).
+4. **PyPI + TestPyPI Trusted Publishers**:  
+   - Create project / reserve `fireweave` on TestPyPI first, then PyPI.  
+   - Trusted publisher: owner `FireWeave-HQ`, repo `fireweave-sdk`, workflow `release.yml`.
+5. **Maven Central** (slowest):  
+   - Verify namespace `ai.fireweave` at [Central Portal](https://central.sonatype.com/) (DNS TXT for `fireweave.ai`).  
+   - Secrets: `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`, `MAVEN_GPG_PASSPHRASE`.  
+   - Code gap: parent POM still needs Central publishing + sources/javadoc/gpg plugins before `publish-maven` can succeed.
+6. **Go**: no registry credentials — once the repo is **public**, pushing `sdks/go/v0.1.0` is enough for `proxy.golang.org`.
+
+### Phase C — Enable staging publish (code change, needs D8)
+
+7. In `.github/workflows/release.yml`, for **staging only**, change publish jobs from `if: false` to something like:
+   ```yaml
+   if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && github.ref_protected /* or environment approval */ }}
+   ```
+   Keep **production** channel hard-disabled until a second authorization.
+8. Dry-run on GitHub Actions: `workflow_dispatch` with `dry_run=true`.  
+9. Staging publish: `dry_run=false`, `channel=staging`, `version=0.1.0` (or `0.1.0-rc.1`), one component at a time: **node → python → go → java**.
+
+### Phase D — Production (later)
+
+10. Second written authorization.  
+11. Promote npm `next` → `latest`; re-upload PyPI; release Maven staging; tag final Go version.
+
+## Recommended first ship set
+
+| Component | Staging artifact | Caveat |
+| --- | --- | --- |
+| **node** | `@fireweaveai/sdk@0.1.0` dist-tag `next` | Highest value; PostHog real |
+| **python** | TestPyPI `fireweave==0.1.0` | PostHog real |
+| **go** | tag `sdks/go/v0.1.0-rc.1` | Needs public repo |
+| **java** | Maven portal staging **or** delay | Document seam-only PostHog; consider delaying Central until namespace verified |
+
+## What the agent can do for you (ask explicitly)
+
+| Action | Needs your OK |
+| --- | --- |
+| Create `FireWeave-HQ/fireweave-sdk` + push `master` | Yes |
+| Open a PR / commit that enables staging-only publish conditions | Yes (D8) |
+| Add Maven Central plugins to the Java parent POM | Yes |
+| Reserve PyPI/TestPyPI names via browser / API with your account | You (browser) |
+| Configure npm/PyPI trusted publishers | You (browser) — agent can give exact field values |
+| Run staging publish workflow | Yes after provisioning |
+
+## Explicit non-goals until authorized
+
+- Flipping production publish on  
+- Publishing from a laptop with long-lived tokens (prefer CI OIDC)  
+- Claiming Java live PostHog `create(config)` works  
+
+---
+
+*Next step: reply with which decisions (D1–D8) you approve and whether to create/push the GitHub repo now.*
