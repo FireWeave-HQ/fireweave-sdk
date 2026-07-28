@@ -11,6 +11,14 @@
     "signal.schema.json",
     "capabilities.schema.json",
     "errors.schema.json",
-    "fireweave-sdk.schema.json"
-  ]
+    "fireweave-sdk.schema.json",
+    "remote-evaluate.schema.json",
+    "remote-capture.schema.json"
+  ],
+  "remoteProtocol": {
+    "evaluatePath": "/v1/flags/evaluate",
+    "capturePath": "/v1/capture",
+    "auth": "Authorization: Bearer <Fireweave project/runtime key>",
+    "doc": "remote-protocol.md"
+  }
 }

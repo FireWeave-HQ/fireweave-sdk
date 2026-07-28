@@ -1,8 +1,11 @@
 /**
  * @fireweaveai/sdk — Fireweave OpenFeature provider + client for Node servers.
- * Public API per docs/architecture.md §6. The PostHog adapter lives behind the
- * "./posthog" subpath export so the main entrypoint has no posthog-node
- * dependency (vendor types never leak; verified by test).
+ * Public API per docs/architecture.md §6.
+ *
+ * Production default: {@link FireweaveRemoteAdapter} (FW key → fw-server).
+ * InMemoryAdapter for offline/tests. PostHogAdapter (advanced/direct) lives
+ * behind the "./posthog" subpath so the main entrypoint never depends on
+ * posthog-node (vendor types never leak; verified by test).
  */
 export { FireweaveError, ERROR_TAXONOMY, redactSecrets, isFireweaveError } from './errors.js';
 export type { FireweaveErrorKind, OpenFeatureErrorCode, ErrorKindSpec } from './errors.js';
@@ -43,6 +46,9 @@ export type {
 
 export { InMemoryAdapter } from './adapters/inmemory.js';
 export type { InMemoryAdapterOptions, InMemoryFlagDefinition, InMemoryFault } from './adapters/inmemory.js';
+
+export { FireweaveRemoteAdapter } from './adapters/remote.js';
+export type { FireweaveRemoteAdapterOptions } from './adapters/remote.js';
 
 export { DEFAULT_ALLOWED_HOSTS, assertHostAllowed, isLoopbackHostname } from './hosts.js';
 

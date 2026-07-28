@@ -1,8 +1,22 @@
 # Observed SDK paths (fill at pin time)
 
-Record the exact HTTP paths and auth schemes used by pinned PostHog SDKs when pointed at this stub. Until filled, harnesses should try the candidates below in order.
+## Fireweave remote protocol (ADR-0005 — default production path)
 
-## Candidates
+Served by this stub and by fw-server:
+
+| Method | Path | Auth |
+| --- | --- | --- |
+| `POST` | `/v1/flags/evaluate` | `Authorization: Bearer <project-api-key_…>` (or `x-api-key`) |
+| `POST` | `/v1/capture` | same |
+
+Schemas: `spec/remote-evaluate.schema.json`, `spec/remote-capture.schema.json`, `spec/remote-protocol.md`.
+The stub maps internal PostHog fixtures → Fireweave decision/capture envelopes (no PostHog field names on the wire).
+
+---
+
+## PostHog protocol candidates (advanced / PostHogAdapter)
+
+Record the exact HTTP paths and auth schemes used by pinned PostHog SDKs when pointed at this stub. Until filled, harnesses should try the candidates below in order.
 
 ### Remote flags
 

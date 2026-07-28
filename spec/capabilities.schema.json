@@ -59,7 +59,7 @@
       "properties": {
         "backend": {
           "type": "string",
-          "enum": ["posthog", "inmemory", "none", "other"]
+          "enum": ["fireweave", "posthog", "inmemory", "none", "other"]
         },
         "lifecycle": {
           "type": "string",

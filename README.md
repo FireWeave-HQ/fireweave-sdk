@@ -7,7 +7,7 @@ Open-source, [OpenFeature](https://openfeature.dev)-compatible, **server-first**
 > **Status: pre-release (0.1.0).**
 >
 > - Repo: https://github.com/FireWeave-HQ/fireweave-sdk — staging publish authorized; configure trusted publishers before first non-dry-run release ([publish-readiness](docs/orchestration/publish-readiness.md)).
-> - **Fireweave remote adapter + fw-server proxy routes are not shipped yet.** Until then, examples run against `InMemoryAdapter`; direct PostHog adapter code exists but is not the product default.
+> - **Fireweave remote adapter is implemented** (`FireweaveRemoteAdapter` → `POST /v1/flags/evaluate` + `/v1/capture`). Examples stay offline (`InMemoryAdapter`) by default; use `--remote` / `FW_API_URL` against the test-server stub or fw-server. Direct `PostHogAdapter` is an advanced escape hatch.
 > - **License**: MIT ([LICENSE](LICENSE)).
 
 ## Why OpenFeature
@@ -18,7 +18,7 @@ Flag evaluation goes through the standard OpenFeature client in every language, 
 - OpenFeature hooks, domains, events, and the never-throw evaluation contract work as specified;
 - Fireweave-specific functionality (release lifecycle, exposure recording, health/outcome signals, capability discovery) lives on a separate `FireweaveClient` that shares the same runtime — it never contaminates the standard flag-evaluation surface (ADR-0003).
 
-One architecture in all four languages: **FireweaveProvider (OpenFeature) + FireweaveClient (extensions) → FireweaveRuntime → BackendAdapter** — production default will be `FireweaveRemoteAdapter` (Fireweave key → fw-server); `InMemoryAdapter` for tests; optional direct `PostHogAdapter`. See [docs/architecture.md](docs/architecture.md) and [ADR-0005](docs/adr/0005-fireweave-proxy-backend.md).
+One architecture in all four languages: **FireweaveProvider (OpenFeature) + FireweaveClient (extensions) → FireweaveRuntime → BackendAdapter** — production default is `FireweaveRemoteAdapter` (Fireweave key → fw-server); `InMemoryAdapter` for tests; optional direct `PostHogAdapter`. See [docs/architecture.md](docs/architecture.md), [ADR-0005](docs/adr/0005-fireweave-proxy-backend.md), and [spec/remote-protocol.md](spec/remote-protocol.md).
 
 ## Quickstart
 

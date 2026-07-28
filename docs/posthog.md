@@ -1,6 +1,10 @@
-# PostHog-backed usage
+# Advanced: direct PostHog adapter
 
-Phase one evaluates flags through PostHog **[PostHog-specific]** on Node, Python, and Go. The `PostHogAdapter` wraps the official PostHog server SDK (Node `posthog-node` 5.46.1, Python `posthog` 7.31.0, Go `posthog-go` v1.22.0) behind the vendor-neutral `BackendAdapter` boundary. **Java is seam only / not production-ready** — see [Java](#java). Your application code never sees PostHog types, and the SDK never reimplements PostHog's flag evaluator (ADR-0002).
+> **Not the production default.** Prefer [Fireweave remote](remote.md) (`FireweaveRemoteAdapter`
+> + `FW_API_URL` / `FW_PROJECT_API_KEY`). Use this page only for Fireweave-internal dogfood,
+> migration, or when you explicitly want the app process to hold PostHog keys.
+
+Phase one’s optional `PostHogAdapter` wraps the official PostHog server SDK (Node `posthog-node` 5.46.1, Python `posthog` 7.31.0, Go `posthog-go` v1.22.0) behind the vendor-neutral `BackendAdapter` boundary. **Java PostHog adapter is seam only** — production Java should use `FireweaveRemoteAdapter`. Your application code never sees PostHog types on the Fireweave public API (ADR-0002).
 
 ## API key types
 
@@ -79,80 +83,32 @@ from fireweave.adapters.posthog import PostHogAdapter
 config = FireweaveConfig(
     project_api_key=os.environ["POSTHOG_PROJECT_API_KEY"],   # phc_...
     host=os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com"),
-    # Local evaluation (optional; server-side secret):
-    # secret_key=os.environ["POSTHOG_FF_SECRET_KEY"],        # phs_ (or personal_api_key=phx_)
-    # local_evaluation=True,
-    # only_evaluate_locally=True,
-    # allowed_hosts=("us.i.posthog.com",),                   # SSRF allowlist
 )
-runtime = FireweaveRuntime(PostHogAdapter(config=config), config)
-runtime.initialize(backend_required=True)   # fail fast (FATAL) on bad config
+adapter = PostHogAdapter(config=config)
+runtime = FireweaveRuntime(adapter, config=config)
+runtime.initialize()
 client = FireweaveClient(runtime)
 ```
-
-Advanced: `PostHogAdapter(client=...)` injects a preconfigured `posthog.Posthog` (never shut down by Fireweave); `transport=` overrides the snapshot fetcher for fault testing.
 
 ### Go
 
 ```go
-import (
-    "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/adapters/posthog"
-    "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/fireweave"
-)
-
-adapter := posthog.New(posthog.Config{
-    ProjectAPIKey:      os.Getenv("POSTHOG_PROJECT_API_KEY"), // phc_... (required)
-    Endpoint:           "https://us.i.posthog.com",           // required
-    SecretKey:          os.Getenv("POSTHOG_FF_SECRET_KEY"),   // optional: enables local eval
-    // LocalEvaluationOnly: true,                             // requires SecretKey
-    FlagRequestTimeout: 3 * time.Second,
-    // FlagRequestRetries: 0,                                 // default: surface typed error
-    // SendExposureEvents: true,                              // vendor $feature_flag_called (default false)
-    CloseTimeout:       10 * time.Second,                     // bound on shutdown (DefaultCloseTimeout = 10s)
-    // AllowedHosts:    []string{"us.i.posthog.com"},         // SSRF allowlist override
+adapter, err := posthog.New(posthog.Config{
+    ProjectAPIKey: os.Getenv("POSTHOG_PROJECT_API_KEY"),
+    Endpoint:      "https://us.i.posthog.com",
 })
-runtime := fireweave.NewRuntime(adapter, fireweave.Config{RequireTargetingKey: true})
 ```
-
-Config is validated during `Initialize` so failures map to the runtime's `FATAL` state. `Close` never inherits posthog-go's indefinite-wait default — it is always deadline-bounded.
 
 ### Java
 
-> **Not production-ready (seam only).** PostHog has **not** published a Java *server* SDK on Maven Central (`com.posthog:posthog-server` — verified 2026-07-27; only Android and the prohibited legacy `com.posthog.java:posthog` 1.2.0 exist). Fireweave does **not** invent or bind an unpublished package. **`PostHogAdapter.create(config)` always fails with `UnsupportedCapability`** — API keys alone cannot create a live PostHog-backed Java client. Prefer [`InMemoryAdapter`](testing.md) for real apps until upstream ships a server SDK.
+`PostHogAdapter.create(config)` throws `UnsupportedCapability` until a Maven Central
+PostHog server SDK exists. Prefer `FireweaveRemoteAdapter` for Java production.
 
-Supported today:
+## Test-server (PostHog protocol)
 
-1. **`InMemoryAdapter`** (recommended for Java production paths until upstream exists) — [testing.md](testing.md).
-2. **Injected `PostHogClientApi` seam** for tests / offline stubs only (see `examples/java`):
-
-```java
-// Test/stub path only — not a live PostHog SDK binding.
-PostHogAdapter adapter = new PostHogAdapter(myPostHogClientApi);  // injected; never closed by Fireweave
-FireweaveConfig config = FireweaveConfig.builder()
-    .projectApiKey("phc_EXAMPLE_FOR_STUBS_ONLY")
-    .host("http://127.0.0.1:3901")
-    .build();
-FireweaveRuntime runtime = new FireweaveRuntime(config, adapter);
-```
-
-The seam passes explicit `distinctId` + properties on every call (no ThreadLocal request context), and surfaces snapshot staleness when the injected client reports aged data (`reason: STALE` + `fireweave.fromCache`).
-
-## Context mapping (all languages)
-
-| Fireweave / OpenFeature | PostHog |
-| --- | --- |
-| `targetingKey` | `distinct_id` (required; never auto-generated — see [identity.md](identity.md)) |
-| Non-reserved context attributes | `person_properties` |
-| Group carriers ([identity.md](identity.md#groups)) | `groups` / `group_properties` |
-| `$`-prefixed attributes | Vendor directives (e.g. `$process_person_profile`), passed through — not person properties |
-
-## Local development without a PostHog account
-
-The repo ships a deterministic PostHog-protocol stub (`test-server/`): `/flags?v=2`, definitions poll, `/batch/`, plus scriptable fault modes (401/429/500/delay/invalid JSON/quota-limited). Point any adapter's `host` at it:
+The repo stub also speaks PostHog paths for this advanced adapter:
 
 ```bash
-node test-server/implementation/server.mjs        # listens on 127.0.0.1:3901
-POSTHOG_HOST=http://127.0.0.1:3901 POSTHOG_API_KEY=phc_example node examples/node/index.mjs --posthog
+node test-server/implementation/server.mjs
+# POST /flags?v=2, GET /flags/definitions, POST /batch
 ```
-
-See [testing.md](testing.md#the-posthog-protocol-test-server).

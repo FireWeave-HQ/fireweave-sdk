@@ -123,7 +123,7 @@ export interface Capabilities {
     features: Record<string, boolean>;
   };
   runtime: {
-    backend: 'posthog' | 'inmemory' | 'none' | 'other';
+    backend: 'fireweave' | 'posthog' | 'inmemory' | 'none' | 'other';
     lifecycle: LifecycleState;
     features?: Record<string, boolean>;
     limits?: {

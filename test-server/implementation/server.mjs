@@ -1,11 +1,16 @@
 /**
- * Fireweave deterministic PostHog protocol stub (test-server/README.md,
+ * Fireweave deterministic protocol stub (test-server/README.md,
  * implementation/PLAN.md). Loopback-only Node HTTP server; no dependencies.
  *
- * Endpoints:
+ * PostHog-protocol endpoints (advanced / PostHogAdapter):
  *   POST /flags/?v=2 (and /flags?v=2)      — flags v2 evaluation body
  *   GET  /flags/definitions?token=...      — local-eval definitions (Bearer auth)
  *   POST /batch/ (and /batch)              — event capture, stored in memory
+ *
+ * Fireweave remote protocol (ADR-0005 / FireweaveRemoteAdapter):
+ *   POST /v1/flags/evaluate  — vendor-neutral evaluate (Bearer FW key)
+ *   POST /v1/capture         — exposures/signals/events batch (Bearer FW key)
+ *
  *   GET  /health                           — {"ok":true}
  * Admin control plane:
  *   POST /_test/fault        {"mode","status","delayMs","ttlRequests","applyTo","body"}
@@ -15,7 +20,7 @@
  *   GET  /_test/events       captured batch events (insert order)
  *
  * Fault modes: delay | 401 | 429 | 500 | invalid_json | truncated | quota_limited
- * applyTo: flags | definitions | batch | all (default flags)
+ * applyTo: flags | definitions | batch | evaluate | capture | all (default flags)
  */
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -49,8 +54,9 @@ const isLoopback = (host) =>
  * @param {object} [options]
  * @param {number} [options.port=3901]
  * @param {string} [options.host='127.0.0.1']
- * @param {string} [options.projectApiKey] accept only this token when set
+ * @param {string} [options.projectApiKey] accept only this token when set (PostHog body token OR FW Bearer)
  * @param {string} [options.secretApiKey]  required Bearer key for definitions when set
+ * @param {string} [options.fireweaveApiKey] accept only this Bearer for /v1/* when set (defaults to projectApiKey)
  * @param {boolean} [options.allowNonLoopback=false]
  */
 export async function startTestServer(options = {}) {
@@ -65,7 +71,74 @@ export async function startTestServer(options = {}) {
     flagsBody: FIXTURES.flagsSuccess(),
     definitionsBody: FIXTURES.definitions(),
     events: [],
+    fwEvents: [],
     requestLog: [],
+  };
+
+  const expectedFwKey = options.fireweaveApiKey ?? options.projectApiKey;
+
+  const extractBearer = (req) => {
+    const auth = req.headers['authorization'];
+    if (typeof auth === 'string' && auth.toLowerCase().startsWith('bearer ')) {
+      return auth.slice(7).trim();
+    }
+    const xKey = req.headers['x-api-key'];
+    if (typeof xKey === 'string' && xKey.trim().length > 0) return xKey.trim();
+    return '';
+  };
+
+  /** Map PostHog flags fixture → Fireweave decision items (vendor-neutral). */
+  const flagsToDecisions = (flagsBody, flagKeys) => {
+    const all = flagsBody?.flags ?? {};
+    const keys = Array.isArray(flagKeys) && flagKeys.length > 0 ? flagKeys : Object.keys(all);
+    const decisions = [];
+    for (const flagKey of keys) {
+      const record = all[flagKey];
+      if (record === undefined) {
+        decisions.push({
+          flagKey,
+          value: null,
+          reason: 'ERROR',
+          found: false,
+        });
+        continue;
+      }
+      const enabled = record.enabled === true;
+      const variant = record.variant ?? null;
+      const value = enabled ? (variant ?? true) : false;
+      const meta = {};
+      if (record.metadata?.version != null) meta['fireweave.flagVersion'] = record.metadata.version;
+      if (record.metadata?.id != null && record.reason?.condition_index != null) {
+        meta['fireweave.vendorFlagId'] = record.metadata.id;
+        if (record.reason?.code) meta['fireweave.reasonCode'] = record.reason.code;
+      }
+      meta['fireweave.backend'] = 'other';
+      let payload;
+      if (typeof record.metadata?.payload === 'string' && record.metadata.payload.length > 0) {
+        try {
+          payload = JSON.parse(record.metadata.payload);
+        } catch {
+          payload = record.metadata.payload;
+        }
+      }
+      const item = {
+        flagKey,
+        value,
+        variant,
+        reason: enabled ? (variant ? 'SPLIT' : 'TARGETING_MATCH') : 'DISABLED',
+        found: true,
+        enabled,
+        flagMetadata: meta,
+      };
+      if (payload !== undefined) item.payload = payload;
+      decisions.push(item);
+    }
+    const quotaLimited =
+      Array.isArray(flagsBody?.quotaLimited) && flagsBody.quotaLimited.includes('feature_flags');
+    const out = { decisions };
+    if (flagsBody?.requestId) out.requestId = flagsBody.requestId;
+    if (quotaLimited) out.quotaLimited = true;
+    return out;
   };
 
   const readBody = (req) =>
@@ -204,9 +277,50 @@ export async function startTestServer(options = {}) {
     return sendJson(res, 200, FIXTURES.batchAccept());
   };
 
+  const handleFwEvaluate = async (req, res) => {
+    const bodyText = await readBody(req);
+    state.requestLog.push({ path: '/v1/flags/evaluate' });
+    if (await applyFault('evaluate', res, () => flagsToDecisions(state.flagsBody))) return undefined;
+    const key = extractBearer(req);
+    if (!key) return sendJson(res, 401, { ok: false, error: 'UNAUTHORIZED' });
+    if (expectedFwKey !== undefined && key !== expectedFwKey) {
+      return sendJson(res, 401, { ok: false, error: 'UNAUTHORIZED' });
+    }
+    let body = {};
+    try {
+      body = JSON.parse(bodyText);
+    } catch {
+      return sendJson(res, 400, { ok: false, error: 'INVALID_BODY' });
+    }
+    if (typeof body.targetingKey !== 'string' || body.targetingKey.length === 0) {
+      return sendJson(res, 400, { ok: false, error: 'TARGETING_KEY_REQUIRED' });
+    }
+    return sendJson(res, 200, flagsToDecisions(state.flagsBody, body.flagKeys));
+  };
+
+  const handleFwCapture = async (req, res) => {
+    const bodyText = await readBody(req);
+    state.requestLog.push({ path: '/v1/capture' });
+    if (await applyFault('capture', res, () => ({ ok: true, accepted: 0 }))) return undefined;
+    const key = extractBearer(req);
+    if (!key) return sendJson(res, 401, { ok: false, error: 'UNAUTHORIZED' });
+    if (expectedFwKey !== undefined && key !== expectedFwKey) {
+      return sendJson(res, 401, { ok: false, error: 'UNAUTHORIZED' });
+    }
+    let body = {};
+    try {
+      body = JSON.parse(bodyText);
+    } catch {
+      return sendJson(res, 400, { ok: false, error: 'INVALID_BODY' });
+    }
+    const events = Array.isArray(body.events) ? body.events : [];
+    for (const event of events) state.fwEvents.push(event);
+    return sendJson(res, 200, { ok: true, accepted: events.length });
+  };
+
   const handleAdmin = async (req, res, url) => {
     if (req.method === 'GET' && url.pathname === '/_test/events') {
-      return sendJson(res, 200, { events: state.events });
+      return sendJson(res, 200, { events: state.events, fwEvents: state.fwEvents });
     }
     if (req.method === 'GET' && url.pathname === '/_test/requests') {
       return sendJson(res, 200, { requests: state.requestLog });
@@ -235,6 +349,7 @@ export async function startTestServer(options = {}) {
         state.flagsBody = FIXTURES.flagsSuccess();
         state.definitionsBody = FIXTURES.definitions();
         state.events = [];
+        state.fwEvents = [];
         state.requestLog = [];
         return sendJson(res, 200, { ok: true });
       default:
@@ -248,6 +363,8 @@ export async function startTestServer(options = {}) {
     const route = async () => {
       if (path === '/health') return sendJson(res, 200, { ok: true });
       if (path.startsWith('/_test')) return handleAdmin(req, res, url);
+      if (req.method === 'POST' && path === '/v1/flags/evaluate') return handleFwEvaluate(req, res);
+      if (req.method === 'POST' && path === '/v1/capture') return handleFwCapture(req, res);
       if (req.method === 'POST' && path === '/flags') return handleFlags(req, res);
       if (req.method === 'GET' && path === '/flags/definitions') return handleDefinitions(req, res, url);
       if (req.method === 'POST' && path === '/batch') return handleBatch(req, res);

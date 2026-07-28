@@ -45,7 +45,7 @@ export interface AdapterRuntimeFeatures {
  * canonical requests to vendor protocols; they never see OpenFeature types.
  */
 export interface BackendAdapter {
-  readonly name: 'inmemory' | 'posthog' | 'other';
+  readonly name: 'inmemory' | 'posthog' | 'fireweave' | 'other';
   /** Bring the backend to a usable state. Reject with FireweaveError on failure. */
   initialize(signal?: AbortSignal): Promise<void>;
   /** Resolve one flag. Throws FireweaveError for transport/auth/parse faults. */

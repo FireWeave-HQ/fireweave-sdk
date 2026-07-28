@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fireweave.ai/spec/0.1.0/remote-evaluate.schema.json",
+  "title": "FireweaveRemoteEvaluate",
+  "description": "Vendor-neutral wire protocol for POST /v1/flags/evaluate (ADR-0005). Auth: Authorization: Bearer <Fireweave project/runtime key> (project-api-key_… today; fw_runtime_ TBD). No PostHog field names.",
+  "type": "object",
+  "$defs": {
+    "jsonValue": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "string", "maxLength": 16384 },
+        { "type": "number" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/jsonValue" },
+          "maxItems": 128
+        },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" },
+          "maxProperties": 128
+        }
+      ]
+    },
+    "evaluateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetingKey"],
+      "properties": {
+        "targetingKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Primary subject key for targeting (never a vendor distinct_id name)."
+        },
+        "attributes": {
+          "type": "object",
+          "description": "Subject attributes for targeting.",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" },
+          "maxProperties": 64
+        },
+        "groups": {
+          "type": "object",
+          "description": "Group memberships: groupType → groupKey.",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "maxProperties": 32
+        },
+        "groupProperties": {
+          "type": "object",
+          "description": "Per-group attributes: groupType → property map.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/$defs/jsonValue" },
+            "maxProperties": 64
+          },
+          "maxProperties": 32
+        },
+        "flagKeys": {
+          "type": "array",
+          "description": "Optional subset of flag keys to evaluate. Omitted ⇒ all known flags for the project.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "maxItems": 256,
+          "uniqueItems": true
+        }
+      }
+    },
+    "decisionItem": {
+      "description": "One flag decision. Compatible with decision.schema.json required fields plus adapter-resolution helpers.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["flagKey", "value", "reason", "found"],
+      "properties": {
+        "flagKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "value": { "$ref": "#/$defs/jsonValue" },
+        "variant": {
+          "type": ["string", "null"],
+          "maxLength": 256
+        },
+        "reason": {
+          "type": "string",
+          "description": "OpenFeature-style reason string.",
+          "examples": [
+            "STATIC",
+            "DEFAULT",
+            "TARGETING_MATCH",
+            "SPLIT",
+            "CACHED",
+            "DISABLED",
+            "UNKNOWN",
+            "STALE",
+            "ERROR"
+          ]
+        },
+        "found": {
+          "type": "boolean",
+          "description": "False when the flag key is unknown to the backend."
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Flag enabled state when known."
+        },
+        "payload": { "$ref": "#/$defs/jsonValue" },
+        "flagMetadata": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "boolean" },
+              { "type": "string", "maxLength": 2048 },
+              { "type": "number" }
+            ]
+          },
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxProperties": 32
+        },
+        "error": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "https://fireweave.ai/spec/0.1.0/errors.schema.json#/$defs/errorInstance" }
+          ]
+        }
+      }
+    },
+    "evaluateResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decisions"],
+      "properties": {
+        "decisions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/decisionItem" },
+          "maxItems": 512
+        },
+        "requestId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "quotaLimited": {
+          "type": "boolean",
+          "description": "True when the upstream provider reported quota limiting for this evaluation."
+        }
+      }
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/evaluateRequest" },
+    { "$ref": "#/$defs/evaluateResponse" }
+  ]
+}

@@ -4,7 +4,7 @@ Five minutes per language: install → configure a provider → evaluate a boole
 
 > **Packages are not yet published.** Every path below installs from a checkout of this repository (path/workspace installs). The import names shown (`@fireweaveai/sdk`, `fireweave`, `ai.fireweave:*`) are the working package names and already work for local installs.
 
-Every snippet below runs **offline** using the deterministic `InMemoryAdapter` — no PostHog account needed. To point the same code at PostHog, swap the adapter as shown in [posthog.md](posthog.md). Complete, runnable versions of these programs live in [`examples/`](../examples/).
+Every snippet below runs **offline** using the deterministic `InMemoryAdapter` — no network needed. For production, use `FireweaveRemoteAdapter` with `FW_API_URL` + `FW_PROJECT_API_KEY` (Fireweave credentials → fw-server; see below). Direct PostHog is an advanced escape hatch in [posthog.md](posthog.md). Complete, runnable programs live in [`examples/`](../examples/) (`--remote` hits the test-server stub).
 
 ## Node.js (≥ 20.20)
 
@@ -46,6 +46,23 @@ await OpenFeature.close();
 ```
 
 Run it: `node examples/node/index.mjs`.
+
+### Production (Fireweave remote)
+
+```js
+import { FireweaveRemoteAdapter, FireweaveProvider, FireweaveRuntime } from '@fireweaveai/sdk';
+import { OpenFeature } from '@openfeature/server-sdk';
+
+const adapter = new FireweaveRemoteAdapter({
+  apiUrl: process.env.FW_API_URL,                 // fw-server base URL
+  apiKey: process.env.FW_PROJECT_API_KEY,         // project-api-key_…
+});
+const runtime = new FireweaveRuntime(adapter);
+await OpenFeature.setProviderAndWait(new FireweaveProvider(runtime, { lazyReady: false }));
+```
+
+Against the repo stub: start `node test-server/implementation/server.mjs`, then
+`FW_API_URL=http://127.0.0.1:3901 FW_PROJECT_API_KEY=project-api-key_dev node examples/node/index.mjs --remote`.
 
 ## Python (≥ 3.10)
 

@@ -22,7 +22,7 @@ injectable for tests.
 """
 
 from ._version import SPEC_VERSION, __version__
-from .adapters import BackendAdapter, FlagResolution, InMemoryAdapter
+from .adapters import BackendAdapter, FlagResolution, FireweaveRemoteAdapter, InMemoryAdapter
 from .capabilities import CANONICAL_CAPABILITIES, CapabilityRegistry
 from .client import (
     CapabilityResult,
@@ -73,6 +73,7 @@ __all__ = [
     "BackendAdapter",
     "FlagResolution",
     "InMemoryAdapter",
+    "FireweaveRemoteAdapter",
     # context / decisions
     "ContextLimits",
     "EvaluationContext",

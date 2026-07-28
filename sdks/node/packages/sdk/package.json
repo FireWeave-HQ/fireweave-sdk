@@ -1,7 +1,7 @@
 {
   "name": "@fireweaveai/sdk",
   "version": "0.1.0",
-  "description": "Fireweave OpenFeature provider + client for Node servers (PostHog-backed, phase one). Working npm name pending company ratification (ADR-0001).",
+  "description": "Fireweave OpenFeature provider + client for Node servers. Default: FireweaveRemoteAdapter (FW key → fw-server). Optional PostHogAdapter for direct/advanced use.",
   "license": "MIT",
   "type": "module",
   "engines": {

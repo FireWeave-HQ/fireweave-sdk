@@ -112,7 +112,7 @@
         "fireweave.quotaLimited": { "type": "boolean" },
         "fireweave.backend": {
           "type": "string",
-          "enum": ["posthog", "inmemory", "other"]
+          "enum": ["fireweave", "posthog", "inmemory", "other"]
         },
         "fireweave.vendorFlagId": {
           "type": "number",
