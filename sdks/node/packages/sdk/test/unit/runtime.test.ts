@@ -249,21 +249,21 @@ test('stableStringify sorts keys deterministically at every level', () => {
   );
 });
 
-test('H-4: evaluate emits Fireweave exposure by default; sendExposure:false opts out', async () => {
-  const adapter = adapterWith(BOOL_ON);
-  const runtime = new FireweaveRuntime(adapter);
-  await runtime.initialize();
-  const first = await runtime.evaluate('fw-a', 'boolean', false, { targetingKey: 'user-1' });
-  assert.equal(first.value, true);
-  assert.equal(adapter.getExposures().length, 1);
-  assert.equal(adapter.getExposures()[0]?.flagKey, 'fw-a');
-  // Dedup on the same tuple.
-  await runtime.evaluate('fw-a', 'boolean', false, { targetingKey: 'user-1' });
-  assert.equal(adapter.getExposures().length, 1);
-  // Opt-out for pure reads.
+test('H-4: evaluate does not emit by default; sendExposure:true opts in with dedup', async () => {
   const pure = adapterWith(BOOL_ON);
   const pureRuntime = new FireweaveRuntime(pure);
   await pureRuntime.initialize();
-  await pureRuntime.evaluate('fw-a', 'boolean', false, { targetingKey: 'user-1' }, { sendExposure: false });
-  assert.equal(pure.getExposures().length, 0);
+  const first = await pureRuntime.evaluate('fw-a', 'boolean', false, { targetingKey: 'user-1' });
+  assert.equal(first.value, true);
+  assert.equal(pure.getExposures().length, 0, 'default evaluate must be side-effect-free');
+
+  const adapter = adapterWith(BOOL_ON);
+  const runtime = new FireweaveRuntime(adapter);
+  await runtime.initialize();
+  await runtime.evaluate('fw-a', 'boolean', false, { targetingKey: 'user-1' }, { sendExposure: true });
+  assert.equal(adapter.getExposures().length, 1);
+  assert.equal(adapter.getExposures()[0]?.flagKey, 'fw-a');
+  // Dedup on the same tuple.
+  await runtime.evaluate('fw-a', 'boolean', false, { targetingKey: 'user-1' }, { sendExposure: true });
+  assert.equal(adapter.getExposures().length, 1);
 });

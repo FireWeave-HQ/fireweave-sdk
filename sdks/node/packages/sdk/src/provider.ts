@@ -56,8 +56,10 @@ export interface FireweaveProviderOptions {
   /** Attach flag payloads to flagMetadata as fireweave.payload. */
   includePayload?: boolean;
   /**
-   * When true (default), successful OF evaluations emit a Fireweave-owned
-   * exposure (H-4 / ADR-0001). Set false for side-effect-free OF reads.
+   * When true, successful OF evaluations emit a Fireweave-owned exposure
+   * (H-4 / ADR-0001 errata / ruling 20). Default `false` — side-effect-free
+   * OF reads; opt in to arm Fireweave emission/dedup (vendor
+   * `$feature_flag_called` remains suppressed — RB-2).
    */
   sendExposure?: boolean;
   /**
@@ -112,7 +114,7 @@ export class FireweaveProvider implements Provider {
   ): Promise<ResolutionDetails<T>> {
     const evalOpts: { includePayload?: boolean; sendExposure?: boolean } = {};
     if (this.options.includePayload === true) evalOpts.includePayload = true;
-    if (this.options.sendExposure === false) evalOpts.sendExposure = false;
+    if (this.options.sendExposure === true) evalOpts.sendExposure = true;
     const decision = await this.runtime.evaluate(
       flagKey,
       expectedType,

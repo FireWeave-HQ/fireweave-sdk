@@ -54,10 +54,11 @@ export interface EvaluateOptions {
   /** Attach flag payload as fireweave.payload metadata (sorted-key JSON string). */
   includePayload?: boolean;
   /**
-   * When true (default), emit a Fireweave-owned exposure for a successful
-   * evaluation (H-4 / ADR-0001 §23). Opt out with `false` for pure reads.
-   * Vendor `$feature_flag_called` is never used for this path — see PostHog
-   * adapter side-effect-free snapshot reads (RB-2).
+   * When true, emit a Fireweave-owned exposure for a successful evaluation
+   * (H-4 / ADR-0001 §23 errata / ruling 20). Default `false` — phase-one
+   * evaluate is side-effect-free. Vendor `$feature_flag_called` stays
+   * suppressed on the local snapshot path (RB-2); Fireweave owns emission
+   * and dedup when opted in.
    */
   sendExposure?: boolean;
   signal?: AbortSignal;
@@ -310,8 +311,8 @@ export class FireweaveRuntime {
     const decision: Decision = { flagKey, value, reason, metadata };
     if (resolution.variant !== undefined) decision.variant = resolution.variant;
 
-    // H-4: OF / detailed-eval default is side-effectful; opt out via sendExposure: false.
-    if (options.sendExposure !== false) {
+    // H-4 / ruling 20: evaluate is side-effect-free by default; opt in via sendExposure: true.
+    if (options.sendExposure === true) {
       this.emitEvaluateExposure({
         targetingKey: context.targetingKey ?? '',
         flagKey,
