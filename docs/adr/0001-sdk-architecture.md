@@ -103,7 +103,7 @@ The **runtime** owns shutdown. Provider `onClose`/`shutdown`/`Shutdown` and `Fir
 
 Exposure (`$feature_flag_called`) is emitted by the PostHog SDK when snapshot accessors run, with SDK-native LRU dedup. Fireweave may add an optional secondary dedup keyed by `(distinct_id, flag_key, variant)` for extension APIs; it must not double-emit with PostHog's cache. Document Node (50k) vs Java (1k) cache size skew.
 
-> **Phase-one errata (2026-07-27, Agent M H-4):** Portable evaluate/OF defaults are **side-effect-free**. Exposures flow through the explicit `exposures` API (or Go `SendExposureEvents: true` / per-call `SendExposure`). The earlier "default emit on OF evaluation" wording below is **deferred** until Node local-eval vendor side effects are controllable (adversarial RB-2) and Java wires `sendExposure`.
+> **Phase-one errata (2026-07-27, Agent M H-4 / ruling 20):** Portable evaluate/OF defaults are **side-effect-free**. Exposures flow through the explicit `exposures` API, or opt-in evaluate emission (`sendExposure: true` / `send_exposure=True` / Go `SendExposureEvents` / per-call `SendExposure` — all default false). The earlier "default emit on OF evaluation" wording below is **deferred** (not phase-one scope).
 
 ### 7. Cold-start defaults
 
@@ -187,7 +187,7 @@ New Fireweave features land on `FireweaveClient` or additive `flagMetadata` keys
 
 ### 23. Side-effect-controlled evaluation
 
-Every evaluation path documents whether it may emit exposure. **Phase-one ratified default:** OF/evaluate path is side-effect-free; opt **in** via Go `SendExposureEvents` / per-call `SendExposure`, or record via `exposures.*`. `evaluationOptions.sendExposure` (Python/Go; Java flag exists but is unwired — see adversarial H-4/H-7 ownership) documents intent for future emit-once alignment. Payload retrieval must follow PostHog semantics (`getFlagPayload` does not emit) when used for metadata enrichment after a value read.
+Every evaluation path documents whether it may emit exposure. **Phase-one ratified default (ruling 20):** OF/evaluate path is side-effect-free; opt **in** via `sendExposure: true` / `send_exposure=True` / Go `SendExposureEvents` / per-call `SendExposure` / Java `EvaluationOptions.sendExposure(true)`, or record via `exposures.*`. Full ADR "default emit on OF" remains deferred. Payload retrieval must follow PostHog semantics (`getFlagPayload` does not emit) when used for metadata enrichment after a value read.
 
 ### 24. Sync vs async adapter surface
 

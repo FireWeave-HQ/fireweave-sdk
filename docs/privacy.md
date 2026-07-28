@@ -37,7 +37,7 @@ Release failure reasons (`releases.fail(reason)`) are redacted in every language
 | | Node | Python | Go | Java |
 |---|---|---|---|---|
 | Context → person properties on `/flags` | yes (remote mode) | yes (remote mode) | yes (remote mode) | via injected client seam |
-| Vendor implicit exposure events (OF/evaluate path) | intended disabled (local residual: adversarial RB-2) | disabled (`exposureEmission: false`) | gated (off unless `SendExposureEvents` / per-call arm + deduped) | n/a (seam; Fireweave-owned; `sendExposure` unwired) |
+| Vendor implicit exposure events (OF/evaluate path) | suppressed on local path (RB-2); evaluate opt-in via `sendExposure: true` (ruling 20) | disabled (`exposureEmission: false`); evaluate opt-in via `send_exposure=True` | gated (off unless `SendExposureEvents` / per-call arm + deduped) | Fireweave-owned via seam; evaluate opt-in via `sendExposure(true)` (default false; ruling 20) |
 | Fireweave exposures | explicit queue, dedup, flush | explicit queue, dedup, flush | explicit queue, dedup, flush | explicit queue, dedup, flush |
 | Signals | opt-in per call | opt-in per call | opt-in per call | opt-in per call |
 | GeoIP | disabled per request | vendor default | vendor default | injected-client dependent |

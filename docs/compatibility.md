@@ -17,7 +17,7 @@ Spec version **0.1.0**; OpenFeature specification compliance floor **v0.8.0**. S
 | **Multivariate variants** | ✅ | ✅ | ✅ | ✅ |
 | **Groups / group properties** | ✅ canonical `fireweave.groups` / `fireweave.groupProperties` + plain `groups` / `groupProperties` alias (rulings 12–14, 19) | ✅ same | ✅ same | ✅ builder `.group()` + canonical/alias attributes |
 | **Flag payloads** (`fireweave.payload` metadata) | ✅ provider `includePayload` | ✅ `include_payload` | ✅ `fireweave.WithIncludePayload(ctx)` / `Flags().Evaluate(..., IncludePayload)` | ✅ `EvaluationOptions` |
-| **Exposure events** | Explicit `exposures.*`; vendor OF-path intended side-effect-free (Node local residual — adversarial RB-2) | Explicit `exposures.*`; OF-path side-effect-free (`exposureEmission: false`) | Explicit `exposures.*` + opt-in vendor events (`SendExposureEvents` / per-call `SendExposure`) | Explicit API via adapter seam; `sendExposure` option unwired (adversarial H-4) |
+| **Exposure events** | Explicit `exposures.*`; evaluate opt-in via `sendExposure: true` (default false; ruling 20); vendor `$feature_flag_called` suppressed on local path (RB-2) | Explicit `exposures.*`; evaluate opt-in (`send_exposure=True`, default false); OF-path side-effect-free | Explicit `exposures.*` + opt-in (`SendExposureEvents` / per-call `SendExposure`, default false) | Explicit `exposures.*` + evaluate opt-in (`sendExposure(true)`, default false); Fireweave-owned via adapter seam (RB-3) |
 | **OpenFeature tracking (spec §6)** | ⏳ planned | ⏳ planned | ⏳ planned | ⏳ planned |
 | **Fireweave extensions** (releases / exposures / signals / capabilities) | ✅ | ✅ | ✅ | ✅ |
 | **Guardrails** | 🧪 stub (`UnsupportedCapability`) | 🧪 stub | 🧪 stub | 🧪 stub |
@@ -57,20 +57,21 @@ All conformance skips are **pre-declared** in the fixtures themselves (`skipped-
 
 ## Known gaps (pre-release; tracked for arbitration/1.0)
 
-1. **Java PostHog binding** pending upstream publication (ruling 10 / adversarial RB-3) — `PostHogAdapter.create(config)` → `UnsupportedCapability`; examples use an offline stub / injected seam.
-2. **Node local/hybrid PostHog evaluation + local `$feature_flag_called`** — adversarial RB-1 / RB-2 (owned by Node agent); do not treat Node local eval as production-ready until those close.
-3. **Ruling 15 residual on Node:** `releases.setContext` stamp/change ULID pattern validation incomplete vs Python/Go/Java (adversarial H-2; Node agent).
-4. **Java `EvaluationContext` builder** still exposes unratified evaluation-context tags (adversarial H-7; Java agent) — do not use for portable contexts.
-5. **Release/signal delivery skew:** Go (and Java via the adapter seam) deliver release transitions/signals to the backend telemetry sink; Node/Python may record some paths in-process only — check `capabilities.get().runtime.features` and language docs.
-6. **Exposure emit-once on OF path** not uniform (adversarial H-4): phase-one portable default is side-effect-free evaluate + explicit `exposures.*`; full ADR §6/§23 "default emit" deferred until RB-2 + Java wiring.
+1. **Java PostHog binding** pending upstream publication (ruling 10 / adversarial RB-3) — `PostHogAdapter.create(config)` → `UnsupportedCapability`; production use requires an injected `PostHogClientApi` seam / offline stub. No published `com.posthog:posthog-server` artifact yet.
+2. **Release/signal delivery skew:** Go (and Java via the adapter seam) deliver release transitions/signals to the backend telemetry sink; Node/Python may record some paths in-process only — check `capabilities.get().runtime.features` and language docs.
+3. **ADR §6/§23 "default emit on OF evaluation"** remains deferred: phase-one portable default is side-effect-free evaluate (ruling 20) + explicit `exposures.*` / opt-in `sendExposure`; full emit-once-on-OF is not phase-one scope.
 
-**Closed since Phase 5 (do not treat as current gaps):**
+**Closed since Phase 5 / Phase 6 (do not treat as current gaps):**
 
 - `fireweave.groups` / `fireweave.groupProperties` carve-out — implemented in all four languages (+ plain alias per ruling 19).
 - `capabilities.get` structured static∪runtime matrix — all four (Python/Go also expose name-list sugar: `names()` / `Operations()`).
 - Extension lifecycle gating (ruling 17) — all four.
 - Fireweave-native Decision API without runtime reach-in — Python `client.flags.evaluate` / `get_details`; Go `client.Flags().Evaluate`; Java `client.evaluate(...)`. Node detailed eval surface is owned by the Node agent (ruling 16 residual if still `runtime.evaluate` only).
 - Host allowlist default-on + Node Internal fixed messages — see [security findings disposition](security/findings-disposition.md).
+- RB-1 / RB-2 (Node hybrid local serve + vendor `$feature_flag_called` suppression on local path) — closed in Node adapter.
+- Adversarial H-2 (Node stamp/change ULID validation) — closed.
+- Adversarial H-4 / ruling 20 (evaluate exposure default false) — Node / Python / Go / Java aligned; opt-in emits Fireweave-owned exposure.
+- Adversarial H-7 (Java `evaluationContexts` builder) — removed from `EvaluationContext`.
 
 ## OpenFeature feature support (per ADR-0003)
 

@@ -245,12 +245,26 @@ class FireweaveRuntimeTest {
     }
 
     @Test
-    void sendExposureDefaultEmitsOnSuccessfulEvaluate() throws Exception {
+    void sendExposureDefaultDoesNotEmitOnSuccessfulEvaluate() throws Exception {
         StubAdapter adapter = new StubAdapter();
         FireweaveRuntime rt = runtime(adapter);
         rt.initialize();
         EvaluationContext ctx = EvaluationContext.builder().targetingKey("user_1").build();
         Decision d = rt.evaluate("checkout", FlagType.BOOLEAN, JsonValue.of(false), null, ctx, null);
+        assertNull(d.error());
+        assertTrue(d.exposureSuppressed());
+        assertTrue(!d.exposureEmitted());
+        assertEquals(0, adapter.exposures.size());
+    }
+
+    @Test
+    void sendExposureTrueOptsInWithFireweaveOwnedExposure() throws Exception {
+        StubAdapter adapter = new StubAdapter();
+        FireweaveRuntime rt = runtime(adapter);
+        rt.initialize();
+        EvaluationContext ctx = EvaluationContext.builder().targetingKey("user_1").build();
+        Decision d = rt.evaluate("checkout", FlagType.BOOLEAN, JsonValue.of(false), null, ctx,
+                EvaluationOptions.builder().sendExposure(true).build());
         assertNull(d.error());
         assertTrue(d.exposureEmitted());
         assertEquals(1, adapter.exposures.size());

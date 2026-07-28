@@ -28,7 +28,7 @@ client := fireweave.NewClient(runtime)                     // Go (facades: clien
 FireweaveClient fireweave = new FireweaveClient(runtime);  // Java (facades: fireweave.releases(), …)
 ```
 
-> **Release context portability.** Pass a `rolloutId` **and** 1–64 unique well-formed `stampIds` (`stmp_<26 Crockford ULID>`), with optional `changeId` (`chg_<26 Crockford ULID>`), matching `spec/release-context.schema.json`. Python/Go/Java enforce the patterns today; Node pattern validation is a residual (adversarial H-2).
+> **Release context portability.** Pass a `rolloutId` **and** 1–64 unique well-formed `stampIds` (`stmp_<26 Crockford ULID>`), with optional `changeId` (`chg_<26 Crockford ULID>`), matching `spec/release-context.schema.json`. All four languages enforce the patterns (adversarial H-2 closed).
 
 ## Flags (Fireweave-native Decision API)
 

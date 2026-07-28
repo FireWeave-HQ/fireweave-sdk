@@ -24,7 +24,10 @@ public final class EvaluationOptions {
         return new Builder();
     }
 
-    /** When false, adapters must use side-effect-free reads (no exposure event). */
+    /**
+     * When true, Fireweave delivers one owned exposure on successful evaluate (ruling 20 opt-in).
+     * Default {@code false} — side-effect-free evaluate, matching Node/Python/Go.
+     */
     public boolean sendExposure() {
         return sendExposure;
     }
@@ -38,7 +41,7 @@ public final class EvaluationOptions {
     }
 
     public static final class Builder {
-        private boolean sendExposure = true;
+        private boolean sendExposure = false;
         private boolean includePayloadMetadata = false;
 
         public Builder sendExposure(boolean v) {

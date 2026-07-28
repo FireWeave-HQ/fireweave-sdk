@@ -142,9 +142,9 @@ public final class FireweaveRuntime implements AutoCloseable {
     }
 
     /**
-     * Honor {@link EvaluationOptions#sendExposure()}: on successful decisions with a targeting
-     * key, deliver one exposure through the adapter (OF default path is side-effectful per
-     * ADR-0001 §6/§23). Opt out with {@code sendExposure(false)}. Never throws.
+     * Honor {@link EvaluationOptions#sendExposure()}: default {@code false} (ruling 20 —
+     * side-effect-free evaluate). When {@code true}, on successful decisions with a targeting
+     * key, deliver one Fireweave-owned exposure through the adapter. Never throws.
      */
     private Decision maybeEmitExposure(Decision d, EvaluationContext ctx, EvaluationOptions opts) {
         if (d.error() != null) {

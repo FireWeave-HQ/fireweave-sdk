@@ -99,8 +99,8 @@ Never invent `distinct_id`. Missing key → Fireweave `InvalidContext` (OF `TARG
 
 ### Exposure policy
 
-- **Phase-one default:** side-effect-free evaluate/OF reads (Python internal-record reads; Go gate off unless `SendExposureEvents` / per-call arm; Node remote body-parse — local path residual under adversarial RB-2).
-- Opt in to vendor `$feature_flag_called` where the adapter supports it (Go config / per-call `SendExposure`); otherwise use Fireweave `exposures.*`.
+- **Phase-one default (ruling 20):** side-effect-free evaluate/OF reads in all four languages; Fireweave-owned exposure only when opted in (`sendExposure` / language equivalent). Vendor `$feature_flag_called` is suppressed on Node local snapshot path (RB-2).
+- Opt in via evaluate options / Go `SendExposureEvents` / per-call arm, or use Fireweave `exposures.*`.
 - Payload-only reads must not emit (PostHog guarantee).
 - Fireweave must not emit a second exposure event for the same OF evaluation.
 

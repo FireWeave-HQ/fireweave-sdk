@@ -507,8 +507,8 @@ func (cs CapabilitySet) Get() Capabilities {
 		Backend:   "other",
 		Lifecycle: string(rt.State()),
 		Limits: map[string]int64{
-			"intSafeMaxAbs":             intSafeMaxAbs,
-			"shutdownTimeoutMsDefault":  10_000,
+			"intSafeMaxAbs":            intSafeMaxAbs,
+			"shutdownTimeoutMsDefault": 10_000,
 		},
 	}
 	if reporter, ok := rt.Adapter().(CapabilityReporter); ok {
