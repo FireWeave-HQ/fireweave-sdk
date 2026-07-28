@@ -54,12 +54,52 @@ public final class Capabilities {
         return runtimeFeatures;
     }
 
-    /** Negotiated dotted capability names, e.g. "releases.setContext" (fixture ext-capabilities-get). */
+    /** Negotiated dotted capability names, e.g. "releases.setContext" (dynamic dispatch sugar). */
     public List<String> names() {
         return capabilityNames;
     }
 
     public boolean supports(String capabilityName) {
         return capabilityNames.contains(capabilityName);
+    }
+
+    /**
+     * Canonical structured {@code {static, runtime}} capability matrix per
+     * {@code spec/capabilities.schema.json} (orchestrator ruling 18: capabilities.get is the
+     * structured matrix, never a flat capability-string list).
+     */
+    public JsonValue toJsonValue() {
+        Map<String, JsonValue> openFeature = new LinkedHashMap<>();
+        openFeature.put("specFloor", JsonValue.of(OPENFEATURE_SPEC_FLOOR));
+        openFeature.put("providerName", JsonValue.of(PROVIDER_NAME));
+        openFeature.put("serverOnly", JsonValue.of(true));
+
+        Map<String, JsonValue> staticFeaturesJson = new LinkedHashMap<>();
+        staticFeatures.forEach((k, v) -> staticFeaturesJson.put(k, JsonValue.of(v)));
+
+        Map<String, JsonValue> staticNode = new LinkedHashMap<>();
+        staticNode.put("language", JsonValue.of(LANGUAGE));
+        staticNode.put("sdkVersion", JsonValue.of(SDK_VERSION));
+        staticNode.put("specVersion", JsonValue.of(SPEC_VERSION));
+        staticNode.put("openFeature", JsonValue.ofObject(openFeature));
+        staticNode.put("features", JsonValue.ofObject(staticFeaturesJson));
+
+        Map<String, JsonValue> runtimeFeaturesJson = new LinkedHashMap<>();
+        runtimeFeatures.forEach((k, v) -> runtimeFeaturesJson.put(k, JsonValue.of(v)));
+
+        Map<String, JsonValue> limits = new LinkedHashMap<>();
+        limits.put("intSafeMaxAbs", JsonValue.of(INT_SAFE_MAX_ABS));
+        limits.put("shutdownTimeoutMsDefault", JsonValue.of(FireweaveConfig.DEFAULT_SHUTDOWN_TIMEOUT_MS));
+
+        Map<String, JsonValue> runtimeNode = new LinkedHashMap<>();
+        runtimeNode.put("backend", JsonValue.of(backend));
+        runtimeNode.put("lifecycle", JsonValue.of(lifecycle.name()));
+        runtimeNode.put("features", JsonValue.ofObject(runtimeFeaturesJson));
+        runtimeNode.put("limits", JsonValue.ofObject(limits));
+
+        Map<String, JsonValue> root = new LinkedHashMap<>();
+        root.put("static", JsonValue.ofObject(staticNode));
+        root.put("runtime", JsonValue.ofObject(runtimeNode));
+        return JsonValue.ofObject(root);
     }
 }

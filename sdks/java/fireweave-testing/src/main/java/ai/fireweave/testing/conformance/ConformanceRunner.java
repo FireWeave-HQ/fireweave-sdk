@@ -51,11 +51,14 @@ import java.util.stream.Stream;
  * Conformance runner per contracts/harness.md: loads all fixtures under contracts/, provisions
  * the {@link InMemoryAdapter} from {@code given}, invokes {@code when} through the REAL
  * OpenFeature client + {@link FireweaveProvider}, normalizes, compares, and writes
- * {@code compatibility-report.java.json}.
+ * {@code compatibility-report.java.json}. Multi-case fixtures ({@code cases[]} with per-case
+ * {@code given} overrides) run every case; all cases must pass.
  *
- * <p>Faults are simulated in-process by the InMemoryAdapter (the shared test-server stub at
- * test-server/implementation/ is not yet runnable); transport-level fault fixtures are annotated
- * in the report message.
+ * <p>Fault fixtures run here against the in-process InMemoryAdapter simulation; the fault modes
+ * the harness prescribes for real HTTP semantics (delay/401/429/500/truncated/invalid JSON —
+ * harness.md "test-server role") are ALSO executed against the live test-server stub over the
+ * PostHogClientApi seam by {@code HttpFaultConformanceTest} in this module's test tree. The one
+ * exception is annotated per-row in the report message.
  */
 public final class ConformanceRunner {
 
@@ -158,14 +161,39 @@ public final class ConformanceRunner {
         }
 
         try {
-            Execution exec = execute(fixture);
-            List<String> problems = new ArrayList<>(FixtureComparator.compare(fixture.get("expect"), exec.actual));
-            problems.addAll(exec.extraProblems);
+            List<String> problems = new ArrayList<>();
+            String note = null;
+            String actualDump = null;
+            JsonNode cases = fixture.get("cases");
+            if (cases != null && cases.isArray()) {
+                // Multi-case fixture: per-case when/expect with optional given overrides.
+                for (JsonNode c : cases) {
+                    ObjectNode effective = caseFixture(fixture, c);
+                    Execution exec = execute(effective);
+                    List<String> caseProblems =
+                            new ArrayList<>(FixtureComparator.compare(effective.get("expect"), exec.actual));
+                    caseProblems.addAll(exec.extraProblems);
+                    String caseName = c.path("name").asText("case");
+                    for (String p : caseProblems) {
+                        problems.add("[" + caseName + "] " + p + " | actual=" + exec.actual);
+                    }
+                }
+            } else {
+                Execution exec = execute(fixture);
+                problems.addAll(FixtureComparator.compare(fixture.get("expect"), exec.actual));
+                problems.addAll(exec.extraProblems);
+                note = exec.note;
+                actualDump = exec.actual.toString();
+            }
             if (problems.isEmpty()) {
                 row.put("status", "pass");
                 row.putNull("limitation");
-                if (exec.note != null) {
-                    row.put("message", exec.note);
+                String faultNote = faultTransportNote(suite, id);
+                if (faultNote != null) {
+                    note = note == null ? faultNote : note + "; " + faultNote;
+                }
+                if (note != null) {
+                    row.put("message", note);
                 } else {
                     row.putNull("message");
                 }
@@ -173,7 +201,7 @@ public final class ConformanceRunner {
                 row.put("status", "fail");
                 row.putNull("limitation");
                 row.put("message", String.join("; ", problems)
-                        + " | actual=" + exec.actual.toString());
+                        + (actualDump == null ? "" : " | actual=" + actualDump));
             }
         } catch (Exception e) {
             row.put("status", "fail");
@@ -181,6 +209,42 @@ public final class ConformanceRunner {
             row.put("message", "runner exception: " + e);
         }
         return row;
+    }
+
+    /** Fault fixtures verified against the real HTTP test-server stub (HttpFaultConformanceTest). */
+    private static final Set<String> HTTP_STUB_VERIFIED_FAULTS = new LinkedHashSet<>(Arrays.asList(
+            "fault-auth-401", "fault-backend-500", "fault-malformed-json", "fault-network-error",
+            "fault-offline", "fault-quota-limited-flags", "fault-rate-limit-429", "fault-timeout"));
+
+    private static String faultTransportNote(String suite, String id) {
+        if (!"faults".equals(suite)) {
+            return null;
+        }
+        if (HTTP_STUB_VERIFIED_FAULTS.contains(id)) {
+            return "fault simulated in-process here; ALSO executed against the real HTTP "
+                    + "test-server stub over the PostHogClientApi seam (HttpFaultConformanceTest)";
+        }
+        return "adapter-simulated only: local-eval definitions staleness sits behind the "
+                + "PostHogClientApi seam (no definitions-poll surface on the seam), so this "
+                + "cannot be driven over HTTP without a vendor client binding (ledger ruling 10)";
+    }
+
+    /** Effective single-case fixture: base given merged with case overrides + case when/expect. */
+    private ObjectNode caseFixture(JsonNode fixture, JsonNode c) {
+        ObjectNode effective = M.createObjectNode();
+        ObjectNode given = M.createObjectNode();
+        JsonNode baseGiven = fixture.get("given");
+        if (baseGiven != null && baseGiven.isObject()) {
+            given.setAll((ObjectNode) baseGiven);
+        }
+        JsonNode caseGiven = c.get("given");
+        if (caseGiven != null && caseGiven.isObject()) {
+            given.setAll((ObjectNode) caseGiven);
+        }
+        effective.set("given", given);
+        effective.set("when", c.get("when"));
+        effective.set("expect", c.get("expect"));
+        return effective;
     }
 
     private static final class Execution {
@@ -347,8 +411,12 @@ public final class ConformanceRunner {
             case "getCapabilities": {
                 Capabilities caps = env.fwClient.capabilities().get();
                 ObjectNode actual = M.createObjectNode();
-                ArrayNode names = actual.putArray("capabilities");
-                caps.names().forEach(names::add);
+                // Ruling 18: structured {static, runtime} matrix, projected onto the expected
+                // shape (same convention as resolvedContext echoes).
+                JsonNode matrix = Json.toJackson(caps.toJsonValue());
+                JsonNode expectShape = expect.get("capabilities");
+                actual.set("capabilities",
+                        expectShape == null ? matrix : FixtureComparator.project(matrix, expectShape));
                 actual.putNull("errorCode");
                 return new Execution(actual);
             }
@@ -657,6 +725,9 @@ public final class ConformanceRunner {
     private static void putErrorCode(ObjectNode actual, ExtensionResult<?> r) {
         if (r.error() != null) {
             actual.put("errorCode", r.error().openFeatureErrorCode());
+            actual.put("errorMessage", r.error().message());
+            actual.put("errorKind", r.error().kind().name());
+            actual.put("degraded", r.isDegraded());
         } else {
             actual.putNull("errorCode");
         }

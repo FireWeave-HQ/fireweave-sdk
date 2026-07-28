@@ -40,6 +40,14 @@ public interface BackendAdapter extends AutoCloseable {
     default void deliverSignal(Signal signal) throws FireweaveException {
     }
 
+    /**
+     * Called after an {@code exposures.flush()} completes. Adapters holding per-flush exposure
+     * dedup state clear it here (ratified clear-on-flush lifecycle — dedup scope is one flush
+     * window, and the set can never grow unbounded; security review M-2). Default: no-op.
+     */
+    default void onExposuresFlushed() {
+    }
+
     /** Adapter-specific runtime capability flags (merged into {@link Capabilities}). */
     default Map<String, Boolean> runtimeFeatures() {
         return Collections.emptyMap();

@@ -197,6 +197,21 @@ class PostHogAdapterTest {
     }
 
     @Test
+    void exposureDedupClearedOnFlush() throws Exception {
+        // Ratified clear-on-flush lifecycle (security review M-2): the dedup set is scoped to
+        // one flush window and can never grow unbounded across a long-lived process.
+        FakeClient client = new FakeClient();
+        PostHogAdapter a = adapter(client);
+        Exposure e = new Exposure("user_1", "fw", "on", JsonValue.of(true), null);
+        a.deliverExposure(e);
+        a.deliverExposure(e);
+        assertEquals(1, client.capturedEvents.size());
+        a.onExposuresFlushed(); // flush window closes
+        a.deliverExposure(e);
+        assertEquals(2, client.capturedEvents.size(), "new flush window re-delivers");
+    }
+
+    @Test
     void injectedClientNotClosedOwnedClientClosed() throws Exception {
         FakeClient injected = new FakeClient();
         PostHogAdapter a = new PostHogAdapter(injected);

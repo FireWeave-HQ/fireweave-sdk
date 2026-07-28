@@ -112,4 +112,77 @@ class ContextValidatorTest {
                         false, LIMITS, Set.of("targetingKey", "kind")));
         assertEquals(ErrorKind.InvalidContext, e.kind());
     }
+
+    // ------------------------------------------------------ rulings 12-14 carve-out
+
+    private static JsonValue groupsAttr() {
+        return JsonValue.ofObject(Map.of("organization", JsonValue.of("org_1")));
+    }
+
+    private static JsonValue groupPropsAttr() {
+        return JsonValue.ofObject(Map.of("organization",
+                JsonValue.ofObject(Map.of("plan", JsonValue.of("enterprise")))));
+    }
+
+    @Test
+    void canonicalFireweaveKeysAcceptedOtherFireweaveKeysRejected() {
+        EvaluationContext ok = EvaluationContext.builder().targetingKey("k")
+                .attribute("fireweave.groups", groupsAttr())
+                .attribute("fireweave.groupProperties", groupPropsAttr())
+                .build();
+        assertDoesNotThrow(() ->
+                ContextValidator.validate(ok, true, LIMITS, Collections.emptySet()));
+
+        // Unratified third key (Python's fireweave.evaluationContexts) stays rejected.
+        expectInvalid(EvaluationContext.builder().targetingKey("k")
+                        .attribute("fireweave.evaluationContexts", JsonValue.ofArray(
+                                java.util.List.of(JsonValue.of("beta")))).build(),
+                "invalid evaluation context");
+    }
+
+    @Test
+    void promoteCanonicalKeysMovesGroupsToFirstClassFields() throws Exception {
+        EvaluationContext ctx = EvaluationContext.builder().targetingKey("k")
+                .attribute("plan", "enterprise")
+                .attribute("fireweave.groups", groupsAttr())
+                .attribute("fireweave.groupProperties", groupPropsAttr())
+                .build();
+        EvaluationContext promoted = ContextValidator.promoteCanonicalKeys(ctx);
+        assertEquals("org_1", promoted.groups().get("organization"));
+        assertEquals(JsonValue.of("enterprise"),
+                promoted.groupProperties().get("organization").get("plan"));
+        assertEquals(Set.of("plan"), promoted.attributes().keySet(),
+                "canonical keys removed from plain attributes after promotion");
+    }
+
+    @Test
+    void promotedAttributeKeysWinOverBuilderSugar() throws Exception {
+        // .group() is idiomatic sugar; the canonical attribute spelling wins on conflict.
+        EvaluationContext ctx = EvaluationContext.builder().targetingKey("k")
+                .group("organization", "org_from_builder")
+                .attribute("fireweave.groups", groupsAttr())
+                .build();
+        assertEquals("org_1",
+                ContextValidator.promoteCanonicalKeys(ctx).groups().get("organization"));
+    }
+
+    @Test
+    void promoteCanonicalKeysRejectsMalformedShapes() {
+        FireweaveException e1 = assertThrows(FireweaveException.class, () ->
+                ContextValidator.promoteCanonicalKeys(EvaluationContext.builder().targetingKey("k")
+                        .attribute("fireweave.groups", "not-an-object").build()));
+        assertEquals(ErrorKind.InvalidContext, e1.kind());
+
+        FireweaveException e2 = assertThrows(FireweaveException.class, () ->
+                ContextValidator.promoteCanonicalKeys(EvaluationContext.builder().targetingKey("k")
+                        .attribute("fireweave.groups", JsonValue.ofObject(
+                                Map.of("organization", JsonValue.of(42)))).build()));
+        assertEquals(ErrorKind.InvalidContext, e2.kind());
+
+        FireweaveException e3 = assertThrows(FireweaveException.class, () ->
+                ContextValidator.promoteCanonicalKeys(EvaluationContext.builder().targetingKey("k")
+                        .attribute("fireweave.groupProperties", JsonValue.ofObject(
+                                Map.of("organization", JsonValue.of("flat")))).build()));
+        assertEquals(ErrorKind.InvalidContext, e3.kind());
+    }
 }

@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Runs all 63 contracts fixtures through the real OpenFeature client; fails on any mismatch. */
+/** Runs all 65 contracts fixtures through the real OpenFeature client; fails on any mismatch. */
 class ConformanceTest {
 
     @Test
@@ -50,10 +50,11 @@ class ConformanceTest {
                 }
             }
         }
-        assertEquals(63, total, "all 63 fixtures discovered");
+        assertEquals(65, total, "all 65 fixtures discovered (63 + ctx-fireweave-groups-carveout"
+                + " + ext-lifecycle-gating)");
         assertTrue(failures.isEmpty(), "conformance failures:\n" + String.join("\n", failures));
         assertEquals(1, skipped, "only eval-int-beyond-safe-integer is a declared Java skip");
-        assertEquals(62, pass);
+        assertEquals(64, pass);
     }
 
     private static Path findContracts() {

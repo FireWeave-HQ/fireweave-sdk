@@ -52,7 +52,25 @@ OpenFeature `PROVIDER_NOT_READY`.
 
 Merge order (later wins): config global → client → invocation. Ratified bounds enforced before
 any adapter/network call: 128 attributes, 256 B keys, 4 KiB values, depth 6, 64 KiB serialized.
-`fireweave.*` attribute keys are reserved; additional reserved keys are configurable.
+`fireweave.*` attribute keys are reserved, with exactly two canonical carve-outs (rulings 12–14):
+`fireweave.groups` and `fireweave.groupProperties` are accepted as the primary cross-language
+path and promoted into the context's first-class groups/groupProperties fields before
+validation; every other `fireweave.*` key is `InvalidContext`. The `EvaluationContext.Builder`
+`.group()` / `.groupProperty()` methods are idiomatic sugar over the same canonical
+representation. Additional reserved keys are configurable.
+
+## Security defaults
+
+- **Host allowlist (default-on, canonical cross-language list):** `app.posthog.com`,
+  `us.posthog.com`, `eu.posthog.com`, `us.i.posthog.com`, `eu.i.posthog.com` + loopback
+  (`localhost`, `127.0.0.1`, `::1`). https is required off-loopback (http on loopback only);
+  self-hosted instances must be explicitly allowlisted via `allowedHosts` (or the explicit
+  `"*"` opt-out, which still enforces https). An empty allowlist denies every host.
+- **Bounded shutdown:** `FireweaveRuntime.shutdown()` closes the adapter on a daemon thread and
+  waits at most `shutdownTimeoutMs` (default 10 000 ms); on expiry it records a `Timeout`
+  `lastError` and returns — a wedged vendor client can never hang process exit.
+- **Exposure dedup clear-on-flush:** `PostHogAdapter`'s exposure dedup set is scoped to one
+  flush window (`BackendAdapter.onExposuresFlushed()` clears it), so it cannot grow unbounded.
 
 ## Deviations & blockers (for orchestrator arbitration)
 
@@ -65,10 +83,16 @@ any adapter/network call: 128 attributes, 256 B keys, 4 KiB values, depth 6, 64 
    the Fireweave-owned `PostHogClientApi` transport seam (snapshot evaluation, explicit context
    passing — no ThreadLocal); binding the real SDK is one adapter-internal class once published.
    `PostHogAdapter.create(config)` fails with a clear `UnsupportedCapability` until then.
-3. **test-server stub not runnable** (`test-server/implementation/` contains planning docs
-   only). Fault fixtures (`contracts/faults/*`) are simulated deterministically in-process by
-   `InMemoryAdapter` (delay compares against configured timeout — no sleeping); marked as
-   adapter-simulated rather than transport-level. Re-run against the HTTP stub when Agent F lands.
+3. **Fault fixtures run twice** (Phase 5 close-out of the original "stub not runnable"
+   deviation): deterministically in-process via `InMemoryAdapter` (delay compares against the
+   configured timeout — no sleeping) in `ConformanceTest`, AND against the real HTTP stub
+   (`test-server/implementation/server.mjs`, spawned as a child node process) through the
+   `PostHogClientApi` seam's test HTTP client in `HttpFaultConformanceTest` — real sockets,
+   timeouts, status codes, truncated bodies, malformed JSON, connection-refused. 8 of 9 fault
+   fixtures are HTTP-drivable; `fault-stale-cache` remains adapter-simulated only because
+   local-eval definitions staleness (last-good definitions after a failed poll) lives behind
+   the seam, which exposes snapshot `ageMs` but no definitions-poll surface — the vendor client
+   owning that lifecycle is unpublished (deviation 2). Annotated per-row in the report message.
 4. **`ctx-reserved-keys-rejected`** is exercised through the Fireweave detailed API instead of
    the OF client: the Java OpenFeature SDK stores the targeting key in the attribute map, so an
    OF context cannot carry a literal `targetingKey` attribute distinct from the targeting key.

@@ -71,11 +71,16 @@ public final class ExampleApp {
 
         // 6. Release-safety extensions on the FireweaveClient facade.
         FireweaveClient fireweave = new FireweaveClient(runtime);
-        fireweave.releases().setContext(ReleaseContext.builder()
-                .stampId("stmp_01HZXEXAMPLE00000000000001")
+        // IDs are typed Crockford ULIDs per spec/release-context.schema.json; setContext
+        // validates the schema's required fields (rolloutId + stampIds) and rejects bad shapes.
+        var bound = fireweave.releases().setContext(ReleaseContext.builder()
+                .stampId("stmp_01HZXEXAMP0E00000000000001")
                 .rolloutId("rollout_example_1")
-                .changeId("chg_01HZXEXAMPLE00000000000001")
+                .changeId("chg_01HZXEXAMP0E00000000000001")
                 .build());
+        if (!bound.isOk()) {
+            throw new IllegalStateException("release context rejected: " + bound.error().message());
+        }
         fireweave.signals().recordHealth("provider", "ok");
         System.out.println("release context bound + health signal recorded");
 

@@ -111,9 +111,21 @@ public final class FireweaveClient implements AutoCloseable {
         runtime.shutdown();
     }
 
+    /**
+     * Lifecycle gate for extension calls (ruling 17, canonical Go/Java model): calls degrade
+     * predictably and never throw — {@code UnsupportedCapability} before READY (the capability
+     * is not yet available), {@code AlreadyClosed} after shutdown. Returns null when the
+     * runtime can serve extensions (READY or STALE).
+     */
     private FireweaveError gateError() {
-        FireweaveException gate = runtime.lifecycleGate();
-        return gate == null ? null : FireweaveError.from(gate);
+        LifecycleState s = runtime.state();
+        if (s == LifecycleState.SHUTDOWN) {
+            return FireweaveError.of(ErrorKind.AlreadyClosed, ErrorKind.AlreadyClosed.defaultMessage());
+        }
+        if (s == LifecycleState.READY || s == LifecycleState.STALE) {
+            return null;
+        }
+        return FireweaveError.of(ErrorKind.UnsupportedCapability, "unsupported capability");
     }
 
     // ------------------------------------------------------------------ releases
@@ -160,14 +172,25 @@ public final class FireweaveClient implements AutoCloseable {
             return current;
         }
 
+        /**
+         * Bind the release context after validating it against exactly the
+         * {@code spec/release-context.schema.json} required fields (ruling 15): rolloutId
+         * required, stampIds required with the typed-ULID shape. Invalid contexts fail with
+         * {@code InvalidContext} — never a throw.
+         */
         public ExtensionResult<ReleaseContext> setContext(ReleaseContext context) {
             FireweaveError gate = gateError();
             if (gate != null) {
-                return ExtensionResult.failure(gate);
+                return ExtensionResult.degraded(gate);
             }
             if (context == null) {
                 return ExtensionResult.failure(
                         FireweaveError.of(ErrorKind.InvalidContext, "release context required"));
+            }
+            try {
+                context.validate();
+            } catch (FireweaveException e) {
+                return ExtensionResult.failure(FireweaveError.from(e));
             }
             this.current = context;
             return ExtensionResult.ok(context);
@@ -188,7 +211,7 @@ public final class FireweaveClient implements AutoCloseable {
         private ExtensionResult<ReleaseStatus> transition(String rolloutId, String status, String reason) {
             FireweaveError gate = gateError();
             if (gate != null) {
-                return ExtensionResult.failure(gate);
+                return ExtensionResult.degraded(gate);
             }
             if (rolloutId == null || rolloutId.isEmpty()) {
                 return ExtensionResult.failure(
@@ -257,7 +280,7 @@ public final class FireweaveClient implements AutoCloseable {
         public ExtensionResult<RecordOutcome> record(Exposure exposure) {
             FireweaveError gate = gateError();
             if (gate != null) {
-                return ExtensionResult.failure(gate);
+                return ExtensionResult.degraded(gate);
             }
             Objects.requireNonNull(exposure, "exposure");
             synchronized (queue) {
@@ -272,7 +295,7 @@ public final class FireweaveClient implements AutoCloseable {
         public ExtensionResult<FlushOutcome> flush() {
             FireweaveError gate = gateError();
             if (gate != null) {
-                return ExtensionResult.failure(gate);
+                return ExtensionResult.degraded(gate);
             }
             List<Exposure> drained;
             synchronized (queue) {
@@ -287,6 +310,12 @@ public final class FireweaveClient implements AutoCloseable {
                 } catch (FireweaveException ex) {
                     // Redelivery is the caller's concern; keep counting what was delivered.
                 }
+            }
+            try {
+                // Clear-on-flush dedup lifecycle (ratified; security review M-2).
+                runtime.adapter().onExposuresFlushed();
+            } catch (RuntimeException ex) {
+                // flush() never throws; adapter cleanup failures are not the caller's problem.
             }
             synchronized (queue) {
                 return ExtensionResult.ok(new FlushOutcome(flushed, queue.size()));
@@ -332,7 +361,7 @@ public final class FireweaveClient implements AutoCloseable {
         public ExtensionResult<Signal> record(Signal signal) {
             FireweaveError gate = gateError();
             if (gate != null) {
-                return ExtensionResult.failure(gate);
+                return ExtensionResult.degraded(gate);
             }
             Objects.requireNonNull(signal, "signal");
             Signal filtered = applyTelemetryAllowlist(signal);

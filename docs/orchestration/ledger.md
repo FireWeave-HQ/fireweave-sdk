@@ -116,3 +116,5 @@ Docs/DX delivered: 9 root community files, 12 user docs, templates; all snippets
 Rulings 11–18 codified; fixture inventory now **65** (new: ctx-fireweave-groups-carveout, ext-lifecycle-gating; multi-case `cases` format introduced — language runners must support it). release-context required set clarified to ["rolloutId","stampIds"].
 
 19. **Plain `groups`/`groupProperties` alias RETAINED for phase one:** `ctx-person-and-groups` stands unchanged; canonical `fireweave.groups`/`fireweave.groupProperties` keys are the primary documented path, plain-alias removal is deferred to the follow-up backlog (avoids cross-language breakage mid-wave). No language may remove the alias in this wave.
+
+- **Phase 5 fix wave** (complete): Node 85u+15i / 63+2sk; Python 238 / 65; Go 74+91sub (-race) / 65; Java 86 / 64+1sk. HIGH security fixes applied; rulings 13–18 implemented; faults re-run against HTTP stub (per-language residual modes documented). Full-matrix verification + Phase 6 adversarial review next.

@@ -199,6 +199,12 @@ public final class EvaluationContext {
             return attribute(key, JsonValue.of(value));
         }
 
+        /** Remove a plain attribute (used when promoting canonical fireweave.* keys). */
+        public Builder removeAttribute(String key) {
+            attributes.remove(key);
+            return this;
+        }
+
         public Builder group(String groupType, String groupKey) {
             groups.put(groupType, groupKey);
             return this;

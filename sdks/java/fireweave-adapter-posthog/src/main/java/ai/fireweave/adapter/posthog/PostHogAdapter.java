@@ -44,7 +44,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * ThreadLocal request context is never used.
  *
  * <h2>Exposure dedup / quotaLimited</h2>
- * {@code $feature_flag_called} exposures are deduped on (distinctId, flagKey, variant, value).
+ * {@code $feature_flag_called} exposures are deduped on (distinctId, flagKey, variant, value)
+ * within one flush window: {@link #onExposuresFlushed()} clears the set after each
+ * {@code exposures.flush()} (ratified clear-on-flush lifecycle), so it never grows unbounded.
  * A {@code quotaLimited} /flags body containing {@code feature_flags} resolves as
  * {@code FlagNotFound} with {@code fireweave.quotaLimited=true} metadata (defaults served,
  * nothing thrown to callers).
@@ -269,6 +271,13 @@ public final class PostHogAdapter implements BackendAdapter {
         } catch (PostHogTransportException e) {
             throw mapTransport(e);
         }
+    }
+
+    @Override
+    public void onExposuresFlushed() {
+        // Clear-on-flush lifecycle (ratified cross-language semantic, security review M-2):
+        // dedup scope is one flush window, so the set is bounded by the queue between flushes.
+        exposureDedup.clear();
     }
 
     @Override

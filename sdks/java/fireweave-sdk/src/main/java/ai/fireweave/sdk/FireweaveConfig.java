@@ -4,6 +4,7 @@ import java.net.URI;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -15,9 +16,24 @@ import java.util.Set;
  */
 public final class FireweaveConfig {
 
-    /** Default SSRF host allowlist (fixture sec-endpoint-ssrf-allowlist). */
+    /**
+     * Canonical cross-language SSRF host allowlist (security review H-1/L-6; fixture
+     * sec-endpoint-ssrf-allowlist): the five documented PostHog hosts plus loopback. Custom
+     * (self-hosted) hosts require explicit {@link Builder#allowedHosts(Set)} configuration;
+     * {@link #ALLOW_ANY_HOST} is the explicit opt-out.
+     */
     public static final Set<String> DEFAULT_ALLOWED_HOSTS = Collections.unmodifiableSet(
-            new LinkedHashSet<>(Arrays.asList("127.0.0.1", "localhost", "us.i.posthog.com", "eu.i.posthog.com")));
+            new LinkedHashSet<>(Arrays.asList(
+                    "app.posthog.com", "us.posthog.com", "eu.posthog.com",
+                    "us.i.posthog.com", "eu.i.posthog.com",
+                    "localhost", "127.0.0.1", "::1")));
+
+    /** Explicit allowlist opt-out entry ("allow any host"); https is still required off-loopback. */
+    public static final String ALLOW_ANY_HOST = "*";
+
+    /** Hosts on which plain http is permitted (test servers); everything else requires https. */
+    private static final Set<String> LOOPBACK_HOSTS = Collections.unmodifiableSet(
+            new LinkedHashSet<>(Arrays.asList("localhost", "127.0.0.1", "::1")));
 
     public static final int DEFAULT_REQUEST_TIMEOUT_MS = 3000;
     public static final int DEFAULT_SHUTDOWN_TIMEOUT_MS = 10000;
@@ -68,27 +84,57 @@ public final class FireweaveConfig {
 
     /**
      * Structural validation. Throws {@code Configuration} (mapped to PROVIDER_FATAL) on:
-     * explicitly-set-but-blank project API key, unparseable host, or host outside the SSRF
-     * allowlist. Messages never echo the key.
+     * explicitly-set-but-blank project API key, unparseable host, non-http(s) scheme, plain
+     * http off-loopback, or host outside the SSRF allowlist (deny-by-default; the explicit
+     * {@link #ALLOW_ANY_HOST} entry opts out of host pinning but never of the https rule).
+     * Messages never echo the key or the host.
      */
     void validate() throws FireweaveException {
         if (projectApiKey != null && projectApiKey.trim().isEmpty()) {
             throw new FireweaveException(ErrorKind.Configuration, "invalid configuration");
         }
         if (host != null) {
-            String h;
+            URI uri;
             try {
-                h = URI.create(host).getHost();
+                uri = URI.create(host);
             } catch (IllegalArgumentException e) {
                 throw new FireweaveException(ErrorKind.Configuration, "invalid configuration", e);
             }
+            String h = normalizeHost(uri.getHost());
             if (h == null || h.isEmpty()) {
                 throw new FireweaveException(ErrorKind.Configuration, "invalid configuration");
             }
-            if (!allowedHosts.isEmpty() && !allowedHosts.contains(h)) {
+            String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+            boolean loopback = LOOPBACK_HOSTS.contains(h);
+            // https required for non-loopback hosts; plain http only on loopback (L-3).
+            if (!"https".equals(scheme) && !("http".equals(scheme) && loopback)) {
+                throw new FireweaveException(ErrorKind.Configuration, "invalid configuration");
+            }
+            if (!allowedHosts.contains(ALLOW_ANY_HOST) && !containsHost(allowedHosts, h)) {
                 throw new FireweaveException(ErrorKind.Configuration, "invalid configuration");
             }
         }
+    }
+
+    /** Lowercase + strip IPv6 brackets so "[::1]" matches the "::1" allowlist entry. */
+    private static String normalizeHost(String h) {
+        if (h == null) {
+            return null;
+        }
+        String out = h.toLowerCase(Locale.ROOT);
+        if (out.startsWith("[") && out.endsWith("]")) {
+            out = out.substring(1, out.length() - 1);
+        }
+        return out;
+    }
+
+    private static boolean containsHost(Set<String> allowed, String normalizedHost) {
+        for (String entry : allowed) {
+            if (normalizedHost.equals(normalizeHost(entry))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public String projectApiKey() {

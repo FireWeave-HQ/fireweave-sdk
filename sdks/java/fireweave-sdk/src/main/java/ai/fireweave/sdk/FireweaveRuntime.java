@@ -118,6 +118,10 @@ public final class FireweaveRuntime implements AutoCloseable {
                 .merge(invocationContext == null ? EvaluationContext.empty() : invocationContext);
 
         try {
+            // Canonical fireweave.groups / fireweave.groupProperties keys (rulings 12-14) are
+            // promoted into the first-class groups fields before validation; all other
+            // fireweave.* keys are rejected by the validator.
+            merged = ContextValidator.promoteCanonicalKeys(merged);
             ContextValidator.validate(merged, config.requireTargetingKey(), config.limits(),
                     config.reservedAttributeKeys());
         } catch (FireweaveException e) {
@@ -189,6 +193,12 @@ public final class FireweaveRuntime implements AutoCloseable {
     /**
      * Idempotent shutdown: first call transitions to SHUTDOWN and closes the adapter; subsequent
      * calls are no-ops. Never throws.
+     *
+     * <p>Adapter close is bounded by {@link FireweaveConfig#shutdownTimeoutMs()} (security review
+     * M-1): the adapter is closed on a daemon thread and waited on for at most the configured
+     * deadline, so a wedged vendor client can never hang process exit. On deadline expiry the
+     * closer thread is interrupted, {@link #lastError()} records a {@code Timeout}, and shutdown
+     * returns; the abandoned daemon thread cannot block JVM termination.
      */
     public void shutdown() {
         synchronized (stateLock) {
@@ -197,9 +207,29 @@ public final class FireweaveRuntime implements AutoCloseable {
             }
             state = LifecycleState.SHUTDOWN;
         }
+        final java.util.concurrent.atomic.AtomicReference<RuntimeException> failure =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        Thread closer = new Thread(() -> {
+            try {
+                adapter.shutdown();
+            } catch (RuntimeException e) {
+                failure.set(e);
+            }
+        }, "fireweave-shutdown");
+        closer.setDaemon(true);
+        closer.start();
+        long timeoutMs = config.shutdownTimeoutMs();
         try {
-            adapter.shutdown();
-        } catch (RuntimeException e) {
+            if (timeoutMs > 0) {
+                closer.join(timeoutMs);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        if (closer.isAlive()) {
+            closer.interrupt();
+            lastError = FireweaveError.of(ErrorKind.Timeout, "shutdown deadline exceeded");
+        } else if (failure.get() != null) {
             lastError = FireweaveError.of(ErrorKind.Internal, "shutdown cleanup error");
         }
     }

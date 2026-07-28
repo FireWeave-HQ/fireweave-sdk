@@ -15,6 +15,7 @@ final class StubAdapter implements BackendAdapter {
     final List<Exposure> exposures = new CopyOnWriteArrayList<>();
     final List<Signal> signals = new CopyOnWriteArrayList<>();
     volatile int shutdownCalls;
+    volatile boolean shutdownBlocksForever;
 
     @Override
     public String name() {
@@ -48,6 +49,14 @@ final class StubAdapter implements BackendAdapter {
 
     @Override
     public void shutdown() {
+        if (shutdownBlocksForever) {
+            try {
+                new java.util.concurrent.CountDownLatch(1).await(); // wedged vendor close
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
         shutdownCalls++;
     }
 }

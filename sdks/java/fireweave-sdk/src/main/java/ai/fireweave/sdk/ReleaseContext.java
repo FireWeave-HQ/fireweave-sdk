@@ -8,9 +8,21 @@ import java.util.Map;
 
 /**
  * Immutable release / rollout context (spec {@code release-context.schema.json}).
- * {@code stampIds} is required (1..64 unique typed ULIDs, {@code stmp_...}).
+ *
+ * <p>Construction is permissive so invalid contexts can be represented and rejected at the
+ * boundary: {@code releases.setContext} calls {@link #validate()}, which enforces exactly the
+ * spec's required fields and shapes (ruling 15) — {@code rolloutId} required (1..128 chars),
+ * {@code stampIds} required (1..64 unique typed ULIDs, {@code stmp_<26-char Crockford>}),
+ * {@code changeId} optional but pattern-checked when present.
  */
 public final class ReleaseContext {
+
+    private static final java.util.regex.Pattern STAMP_ID_PATTERN =
+            java.util.regex.Pattern.compile("^stmp_[0-9A-HJKMNP-TV-Z]{26}$");
+    private static final java.util.regex.Pattern CHANGE_ID_PATTERN =
+            java.util.regex.Pattern.compile("^chg_[0-9A-HJKMNP-TV-Z]{26}$");
+    private static final int MAX_STAMP_IDS = 64;
+    private static final int MAX_ROLLOUT_ID_LENGTH = 128;
 
     private final List<String> stampIds;
     private final String rolloutId;
@@ -18,13 +30,31 @@ public final class ReleaseContext {
     private final Map<String, Object> metadata;
 
     private ReleaseContext(Builder b) {
-        if (b.stampIds.isEmpty()) {
-            throw new IllegalArgumentException("stampIds requires at least one entry");
-        }
         this.stampIds = Collections.unmodifiableList(new ArrayList<>(b.stampIds));
         this.rolloutId = b.rolloutId;
         this.changeId = b.changeId;
         this.metadata = Collections.unmodifiableMap(new LinkedHashMap<>(b.metadata));
+    }
+
+    /**
+     * Validate against {@code spec/release-context.schema.json} (ruling 15). Fixed, value-free
+     * message — IDs and metadata never echo into errors.
+     */
+    void validate() throws FireweaveException {
+        if (rolloutId == null || rolloutId.isEmpty() || rolloutId.length() > MAX_ROLLOUT_ID_LENGTH) {
+            throw new FireweaveException(ErrorKind.InvalidContext, "invalid release context");
+        }
+        if (stampIds.isEmpty() || stampIds.size() > MAX_STAMP_IDS) {
+            throw new FireweaveException(ErrorKind.InvalidContext, "invalid release context");
+        }
+        for (String stampId : stampIds) {
+            if (stampId == null || !STAMP_ID_PATTERN.matcher(stampId).matches()) {
+                throw new FireweaveException(ErrorKind.InvalidContext, "invalid release context");
+            }
+        }
+        if (changeId != null && !CHANGE_ID_PATTERN.matcher(changeId).matches()) {
+            throw new FireweaveException(ErrorKind.InvalidContext, "invalid release context");
+        }
     }
 
     public static Builder builder() {

@@ -19,7 +19,67 @@ public final class ContextValidator {
     /** Attribute names that must never appear as ordinary person attributes. */
     public static final String RESERVED_PREFIX = "fireweave.";
 
+    /** Canonical reserved context key carrying PostHog groups (rulings 12–14). */
+    public static final String GROUPS_KEY = "fireweave.groups";
+
+    /** Canonical reserved context key carrying PostHog group properties (rulings 12–14). */
+    public static final String GROUP_PROPERTIES_KEY = "fireweave.groupProperties";
+
+    /**
+     * The ONLY permitted {@code fireweave.*} context keys (ruling 13). Every other
+     * {@code fireweave.*} key is rejected as {@code InvalidContext}.
+     */
+    private static final Set<String> CANONICAL_RESERVED_KEYS = new java.util.HashSet<>(
+            java.util.Arrays.asList(GROUPS_KEY, GROUP_PROPERTIES_KEY));
+
     private ContextValidator() {
+    }
+
+    /**
+     * Promote the canonical {@code fireweave.groups} / {@code fireweave.groupProperties}
+     * context keys (rulings 12–14: the primary cross-language path; the {@code .group()}
+     * builder is idiomatic sugar over the same canonical representation) into the context's
+     * first-class groups / groupProperties fields. Malformed shapes (non-object values,
+     * non-string group keys) raise {@code InvalidContext}. Attribute spellings win over
+     * builder-set entries on conflict (later-wins, consistent with merge semantics).
+     */
+    public static EvaluationContext promoteCanonicalKeys(EvaluationContext context)
+            throws FireweaveException {
+        Map<String, JsonValue> attrs = context.attributes();
+        JsonValue groups = attrs.get(GROUPS_KEY);
+        JsonValue groupProps = attrs.get(GROUP_PROPERTIES_KEY);
+        if (groups == null && groupProps == null) {
+            return context;
+        }
+        EvaluationContext.Builder b = context.toBuilder();
+        if (groups != null) {
+            if (groups.kind() != JsonValue.Kind.OBJECT) {
+                throw new FireweaveException(ErrorKind.InvalidContext, "invalid evaluation context");
+            }
+            for (Map.Entry<String, JsonValue> e : groups.asObject().entrySet()) {
+                if (e.getValue().kind() != JsonValue.Kind.STRING
+                        || e.getValue().asString().isEmpty()) {
+                    throw new FireweaveException(ErrorKind.InvalidContext, "invalid evaluation context");
+                }
+                b.group(e.getKey(), e.getValue().asString());
+            }
+            b.removeAttribute(GROUPS_KEY);
+        }
+        if (groupProps != null) {
+            if (groupProps.kind() != JsonValue.Kind.OBJECT) {
+                throw new FireweaveException(ErrorKind.InvalidContext, "invalid evaluation context");
+            }
+            for (Map.Entry<String, JsonValue> e : groupProps.asObject().entrySet()) {
+                if (e.getValue().kind() != JsonValue.Kind.OBJECT) {
+                    throw new FireweaveException(ErrorKind.InvalidContext, "invalid evaluation context");
+                }
+                for (Map.Entry<String, JsonValue> p : e.getValue().asObject().entrySet()) {
+                    b.groupProperty(e.getKey(), p.getKey(), p.getValue());
+                }
+            }
+            b.removeAttribute(GROUP_PROPERTIES_KEY);
+        }
+        return b.build();
     }
 
     public static void validate(EvaluationContext context,
@@ -36,8 +96,13 @@ public final class ContextValidator {
         Map<String, JsonValue> attrs = context.attributes();
 
         for (String key : attrs.keySet()) {
-            if (key.startsWith(RESERVED_PREFIX)
-                    || (reservedAttributeKeys != null && reservedAttributeKeys.contains(key))) {
+            // Ruling 13 carve-out: fireweave.groups / fireweave.groupProperties are the only
+            // permitted fireweave.* keys (normally promoted to first-class fields before
+            // validation; tolerated here for direct validate() callers).
+            if (key.startsWith(RESERVED_PREFIX) && !CANONICAL_RESERVED_KEYS.contains(key)) {
+                throw new FireweaveException(ErrorKind.InvalidContext, "invalid evaluation context");
+            }
+            if (reservedAttributeKeys != null && reservedAttributeKeys.contains(key)) {
                 throw new FireweaveException(ErrorKind.InvalidContext, "invalid evaluation context");
             }
         }
