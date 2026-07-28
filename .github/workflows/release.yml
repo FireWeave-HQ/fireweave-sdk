@@ -1,10 +1,13 @@
 # Fireweave polyglot SDK — release automation (workflow_dispatch only).
 #
-# DRY-RUN BY DEFAULT. This workflow builds, changelogs, SBOMs, checksums and
-# (optionally) attests + tags one component. Every registry publishing step is
-# HARD-DISABLED with `if: false` and must not be enabled without explicit
-# written authorization from the Fireweave release owner AND the credential /
-# trusted-publisher provisioning documented in .github/RELEASE.md.
+# DRY-RUN BY DEFAULT. Builds, changelogs, SBOMs, checksums; optionally tags.
+#
+# STAGING PUBLISH (authorized 2026-07-27): npm + TestPyPI + Go proxy warm are
+# enabled only when dry_run=false AND channel=staging AND the matching
+# component is selected. Requires trusted publishers (see RELEASE.md).
+#
+# STILL HARD-DISABLED: Maven Central (namespace pending), and ALL production
+# channel publishes (npm latest / real PyPI / Maven release).
 #
 # Tag convention (org): <component>/v<semver>
 #   node   -> node/v0.1.0
@@ -33,7 +36,7 @@ on:
         options: [staging, production]
         default: staging
       dry_run:
-        description: 'Dry run (no tag push, no attestation). Publishing itself is hard-disabled regardless.'
+        description: 'Dry run (no tag push, no attestation, no staging publish). Set false only after trusted publishers are configured.'
         required: true
         type: boolean
         default: true
@@ -162,44 +165,62 @@ jobs:
           git push origin "refs/tags/${TAG}"
 
   # =========================================================================
-  # PUBLISHING — HARD-DISABLED. Every job below carries `if: false`.
-  # DO NOT flip these to true without: (1) explicit written authorization from
-  # the Fireweave release owner, and (2) the registry provisioning in
-  # .github/RELEASE.md (npm trusted publisher, PyPI trusted publisher, Maven
-  # Central namespace + secrets). The steps are kept real so enabling them is
-  # a one-line, reviewed change — never an improvised script.
+  # PUBLISHING
+  # - Staging (authorized): npm + TestPyPI + Go proxy warm when dry_run=false
+  #   and channel=staging. Requires trusted publishers (RELEASE.md).
+  # - Production: HARD-DISABLED (if: false) until a second written authorization.
+  # - Maven: HARD-DISABLED until ai.fireweave Central namespace + secrets exist.
   # =========================================================================
 
   publish-npm:
-    name: publish npm (HARD-DISABLED)
+    name: publish npm (staging → dist-tag next)
     needs: [validate, build]
-    if: ${{ false }} # HARD-DISABLED — requires explicit release-owner authorization + npm trusted publishing (RELEASE.md)
+    if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && inputs.component == 'node' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write # npm OIDC trusted publishing — no NPM_TOKEN secret needed once provisioned
+      contents: read
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
           registry-url: https://registry.npmjs.org
-      - name: Build and publish @fireweaveai/sdk
+      - name: Assert OIDC preconditions
+        run: |
+          echo "npm version: $(npm --version)"
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo "::error::OIDC id-token request vars absent — configure npm Trusted Publisher and permissions.id-token: write"
+            exit 1
+          fi
+      - name: Build and publish @fireweaveai/sdk (dist-tag next)
         working-directory: sdks/node
         run: |
+          npm install -g npm@latest
           npm ci
           npm run build
           cd packages/sdk
-          # staging channel -> dist-tag "next"; production -> "latest"
-          if [ "${{ inputs.channel }}" = "staging" ]; then DIST_TAG=next; else DIST_TAG=latest; fi
-          npm publish --provenance --access public --tag "$DIST_TAG"
+          npm publish --provenance --access public --tag next
+
+  publish-npm-production:
+    name: publish npm production (HARD-DISABLED)
+    needs: [validate, build]
+    if: ${{ false }} # HARD-DISABLED — second authorization required for dist-tag latest
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - run: echo "production npm publish is hard-disabled"
 
   publish-pypi:
-    name: publish PyPI (HARD-DISABLED)
+    name: publish TestPyPI (staging)
     needs: [validate, build]
-    if: ${{ false }} # HARD-DISABLED — requires explicit release-owner authorization + PyPI/TestPyPI trusted publisher (RELEASE.md)
+    if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && inputs.component == 'python' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write # PyPI OIDC trusted publishing
+      contents: read
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -209,22 +230,27 @@ jobs:
         run: |
           python -m pip install build
           python -m build --outdir dist/ sdks/python
-      - name: Publish to TestPyPI (staging channel)
-        if: ${{ inputs.channel == 'staging' }}
+      - name: Publish to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: dist/
-      - name: Publish to PyPI (production channel)
-        if: ${{ inputs.channel == 'production' }}
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: dist/
+
+  publish-pypi-production:
+    name: publish PyPI production (HARD-DISABLED)
+    needs: [validate, build]
+    if: ${{ false }} # HARD-DISABLED — second authorization required for real PyPI
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - run: echo "production PyPI publish is hard-disabled"
 
   publish-maven:
     name: publish Maven Central (HARD-DISABLED)
     needs: [validate, build]
-    if: ${{ false }} # HARD-DISABLED — requires explicit release-owner authorization + Central namespace (ai.fireweave pending), GPG key + portal tokens (RELEASE.md)
+    if: ${{ false }} # HARD-DISABLED — ai.fireweave Central namespace + GPG/portal secrets pending
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -250,9 +276,9 @@ jobs:
           mvn -B -ntp -DskipTests deploy -DautoReleaseAfterClose="$AUTO"
 
   publish-go:
-    name: publish Go module (HARD-DISABLED)
+    name: warm Go module proxy (staging)
     needs: [validate, build]
-    if: ${{ false }} # HARD-DISABLED — Go "publishing" is just the pushed tag; this job only warms the module proxy after an authorized tag push
+    if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && inputs.component == 'go' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/setup-go@v6

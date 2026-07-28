@@ -1,10 +1,12 @@
 # Fireweave SDK — Release Process
 
 Owner: release engineering (Agent K scope: `.github/`, `scripts/`, `tools/`).
-Status: **nothing is published anywhere yet**; every publishing step in
-[`workflows/release.yml`](workflows/release.yml) is hard-disabled with
-`if: false` and stays disabled until the provisioning below is complete and a
-release owner gives explicit written authorization.
+Status (2026-07-27): **staging publish authorized** for npm (`@fireweaveai/sdk`
+dist-tag `next`), TestPyPI (`fireweave`), and Go proxy warm — only when
+`workflow_dispatch` has `dry_run=false` and `channel=staging`. **Production**
+npm/PyPI and **all Maven** jobs remain hard-disabled (`if: false`) until a
+second authorization and Central namespace provisioning. Configure trusted
+publishers below **before** the first non-dry-run staging release.
 
 ## Overview
 

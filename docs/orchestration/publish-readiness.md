@@ -19,16 +19,16 @@ Goal: unblock **staging** publish of `0.1.0` without shipping broken claims (Jav
 
 ## Decision log (company / you)
 
-Check each box when decided. Suggested defaults in parentheses.
+Ratified by release owner (niketh) 2026-07-27 — reply "yes" to publish-readiness proposal.
 
-- [ ] **D1. License ratification** — Confirm MIT for this OSS SDK (file already says MIT).  
-- [ ] **D2. Repo visibility** — Public `FireWeave-HQ/fireweave-sdk` (required for Go module + OIDC trusted publishing).  
-- [ ] **D3. npm package name** — Ratify `@fireweaveai/sdk` (matches architecture.md; does not collide with `deploy-sdk`).  
-- [ ] **D4. PyPI name** — Prefer `fireweave` (short); fallback `fireweave-sdk` if contested.  
-- [ ] **D5. Maven groupId** — Ratify `ai.fireweave` and start Central namespace verification (DNS TXT on `fireweave.ai`).  
-- [ ] **D6. First publish channel** — Staging only first (`npm` dist-tag `next`, TestPyPI, Maven portal staging, Go `-rc.1` or skip Go until public).  
-- [ ] **D7. Java PostHog honesty** — Confirm shipping Java **without** live PostHog `create(config)` is acceptable for 0.1.0 (current design: injection/seam only).  
-- [ ] **D8. Explicit publish authorization** — Written OK to flip specific `release.yml` jobs off `if: false` for staging only.
+- [x] **D1. License ratification** — MIT (already in `LICENSE`).  
+- [x] **D2. Repo visibility** — Public `FireWeave-HQ/fireweave-sdk`.  
+- [x] **D3. npm package name** — `@fireweaveai/sdk`.  
+- [x] **D4. PyPI name** — `fireweave`.  
+- [x] **D5. Maven groupId** — `ai.fireweave` (Central verification still pending; Maven publish stays disabled).  
+- [x] **D6. First publish channel** — Staging only (`npm` dist-tag `next`, TestPyPI, Go tag + proxy warm).  
+- [x] **D7. Java PostHog honesty** — 0.1.0 ships seam-only / injection-only; no live `create(config)`.  
+- [x] **D8. Explicit publish authorization** — Staging npm + TestPyPI + Go warm enabled when `dry_run=false` && `channel=staging`. Production + Maven remain `if: false`.
 
 ## Ordered unblock plan
 
