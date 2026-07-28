@@ -14,8 +14,8 @@
     "build": "npm run build --workspace @fireweaveai/sdk",
     "typecheck": "npm run build && tsc -p packages/sdk/tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
     "test": "npm run test:unit && npm run test:integration",
-    "test:unit": "npm run build && node --test \"packages/sdk/test/unit/*.test.ts\"",
-    "test:integration": "npm run build && node --test \"packages/sdk/test/integration/*.test.ts\"",
+    "test:unit": "npm run build && node --test packages/sdk/test/unit/*.test.ts",
+    "test:integration": "npm run build && node --test packages/sdk/test/integration/*.test.ts",
     "conformance": "npm run build && node test/conformance/run.ts",
     "verify": "npm run typecheck && npm run test && npm run conformance"
   },
