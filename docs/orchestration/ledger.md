@@ -118,3 +118,12 @@ Rulings 11–18 codified; fixture inventory now **65** (new: ctx-fireweave-group
 19. **Plain `groups`/`groupProperties` alias RETAINED for phase one:** `ctx-person-and-groups` stands unchanged; canonical `fireweave.groups`/`fireweave.groupProperties` keys are the primary documented path, plain-alias removal is deferred to the follow-up backlog (avoids cross-language breakage mid-wave). No language may remove the alias in this wave.
 
 - **Phase 5 fix wave** (complete): Node 85u+15i / 63+2sk; Python 238 / 65; Go 74+91sub (-race) / 65; Java 86 / 64+1sk. HIGH security fixes applied; rulings 13–18 implemented; faults re-run against HTTP stub (per-language residual modes documented). Full-matrix verification + Phase 6 adversarial review next.
+
+## Agent M adversarial review (Phase 6) — NO-GO
+
+3 release blockers, 8 high, 9 medium, 7 low, 5 future. See `docs/reviews/adversarial-review.md`.
+Mandatory before acceptance: fix RB-1..RB-3 and all HIGH findings; re-run verification; re-review blockers.
+
+**RB-1:** Node hybrid/local eval maps successful local serves to Network — fix error mapping.
+**RB-2:** Node local snapshot path still emits `$feature_flag_called` despite claims — disable or gate correctly.
+**RB-3:** Java `PostHogAdapter.create(config)` always UnsupportedCapability — either interim remote-only binding OR demote Java PostHog to explicitly unsupported in all public docs/examples/compatibility matrix (no false claims). Prefer honest unsupported + injection-only until PostHog publishes a server SDK, unless a safe remote-only legacy bind is trivial and tested.
