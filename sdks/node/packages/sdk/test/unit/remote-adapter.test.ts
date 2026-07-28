@@ -9,7 +9,7 @@ function mockFetch(
   calls: FetchCall[] = [],
 ) {
   return async (url: string, init?: FetchCall['init']) => {
-    calls.push({ url, init });
+    calls.push(init === undefined ? { url } : { url, init });
     const result = handler(url, init);
     const text = JSON.stringify(result.body);
     return {

@@ -49,6 +49,10 @@ jobs:
       - name: Install workspace dependencies
         working-directory: sdks/node
         run: npm ci
+      # dist/ is gitignored; package exports resolve to dist/, so build before tsc/tests.
+      - name: Build SDK (emit dist/ for package exports)
+        working-directory: sdks/node
+        run: npm run build
       - name: Typecheck (tsc — lint-equivalent; no eslint/prettier configs in repo)
         working-directory: sdks/node
         run: npm run typecheck
@@ -193,7 +197,7 @@ jobs:
         run: |
           node test-server/implementation/server.mjs --port 3901 &
           echo "TEST_SERVER_PID=$!" >> "$GITHUB_ENV"
-          for i in $(seq 1 20); do
+          for _ in $(seq 1 20); do
             if curl -fsS http://127.0.0.1:3901/health >/dev/null 2>&1; then break; fi
             sleep 0.5
           done
@@ -210,6 +214,7 @@ jobs:
         working-directory: sdks/node
         run: |
           npm ci
+          npm run build
           npm run test:integration
       - name: Stop test-server
         if: always()

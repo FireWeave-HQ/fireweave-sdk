@@ -54,7 +54,7 @@ Fireweave may attach `flagMetadata["fireweave.errorKind"]` with the canonical `k
 ### `InvalidContext` subtype selection
 
 - Missing required `targetingKey` → OF `TARGETING_KEY_MISSING`.
-- All other context violations (type, reserved keys misuse, size/depth/count bounds) → OF `INVALID_CONTEXT`.
+- All other context violations (type, reserved keys misuse, and size, depth, or count bounds) → OF `INVALID_CONTEXT`.
 
 ### Quota limiting note
 

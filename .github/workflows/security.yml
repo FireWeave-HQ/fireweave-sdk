@@ -123,8 +123,10 @@ jobs:
         run: |
           python -m pip install --quiet -e './sdks/python[posthog,openfeature]' pip-licenses
           # pip-licenses uses classifier/metadata names, not SPDX ids.
+          # MPL 2.0 is allowlisted only for certifi (Mozilla CA bundle; transitive
+          # via requests/httpx) — reviewed as an unavoidable HTTPS dependency.
           pip-licenses --partial-match --allow-only \
-            'MIT;MIT License;Apache-2.0;Apache Software License;BSD;BSD License;ISC;ISC License;Python Software Foundation License;Zlib;Public Domain;The Unlicense;CC0'
+            'MIT;MIT License;Apache-2.0;Apache Software License;BSD;BSD License;ISC;ISC License;Python Software Foundation License;Zlib;Public Domain;The Unlicense;CC0;Mozilla Public License 2.0 (MPL 2.0);MPL 2.0'
       - name: go — go-licenses (fails on anything off-allowlist)
         working-directory: sdks/go
         run: |

@@ -25,11 +25,16 @@ fw_require() {
   command -v "$1" >/dev/null 2>&1 || fw_die "required tool not found: $1 ($2)"
 }
 
-# Ensure sdks/node has node_modules (npm ci if lockfile present, else install).
+# Ensure sdks/node has node_modules (npm ci if lockfile present, else install)
+# and dist/ is built (package exports resolve to dist/; dist/ is gitignored).
 fw_node_deps() {
   if [ ! -d "$FW_ROOT/sdks/node/node_modules" ]; then
     fw_section "node: installing workspace dependencies"
     (cd "$FW_ROOT/sdks/node" && if [ -f package-lock.json ]; then npm ci; else npm install; fi)
+  fi
+  if [ ! -f "$FW_ROOT/sdks/node/packages/sdk/dist/index.js" ]; then
+    fw_section "node: building SDK dist/"
+    (cd "$FW_ROOT/sdks/node" && npm run build)
   fi
 }
 

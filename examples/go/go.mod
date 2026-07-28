@@ -1,6 +1,6 @@
 module github.com/FireWeave-HQ/fireweave-sdk/examples/go
 
-go 1.25.0
+go 1.25.12
 
 require (
 	github.com/FireWeave-HQ/fireweave-sdk/sdks/go v0.0.0

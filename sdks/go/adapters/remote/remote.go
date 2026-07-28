@@ -51,11 +51,11 @@ type Adapter struct {
 }
 
 type evaluateRequest struct {
-	TargetingKey    string                 `json:"targetingKey"`
-	Attributes      map[string]any         `json:"attributes,omitempty"`
-	Groups          map[string]string      `json:"groups,omitempty"`
-	GroupProperties map[string]any         `json:"groupProperties,omitempty"`
-	FlagKeys        []string               `json:"flagKeys,omitempty"`
+	TargetingKey    string            `json:"targetingKey"`
+	Attributes      map[string]any    `json:"attributes,omitempty"`
+	Groups          map[string]string `json:"groups,omitempty"`
+	GroupProperties map[string]any    `json:"groupProperties,omitempty"`
+	FlagKeys        []string          `json:"flagKeys,omitempty"`
 }
 
 type decisionItem struct {

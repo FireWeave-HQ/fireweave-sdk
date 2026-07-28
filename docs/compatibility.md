@@ -55,7 +55,9 @@ All conformance skips are **pre-declared** in the fixtures themselves (`skipped-
 | Go capture queue | posthog-go can drop telemetry on queue overflow; capture failures map to extension errors, flag evaluation is unaffected |
 | `$`-prefixed context attributes | Passed through as PostHog system directives, not person properties; stripped from telemetry context views |
 
-## Known gaps (pre-release; tracked for arbitration/1.0)
+## Known gaps
+
+Pre-release; tracked for arbitration/1.0.
 
 1. **Java PostHog binding** pending upstream publication (ruling 10 / adversarial RB-3) — `PostHogAdapter.create(config)` → `UnsupportedCapability`; production use requires an injected `PostHogClientApi` seam / offline stub. No published `com.posthog:posthog-server` artifact yet.
 2. **Release/signal delivery skew:** Go (and Java via the adapter seam) deliver release transitions/signals to the backend telemetry sink; Node/Python may record some paths in-process only — check `capabilities.get().runtime.features` and language docs.
