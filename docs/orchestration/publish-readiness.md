@@ -97,7 +97,20 @@ Ratified by release owner (niketh) 2026-07-27 — reply "yes" to publish-readine
 - Flipping production publish on  
 - Publishing from a laptop with long-lived tokens (prefer CI OIDC)  
 - Claiming Java live PostHog `create(config)` works  
+- Claiming “bring your PostHog key” as the primary customer path (superseded by ADR-0005)
+
+## Credential model correction (ADR-0005)
+
+Customer apps must use a **Fireweave** key/secret. All evaluate/capture traffic goes to **fw-server**, which proxies to PostHog (or a future vendor). Do **not** document or require PostHog keys in the default quickstart.
+
+**Blocking for a truthful staging publish of the remote path:**
+
+1. fw-server routes: evaluate + capture (and later definitions) with Fireweave auth → PostHog forward  
+2. SDK `FireweaveRemoteAdapter` in all four languages  
+3. Docs/examples updated to `FW_*` credentials  
+
+Until those land, staging packages should ship with **InMemory** + clear “remote adapter pending” notes — or wait to publish Node/Python until the remote adapter exists.
 
 ---
 
-*Next step: reply with which decisions (D1–D8) you approve and whether to create/push the GitHub repo now.*
+*Repo created 2026-07-27. Trusted publishers still need browser setup (see checklist above).*

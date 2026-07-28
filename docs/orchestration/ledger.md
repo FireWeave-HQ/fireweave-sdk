@@ -145,3 +145,7 @@ Mandatory before acceptance: fix RB-1..RB-3 and all HIGH findings; re-run verifi
   - `bash scripts/conformance-all.sh` → exit 0 (65 fixtures; node 63+2sk / python 65 / go 65 / java 64+1sk; **0 undeclared divergences**)
   - `bash scripts/build-all.sh` → exit 0 (dry-run artifacts + SHA256SUMS; nothing published)
 - **Go / no-go:** **GO for pre-release scaffolding** (CI, dry-run packaging, docs, tags-when-authorized). **NO-GO for public npm/PyPI/Maven publish** until company license/name ratification + registry provisioning (see `.github/RELEASE.md`). No packages published in Phase 7.
+
+## Ruling 21 — Fireweave proxy backend (2026-07-27)
+
+Production apps use **Fireweave credentials** only; SDK → **fw-server** → PostHog (or future vendor). Documented in ADR-0005. PostHogAdapter demoted to advanced/direct escape hatch. fw-server proxy routes do not exist yet — required before claiming the remote path in published packages.

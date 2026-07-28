@@ -1,12 +1,14 @@
 # Fireweave SDK
 
-Open-source, [OpenFeature](https://openfeature.dev)-compatible, **server-first** feature-flag SDK for **Node.js, Python, Go, and Java**, with release-safety extensions (releases, exposures, signals, capabilities). Phase one evaluates flags through [PostHog](https://posthog.com) on Node, Python, and Go — the SDK wraps the official PostHog server SDKs behind a vendor-neutral adapter; it never reimplements flag evaluation and never leaks PostHog types into its public API. **Java PostHog is seam only / not production-ready** pending an upstream server SDK.
+Open-source, [OpenFeature](https://openfeature.dev)-compatible, **server-first** feature-flag SDK for **Node.js, Python, Go, and Java**, with release-safety extensions (releases, exposures, signals, capabilities).
 
-> **Status: pre-release (0.1.0, unpublished).**
+**Production model (ADR-0005):** applications use a **Fireweave** project key and talk to **fw-server**. fw-server proxies evaluate/capture to PostHog (or a future provider). Apps do **not** embed PostHog `phc_`/`phs_`/`phx_` keys. A direct PostHog adapter remains available as an advanced escape hatch only.
+
+> **Status: pre-release (0.1.0).**
 >
-> - **No packages are published** to npm, PyPI, Go module proxy, or Maven Central. Install from a checkout of this repository (see [Quickstart](#quickstart)). Package names (`@fireweaveai/sdk`, `fireweave`, `ai.fireweave:*`) are working names pending company ratification.
-> - **Java PostHog: seam only / not production-ready.** PostHog has not published a Java *server* SDK (verified Maven Central 2026-07-27). `PostHogAdapter.create(config)` returns `UnsupportedCapability`; API keys alone cannot create a live PostHog-backed Java client. Use `InMemoryAdapter` or an injected `PostHogClientApi` stub for tests. OpenFeature provider, in-memory adapter, and extensions work today.
-> - **License**: this repository ships the MIT license text ([LICENSE](LICENSE)); formal ratification of MIT as the license is pending a company decision and is a release blocker (ADR-0001).
+> - Repo: https://github.com/FireWeave-HQ/fireweave-sdk — staging publish authorized; configure trusted publishers before first non-dry-run release ([publish-readiness](docs/orchestration/publish-readiness.md)).
+> - **Fireweave remote adapter + fw-server proxy routes are not shipped yet.** Until then, examples run against `InMemoryAdapter`; direct PostHog adapter code exists but is not the product default.
+> - **License**: MIT ([LICENSE](LICENSE)).
 
 ## Why OpenFeature
 
@@ -16,7 +18,7 @@ Flag evaluation goes through the standard OpenFeature client in every language, 
 - OpenFeature hooks, domains, events, and the never-throw evaluation contract work as specified;
 - Fireweave-specific functionality (release lifecycle, exposure recording, health/outcome signals, capability discovery) lives on a separate `FireweaveClient` that shares the same runtime — it never contaminates the standard flag-evaluation surface (ADR-0003).
 
-One architecture in all four languages: **FireweaveProvider (OpenFeature) + FireweaveClient (extensions) → FireweaveRuntime → BackendAdapter** (`PostHogAdapter` for production on Node/Python/Go; Java: `InMemoryAdapter` or injected PostHog seam only). See [docs/architecture.md](docs/architecture.md).
+One architecture in all four languages: **FireweaveProvider (OpenFeature) + FireweaveClient (extensions) → FireweaveRuntime → BackendAdapter** — production default will be `FireweaveRemoteAdapter` (Fireweave key → fw-server); `InMemoryAdapter` for tests; optional direct `PostHogAdapter`. See [docs/architecture.md](docs/architecture.md) and [ADR-0005](docs/adr/0005-fireweave-proxy-backend.md).
 
 ## Quickstart
 

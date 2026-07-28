@@ -6,7 +6,9 @@
 
 ## 1. Goal
 
-Open-source, OpenFeature-compatible, server-first SDK for Node, Python, Go, and Java. One shared architectural pattern per language: **FireweaveProvider + FireweaveClient → FireweaveRuntime → BackendAdapter**. Phase-one adapter: PostHog (official SDKs). Test adapter: InMemory. No custom flag evaluator. No PostHog types in public APIs. Side-effect-controlled evaluation.
+Open-source, OpenFeature-compatible, server-first SDK for Node, Python, Go, and Java. One shared architectural pattern per language: **FireweaveProvider + FireweaveClient → FireweaveRuntime → BackendAdapter**.
+
+**Production credential model (ADR-0005):** apps use a **Fireweave** API key/secret and call **fw-server**; fw-server proxies to PostHog (or a future vendor). Apps do **not** hold PostHog `phc_`/`phs_`/`phx_` keys. The direct `PostHogAdapter` (ADR-0002) is an optional advanced escape hatch. Test adapter: InMemory. No custom flag evaluator. No PostHog types in public APIs. Side-effect-controlled evaluation.
 
 This repo implements internal ADR-017's thin-provider decision and **supersedes** its in-repo language packs.
 
@@ -26,14 +28,16 @@ This repo implements internal ADR-017's thin-provider decision and **supersedes*
                               │
 ┌─────────────────────────────▼───────────────────────────────┐
 │  BackendAdapter (interface)                                  │
-│  ┌─────────────────────┐  ┌──────────────────────────────┐  │
-│  │ PostHogAdapter      │  │ InMemoryAdapter (tests)      │  │
-│  │ wraps official SDK  │  │ fixture-driven decisions     │  │
-│  └─────────────────────┘  └──────────────────────────────┘  │
+│  ┌──────────────────────┐ ┌───────────────┐ ┌─────────────┐ │
+│  │ FireweaveRemoteAdapter│ │ PostHogAdapter│ │ InMemory    │ │
+│  │ (default / ADR-0005) │ │ (advanced)    │ │ (tests)     │ │
+│  │ FW key → fw-server   │ │ direct PH SDK │ │ fixtures    │ │
+│  └──────────────────────┘ └───────────────┘ └─────────────┘ │
 └─────────────────────────────────────────────────────────────┘
                               │
-                    PostHog /flags · definitions
-                    (or none for InMemory)
+              fw-server /v1/flags · /v1/capture  (prod)
+              optional direct PostHog            (advanced)
+              none                               (InMemory)
 ```
 
 | Layer | Responsibility |
@@ -42,7 +46,7 @@ This repo implements internal ADR-017's thin-provider decision and **supersedes*
 | FireweaveProvider | OF `FeatureProvider`; maps context/errors; delegates to runtime |
 | FireweaveClient | Releases, exposures helpers, signals, guardrails, capabilities, telemetry, detailed eval |
 | FireweaveRuntime | Shared init/shutdown, config, adapter ownership, exposure policy |
-| BackendAdapter | Vendor-neutral evaluate/capture/lifecycle; PostHog types stop here |
+| BackendAdapter | Vendor-neutral evaluate/capture/lifecycle; **production: Fireweave remote**; PostHog types only inside optional direct adapter |
 | Spec / contracts | Canonical JSON Schema (`spec/`); fixtures owned by Agent E (`contracts/`) |
 
 ## 3. Lifecycle state machine
