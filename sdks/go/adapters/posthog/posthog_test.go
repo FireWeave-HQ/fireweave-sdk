@@ -171,6 +171,22 @@ func TestResolveQuotaLimited(t *testing.T) {
 	}
 }
 
+func TestResolveQuotaLimitedCamelCaseSpelling(t *testing.T) {
+	// The deterministic test-server stub (and some backend versions) emit
+	// "quotaLimited" instead of "quota_limited"; both must be detected.
+	transport := &fakeTransport{handler: func(req *http.Request) (*http.Response, error) {
+		return respond(req, 200, `{"flags":{},"featureFlags":{},"featureFlagPayloads":{},"quotaLimited":["feature_flags"]}`), nil
+	}}
+	a := newReadyAdapter(t, transport)
+	d := resolveBool(t, a, "fw-q")
+	if d.Error == nil || d.Error.Kind != fireweave.KindFlagNotFound {
+		t.Fatalf("decision = %+v", d)
+	}
+	if d.Metadata[fireweave.MetaQuotaLimited] != true {
+		t.Fatalf("metadata = %v, want fireweave.quotaLimited=true", d.Metadata)
+	}
+}
+
 func TestErrorMappingByHTTPStatus(t *testing.T) {
 	cases := []struct {
 		status int
@@ -273,6 +289,10 @@ func TestConfigValidation(t *testing.T) {
 			AllowedHosts: []string{"127.0.0.1", "us.i.posthog.com"}}},
 		{"local-only without secret", Config{ProjectAPIKey: "phc_x", Endpoint: "http://127.0.0.1:3901",
 			LocalEvaluationOnly: true}},
+		{"http on non-loopback default host", Config{ProjectAPIKey: "phc_x",
+			Endpoint: "http://us.i.posthog.com"}},
+		{"http on non-loopback custom host", Config{ProjectAPIKey: "phc_x",
+			Endpoint: "http://posthog.internal.example", AllowedHosts: []string{"posthog.internal.example"}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -289,7 +309,14 @@ func TestConfigValidation(t *testing.T) {
 }
 
 func TestDefaultEndpointAllowlist(t *testing.T) {
-	for _, host := range []string{"https://us.i.posthog.com", "https://eu.i.posthog.com", "http://localhost:3901"} {
+	// The canonical cross-language default list: five PostHog hosts over
+	// https, plus loopback where plain http is permitted.
+	allowed := []string{
+		"https://app.posthog.com", "https://us.posthog.com", "https://eu.posthog.com",
+		"https://us.i.posthog.com", "https://eu.i.posthog.com",
+		"http://localhost:3901", "http://127.0.0.1:3901", "https://localhost:3901",
+	}
+	for _, host := range allowed {
 		a := New(Config{ProjectAPIKey: "phc_x", Endpoint: host,
 			Transport: &fakeTransport{handler: func(req *http.Request) (*http.Response, error) {
 				return respond(req, 200, "{}"), nil
@@ -298,6 +325,14 @@ func TestDefaultEndpointAllowlist(t *testing.T) {
 			t.Errorf("host %s should be allowed: %v", host, err)
 		}
 		_ = a.Close(context.Background())
+	}
+	// Custom hosts require explicit AllowedHosts configuration.
+	denied := []string{"https://selfhosted.example.com", "https://posthog.com", "http://us.i.posthog.com"}
+	for _, host := range denied {
+		a := New(Config{ProjectAPIKey: "phc_x", Endpoint: host})
+		if err := a.Initialize(context.Background()); !errors.Is(err, fireweave.ErrConfiguration) {
+			t.Errorf("host %s should be rejected without explicit config, got %v", host, err)
+		}
 	}
 }
 
@@ -390,7 +425,16 @@ func TestTypedValueCoercion(t *testing.T) {
 	}
 }
 
-func TestContextMappingToVendorPayload(t *testing.T) {
+// vendorPayload is the captured /flags request body shape.
+type vendorPayload struct {
+	DistinctID       string                    `json:"distinct_id"`
+	Groups           map[string]any            `json:"groups"`
+	PersonProperties map[string]any            `json:"person_properties"`
+	GroupProperties  map[string]map[string]any `json:"group_properties"`
+}
+
+func capturePayload(t *testing.T, attrs map[string]any) vendorPayload {
+	t.Helper()
 	var captured []byte
 	transport := &fakeTransport{handler: func(req *http.Request) (*http.Response, error) {
 		captured, _ = io.ReadAll(req.Body)
@@ -400,23 +444,23 @@ func TestContextMappingToVendorPayload(t *testing.T) {
 	a := newReadyAdapter(t, transport)
 	_ = a.Resolve(context.Background(), fireweave.ResolveRequest{
 		FlagKey: "fw-g", Type: fireweave.FlagTypeBoolean, DefaultValue: false,
-		Context: fireweave.NewEvaluationContext("user_42", map[string]any{
-			"email_domain":            "example.com",
-			"groups":                  map[string]any{"organization": "org_1"},
-			"groupProperties":         map[string]any{"organization": map[string]any{"plan": "enterprise"}},
-			"$process_person_profile": false,
-		}),
+		Context: fireweave.NewEvaluationContext("user_42", attrs),
 	})
-
-	var body struct {
-		DistinctID       string                    `json:"distinct_id"`
-		Groups           map[string]any            `json:"groups"`
-		PersonProperties map[string]any            `json:"person_properties"`
-		GroupProperties  map[string]map[string]any `json:"group_properties"`
-	}
+	var body vendorPayload
 	if err := json.Unmarshal(captured, &body); err != nil {
 		t.Fatalf("unmarshal request: %v (%s)", err, captured)
 	}
+	return body
+}
+
+func TestContextMappingToVendorPayload(t *testing.T) {
+	// Canonical carve-out keys (rulings 12–14) are the primary path.
+	body := capturePayload(t, map[string]any{
+		"email_domain":                "example.com",
+		fireweave.AttrGroups:          map[string]any{"organization": "org_1"},
+		fireweave.AttrGroupProperties: map[string]any{"organization": map[string]any{"plan": "enterprise"}},
+		"$process_person_profile":     false,
+	})
 	if body.DistinctID != "user_42" {
 		t.Errorf("distinct_id = %q (targetingKey must map)", body.DistinctID)
 	}
@@ -429,7 +473,37 @@ func TestContextMappingToVendorPayload(t *testing.T) {
 	if _, leaked := body.PersonProperties["$process_person_profile"]; leaked {
 		t.Error("$-prefixed directives must not become person properties")
 	}
+	if _, leaked := body.PersonProperties[fireweave.AttrGroups]; leaked {
+		t.Error("fireweave.* carve-out keys must not become person properties")
+	}
 	if body.GroupProperties["organization"]["plan"] != "enterprise" {
 		t.Errorf("group properties = %v", body.GroupProperties)
+	}
+}
+
+func TestContextMappingPlainGroupAliasStillSupported(t *testing.T) {
+	// Plain "groups"/"groupProperties" remain a documented pre-canon alias.
+	body := capturePayload(t, map[string]any{
+		"groups":          map[string]any{"organization": "org_2"},
+		"groupProperties": map[string]any{"organization": map[string]any{"plan": "free"}},
+	})
+	if body.Groups["organization"] != "org_2" {
+		t.Errorf("alias groups = %v", body.Groups)
+	}
+	if body.GroupProperties["organization"]["plan"] != "free" {
+		t.Errorf("alias group properties = %v", body.GroupProperties)
+	}
+	if _, leaked := body.PersonProperties["groups"]; leaked {
+		t.Error("alias groups must not become person properties")
+	}
+}
+
+func TestContextMappingCanonicalKeyWinsOverAlias(t *testing.T) {
+	body := capturePayload(t, map[string]any{
+		fireweave.AttrGroups: map[string]any{"organization": "org_canonical"},
+		"groups":             map[string]any{"organization": "org_alias"},
+	})
+	if body.Groups["organization"] != "org_canonical" {
+		t.Errorf("canonical key must take precedence, groups = %v", body.Groups)
 	}
 }

@@ -92,10 +92,12 @@ func main() {
 	}
 
 	// 5. Fireweave extensions: bind the rollout and report health.
+	// stampIds/changeId are typed 26-char Crockford ULIDs, validated
+	// against spec/release-context.schema.json by SetContext.
 	release := fireweave.ReleaseContext{
-		RolloutID: "rollout_01HZXEXAMPLE000000000001",
-		ChangeID:  "chg_01HZXEXAMPLE0000000000001",
-		StampIDs:  []string{"stmp_01HZXEXAMPLE000000000001"},
+		RolloutID: "rollout_example_checkout_redesign",
+		ChangeID:  "chg_01HZXEG0000000000000000001",
+		StampIDs:  []string{"stmp_01HZXEG0000000000000000001"},
 	}
 	if err := client.Releases().SetContext(ctx, release); err != nil {
 		log.Fatalf("release context: %v", err)
@@ -105,7 +107,9 @@ func main() {
 	}); err != nil {
 		log.Fatalf("health signal: %v", err)
 	}
-	fmt.Printf("release bound: %s (capabilities: %v)\n", release.RolloutID, client.Capabilities().Get())
+	caps := client.Capabilities().Get()
+	fmt.Printf("release bound: %s (backend=%s lifecycle=%s operations=%v)\n",
+		release.RolloutID, caps.Runtime.Backend, caps.Runtime.Lifecycle, client.Capabilities().Operations())
 
 	// 6. Clean shutdown: bounded by context, idempotent.
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)

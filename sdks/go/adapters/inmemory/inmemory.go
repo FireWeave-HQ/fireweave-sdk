@@ -105,6 +105,19 @@ func (a *Adapter) Initialize(ctx context.Context) error {
 // Close implements fireweave.BackendAdapter; it is a no-op.
 func (a *Adapter) Close(ctx context.Context) error { return nil }
 
+// ReportCapabilities implements fireweave.CapabilityReporter for the
+// structured capabilities.get matrix (ruling 18).
+func (a *Adapter) ReportCapabilities() fireweave.AdapterCapabilities {
+	return fireweave.AdapterCapabilities{
+		Backend: "inmemory",
+		Features: map[string]bool{
+			"remoteEvaluation":    false,
+			"localEvaluation":     true,
+			"sideEffectFreeReads": true,
+		},
+	}
+}
+
 // ResolveCount reports how many Resolve calls reached the adapter (the
 // conformance harness uses it to assert networkCalls == 0 semantics).
 func (a *Adapter) ResolveCount() int64 { return a.resolveCount.Load() }
@@ -174,7 +187,12 @@ func matches(flag Flag, ctx fireweave.EvaluationContext) bool {
 		}
 	}
 	if len(flag.MatchGroups) > 0 {
-		groups, _ := ctx.Attributes["groups"].(map[string]any)
+		// Canonical carve-out key first (fireweave.groups, rulings 12–14),
+		// plain "groups" as the documented pre-canon alias.
+		groups, ok := ctx.Attributes[fireweave.AttrGroups].(map[string]any)
+		if !ok {
+			groups, _ = ctx.Attributes["groups"].(map[string]any)
+		}
 		for k, want := range flag.MatchGroups {
 			if groups == nil || !jsonEqual(groups[k], want) {
 				return false
@@ -298,3 +316,4 @@ func (a *Adapter) DeliveredTelemetry() []fireweave.TelemetryEvent {
 
 var _ fireweave.BackendAdapter = (*Adapter)(nil)
 var _ fireweave.TelemetrySink = (*Adapter)(nil)
+var _ fireweave.CapabilityReporter = (*Adapter)(nil)

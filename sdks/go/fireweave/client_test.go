@@ -46,6 +46,25 @@ func TestExposureFlushDrainsQueue(t *testing.T) {
 	}
 }
 
+func TestExposureDedupWindowClearsOnFlush(t *testing.T) {
+	c := readyClient(t)
+	ctx := context.Background()
+	exp := Exposure{TargetingKey: "org_1", FlagKey: "fw-exp", Variant: "on", Value: true}
+
+	if res, _ := c.Exposures().Record(ctx, exp); res.Deduped {
+		t.Fatalf("first record deduped: %+v", res)
+	}
+	if n, err := c.Exposures().Flush(ctx); err != nil || n != 1 {
+		t.Fatalf("flush = %d, %v", n, err)
+	}
+	// Clear-on-flush lifecycle: the same tuple queues again after a flush
+	// (dedup state must not grow for the process lifetime).
+	res, err := c.Exposures().Record(ctx, exp)
+	if err != nil || res.Deduped || res.Queued != 1 {
+		t.Fatalf("post-flush record = %+v err=%v (seen-set must clear on flush)", res, err)
+	}
+}
+
 func TestExposureWithNonComparableValueDoesNotPanic(t *testing.T) {
 	c := readyClient(t)
 	ctx := context.Background()
@@ -58,10 +77,16 @@ func TestExposureWithNonComparableValueDoesNotPanic(t *testing.T) {
 	}
 }
 
+// Schema-valid typed IDs (26-char Crockford ULIDs) for release tests.
+const (
+	testStampID  = "stmp_01HZXRE0000000000000000001"
+	testChangeID = "chg_01HZXRE0000000000000000001"
+)
+
 func TestReleaseLifecycle(t *testing.T) {
 	c := readyClient(t)
 	ctx := context.Background()
-	rc := ReleaseContext{RolloutID: "rollout_1", ChangeID: "chg_1", StampIDs: []string{"stmp_1"}}
+	rc := ReleaseContext{RolloutID: "rollout_1", ChangeID: testChangeID, StampIDs: []string{testStampID}}
 
 	if err := c.Releases().SetContext(ctx, rc); err != nil {
 		t.Fatal(err)
@@ -73,7 +98,7 @@ func TestReleaseLifecycle(t *testing.T) {
 	// Returned context is a copy; mutating it does not affect stored state.
 	got.StampIDs[0] = "mutated"
 	again, _ := c.Releases().Context()
-	if again.StampIDs[0] != "stmp_1" {
+	if again.StampIDs[0] != testStampID {
 		t.Error("release context must be copied out")
 	}
 
@@ -99,7 +124,7 @@ func TestReleaseLifecycle(t *testing.T) {
 func TestReleaseFailRedactsReason(t *testing.T) {
 	c := readyClient(t)
 	ctx := context.Background()
-	_ = c.Releases().SetContext(ctx, ReleaseContext{RolloutID: "rollout_1"})
+	_ = c.Releases().SetContext(ctx, ReleaseContext{RolloutID: "rollout_1", StampIDs: []string{testStampID}})
 	_ = c.Releases().Start(ctx, "rollout_1")
 	if err := c.Releases().Fail(ctx, "rollout_1", "guardrail breach with key phc_SECRET123"); err != nil {
 		t.Fatal(err)
@@ -160,21 +185,88 @@ func TestGuardrailsPhaseOneStub(t *testing.T) {
 	}
 }
 
-func TestCapabilities(t *testing.T) {
+func TestReleaseSetContextValidation(t *testing.T) {
+	c := readyClient(t)
+	ctx := context.Background()
+	longRollout := strings.Repeat("r", 129)
+	cases := []struct {
+		name string
+		rc   ReleaseContext
+	}{
+		{"missing rolloutId", ReleaseContext{StampIDs: []string{testStampID}}},
+		{"rolloutId too long", ReleaseContext{RolloutID: longRollout, StampIDs: []string{testStampID}}},
+		{"missing stampIds", ReleaseContext{RolloutID: "rollout_1"}},
+		{"malformed stampId", ReleaseContext{RolloutID: "rollout_1", StampIDs: []string{"stmp_short"}}},
+		{"non-crockford stampId (L)", ReleaseContext{RolloutID: "rollout_1", StampIDs: []string{"stmp_01HZXLE0000000000000000001"}}},
+		{"duplicate stampIds", ReleaseContext{RolloutID: "rollout_1", StampIDs: []string{testStampID, testStampID}}},
+		{"malformed changeId", ReleaseContext{RolloutID: "rollout_1", ChangeID: "chg_1", StampIDs: []string{testStampID}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := c.Releases().SetContext(ctx, tc.rc); !errors.Is(err, ErrConfiguration) {
+				t.Fatalf("err = %v, want Configuration", err)
+			}
+		})
+	}
+	// Valid per spec/release-context.schema.json: rolloutId + well-formed
+	// stampIds; changeId optional.
+	if err := c.Releases().SetContext(ctx, ReleaseContext{RolloutID: "rollout_1", StampIDs: []string{testStampID}}); err != nil {
+		t.Fatalf("valid context rejected: %v", err)
+	}
+}
+
+func TestCapabilitiesStructuredMatrix(t *testing.T) {
 	c := readyClient(t)
 	caps := c.Capabilities().Get()
+
+	if caps.Static.Language != "go" || caps.Static.SDKVersion == "" || caps.Static.SpecVersion != "0.1.0" {
+		t.Fatalf("static = %+v", caps.Static)
+	}
+	of := caps.Static.OpenFeature
+	if of.SpecFloor != "0.8.0" || of.ProviderName != "fireweave" || !of.ServerOnly {
+		t.Fatalf("openFeature = %+v", of)
+	}
+	for _, feature := range []string{"flags", "inMemoryAdapter", "releases", "exposures", "signals"} {
+		if !caps.Static.Features[feature] {
+			t.Errorf("static feature %q should be true", feature)
+		}
+	}
+	if caps.Static.Features["guardrails"] {
+		t.Error("guardrails is a phase-one stub and must report false")
+	}
+	if caps.Runtime.Lifecycle != "READY" {
+		t.Errorf("lifecycle = %q, want READY", caps.Runtime.Lifecycle)
+	}
+	// stubAdapter implements no CapabilityReporter → backend "other".
+	if caps.Runtime.Backend != "other" {
+		t.Errorf("backend = %q, want other", caps.Runtime.Backend)
+	}
+	if caps.Runtime.Limits["intSafeMaxAbs"] != int64(9007199254740991) {
+		t.Errorf("limits = %v", caps.Runtime.Limits)
+	}
+
+	// Lifecycle reflects the live state.
+	_ = c.Runtime().Shutdown(context.Background())
+	if got := c.Capabilities().Get().Runtime.Lifecycle; got != "SHUTDOWN" {
+		t.Errorf("post-shutdown lifecycle = %q", got)
+	}
+}
+
+func TestCapabilityOperationsAndInvoke(t *testing.T) {
+	c := readyClient(t)
+	ops := c.Capabilities().Operations()
 	want := []string{
 		"releases.setContext", "releases.start", "releases.complete", "releases.fail",
 		"exposures.record", "exposures.flush",
 		"signals.recordHealth", "signals.recordError", "signals.recordMetric", "signals.recordOutcome",
 		"capabilities.get",
 	}
-	if len(caps) != len(want) {
-		t.Fatalf("capabilities = %v", caps)
+	if len(ops) != len(want) {
+		t.Fatalf("operations = %v", ops)
 	}
 	for i := range want {
-		if caps[i] != want[i] {
-			t.Errorf("capability[%d] = %s, want %s", i, caps[i], want[i])
+		if ops[i] != want[i] {
+			t.Errorf("operation[%d] = %s, want %s", i, ops[i], want[i])
 		}
 	}
 	if err := c.Capabilities().Invoke(context.Background(), "releases.teleport", nil); !errors.Is(err, ErrUnsupportedCapability) {
@@ -190,7 +282,8 @@ func TestExtensionsGatedByLifecycle(t *testing.T) {
 	c := NewClient(rt)
 	ctx := context.Background()
 
-	if err := c.Releases().SetContext(ctx, ReleaseContext{RolloutID: "r"}); !errors.Is(err, ErrNotReady) {
+	// Ruling 17: pre-ready extension calls degrade as UnsupportedCapability.
+	if err := c.Releases().SetContext(ctx, ReleaseContext{RolloutID: "r"}); !errors.Is(err, ErrUnsupportedCapability) {
 		t.Errorf("before init: %v", err)
 	}
 	_ = rt.Initialize(ctx)

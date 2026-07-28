@@ -106,13 +106,63 @@ func TestValidateReservedKeys(t *testing.T) {
 		{"targetingKey": "dup"},
 		{"kind": "user"},
 		{"fireweave.anything": 1},
+		{"fireweave.evaluationContexts": []any{"a"}}, // rejected per ruling 13
 		{ReservedInvalidContextKey: true},
+		{AttrGroups: "not-a-map"},         // carve-out keys must carry maps
+		{AttrGroupProperties: []any{"x"}}, // carve-out keys must carry maps
 	}
 	for _, attrs := range cases {
 		err := ValidateContext(EvaluationContext{TargetingKey: "k", Attributes: attrs}, DefaultLimits(), false)
 		if err == nil || err.Kind != KindInvalidContext {
 			t.Errorf("attrs %v: got %v, want InvalidContext", attrs, err)
 		}
+	}
+}
+
+func TestValidateFireweaveGroupsCarveOut(t *testing.T) {
+	// Rulings 12–14: fireweave.groups and fireweave.groupProperties are the
+	// only permitted fireweave.* context keys.
+	attrs := map[string]any{
+		AttrGroups:          map[string]any{"organization": "org_1"},
+		AttrGroupProperties: map[string]any{"organization": map[string]any{"plan": "enterprise"}},
+		"email_domain":      "example.com",
+	}
+	if err := ValidateContext(EvaluationContext{TargetingKey: "k", Attributes: attrs}, DefaultLimits(), false); err != nil {
+		t.Fatalf("canonical carve-out keys must validate, got %v", err)
+	}
+}
+
+func TestGroupsTypedSugarMapsToCanonicalKeys(t *testing.T) {
+	base := NewEvaluationContext("user_1", map[string]any{"tier": "pro"})
+	groups := map[string]any{"organization": "org_1"}
+	props := map[string]any{"organization": map[string]any{"plan": "enterprise"}}
+
+	c := base.WithGroups(groups).WithGroupProperties(props)
+
+	// The sugar writes exactly the canonical keys.
+	if got, ok := c.Attributes[AttrGroups].(map[string]any); !ok || got["organization"] != "org_1" {
+		t.Fatalf("WithGroups must set %s, attrs = %v", AttrGroups, c.Attributes)
+	}
+	if _, ok := c.Attributes[AttrGroupProperties].(map[string]any); !ok {
+		t.Fatalf("WithGroupProperties must set %s, attrs = %v", AttrGroupProperties, c.Attributes)
+	}
+	// Accessors read back the canonical keys.
+	if g := c.Groups(); g["organization"] != "org_1" {
+		t.Errorf("Groups() = %v", g)
+	}
+	if gp := c.GroupProperties(); gp["organization"] == nil {
+		t.Errorf("GroupProperties() = %v", gp)
+	}
+	// Sugar output validates and originals are not aliased.
+	if err := ValidateContext(c, DefaultLimits(), false); err != nil {
+		t.Fatalf("sugar-built context must validate, got %v", err)
+	}
+	groups["organization"] = "mutated"
+	if g := c.Groups(); g["organization"] != "org_1" {
+		t.Error("WithGroups must deep-copy its input")
+	}
+	if base.Attributes[AttrGroups] != nil {
+		t.Error("WithGroups must not mutate the receiver")
 	}
 }
 

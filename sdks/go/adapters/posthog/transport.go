@@ -85,12 +85,15 @@ func (t *interceptTransport) RoundTrip(req *http.Request) (*http.Response, error
 	resp.Body = io.NopCloser(bytes.NewReader(body))
 
 	var parsed struct {
-		QuotaLimited []string                       `json:"quota_limited"`
-		Flags        map[string]*capturedFlagDetail `json:"flags"`
+		// Both spellings appear in the wild (posthog-go pins quota_limited;
+		// the deterministic test-server stub emits quotaLimited).
+		QuotaLimited      []string                       `json:"quota_limited"`
+		QuotaLimitedCamel []string                       `json:"quotaLimited"`
+		Flags             map[string]*capturedFlagDetail `json:"flags"`
 	}
 	if json.Unmarshal(body, &parsed) == nil {
 		cap := &capturedResponse{flags: parsed.Flags}
-		for _, q := range parsed.QuotaLimited {
+		for _, q := range append(parsed.QuotaLimited, parsed.QuotaLimitedCamel...) {
 			if q == "feature_flags" {
 				cap.quotaLimited = true
 			}

@@ -26,6 +26,16 @@ func gateKey(distinctID, flagKey string) string {
 	return distinctID + "\x00" + flagKey
 }
 
+// clearSeen resets the response-level dedup window. It is called on every
+// telemetry flush (ratified clear-on-flush lifecycle) so the seen-set is
+// bounded by the flush window instead of growing for the process lifetime.
+// Armed tokens are left untouched: they belong to in-flight resolutions.
+func (g *exposureGate) clearSeen() {
+	g.mu.Lock()
+	g.seen = map[string]bool{}
+	g.mu.Unlock()
+}
+
 // arm permits the next $feature_flag_called for (distinctID, flagKey).
 func (g *exposureGate) arm(distinctID, flagKey string) {
 	if !g.send {

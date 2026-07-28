@@ -3,16 +3,54 @@ package fireweave
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"slices"
 	"sync"
 )
 
 // ReleaseContext identifies the rollout a workload participates in
-// (spec/release-context.schema.json).
+// (spec/release-context.schema.json). Releases.SetContext validates it
+// against the schema's required fields and patterns (ruling 15).
 type ReleaseContext struct {
+	// RolloutID identifies the rollout. Required, 1–128 characters.
 	RolloutID string
-	ChangeID  string
-	StampIDs  []string
+	// ChangeID is an optional typed change ULID (chg_<26-char Crockford>).
+	ChangeID string
+	// StampIDs are the deploy stamp identifiers (stmp_<26-char Crockford>).
+	// Required: 1–64 unique entries.
+	StampIDs []string
+}
+
+// Typed-ID patterns from spec/release-context.schema.json.
+var (
+	stampIDPattern  = regexp.MustCompile(`^stmp_[0-9A-HJKMNP-TV-Z]{26}$`)
+	changeIDPattern = regexp.MustCompile(`^chg_[0-9A-HJKMNP-TV-Z]{26}$`)
+)
+
+// validateReleaseContext enforces exactly the spec/release-context.schema.json
+// required fields and patterns (ruling 15: rolloutId required, stampIds per
+// schema). Messages are fixed strings; they never echo caller values.
+func validateReleaseContext(rc ReleaseContext) *Error {
+	if rc.RolloutID == "" || len(rc.RolloutID) > 128 {
+		return NewError(KindConfiguration, "release context requires a rolloutId", nil)
+	}
+	if len(rc.StampIDs) < 1 || len(rc.StampIDs) > 64 {
+		return NewError(KindConfiguration, "release context requires 1-64 stampIds", nil)
+	}
+	seen := make(map[string]struct{}, len(rc.StampIDs))
+	for _, s := range rc.StampIDs {
+		if !stampIDPattern.MatchString(s) {
+			return NewError(KindConfiguration, "release context stampIds must match stmp_<26-char ULID>", nil)
+		}
+		if _, dup := seen[s]; dup {
+			return NewError(KindConfiguration, "release context stampIds must be unique", nil)
+		}
+		seen[s] = struct{}{}
+	}
+	if rc.ChangeID != "" && !changeIDPattern.MatchString(rc.ChangeID) {
+		return NewError(KindConfiguration, "release context changeId must match chg_<26-char ULID>", nil)
+	}
+	return nil
 }
 
 func (rc ReleaseContext) copy() ReleaseContext {
@@ -102,7 +140,8 @@ type Signal struct {
 	StampID   string
 }
 
-// Capabilities advertised by this SDK in phase one, in canonical order.
+// Extension operations advertised by this SDK in phase one, in canonical
+// order (the Invoke dispatch table).
 var capabilityList = []string{
 	"releases.setContext",
 	"releases.start",
@@ -140,6 +179,9 @@ func NewClient(rt *Runtime) *Client {
 // Runtime returns the underlying runtime.
 func (c *Client) Runtime() *Runtime { return c.rt }
 
+// gate enforces ruling 17 lifecycle gating: extension calls degrade with a
+// structured typed error (never a panic/throw) — UnsupportedCapability
+// before the runtime is READY, AlreadyClosed after shutdown.
 func (c *Client) gate() *Error {
 	switch c.rt.State() {
 	case StateReady, StateStale:
@@ -147,7 +189,7 @@ func (c *Client) gate() *Error {
 	case StateShutdown:
 		return NewError(KindAlreadyClosed, "", nil)
 	default:
-		return NewError(KindNotReady, "", nil)
+		return NewError(KindUnsupportedCapability, "", nil)
 	}
 }
 
@@ -178,12 +220,15 @@ type Releases struct{ c *Client }
 func (c *Client) Releases() Releases { return Releases{c} }
 
 // SetContext binds the rollout identity used by subsequent release ops.
+// The context is validated against spec/release-context.schema.json
+// (rolloutId required, 1–64 unique well-formed stampIds, optional
+// well-formed changeId); invalid contexts return a Configuration error.
 func (r Releases) SetContext(ctx context.Context, rc ReleaseContext) error {
 	if err := r.c.gate(); err != nil {
 		return err
 	}
-	if rc.RolloutID == "" {
-		return NewError(KindConfiguration, "release context requires a rolloutId", nil)
+	if err := validateReleaseContext(rc); err != nil {
+		return err
 	}
 	cp := rc.copy()
 	r.c.mu.Lock()
@@ -270,6 +315,9 @@ func exposureKey(e Exposure) string {
 
 // Record queues one exposure. Duplicate (targetingKey, flagKey, variant,
 // value) tuples are deduplicated: the duplicate is counted but not queued.
+// The dedup window spans one flush cycle — Flush clears the seen-set (the
+// ratified clear-on-flush lifecycle), so the set cannot grow unbounded and
+// the same tuple is queued again after a flush.
 func (x Exposures) Record(ctx context.Context, e Exposure) (RecordResult, error) {
 	if err := x.c.gate(); err != nil {
 		return RecordResult{}, err
@@ -293,7 +341,9 @@ func (x Exposures) Pending() int {
 }
 
 // Flush drains the exposure queue to the adapter's telemetry sink (when
-// available) and returns the number of exposures flushed.
+// available) and returns the number of exposures flushed. Flushing also
+// clears the dedup seen-set (clear-on-flush lifecycle): dedup state is
+// bounded by the flush window instead of growing for the process lifetime.
 func (x Exposures) Flush(ctx context.Context) (int, error) {
 	if err := x.c.gate(); err != nil {
 		return 0, err
@@ -301,6 +351,7 @@ func (x Exposures) Flush(ctx context.Context) (int, error) {
 	x.c.mu.Lock()
 	batch := x.c.exposureQueue
 	x.c.exposureQueue = nil
+	x.c.exposureSeen = map[string]int{}
 	x.c.mu.Unlock()
 
 	for i, e := range batch {
@@ -407,8 +458,58 @@ type CapabilitySet struct{ c *Client }
 // Capabilities returns the capability facade.
 func (c *Client) Capabilities() CapabilitySet { return CapabilitySet{c} }
 
-// Get returns the negotiated capability list for this SDK build.
-func (cs CapabilitySet) Get() []string { return slices.Clone(capabilityList) }
+// Get returns the structured capability matrix for this SDK build and
+// runtime, per spec/capabilities.schema.json (ruling 18). The static block
+// is fixed at compile time; the runtime block reflects the adapter's
+// CapabilityReporter report (backend "other" when the adapter does not
+// implement it) and the current lifecycle state.
+func (cs CapabilitySet) Get() Capabilities {
+	rt := cs.c.rt
+	runtime := RuntimeCapabilities{
+		Backend:   "other",
+		Lifecycle: string(rt.State()),
+		Limits:    map[string]int64{"intSafeMaxAbs": intSafeMaxAbs},
+	}
+	if reporter, ok := rt.Adapter().(CapabilityReporter); ok {
+		report := reporter.ReportCapabilities()
+		if report.Backend != "" {
+			runtime.Backend = report.Backend
+		}
+		if len(report.Features) > 0 {
+			runtime.Features = make(map[string]bool, len(report.Features))
+			for k, v := range report.Features {
+				runtime.Features[k] = v
+			}
+		}
+	}
+	return Capabilities{
+		Static: StaticCapabilities{
+			Language:    "go",
+			SDKVersion:  Version,
+			SpecVersion: SpecVersion,
+			OpenFeature: OpenFeatureCapabilities{
+				SpecFloor:    openFeatureSpecFloor,
+				ProviderName: "fireweave",
+				ServerOnly:   true,
+			},
+			Features: map[string]bool{
+				"flags":           true,
+				"releases":        true,
+				"exposures":       true,
+				"signals":         true,
+				"guardrails":      false, // phase-one stub (degrades typed)
+				"telemetryOptIn":  true,  // exposure emission is opt-in
+				"inMemoryAdapter": true,
+				"posthogAdapter":  true,
+			},
+		},
+		Runtime: runtime,
+	}
+}
+
+// Operations returns the flat extension-operation names this build
+// dispatches through Invoke (idiomatic sugar over the matrix in Get).
+func (cs CapabilitySet) Operations() []string { return slices.Clone(capabilityList) }
 
 // Invoke dispatches a capability by name. Unknown capabilities degrade with
 // a typed UnsupportedCapability error instead of panicking.

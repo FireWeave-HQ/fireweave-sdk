@@ -1,6 +1,7 @@
 package conformance
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -66,16 +67,41 @@ func runOne(f Fixture) Result {
 		return res
 	}
 
-	actual, note, err := execute(f)
-	if err != nil {
-		res.Status = "fail"
-		msg := "harness error: " + err.Error()
-		res.Message = &msg
+	// Multi-case fixtures (contracts/README.md): every case runs against a
+	// fresh setup with cases[].given shallow-merged over the fixture-level
+	// given; all cases must pass. One report row per fixture.
+	if len(f.Cases) > 0 {
+		var failures []string
+		var notes []string
+		for _, cs := range f.Cases {
+			cf := f
+			cf.Cases = nil
+			cf.Given = mergeGiven(f.Given, cs.Given)
+			cf.When = cs.When
+			cf.Expect = cs.Expect
+			diffs, note := runSingle(cf)
+			if note != "" {
+				notes = append(notes, cs.Name+": "+note)
+			}
+			for _, d := range diffs {
+				failures = append(failures, cs.Name+": "+d)
+			}
+		}
+		if len(failures) > 0 {
+			res.Status = "fail"
+			msg := strings.Join(failures, "; ")
+			res.Message = &msg
+			return res
+		}
+		res.Status = "pass"
+		if len(notes) > 0 {
+			joined := strings.Join(notes, "; ")
+			res.Message = &joined
+		}
 		return res
 	}
 
-	assertionDiffs := assertMustNotContain(f, actual)
-	diffs := append(Compare(actual, f.Expect), assertionDiffs...)
+	diffs, note := runSingle(f)
 	if len(diffs) > 0 {
 		res.Status = "fail"
 		msg := strings.Join(diffs, "; ")
@@ -87,6 +113,68 @@ func runOne(f Fixture) Result {
 		res.Message = &note
 	}
 	return res
+}
+
+// runSingle executes one single-case fixture and returns comparator diffs
+// (empty means pass) plus the harness note.
+func runSingle(f Fixture) ([]string, string) {
+	actual, note, err := execute(f)
+	if err != nil {
+		return []string{"harness error: " + err.Error()}, note
+	}
+	// getCapabilities exception (contracts/harness.md, ruling 18): validate
+	// the full structured matrix against spec/capabilities.schema.json
+	// constraints, then compare expect.capabilities as a subset.
+	diffs := adjustCapabilitiesResult(f, actual)
+	assertionDiffs := assertMustNotContain(f, actual)
+	diffs = append(diffs, append(Compare(actual, f.Expect), assertionDiffs...)...)
+	return diffs, note
+}
+
+// mergeGiven shallow-merges a case-level given over the fixture-level one:
+// keys present in the override replace the base value wholesale.
+func mergeGiven(base Given, override *Given) Given {
+	if override == nil {
+		return base
+	}
+	out := base
+	if override.ProviderState != "" {
+		out.ProviderState = override.ProviderState
+	}
+	if override.Flags != nil {
+		out.Flags = override.Flags
+	}
+	if override.GlobalContext != nil {
+		out.GlobalContext = override.GlobalContext
+	}
+	if override.ClientContext != nil {
+		out.ClientContext = override.ClientContext
+	}
+	if override.Config != nil {
+		out.Config = override.Config
+	}
+	if override.Fault != nil {
+		out.Fault = override.Fault
+	}
+	if override.Extensions != nil {
+		out.Extensions = override.Extensions
+	}
+	if override.ExposureQueue != nil {
+		out.ExposureQueue = override.ExposureQueue
+	}
+	if override.ReleaseContext != nil {
+		out.ReleaseContext = override.ReleaseContext
+	}
+	if override.ReleaseStatus != "" {
+		out.ReleaseStatus = override.ReleaseStatus
+	}
+	if override.Domains != nil {
+		out.Domains = override.Domains
+	}
+	if override.Replacement != nil {
+		out.Replacement = override.Replacement
+	}
+	return out
 }
 
 func assertMustNotContain(f Fixture, actual map[string]any) []string {
@@ -193,12 +281,13 @@ type bareProvider struct{ of.FeatureProvider }
 
 // session is one arranged provider + client + runtime.
 type session struct {
-	provider *fwof.Provider
-	ofClient *of.Client
-	client   *fireweave.Client
-	adapter  *inmemory.Adapter  // nil when PostHog-backed
-	ph       *phadapter.Adapter // nil when in-memory
-	domain   string
+	provider  *fwof.Provider
+	ofClient  *of.Client
+	client    *fireweave.Client
+	adapter   *inmemory.Adapter  // nil when PostHog-backed
+	ph        *phadapter.Adapter // nil when in-memory
+	domain    string
+	stubReset func() // clears live test-server stub fault state (nil when unused)
 }
 
 func (s *session) close() {
@@ -206,6 +295,9 @@ func (s *session) close() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = s.provider.ShutdownWithContext(ctx)
+	}
+	if s.stubReset != nil {
+		s.stubReset()
 	}
 }
 
@@ -224,13 +316,29 @@ func setupSession(f Fixture, given Given, flags map[string]FixtureFlag, state st
 
 	useFault := given.Fault != nil && f.ID != "fault-stale-cache"
 	if useFault {
-		transport := newFaultTransport(given.Fault)
 		cfg := phadapter.Config{
 			ProjectAPIKey:      "phc_conformance000000000000000001",
 			Endpoint:           "http://127.0.0.1:3901",
-			Transport:          transport,
 			FlagRequestTimeout: 2 * time.Second,
 			CloseTimeout:       2 * time.Second,
+		}
+		// Live-stub mode (FIREWEAVE_TEST_SERVER_URL): fault modes the
+		// test-server control plane supports run over real HTTP against
+		// the stub; the remaining modes (networkError, offline) stay on
+		// the injected fake Transport, which is also the default when no
+		// stub URL is configured (hermetic `go test`).
+		stubURL := stubBaseURL()
+		stubFault := stubFaultBody(given.Fault)
+		if stubURL != "" && stubFault != nil {
+			if err := stubSetFault(stubURL, stubFault); err != nil {
+				return s, note, fmt.Errorf("test-server stub fault setup: %w", err)
+			}
+			cfg.Endpoint = stubURL
+			s.stubReset = func() { _ = stubResetState(stubURL) }
+			note = "fault exercised via live test-server HTTP stub"
+		} else {
+			cfg.Transport = newFaultTransport(given.Fault)
+			note = "fault simulated via injected fake Transport (test-server stub not exercised)"
 		}
 		if given.Config != nil {
 			if k, ok := given.Config["projectApiKey"].(string); ok && k != "" {
@@ -243,7 +351,6 @@ func setupSession(f Fixture, given Given, flags map[string]FixtureFlag, state st
 		}
 		s.ph = phadapter.New(cfg)
 		s.client = fireweave.NewClient(fireweave.NewRuntime(s.ph, runtimeConfigFrom(given)))
-		note = "fault simulated via injected fake Transport (test-server stub not exercised)"
 	} else {
 		s.adapter = inmemoryFrom(flags)
 		s.client = fireweave.NewClient(fireweave.NewRuntime(s.adapter, runtimeConfigFrom(given)))
@@ -517,38 +624,59 @@ func executeExtension(f Fixture) (map[string]any, string, error) {
 	client := fireweave.NewClient(fireweave.NewRuntime(adapter, runtimeConfigFrom(f.Given)))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := client.Runtime().Initialize(ctx); err != nil {
-		return nil, "", fmt.Errorf("extension init: %w", err)
-	}
-	defer func() { _ = client.Runtime().Shutdown(ctx) }()
 
-	// Seed release context and status.
-	if f.Given.ReleaseContext != nil {
-		rc := releaseContextFrom(f.Given.ReleaseContext)
-		if err := client.Releases().SetContext(ctx, rc); err != nil {
-			return nil, "", fmt.Errorf("seed release context: %w", err)
+	// Lifecycle arrangement (ruling 17 gating fixtures): NOT_READY leaves
+	// the runtime uninitialized, CLOSED initializes then shuts down,
+	// READY/STALE (default) initialize.
+	state := f.Given.ProviderState
+	switch state {
+	case "NOT_READY":
+		// leave uninitialized
+	case "CLOSED":
+		if err := client.Runtime().Initialize(ctx); err != nil {
+			return nil, "", fmt.Errorf("extension pre-close init: %w", err)
 		}
-		if f.Given.ReleaseStatus == "in_progress" {
-			if err := client.Releases().Start(ctx, rc.RolloutID); err != nil {
-				return nil, "", fmt.Errorf("seed release status: %w", err)
+		if err := client.Runtime().Shutdown(ctx); err != nil {
+			return nil, "", fmt.Errorf("extension pre-close shutdown: %w", err)
+		}
+	default: // READY, STALE, ""
+		if err := client.Runtime().Initialize(ctx); err != nil {
+			return nil, "", fmt.Errorf("extension init: %w", err)
+		}
+		if state == "STALE" {
+			client.Runtime().MarkStale()
+		}
+		defer func() { _ = client.Runtime().Shutdown(ctx) }()
+
+		// Seed release context and status (READY-gated operations).
+		if f.Given.ReleaseContext != nil {
+			rc := releaseContextFrom(f.Given.ReleaseContext)
+			if err := client.Releases().SetContext(ctx, rc); err != nil {
+				return nil, "", fmt.Errorf("seed release context: %w", err)
+			}
+			if f.Given.ReleaseStatus == "in_progress" {
+				if err := client.Releases().Start(ctx, rc.RolloutID); err != nil {
+					return nil, "", fmt.Errorf("seed release status: %w", err)
+				}
 			}
 		}
-	}
-	// Seed the exposure queue.
-	for _, e := range f.Given.ExposureQueue {
-		if _, err := client.Exposures().Record(ctx, exposureFrom(e)); err != nil {
-			return nil, "", fmt.Errorf("seed exposure: %w", err)
+		// Seed the exposure queue.
+		for _, e := range f.Given.ExposureQueue {
+			if _, err := client.Exposures().Record(ctx, exposureFrom(e)); err != nil {
+				return nil, "", fmt.Errorf("seed exposure: %w", err)
+			}
 		}
 	}
 
 	switch f.When.Operation {
 	case "getCapabilities":
-		caps := client.Capabilities().Get()
-		list := make([]any, len(caps))
-		for i, c := range caps {
-			list[i] = c
+		// Ruling 18: always the structured spec/capabilities.schema.json
+		// matrix, never a flat capability-string list.
+		matrix, err := toJSONMap(client.Capabilities().Get())
+		if err != nil {
+			return nil, "", fmt.Errorf("encode capabilities: %w", err)
 		}
-		return map[string]any{"capabilities": list, "errorCode": nil}, "", nil
+		return map[string]any{"capabilities": matrix, "errorCode": nil}, "", nil
 
 	case "recordExposure":
 		res, err := client.Exposures().Record(ctx, exposureFrom(f.When.Exposure))
@@ -605,6 +733,12 @@ func executeExtension(f Fixture) (map[string]any, string, error) {
 	case "emitSignal":
 		err := emitSignal(ctx, client, f.When.Signal)
 		actual := map[string]any{"ok": err == nil, "accepted": err == nil, "errorCode": errCodeOrNil(err)}
+		var fwErr *fireweave.Error
+		if err != nil && asFireweave(err, &fwErr) {
+			actual["errorMessage"] = fwErr.Message
+			actual["errorKind"] = string(fwErr.Kind)
+			actual["degraded"] = isDegradedKind(fwErr.Kind)
+		}
 		if recorded := client.Signals().Recorded(); len(recorded) > 0 {
 			actual["__recordedMessage"] = recorded[len(recorded)-1].Message
 		}
@@ -617,7 +751,7 @@ func executeExtension(f Fixture) (map[string]any, string, error) {
 		if err != nil && asFireweave(err, &fwErr) {
 			actual["errorMessage"] = fwErr.Message
 			actual["errorKind"] = string(fwErr.Kind)
-			actual["degraded"] = fwErr.Kind == fireweave.KindUnsupportedCapability
+			actual["degraded"] = isDegradedKind(fwErr.Kind)
 		}
 		return actual, "", nil
 	}
@@ -651,6 +785,12 @@ func emitSignal(ctx context.Context, client *fireweave.Client, sig map[string]an
 	}
 }
 
+// isDegradedKind reports whether an extension error kind is a ruling-17
+// graceful degradation (structured result instead of a throw).
+func isDegradedKind(kind fireweave.ErrorKind) bool {
+	return kind == fireweave.KindUnsupportedCapability || kind == fireweave.KindAlreadyClosed
+}
+
 func asProviderInitError(err error, target **of.ProviderInitError) bool {
 	return errors.As(err, target)
 }
@@ -660,6 +800,22 @@ func asFireweave(err error, target **fireweave.Error) bool {
 }
 
 // --- small conversions ---
+
+// toJSONMap round-trips a struct through JSON into a generic map, keeping
+// numbers as json.Number so the comparator's canonical form is exact.
+func toJSONMap(v any) (map[string]any, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
+	var out map[string]any
+	if err := dec.Decode(&out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
 
 func releaseContextFrom(m map[string]any) fireweave.ReleaseContext {
 	rc := fireweave.ReleaseContext{}

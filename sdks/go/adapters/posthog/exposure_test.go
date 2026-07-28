@@ -48,6 +48,43 @@ func TestGateAllowsFirstExposureThenDedups(t *testing.T) {
 	}
 }
 
+func TestGateSeenClearsOnFlush(t *testing.T) {
+	g := &exposureGate{send: true, seen: map[string]bool{}, allow: map[string]int{}}
+
+	g.arm("u1", "f1")
+	if msg := g.beforeSend(flagCalledEvent("u1", "f1", true)); msg == nil {
+		t.Fatal("first armed exposure must pass")
+	}
+	g.arm("u1", "f1")
+	if msg := g.beforeSend(flagCalledEvent("u1", "f1", true)); msg != nil {
+		t.Fatal("duplicate before flush must be deduped")
+	}
+	// Clear-on-flush lifecycle: the dedup window resets, so the same tuple
+	// may emit again (and the set cannot grow unbounded).
+	g.clearSeen()
+	g.arm("u1", "f1")
+	if msg := g.beforeSend(flagCalledEvent("u1", "f1", true)); msg == nil {
+		t.Fatal("post-flush exposure for the same tuple must pass")
+	}
+}
+
+func TestAdapterFlushTelemetryClearsGateSeen(t *testing.T) {
+	a := New(Config{SendExposureEvents: true})
+	a.gate.mu.Lock()
+	a.gate.seen["u\x00f\x00true"] = true
+	a.gate.mu.Unlock()
+
+	if err := a.FlushTelemetry(t.Context()); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	a.gate.mu.Lock()
+	n := len(a.gate.seen)
+	a.gate.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("gate seen-set has %d entries after flush, want 0", n)
+	}
+}
+
 func TestGateSuppressesUnarmedInternalReads(t *testing.T) {
 	g := &exposureGate{send: true, seen: map[string]bool{}, allow: map[string]int{}}
 	if msg := g.beforeSend(flagCalledEvent("u1", "f1", true)); msg != nil {

@@ -4,12 +4,90 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
+
+// stubBaseURL returns the live test-server stub base URL when fault
+// fixtures should run over real HTTP (test-server/implementation/server.mjs)
+// instead of the injected fake Transport. Unset ⇒ hermetic fake mode.
+func stubBaseURL() string {
+	for _, key := range []string{"FIREWEAVE_TEST_SERVER_URL", "FW_TEST_SERVER_URL"} {
+		if v := strings.TrimRight(strings.TrimSpace(os.Getenv(key)), "/"); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// stubFaultBody maps a fixture given.fault block onto the test-server
+// control-plane body (POST /_test/fault). It returns nil for fault modes
+// the stub cannot produce over a live connection (networkError, offline),
+// which stay on the injected fake Transport.
+func stubFaultBody(fault map[string]any) map[string]any {
+	mode, _ := fault["mode"].(string)
+	switch mode {
+	case "httpStatus":
+		status, ok := fault["status"].(json.Number)
+		if !ok {
+			return nil
+		}
+		switch status.String() {
+		case "401", "429", "500":
+			return map[string]any{"mode": status.String(), "applyTo": "flags"}
+		}
+		return nil
+	case "invalidJson":
+		body := map[string]any{"mode": "invalid_json", "applyTo": "flags"}
+		if b, ok := fault["body"].(string); ok && b != "" {
+			body["body"] = b
+		}
+		return body
+	case "delay":
+		delayMs := json.Number("1000")
+		if d, ok := fault["delayMs"].(json.Number); ok {
+			delayMs = d
+		}
+		return map[string]any{"mode": "delay", "delayMs": delayMs, "applyTo": "flags"}
+	case "quotaLimited":
+		return map[string]any{"mode": "quota_limited", "applyTo": "flags"}
+	}
+	return nil
+}
+
+var stubHTTPClient = &http.Client{Timeout: 5 * time.Second}
+
+func stubPost(baseURL, path string, body map[string]any) error {
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	resp, err := stubHTTPClient.Post(baseURL+path, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("stub %s: status %d", path, resp.StatusCode)
+	}
+	return nil
+}
+
+// stubSetFault arms the stub's fault injection for the next requests.
+func stubSetFault(baseURL string, body map[string]any) error {
+	return stubPost(baseURL, "/_test/fault", body)
+}
+
+// stubResetState clears faults/events and restores fixture defaults.
+func stubResetState(baseURL string) error {
+	return stubPost(baseURL, "/_test/reset", map[string]any{})
+}
 
 // faultTransport is the injected fake http.RoundTripper used for fault
 // fixtures when the runner does not target the live test-server stub. It

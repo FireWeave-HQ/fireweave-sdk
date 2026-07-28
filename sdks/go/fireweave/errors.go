@@ -3,6 +3,30 @@
 // model, the BackendAdapter contract, and the FireweaveClient extension
 // surface (releases, exposures, signals, guardrails, capabilities).
 //
+// # Evaluation options
+//
+// OpenFeature has no per-invocation provider options, so Fireweave carries
+// evaluation options on the Go context.Context. WithIncludePayload marks
+// an evaluation so the flag's JSON payload is attached to the decision as
+// fireweave.payload flag metadata (a JSON-string serialization):
+//
+//	ctx = fireweave.WithIncludePayload(ctx)
+//	details, _ := ofClient.BooleanValueDetails(ctx, "my-flag", false, evalCtx)
+//	payload := details.FlagMetadata["fireweave.payload"]
+//
+// # Reserved context keys
+//
+// "targetingKey" and "kind" are reserved by the OpenFeature context model,
+// and the "fireweave." prefix is reserved for SDK use. Exactly two
+// fireweave.* keys are permitted (rulings 12–14): AttrGroups
+// ("fireweave.groups") and AttrGroupProperties
+// ("fireweave.groupProperties") — the canonical carriers for group
+// targeting, settable via the typed EvaluationContext.WithGroups /
+// WithGroupProperties sugar. Any other fireweave.* key fails validation
+// with InvalidContext. Attributes whose key starts with "$" are
+// vendor directives: the PostHog adapter forwards them as request
+// directives and strips them from person properties.
+//
 // # Concurrency
 //
 // All exported types in this package that carry mutable state (Runtime,

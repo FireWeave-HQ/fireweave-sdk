@@ -25,6 +25,20 @@ type Fixture struct {
 	Given  Given          `json:"given"`
 	When   When           `json:"when"`
 	Expect map[string]any `json:"expect"`
+
+	// Cases is the optional multi-case form (contracts/README.md): when
+	// present the fixture has no top-level when/expect and every case must
+	// pass against a fresh setup.
+	Cases []FixtureCase `json:"cases"`
+}
+
+// FixtureCase is one case of a multi-case fixture. Given (when present)
+// shallow-merges over the fixture-level given block.
+type FixtureCase struct {
+	Name   string         `json:"name"`
+	Given  *Given         `json:"given"`
+	When   When           `json:"when"`
+	Expect map[string]any `json:"expect"`
 }
 
 // Given is the fixture arrangement block.

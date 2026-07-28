@@ -18,7 +18,27 @@
 //   - posthog-go emits $feature_flag_called implicitly whenever a snapshot
 //     value is read. A BeforeSend gate drops those events unless exposure
 //     sending is enabled and the (distinct_id, flag, response) tuple has
-//     not been sent before (exposure dedup).
+//     not been sent before (exposure dedup; the dedup set clears on every
+//     telemetry flush).
+//
+// # Context attribute mapping
+//
+// Evaluation-context attributes map onto the vendor /flags payload as
+// follows (see buildPayload):
+//
+//   - The targeting key becomes the PostHog distinct_id.
+//   - The canonical carve-out keys "fireweave.groups" and
+//     "fireweave.groupProperties" (rulings 12–14) become the vendor
+//     "groups" / "group_properties" fields; the plain "groups" /
+//     "groupProperties" spellings remain a documented pre-canon alias.
+//   - Attributes whose key starts with "$" are treated as PostHog vendor
+//     directives (e.g. "$process_person_profile") and are STRIPPED from
+//     person properties — they are never transmitted as person data and
+//     never appear in the resolved Fireweave context.
+//   - Every other attribute becomes a PostHog person property.
+//
+// Flag payloads are attached to decision metadata (fireweave.payload) only
+// when the evaluation was marked with fireweave.WithIncludePayload(ctx).
 //
 // Concurrency: Adapter is safe for concurrent use. Initialize is called
 // once by the runtime; Resolve may run from many goroutines concurrently
@@ -46,12 +66,21 @@ import (
 // indefinite wait, which must not leak to Fireweave callers.
 const DefaultCloseTimeout = 5 * time.Second
 
-// defaultAllowedHosts is the endpoint allowlist applied when
-// Config.AllowedHosts is empty (SSRF guard).
+// defaultAllowedHosts is the canonical cross-language endpoint allowlist
+// applied when Config.AllowedHosts is empty (SSRF guard): the five official
+// PostHog hosts plus loopback. Custom (e.g. self-hosted) hosts require an
+// explicit Config.AllowedHosts entry. https is required for non-loopback
+// hosts; plain http is permitted on loopback only.
 var defaultAllowedHosts = []string{
+	"app.posthog.com", "us.posthog.com", "eu.posthog.com",
 	"us.i.posthog.com", "eu.i.posthog.com",
-	"us.posthog.com", "eu.posthog.com", "app.posthog.com",
 	"localhost", "127.0.0.1", "::1",
+}
+
+// isLoopbackHost reports whether the hostname is the canonical loopback set
+// (localhost, 127.0.0.1, ::1).
+func isLoopbackHost(host string) bool {
+	return strings.EqualFold(host, "localhost") || host == "127.0.0.1" || host == "::1"
 }
 
 // Config configures the adapter. It deliberately contains only stdlib
@@ -123,6 +152,7 @@ func newWithClient(cfg Config, client posthoggo.Client) *Adapter {
 
 var _ fireweave.BackendAdapter = (*Adapter)(nil)
 var _ fireweave.TelemetrySink = (*Adapter)(nil)
+var _ fireweave.CapabilityReporter = (*Adapter)(nil)
 
 // validateConfig enforces required keys and the endpoint allowlist. Error
 // messages are fixed strings: they never echo the key or endpoint.
@@ -134,11 +164,16 @@ func (a *Adapter) validateConfig() *fireweave.Error {
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
 		return fireweave.NewError(fireweave.KindConfiguration, "invalid configuration", nil)
 	}
+	host := u.Hostname()
+	// https is required for non-loopback hosts; plain http is allowed on
+	// loopback only (the local test-server).
+	if u.Scheme == "http" && !isLoopbackHost(host) {
+		return fireweave.NewError(fireweave.KindConfiguration, "invalid configuration", nil)
+	}
 	allowed := a.cfg.AllowedHosts
 	if len(allowed) == 0 {
 		allowed = defaultAllowedHosts
 	}
-	host := u.Hostname()
 	ok := false
 	for _, h := range allowed {
 		if strings.EqualFold(h, host) {
@@ -295,40 +330,52 @@ func (a *Adapter) Resolve(ctx context.Context, req fireweave.ResolveRequest) fir
 }
 
 // buildPayload maps the Fireweave context onto the vendor payload:
-// targetingKey → distinct_id, "groups"/"groupProperties" attributes to the
-// dedicated fields, "$"-prefixed attributes are vendor directives (not
-// person properties), everything else becomes person properties.
+// targetingKey → distinct_id; the canonical fireweave.groups /
+// fireweave.groupProperties carve-out keys (rulings 12–14) map to the
+// dedicated groups / group_properties fields (the plain "groups" /
+// "groupProperties" spellings remain a documented pre-canon alias, with
+// the canonical keys taking precedence when both are present);
+// "$"-prefixed attributes are vendor directives (not person properties)
+// and are stripped from person_properties; everything else becomes a
+// person property.
 func (a *Adapter) buildPayload(req fireweave.ResolveRequest) posthoggo.EvaluateFlagsPayload {
 	payload := posthoggo.EvaluateFlagsPayload{
 		DistinctId:          req.Context.TargetingKey,
 		OnlyEvaluateLocally: a.cfg.LocalEvaluationOnly,
 		FlagKeys:            []string{req.FlagKey},
 	}
+	attrs := req.Context.Attributes
+
+	if g, ok := groupAttr(attrs, fireweave.AttrGroups, "groups"); ok {
+		groups := posthoggo.Groups{}
+		for gk, gv := range g {
+			groups[gk] = gv
+		}
+		payload.Groups = groups
+	}
+	if gp, ok := groupAttr(attrs, fireweave.AttrGroupProperties, "groupProperties"); ok {
+		out := map[string]posthoggo.Properties{}
+		for gk, gv := range gp {
+			if m, ok := gv.(map[string]any); ok {
+				props := posthoggo.NewProperties()
+				for pk, pv := range m {
+					props[pk] = pv
+				}
+				out[gk] = props
+			}
+		}
+		payload.GroupProperties = out
+	}
+
 	person := posthoggo.NewProperties()
-	for k, v := range req.Context.Attributes {
+	for k, v := range attrs {
 		switch {
-		case k == "groups":
-			if g, ok := v.(map[string]any); ok {
-				groups := posthoggo.Groups{}
-				for gk, gv := range g {
-					groups[gk] = gv
-				}
-				payload.Groups = groups
-			}
-		case k == "groupProperties":
-			if gp, ok := v.(map[string]any); ok {
-				out := map[string]posthoggo.Properties{}
-				for gk, gv := range gp {
-					if m, ok := gv.(map[string]any); ok {
-						props := posthoggo.NewProperties()
-						for pk, pv := range m {
-							props[pk] = pv
-						}
-						out[gk] = props
-					}
-				}
-				payload.GroupProperties = out
-			}
+		case k == "groups" || k == "groupProperties":
+			// Group carve-out (canonical or alias spelling): mapped above,
+			// never a person property.
+		case strings.HasPrefix(k, fireweave.ReservedKeyPrefix):
+			// fireweave.* reserved namespace (incl. the canonical group
+			// keys): never a person property.
 		case strings.HasPrefix(k, "$"):
 			// Vendor directive (e.g. $process_person_profile); not a person
 			// property.
@@ -340,6 +387,18 @@ func (a *Adapter) buildPayload(req fireweave.ResolveRequest) posthoggo.EvaluateF
 		payload.PersonProperties = person
 	}
 	return payload
+}
+
+// groupAttr reads a map-valued attribute preferring the canonical
+// fireweave.* key over the legacy plain-spelling alias.
+func groupAttr(attrs map[string]any, canonical, alias string) (map[string]any, bool) {
+	if m, ok := attrs[canonical].(map[string]any); ok {
+		return m, true
+	}
+	if m, ok := attrs[alias].(map[string]any); ok {
+		return m, true
+	}
+	return nil, false
 }
 
 // buildDecision converts vendor values into a normalized Decision,
@@ -542,8 +601,29 @@ func (a *Adapter) EnqueueTelemetry(ctx context.Context, ev fireweave.TelemetryEv
 
 // FlushTelemetry is best-effort: posthog-go batches on an interval and
 // drains deterministically only on Close, which the adapter performs with
-// a bounded deadline.
-func (a *Adapter) FlushTelemetry(ctx context.Context) error { return ctx.Err() }
+// a bounded deadline. Flushing clears the exposure gate's response-level
+// dedup set (clear-on-flush lifecycle) so it cannot grow unbounded in
+// long-lived, high-cardinality services.
+func (a *Adapter) FlushTelemetry(ctx context.Context) error {
+	a.gate.clearSeen()
+	return ctx.Err()
+}
+
+// ReportCapabilities implements fireweave.CapabilityReporter for the
+// structured capabilities.get matrix (ruling 18).
+func (a *Adapter) ReportCapabilities() fireweave.AdapterCapabilities {
+	return fireweave.AdapterCapabilities{
+		Backend: "posthog",
+		Features: map[string]bool{
+			"remoteEvaluation":    !a.cfg.LocalEvaluationOnly,
+			"localEvaluation":     a.cfg.SecretKey != "",
+			"localOnly":           a.cfg.LocalEvaluationOnly,
+			"exposureEmission":    a.cfg.SendExposureEvents,
+			"sideEffectFreeReads": !a.cfg.SendExposureEvents,
+			"groupAnalytics":      true,
+		},
+	}
+}
 
 // takeCaptured returns intercepted /flags response data for a distinct_id.
 func (a *Adapter) takeCaptured(distinctID string) *capturedResponse {

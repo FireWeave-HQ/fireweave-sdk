@@ -7,9 +7,24 @@ import (
 
 // Reserved attribute keys. "targetingKey" and "kind" are reserved by the
 // OpenFeature context model; every key under the "fireweave." prefix is
-// reserved for SDK-internal use.
+// reserved for SDK-internal use, with exactly two ratified carve-outs
+// (orchestrator rulings 12–14): AttrGroups and AttrGroupProperties are the
+// canonical context keys for group targeting and are the ONLY permitted
+// "fireweave.*" attributes. Every other "fireweave.*" key is rejected with
+// InvalidContext.
 const (
 	ReservedKeyPrefix = "fireweave."
+	// AttrGroups is the canonical context key carrying group memberships
+	// (map of group type → group key), e.g.
+	// {"organization": "org_123"}. It maps to the vendor "groups" payload
+	// field and is never treated as a person property.
+	AttrGroups = "fireweave.groups"
+	// AttrGroupProperties is the canonical context key carrying per-group
+	// properties (map of group type → property map), e.g.
+	// {"organization": {"plan": "enterprise"}}. It maps to the vendor
+	// "group_properties" payload field and is never treated as a person
+	// property.
+	AttrGroupProperties = "fireweave.groupProperties"
 	// ReservedInvalidContextKey is an internal sentinel attribute injected by
 	// the provider's context-guard hook when reserved-key misuse is detected
 	// before the Go OpenFeature SDK flattens (and thereby destroys evidence
@@ -40,6 +55,45 @@ func NewEvaluationContext(targetingKey string, attributes map[string]any) Evalua
 // Copy returns a deep copy of the context.
 func (c EvaluationContext) Copy() EvaluationContext {
 	return EvaluationContext{TargetingKey: c.TargetingKey, Attributes: deepCopyMap(c.Attributes)}
+}
+
+// WithGroups returns a copy of the context with the canonical AttrGroups
+// ("fireweave.groups") attribute set. This is the idiomatic typed accessor
+// ratified by ruling 14: it is sugar over the canonical context key, not a
+// separate representation.
+func (c EvaluationContext) WithGroups(groups map[string]any) EvaluationContext {
+	out := c.Copy()
+	if out.Attributes == nil {
+		out.Attributes = map[string]any{}
+	}
+	out.Attributes[AttrGroups] = deepCopyMap(groups)
+	return out
+}
+
+// WithGroupProperties returns a copy of the context with the canonical
+// AttrGroupProperties ("fireweave.groupProperties") attribute set (typed
+// sugar per ruling 14; see WithGroups).
+func (c EvaluationContext) WithGroupProperties(props map[string]any) EvaluationContext {
+	out := c.Copy()
+	if out.Attributes == nil {
+		out.Attributes = map[string]any{}
+	}
+	out.Attributes[AttrGroupProperties] = deepCopyMap(props)
+	return out
+}
+
+// Groups returns a copy of the canonical AttrGroups attribute (nil when
+// unset or not a map).
+func (c EvaluationContext) Groups() map[string]any {
+	g, _ := c.Attributes[AttrGroups].(map[string]any)
+	return deepCopyMap(g)
+}
+
+// GroupProperties returns a copy of the canonical AttrGroupProperties
+// attribute (nil when unset or not a map).
+func (c EvaluationContext) GroupProperties() map[string]any {
+	g, _ := c.Attributes[AttrGroupProperties].(map[string]any)
+	return deepCopyMap(g)
 }
 
 func deepCopyMap(m map[string]any) map[string]any {
@@ -149,9 +203,20 @@ func ValidateContext(c EvaluationContext, limits Limits, requireTargetingKey boo
 		err.TargetingKeyMissing = true
 		return err
 	}
-	for k := range c.Attributes {
-		if k == attrTargetingKey || k == attrKind || strings.HasPrefix(k, ReservedKeyPrefix) {
+	for k, v := range c.Attributes {
+		if k == attrTargetingKey || k == attrKind {
 			return NewError(KindInvalidContext, msgInvalidContext, nil)
+		}
+		if strings.HasPrefix(k, ReservedKeyPrefix) {
+			// Ratified carve-out (rulings 12–14): fireweave.groups and
+			// fireweave.groupProperties are the only permitted fireweave.*
+			// keys, and both must carry map values.
+			if k != AttrGroups && k != AttrGroupProperties {
+				return NewError(KindInvalidContext, msgInvalidContext, nil)
+			}
+			if _, ok := v.(map[string]any); !ok {
+				return NewError(KindInvalidContext, msgInvalidContext, nil)
+			}
 		}
 	}
 	if len(c.Attributes) > limits.MaxAttributes {
