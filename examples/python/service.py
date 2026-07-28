@@ -89,8 +89,13 @@ def main() -> None:
 
     # 5. Release-safety extensions on the Fireweave client (same runtime).
     fw = FireweaveClient(runtime)
+    # rolloutId is free-form; changeId/stampIds are typed 26-char ULIDs
+    # (spec/release-context.schema.json — ruling 15: both rolloutId and
+    # stampIds are required, and set_context validates the patterns).
     fw.releases.set_context(
-        rollout_id="rollout_01HZX3", change_id="chg_01HZX3", stamp_ids=["stmp_01HZX3"]
+        rollout_id="rollout_01HZX3",
+        change_id="chg_01HZXEX0000000000000000001",
+        stamp_ids=["stmp_01HZXEX0000000000000000001"],
     )
     fw.releases.start()
     fw.signals.record_health("checkout-service", "ok", rollout_id="rollout_01HZX3")

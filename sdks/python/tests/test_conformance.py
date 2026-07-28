@@ -20,5 +20,7 @@ def test_fixture(fixture):
     assert result["status"] == "pass", result.get("diffs")
 
 
-def test_fixture_count_is_63():
-    assert len(FIXTURES) == 63
+def test_fixture_count_matches_canonical_inventory():
+    # 65 = Phase-3's 63 + ctx-fireweave-groups-carveout + ext-lifecycle-gating
+    # (contracts/README.md canonical inventory).
+    assert len(FIXTURES) == 65

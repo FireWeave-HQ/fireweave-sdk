@@ -33,7 +33,7 @@ from .client import (
     ReleaseResult,
     SignalResult,
 )
-from .config import FireweaveConfig
+from .config import DEFAULT_ALLOWED_HOSTS, FireweaveConfig
 from .context import ContextLimits, EvaluationContext, merge_contexts, validate_context
 from .decision import Decision, Reason
 from .errors import (
@@ -66,6 +66,7 @@ __all__ = [
     "FireweaveClient",
     "FireweaveRuntime",
     "FireweaveConfig",
+    "DEFAULT_ALLOWED_HOSTS",
     "LifecycleState",
     "EvaluationOptions",
     # adapters

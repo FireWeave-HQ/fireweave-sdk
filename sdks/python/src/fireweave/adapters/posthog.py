@@ -20,6 +20,7 @@ Wraps ``posthog==7.31.0`` per ADR-0002:
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Protocol
 
@@ -199,9 +200,19 @@ def _parse_payload(payload: Any) -> Any:
 # PostHog condition-match reason strings that indicate a targeting match.
 _MATCH_REASONS = frozenset({"condition_match", "matched_condition", "super_condition_value"})
 
+# Explicit vendor bounds (security review M-5): never inherit posthog-python's
+# retry/queue defaults. Flag-request and capture retries are pinned to 0 to
+# match Node (featureFlagsRequestMaxRetries/fetchRetryCount = 0) and Go
+# (FeatureFlagRequestMaxRetries = 0); the capture queue is explicitly bounded.
+VENDOR_FLAG_REQUEST_MAX_RETRIES = 0
+VENDOR_CAPTURE_MAX_RETRIES = 0
+VENDOR_MAX_QUEUE_SIZE = 10_000
+
 
 class PostHogAdapter:
     """BackendAdapter over PostHog remote (`phc_`) or local-eval (`phs_`/`phx_`)."""
+
+    backend_name = "posthog"
 
     def __init__(
         self,
@@ -253,6 +264,12 @@ class PostHogAdapter:
             ),
             "enable_local_evaluation": cfg.local_evaluation,
             "sync_mode": False,
+            # Explicit retry/queue caps (M-5): no vendor retries, bounded
+            # capture queue — mirrored into capabilities.get() runtime
+            # features (vendorRetriesDisabled / boundedTelemetryQueue).
+            "feature_flags_request_max_retries": VENDOR_FLAG_REQUEST_MAX_RETRIES,
+            "max_retries": VENDOR_CAPTURE_MAX_RETRIES,
+            "max_queue_size": VENDOR_MAX_QUEUE_SIZE,
         }
         if cfg.personal_api_key:
             kwargs["personal_api_key"] = cfg.personal_api_key  # phx_
@@ -261,10 +278,20 @@ class PostHogAdapter:
         return Posthog(cfg.project_api_key, **kwargs)
 
     def shutdown(self, timeout_ms: int) -> None:
+        """Bounded shutdown: vendor flush/close must finish within ``timeout_ms``.
+
+        posthog-python joins consumer threads on ``shutdown()`` with no
+        deadline of its own (security review M-1); the vendor close runs on a
+        daemon worker and is abandoned once the configured budget elapses so
+        a wedged network can never hang process exit.
+        """
         self._initialized = False
         self._transport = None
         client, self._client = self._client, None
-        if client is not None and self._owns_client:
+        if client is None or not self._owns_client:
+            return
+
+        def _close_vendor() -> None:
             for method in ("flush", "shutdown"):
                 fn = getattr(client, method, None)
                 if callable(fn):
@@ -272,6 +299,14 @@ class PostHogAdapter:
                         fn()
                     except Exception:
                         pass
+
+        worker = threading.Thread(
+            target=_close_vendor, name="fireweave-posthog-shutdown", daemon=True
+        )
+        worker.start()
+        worker.join(max(timeout_ms, 0) / 1000.0)
+        # If the worker is still alive here the deadline elapsed; the daemon
+        # thread is abandoned by design (never raises, never blocks exit).
 
     # -- resolution ------------------------------------------------------------
 
@@ -325,28 +360,64 @@ class PostHogAdapter:
             quota_limited=snapshot.quota_limited,
         )
 
-    # -- exposures ---------------------------------------------------------------
+    # -- capabilities ------------------------------------------------------------
 
-    def send_exposures(self, events: list) -> None:
-        """Emit deduped Fireweave exposure events via the vendor client."""
+    def runtime_features(self) -> Dict[str, bool]:
+        """Adapter runtime features merged into ``capabilities.get()``."""
+        cfg = self._config
+        return {
+            "remoteEvaluation": not cfg.only_evaluate_locally,
+            "localEvaluation": bool(cfg.local_evaluation),
+            "localOnly": bool(cfg.only_evaluate_locally),
+            "exposureEmission": True,
+            "sideEffectFreeReads": True,
+            "groupAnalytics": True,
+            # M-5 mirror: effective vendor bounds are auditable by operators.
+            "vendorRetriesDisabled": True,
+            "boundedTelemetryQueue": True,
+        }
+
+    # -- telemetry sink (ruling 17) ------------------------------------------------
+
+    def _capture(self, distinct_id: str, event: str, properties: Dict[str, Any]) -> None:
+        """Best-effort vendor capture; telemetry loss never affects callers."""
         client = self._client
         if client is None:
             return
         capture = getattr(client, "capture", None)
         if not callable(capture):
             return
+        try:
+            capture(distinct_id=distinct_id, event=event, properties=properties)
+        except Exception:
+            pass
+
+    def send_exposures(self, events: list) -> None:
+        """Emit deduped Fireweave exposure events via the vendor client."""
         for event in events:
-            try:
-                capture(
-                    distinct_id=event.get("targetingKey"),
-                    event="$feature_flag_called",
-                    properties={
-                        "$feature_flag": event.get("flagKey"),
-                        "$feature_flag_response": event.get("value"),
-                        "$feature_flag_variant": event.get("variant"),
-                        "fireweave.rolloutId": event.get("rolloutId"),
-                    },
-                )
-            except Exception:
-                # Telemetry loss must never affect callers.
-                pass
+            self._capture(
+                distinct_id=event.get("targetingKey"),
+                event="$feature_flag_called",
+                properties={
+                    "$feature_flag": event.get("flagKey"),
+                    "$feature_flag_response": event.get("value"),
+                    "$feature_flag_variant": event.get("variant"),
+                    "fireweave.rolloutId": event.get("rolloutId"),
+                },
+            )
+
+    def deliver_signal(self, signal: Dict[str, Any]) -> None:
+        """Deliver one recorded (allowlisted, redacted) signal to the vendor."""
+        self._capture(
+            distinct_id=signal.get("rolloutId") or "fireweave",
+            event=f"$fw_signal_{signal.get('kind')}",
+            properties=dict(signal),
+        )
+
+    def deliver_release(self, event: Dict[str, Any]) -> None:
+        """Deliver one release transition (setContext/start/complete/fail)."""
+        self._capture(
+            distinct_id=event.get("rolloutId") or "fireweave",
+            event=f"$fw_release_{event.get('status')}",
+            properties=dict(event),
+        )

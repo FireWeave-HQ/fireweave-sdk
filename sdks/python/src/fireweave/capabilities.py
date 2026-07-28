@@ -1,9 +1,12 @@
 """Capability registry (spec/capabilities.schema.json).
 
 Capabilities are negotiated at construction: the static set below intersected
-with what the configured adapter supports. ``capabilities.get()`` returns the
-negotiated list; invoking an unregistered capability degrades gracefully with
-``UnsupportedCapability`` (never throws from the facade).
+with what the configured adapter supports. The registry holds the negotiated
+NAME list (``client.capabilities.names()``); the public
+``client.capabilities.get()`` returns the structured static/runtime matrix of
+``spec/capabilities.schema.json`` (ruling 18). Invoking an unregistered
+capability degrades gracefully with ``UnsupportedCapability`` (never throws
+from the facade).
 """
 
 from __future__ import annotations

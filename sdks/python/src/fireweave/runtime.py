@@ -26,12 +26,12 @@ from .context import EvaluationContext, merge_contexts, validate_context
 from .decision import Decision, Reason
 from .errors import (
     AlreadyClosedError,
-    ErrorKind,
     FireweaveError,
     FlagNotFoundError,
     InternalError,
     NotReadyError,
     TypeMismatchError,
+    UnsupportedCapabilityError,
     FLAG_METADATA_ERROR_KIND_KEY,
 )
 from .types import FlagMetadata, FlagType
@@ -166,6 +166,21 @@ class FireweaveRuntime:
         with self._lock:
             self._state = LifecycleState.READY
             self._init_error = None
+
+    def lifecycle_gate(self) -> Optional[FireweaveError]:
+        """Extension-call lifecycle gate (ruling 17, Go/Java model).
+
+        READY/STALE pass (``None``); after shutdown the gate is
+        ``AlreadyClosed``; any pre-ready state degrades with
+        ``UnsupportedCapability``. Callers convert the returned error into a
+        structured result — extension APIs never raise for lifecycle reasons.
+        """
+        state = self.state
+        if state in (LifecycleState.READY, LifecycleState.STALE):
+            return None
+        if state is LifecycleState.SHUTDOWN:
+            return AlreadyClosedError()
+        return UnsupportedCapabilityError()
 
     def mark_stale(self) -> None:
         with self._lock:

@@ -14,17 +14,25 @@ Facade rules:
 
 from __future__ import annotations
 
+import importlib.util
 import json
+import re
 import threading
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from ._version import OPENFEATURE_SPEC_FLOOR, SPEC_VERSION, __version__
 from .capabilities import CapabilityRegistry
 from .context import EvaluationContext
 from .decision import Decision
-from .errors import ErrorKind, UnsupportedCapabilityError, redact_secrets
+from .errors import (
+    ErrorKind,
+    FireweaveError,
+    UnsupportedCapabilityError,
+    redact_secrets,
+)
 from .runtime import EvaluationOptions, FireweaveRuntime
-from .types import FlagType, JsonValue
+from .types import INT_SAFE_MAX_ABS, SHUTDOWN_TIMEOUT_MS_DEFAULT, FlagType, JsonValue
 
 __all__ = [
     "FireweaveClient",
@@ -58,6 +66,14 @@ _SIGNAL_ATTRIBUTE_ALLOWLIST = frozenset(
 
 _SIGNAL_KINDS = frozenset({"health", "error", "metric", "outcome"})
 
+# Release-context validation (ruling 15: exactly the required fields of
+# spec/release-context.schema.json — rolloutId AND stampIds; typed-ULID
+# patterns for stampIds/changeId; no additional requirements).
+_CHANGE_ID_RE = re.compile(r"^chg_[0-9A-HJKMNP-TV-Z]{26}$")
+_STAMP_ID_RE = re.compile(r"^stmp_[0-9A-HJKMNP-TV-Z]{26}$")
+_ROLLOUT_ID_MAX_LEN = 128
+_STAMP_IDS_MAX = 64
+
 
 @dataclass(frozen=True)
 class ReleaseContext:
@@ -82,7 +98,9 @@ class ReleaseResult:
     status: Optional[str] = None
     reason: Optional[str] = None
     release_context: Optional[ReleaseContext] = None
+    degraded: bool = False
     error_kind: Optional[ErrorKind] = None
+    error_code: Optional[str] = None
     error_message: Optional[str] = None
 
 
@@ -91,7 +109,10 @@ class ExposureResult:
     ok: bool
     queued: int
     deduped: bool = False
+    degraded: bool = False
     error_kind: Optional[ErrorKind] = None
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -99,7 +120,10 @@ class FlushResult:
     ok: bool
     flushed: int
     queued: int
+    degraded: bool = False
     error_kind: Optional[ErrorKind] = None
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -107,7 +131,9 @@ class SignalResult:
     ok: bool
     accepted: bool
     recorded: Dict[str, Any] = field(default_factory=dict)
+    degraded: bool = False
     error_kind: Optional[ErrorKind] = None
+    error_code: Optional[str] = None
     error_message: Optional[str] = None
 
 
@@ -121,6 +147,42 @@ class CapabilityResult:
     error_message: Optional[str] = None
 
 
+def _gated_release(err: FireweaveError) -> ReleaseResult:
+    return ReleaseResult(
+        ok=False,
+        degraded=True,
+        error_kind=err.kind,
+        error_code=err.openfeature_error_code,
+        error_message=err.message,
+    )
+
+
+def _validate_release_context(
+    rollout_id: Any, change_id: Any, stamp_ids: Sequence[Any]
+) -> Optional[str]:
+    """Ruling 15: enforce exactly spec/release-context.schema.json.
+
+    Returns a safe validation message, or ``None`` when valid.
+    """
+    if not isinstance(rollout_id, str) or not rollout_id:
+        return "release context requires a rolloutId"
+    if len(rollout_id) > _ROLLOUT_ID_MAX_LEN:
+        return "invalid release context"
+    stamp_list = list(stamp_ids)
+    if not stamp_list:
+        return "release context requires stampIds"
+    if len(stamp_list) > _STAMP_IDS_MAX or len(set(stamp_list)) != len(stamp_list):
+        return "invalid release context"
+    for stamp in stamp_list:
+        if not isinstance(stamp, str) or not _STAMP_ID_RE.match(stamp):
+            return "invalid release context"
+    if change_id is not None and (
+        not isinstance(change_id, str) or not _CHANGE_ID_RE.match(change_id)
+    ):
+        return "invalid release context"
+    return None
+
+
 class _ReleasesNamespace:
     def __init__(self, client: "FireweaveClient") -> None:
         self._client = client
@@ -129,15 +191,37 @@ class _ReleasesNamespace:
         self._status: Dict[str, str] = {}
         self._fail_reason: Dict[str, str] = {}
 
+    def _deliver(self, status: str, ctx_dict: Dict[str, Any]) -> None:
+        """Best-effort delivery to the adapter sink (ruling 17)."""
+        sink = getattr(self._client.runtime.adapter, "deliver_release", None)
+        if callable(sink):
+            try:
+                sink(dict(ctx_dict, status=status))
+            except Exception:
+                # Telemetry loss must never affect callers.
+                pass
+
     def set_context(
         self,
         rollout_id: str,
         change_id: Optional[str] = None,
         stamp_ids: Sequence[str] = (),
     ) -> ReleaseResult:
+        gate = self._client.runtime.lifecycle_gate()
+        if gate is not None:
+            return _gated_release(gate)
+        problem = _validate_release_context(rollout_id, change_id, stamp_ids)
+        if problem is not None:
+            return ReleaseResult(
+                ok=False,
+                error_kind=ErrorKind.CONFIGURATION,
+                error_code="GENERAL",
+                error_message=problem,
+            )
         ctx = ReleaseContext(rollout_id, change_id, tuple(stamp_ids))
         with self._lock:
             self._context = ctx
+        self._deliver("context_set", ctx.to_dict())
         return ReleaseResult(ok=True, release_context=ctx)
 
     def _resolve_rollout(self, rollout_id: Optional[str]) -> Optional[str]:
@@ -149,11 +233,15 @@ class _ReleasesNamespace:
     def _transition(
         self, rollout_id: Optional[str], status: str, reason: Optional[str] = None
     ) -> ReleaseResult:
+        gate = self._client.runtime.lifecycle_gate()
+        if gate is not None:
+            return _gated_release(gate)
         resolved = self._resolve_rollout(rollout_id)
         if resolved is None:
             return ReleaseResult(
                 ok=False,
                 error_kind=ErrorKind.CONFIGURATION,
+                error_code="GENERAL",
                 error_message="no release context bound",
             )
         safe_reason = redact_secrets(reason)
@@ -161,6 +249,14 @@ class _ReleasesNamespace:
             self._status[resolved] = status
             if safe_reason is not None:
                 self._fail_reason[resolved] = safe_reason
+            bound = self._context
+        event: Dict[str, Any] = (
+            bound.to_dict() if bound is not None and bound.rollout_id == resolved
+            else {"rolloutId": resolved}
+        )
+        if safe_reason is not None:
+            event["reason"] = safe_reason
+        self._deliver(status, event)
         return ReleaseResult(ok=True, status=status, reason=safe_reason)
 
     def start(self, rollout_id: Optional[str] = None) -> ReleaseResult:
@@ -218,6 +314,16 @@ class _ExposuresNamespace:
         value: JsonValue = None,
         rollout_id: Optional[str] = None,
     ) -> ExposureResult:
+        gate = self._client.runtime.lifecycle_gate()
+        if gate is not None:
+            return ExposureResult(
+                ok=False,
+                queued=self.queued,
+                degraded=True,
+                error_kind=gate.kind,
+                error_code=gate.openfeature_error_code,
+                error_message=gate.message,
+            )
         key = self._dedup_key(targeting_key, flag_key, variant, value)
         event: Dict[str, Any] = {
             "targetingKey": targeting_key,
@@ -235,6 +341,17 @@ class _ExposuresNamespace:
             return ExposureResult(ok=True, queued=len(self._queue), deduped=False)
 
     def flush(self) -> FlushResult:
+        gate = self._client.runtime.lifecycle_gate()
+        if gate is not None:
+            return FlushResult(
+                ok=False,
+                flushed=0,
+                queued=self.queued,
+                degraded=True,
+                error_kind=gate.kind,
+                error_code=gate.openfeature_error_code,
+                error_message=gate.message,
+            )
         with self._lock:
             drained = list(self._queue)
             self._queue.clear()
@@ -276,11 +393,23 @@ class _SignalsNamespace:
         self._recorded: List[Dict[str, Any]] = []
 
     def _record(self, kind: str, name: str, **attributes: Any) -> SignalResult:
+        gate = self._client.runtime.lifecycle_gate()
+        if gate is not None:
+            return SignalResult(
+                ok=False,
+                accepted=False,
+                degraded=True,
+                error_kind=gate.kind,
+                error_code=gate.openfeature_error_code,
+                error_message=gate.message,
+            )
         if kind not in _SIGNAL_KINDS:
             return SignalResult(
                 ok=False,
                 accepted=False,
+                degraded=True,
                 error_kind=ErrorKind.UNSUPPORTED_CAPABILITY,
+                error_code="GENERAL",
                 error_message="unsupported signal kind",
             )
         signal: Dict[str, Any] = {"kind": kind, "name": name}
@@ -294,6 +423,14 @@ class _SignalsNamespace:
             signal[key] = value
         with self._lock:
             self._recorded.append(signal)
+        # Ruling 17: deliver to the adapter sink, best-effort.
+        sink = getattr(self._client.runtime.adapter, "deliver_signal", None)
+        if callable(sink):
+            try:
+                sink(dict(signal))
+            except Exception:
+                # Telemetry loss must never affect callers.
+                pass
         return SignalResult(ok=True, accepted=True, recorded=dict(signal))
 
     def record_health(
@@ -373,12 +510,73 @@ class _GuardrailsNamespace:
         return self._degraded()
 
 
+# runtime.backend enum per spec/capabilities.schema.json.
+_KNOWN_BACKENDS = frozenset({"posthog", "inmemory", "none", "other"})
+
+
 class _CapabilitiesNamespace:
-    def __init__(self, registry: CapabilityRegistry) -> None:
+    def __init__(self, client: "FireweaveClient", registry: CapabilityRegistry) -> None:
+        self._client = client
         self._registry = registry
 
-    def get(self) -> List[str]:
+    def names(self) -> List[str]:
+        """Negotiated capability names in canonical order."""
         return self._registry.get()
+
+    def get(self) -> Dict[str, Any]:
+        """Structured static/runtime capability matrix (ruling 18).
+
+        Shape: ``spec/capabilities.schema.json`` — never a flat name list;
+        use :meth:`names` for the negotiated capability-name list.
+        """
+        runtime = self._client.runtime
+        adapter = runtime.adapter
+        registry = self._registry
+
+        backend = getattr(adapter, "backend_name", "other")
+        if backend not in _KNOWN_BACKENDS:
+            backend = "other"
+
+        runtime_features: Dict[str, bool] = {}
+        features_fn = getattr(adapter, "runtime_features", None)
+        if callable(features_fn):
+            try:
+                runtime_features = {
+                    k: bool(v) for k, v in dict(features_fn()).items()
+                }
+            except Exception:
+                runtime_features = {}
+
+        return {
+            "static": {
+                "language": "python",
+                "sdkVersion": __version__,
+                "specVersion": SPEC_VERSION,
+                "openFeature": {
+                    "specFloor": OPENFEATURE_SPEC_FLOOR,
+                    "providerName": "fireweave",
+                    "serverOnly": True,
+                },
+                "features": {
+                    "flags": True,
+                    "releases": registry.supports("releases.setContext"),
+                    "exposures": registry.supports("exposures.record"),
+                    "signals": registry.supports("signals.recordHealth"),
+                    "guardrails": False,
+                    "inMemoryAdapter": True,
+                    "posthogAdapter": importlib.util.find_spec("posthog") is not None,
+                },
+            },
+            "runtime": {
+                "backend": backend,
+                "lifecycle": runtime.state.name,
+                "features": runtime_features,
+                "limits": {
+                    "intSafeMaxAbs": INT_SAFE_MAX_ABS,
+                    "shutdownTimeoutMsDefault": SHUTDOWN_TIMEOUT_MS_DEFAULT,
+                },
+            },
+        }
 
     def invoke(self, capability: str, **args: Any) -> CapabilityResult:
         """Dynamic capability invocation; degrades instead of throwing."""
@@ -487,7 +685,7 @@ class FireweaveClient:
         self.exposures = _ExposuresNamespace(self)
         self.signals = _SignalsNamespace(self)
         self.guardrails = _GuardrailsNamespace()
-        self.capabilities = _CapabilitiesNamespace(registry)
+        self.capabilities = _CapabilitiesNamespace(self, registry)
         self._register_capabilities(registry)
         self._shutdown_lock = threading.Lock()
         self._closed = False

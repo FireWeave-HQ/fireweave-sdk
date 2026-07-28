@@ -6,8 +6,8 @@ Implements ``spec/evaluation-context.schema.json`` v0.1.0:
   64 KiB serialized size.
 - Reserved keys: ``targetingKey`` / ``kind`` (configurable) may not appear in
   attributes; ``fireweave.*`` keys are reserved for the SDK except the
-  sanctioned carriers (``fireweave.groups``, ``fireweave.groupProperties``,
-  ``fireweave.evaluationContexts``).
+  sanctioned carriers (``fireweave.groups``, ``fireweave.groupProperties``
+  — rulings 12–13: these are the ONLY permitted ``fireweave.*`` keys).
 - Merge order: global -> client -> invocation (later layers win per key).
 - Immutability: contexts are frozen; attribute maps are deep-copied on
   construction and exposed via read-only views.
@@ -25,9 +25,10 @@ from .types import JsonValue
 
 __all__ = ["ContextLimits", "EvaluationContext", "merge_contexts", "validate_context"]
 
-# Sanctioned fireweave.* carriers (spec/evaluation-context.schema.json).
+# Sanctioned fireweave.* carriers (spec/evaluation-context.schema.json,
+# orchestrator rulings 12–13): exactly these two — nothing else.
 _ALLOWED_FIREWEAVE_KEYS = frozenset(
-    {"fireweave.groups", "fireweave.groupProperties", "fireweave.evaluationContexts"}
+    {"fireweave.groups", "fireweave.groupProperties"}
 )
 _DEFAULT_RESERVED_KEYS = ("targetingKey", "kind")
 

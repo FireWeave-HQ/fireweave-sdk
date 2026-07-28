@@ -162,8 +162,13 @@ class AsyncFireweaveClient:
             lambda: self._sync.signals.record_outcome(*args, **kwargs)
         )
 
-    async def capabilities_get(self) -> list:
+    async def capabilities_get(self) -> dict:
+        """Structured capability matrix (ruling 18; see ``capabilities.get``)."""
         return await asyncio.to_thread(self._sync.capabilities.get)
+
+    async def capabilities_names(self) -> list:
+        """Negotiated capability-name list."""
+        return await asyncio.to_thread(self._sync.capabilities.names)
 
     async def capabilities_invoke(self, capability: str, **args: Any) -> CapabilityResult:
         return await asyncio.to_thread(

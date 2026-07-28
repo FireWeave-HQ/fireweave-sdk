@@ -92,6 +92,14 @@ class TestReservedKeys:
             )
         )
 
+    def test_evaluation_contexts_key_rejected(self):
+        """Ruling 13: fireweave.evaluationContexts is NOT a sanctioned key —
+        only fireweave.groups + fireweave.groupProperties are permitted."""
+        with pytest.raises(InvalidContextError):
+            _validate(
+                EvaluationContext("u", {"fireweave.evaluationContexts": ["prod"]})
+            )
+
     def test_require_targeting_key(self):
         with pytest.raises(TargetingKeyMissingError) as exc_info:
             _validate(EvaluationContext(None, {"plan": "pro"}), require_targeting_key=True)

@@ -127,18 +127,22 @@ def test_async_client_wrappers():
         details = await client.get_details(
             "f", FlagType.BOOLEAN, False, EvaluationContext("u")
         )
-        release = await client.releases_set_context("rollout_01H")
+        release = await client.releases_set_context(
+            "rollout_01H", stamp_ids=["stmp_01HZXRE0000000000000000001"]
+        )
         signal = await client.signals_record_health("provider", "ok")
         caps = await client.capabilities_get()
+        names = await client.capabilities_names()
         await client.shutdown()
         after = await client.get_details("f", FlagType.BOOLEAN, False)
-        return value, details, release, signal, caps, after
+        return value, details, release, signal, caps, names, after
 
-    value, details, release, signal, caps, after = asyncio.run(go())
+    value, details, release, signal, caps, names, after = asyncio.run(go())
     assert value is True
     assert details.reason == "TARGETING_MATCH"
     assert release.ok and signal.accepted
-    assert "capabilities.get" in caps
+    assert caps["static"]["language"] == "python"  # ruling 18: matrix shape
+    assert "capabilities.get" in names
     assert after.error_kind is ErrorKind.ALREADY_CLOSED
 
 

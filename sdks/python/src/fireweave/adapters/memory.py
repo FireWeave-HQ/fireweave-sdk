@@ -37,6 +37,8 @@ __all__ = ["InMemoryAdapter"]
 class InMemoryAdapter:
     """Fixture-driven adapter; thread-safe; supports live flag replacement."""
 
+    backend_name = "inmemory"
+
     def __init__(self, flags: Optional[Mapping[str, Dict[str, Any]]] = None) -> None:
         self._lock = threading.Lock()
         self._flags: Dict[str, Dict[str, Any]] = dict(flags or {})
@@ -102,3 +104,12 @@ class InMemoryAdapter:
     def shutdown(self, timeout_ms: int) -> None:
         with self._lock:
             self._closed = True
+
+    def runtime_features(self) -> Dict[str, bool]:
+        """Adapter runtime features merged into ``capabilities.get()``."""
+        return {
+            "remoteEvaluation": False,
+            "localEvaluation": True,
+            "exposureEmission": False,
+            "sideEffectFreeReads": True,
+        }

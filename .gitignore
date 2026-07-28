@@ -3,6 +3,7 @@ node_modules/
 venv/
 __pycache__/
 *.pyc
+*.egg-info/
 dist/
 build/
 .gradle/
@@ -10,3 +11,6 @@ target/
 *.class
 .DS_Store
 results.*.json
+
+# Compiled Go example binary (`go build` output in examples/go/)
+examples/go/go

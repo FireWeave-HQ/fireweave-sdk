@@ -3,7 +3,8 @@
 # orchestrator for Agent G; CI fails only on NEW findings not listed here.
 # Format: normalized ruff concise output with line:col stripped
 # (see tools/lint/check-python.sh). Remove entries as Agent G fixes them.
-sdks/python/conformance/runner.py: F841 Local variable `limits` is assigned to but never used
-sdks/python/src/fireweave/runtime.py: F401 [*] `.errors.ErrorKind` imported but unused
-sdks/python/tests/test_posthog_adapter.py: F401 [*] `fireweave.adapters.posthog.SnapshotData` imported but unused
-sdks/python/tests/test_posthog_adapter.py: F401 [*] `fireweave.adapters.posthog.VendorFlagRecord` imported but unused
+#
+# Phase 5: all four baselined findings fixed by Agent G (unused ErrorKind
+# import in runtime.py; unused SnapshotData/VendorFlagRecord imports in
+# test_posthog_adapter.py; unused `limits` local in conformance/runner.py,
+# now wired into FireweaveConfig). The baseline is empty — any finding fails CI.

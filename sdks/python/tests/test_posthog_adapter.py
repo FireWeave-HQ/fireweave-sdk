@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -18,8 +20,6 @@ from fireweave import (
 )
 from fireweave.adapters.posthog import (
     PostHogAdapter,
-    SnapshotData,
-    VendorFlagRecord,
     map_transport_error,
 )
 from fireweave.errors import (
@@ -212,6 +212,133 @@ def test_injected_client_not_shut_down():
     adapter = make_adapter(fake)
     adapter.shutdown(1000)
     assert not fake.shut_down and not fake.flushed
+
+
+def _owned_adapter_with(client: Any) -> PostHogAdapter:
+    """Adapter that OWNS a (fake) vendor client, bypassing the real builder."""
+    adapter = PostHogAdapter(
+        config=FireweaveConfig(
+            project_api_key="phc_TESTKEY0000000000000000000001",
+            host="https://us.i.posthog.com",
+        )
+    )
+    adapter._build_client = lambda: client  # type: ignore[method-assign]
+    adapter.initialize()
+    return adapter
+
+
+def test_shutdown_enforces_configured_timeout():
+    """M-1: a wedged vendor flush must not hang shutdown past timeout_ms."""
+
+    class HangingClient:
+        def __init__(self):
+            self.flush_started = threading.Event()
+
+        def flush(self):
+            self.flush_started.set()
+            time.sleep(30)
+
+        def shutdown(self):  # pragma: no cover - never reached (flush hangs)
+            pass
+
+    hanging = HangingClient()
+    adapter = _owned_adapter_with(hanging)
+    start = time.monotonic()
+    adapter.shutdown(200)
+    elapsed = time.monotonic() - start
+    assert hanging.flush_started.is_set()
+    assert elapsed < 5.0  # bounded by the 200 ms budget, not the 30 s hang
+
+
+def test_shutdown_completes_promptly_within_budget():
+    fake = FakePostHogClient({})
+    adapter = _owned_adapter_with(fake)
+    adapter.shutdown(10_000)
+    assert fake.flushed and fake.shut_down
+
+
+# --- vendor bounds (M-5) --------------------------------------------------------
+
+
+def test_build_client_pins_vendor_retry_and_queue_caps(monkeypatch):
+    import posthog
+
+    captured: Dict[str, Any] = {}
+
+    class FakeVendor:
+        def __init__(self, project_api_key, **kwargs):
+            captured["project_api_key"] = project_api_key
+            captured.update(kwargs)
+
+    monkeypatch.setattr(posthog, "Posthog", FakeVendor)
+    adapter = PostHogAdapter(
+        config=FireweaveConfig(
+            project_api_key="phc_TESTKEY0000000000000000000001",
+            host="https://us.i.posthog.com",
+        )
+    )
+    adapter._build_client()
+    assert captured["feature_flags_request_max_retries"] == 0  # match Node/Go
+    assert captured["max_retries"] == 0
+    assert captured["max_queue_size"] == 10_000
+
+
+def test_vendor_client_signature_accepts_pinned_caps():
+    """Guard against vendor-pin drift: posthog==7.31.0 must accept our caps."""
+    import inspect
+
+    from posthog import Posthog
+
+    params = inspect.signature(Posthog.__init__).parameters
+    for kwarg in (
+        "feature_flags_request_max_retries",
+        "max_retries",
+        "max_queue_size",
+        "feature_flags_request_timeout_seconds",
+        "enable_local_evaluation",
+        "sync_mode",
+    ):
+        assert kwarg in params, f"posthog pin no longer accepts {kwarg}"
+
+
+def test_runtime_features_mirror_vendor_bounds():
+    adapter = make_adapter(FakePostHogClient({}))
+    features = adapter.runtime_features()
+    assert features["vendorRetriesDisabled"] is True
+    assert features["boundedTelemetryQueue"] is True
+    assert features["exposureEmission"] is True
+
+
+# --- telemetry sink (ruling 17) ---------------------------------------------------
+
+
+def test_deliver_signal_uses_capture():
+    fake = FakePostHogClient({})
+    adapter = make_adapter(fake)
+    adapter.deliver_signal(
+        {"kind": "health", "name": "provider", "status": "ok",
+         "rolloutId": "rollout_01H"}
+    )
+    assert fake.captured[0]["event"] == "$fw_signal_health"
+    assert fake.captured[0]["distinct_id"] == "rollout_01H"
+    assert fake.captured[0]["properties"]["status"] == "ok"
+
+
+def test_deliver_release_uses_capture():
+    fake = FakePostHogClient({})
+    adapter = make_adapter(fake)
+    adapter.deliver_release({"rolloutId": "rollout_01H", "status": "in_progress"})
+    assert fake.captured[0]["event"] == "$fw_release_in_progress"
+
+
+def test_sink_swallows_vendor_capture_errors():
+    class ExplodingCapture(FakePostHogClient):
+        def capture(self, **kwargs):
+            raise RuntimeError("vendor boom")
+
+    adapter = make_adapter(ExplodingCapture({}))
+    adapter.deliver_signal({"kind": "health", "name": "n"})  # must not raise
+    adapter.deliver_release({"rolloutId": "r", "status": "failed"})  # must not raise
 
 
 def test_adapter_requires_some_configuration():

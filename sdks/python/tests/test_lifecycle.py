@@ -76,6 +76,71 @@ def test_ssrf_allowlist_rejects_unlisted_host():
     assert rt.state is LifecycleState.FATAL
 
 
+class TestDefaultHostAllowlist:
+    """Security review H-1/L-3/L-6: allowlist ON by default, canonical list,
+    https required off-loopback, http permitted on loopback only."""
+
+    KEY = "phc_TESTKEY0000000000000000000002"
+
+    def _validate(self, host, **kwargs):
+        FireweaveConfig(project_api_key=self.KEY, host=host, **kwargs).validate(
+            backend_required=True
+        )
+
+    def test_default_allowlist_is_canonical(self):
+        from fireweave import DEFAULT_ALLOWED_HOSTS
+
+        assert DEFAULT_ALLOWED_HOSTS == (
+            "app.posthog.com", "us.posthog.com", "eu.posthog.com",
+            "us.i.posthog.com", "eu.i.posthog.com",
+            "localhost", "127.0.0.1", "::1",
+        )
+
+    @pytest.mark.parametrize("host", [
+        "https://app.posthog.com",
+        "https://us.posthog.com",
+        "https://eu.posthog.com",
+        "https://us.i.posthog.com",
+        "https://eu.i.posthog.com",
+        "https://US.I.POSTHOG.COM",  # hostname match is case-insensitive
+        "http://localhost:3901",
+        "http://127.0.0.1:3901",
+        "https://127.0.0.1:3901",
+    ])
+    def test_default_allowed_hosts_accepted(self, host):
+        self._validate(host)
+
+    def test_unlisted_host_rejected_by_default(self):
+        """H-1: no explicit allowed_hosts config -> unknown hosts denied."""
+        with pytest.raises(ConfigurationError):
+            self._validate("https://169.254.169.254")
+        with pytest.raises(ConfigurationError):
+            self._validate("https://evil.example.com")
+
+    def test_http_rejected_for_non_loopback_even_when_allowlisted(self):
+        with pytest.raises(ConfigurationError):
+            self._validate("http://us.i.posthog.com")
+        with pytest.raises(ConfigurationError):
+            self._validate(
+                "http://selfhosted.example.com",
+                allowed_hosts=("selfhosted.example.com",),
+            )
+
+    def test_self_hosted_requires_explicit_opt_in(self):
+        with pytest.raises(ConfigurationError):
+            self._validate("https://posthog.internal.example.com")
+        self._validate(
+            "https://posthog.internal.example.com",
+            allowed_hosts=("posthog.internal.example.com",),
+        )
+
+    def test_wildcard_opt_out_disables_host_pinning(self):
+        self._validate("https://anything.example.com", allowed_hosts=("*",))
+        # https is still required off-loopback even with the wildcard.
+        with pytest.raises(ConfigurationError):
+            self._validate("http://anything.example.com", allowed_hosts=("*",))
+
+
 def test_shutdown_from_ready():
     rt = make_runtime()
     rt.initialize()

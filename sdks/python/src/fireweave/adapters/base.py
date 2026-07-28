@@ -56,4 +56,24 @@ class BackendAdapter(Protocol):
         """Resolve one flag against a validated, merged context."""
 
     def shutdown(self, timeout_ms: int) -> None:
-        """Deterministically flush and release resources. Idempotent."""
+        """Deterministically flush and release resources within ``timeout_ms``.
+
+        Idempotent; must never block past the deadline.
+        """
+
+
+# Optional adapter surface (duck-typed, ruling 17 / capabilities matrix):
+#
+# - ``backend_name: str`` — "posthog" | "inmemory" | "none" | "other"
+#   (spec/capabilities.schema.json runtime.backend).
+# - ``runtime_features() -> Dict[str, bool]`` — adapter-dependent runtime
+#   capability booleans merged into ``capabilities.get()``.
+# - ``send_exposures(events: list) -> None`` — telemetry sink for flushed
+#   exposure events.
+# - ``deliver_signal(signal: Dict) -> None`` — telemetry sink for recorded
+#   signals.
+# - ``deliver_release(event: Dict) -> None`` — telemetry sink for release
+#   transitions.
+#
+# All sink methods are best-effort: implementations swallow vendor errors —
+# telemetry loss must never affect callers.

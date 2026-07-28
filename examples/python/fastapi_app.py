@@ -69,9 +69,12 @@ def build_client(adapter: Optional[BackendAdapter] = None) -> FireweaveClient:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     client = build_client()
+    # changeId/stampIds are typed 26-char ULIDs; rolloutId + stampIds are
+    # required (spec/release-context.schema.json, ruling 15).
     client.releases.set_context(
-        rollout_id="rollout_01HZX3", change_id="chg_01HZX3",
-        stamp_ids=["stmp_01HZX3"],
+        rollout_id="rollout_01HZX3",
+        change_id="chg_01HZXEX0000000000000000001",
+        stamp_ids=["stmp_01HZXEX0000000000000000001"],
     )
     client.signals.record_health("checkout-service", "ok",
                                  rollout_id="rollout_01HZX3")

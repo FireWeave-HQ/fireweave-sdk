@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI entry point: run the 63 contracts fixtures, emit normalized results JSON.
+"""CLI entry point: run the 65 contracts fixtures, emit normalized results JSON.
 
 Usage::
 
