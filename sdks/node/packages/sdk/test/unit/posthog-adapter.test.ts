@@ -201,15 +201,37 @@ test('resolve after shutdown -> AlreadyClosed', async () => {
   await rejectsWithKind(adapter.resolve('fw-x', CTX), 'AlreadyClosed');
 });
 
+function localSnapshot(flagKey = 'fw-x', overrides: Record<string, unknown> = {}) {
+  let getFlagCalls = 0;
+  const record = {
+    key: flagKey,
+    enabled: true,
+    id: 7,
+    version: 3,
+    reason: 'condition_match',
+    locallyEvaluated: true,
+    ...overrides,
+  };
+  return {
+    getFlagCalls: () => getFlagCalls,
+    snapshot: {
+      isEnabled: () => true,
+      getFlag: () => {
+        getFlagCalls += 1;
+        return true as const;
+      },
+      getFlagPayload: () => undefined,
+      keys: [flagKey],
+      _flags: { [flagKey]: record },
+    },
+  };
+}
+
 test('injected client lifecycle stays with the caller (no shutdown call)', async () => {
   let shutdownCalled = false;
+  const { snapshot } = localSnapshot();
   const fakeClient = {
-    evaluateFlags: async () => ({
-      isEnabled: () => true,
-      getFlag: () => true as const,
-      getFlagPayload: () => undefined,
-      keys: ['fw-x'],
-    }),
+    evaluateFlags: async () => snapshot,
     capture: () => {},
     flush: async () => {},
     shutdown: async () => {
@@ -225,15 +247,58 @@ test('injected client lifecycle stays with the caller (no shutdown call)', async
   assert.equal(shutdownCalled, false, 'injected client must not be shut down by the adapter');
 });
 
+test('RB-1: hybrid local serve without /flags observation is a Decision, not Network', async () => {
+  const { snapshot, getFlagCalls } = localSnapshot();
+  const fakeClient = {
+    evaluateFlags: async () => snapshot,
+    capture: () => {},
+    flush: async () => {},
+    shutdown: async () => {},
+    isLocalEvaluationReady: () => true,
+  };
+  // Hybrid: secret key present, onlyEvaluateLocally NOT set — no HTTP observation.
+  const adapter = new PostHogAdapter({ client: fakeClient, secretApiKey: 'phs_unit_test' });
+  await adapter.initialize();
+  const res = await adapter.resolve('fw-x', CTX);
+  assert.equal(res.found, true);
+  assert.equal(res.value, true);
+  assert.equal(res.version, 3);
+  assert.equal(getFlagCalls(), 0, 'must not call emitting getFlag on local/hybrid path');
+});
+
+test('RB-2: local snapshot path does not emit vendor $feature_flag_called', async () => {
+  const captured: Array<{ distinctId: string; event: string; properties?: Record<string, unknown> }> = [];
+  const { snapshot, getFlagCalls } = localSnapshot();
+  const fakeClient = {
+    evaluateFlags: async () => snapshot,
+    capture: (props: { distinctId: string; event: string; properties?: Record<string, unknown> }) => {
+      captured.push(props);
+    },
+    flush: async () => {},
+    shutdown: async () => {},
+    isLocalEvaluationReady: () => true,
+  };
+  const adapter = new PostHogAdapter({
+    client: fakeClient,
+    onlyEvaluateLocally: true,
+    secretApiKey: 'phs_unit_test',
+  });
+  await adapter.initialize();
+  const res = await adapter.resolve('fw-x', CTX);
+  assert.equal(res.found, true);
+  assert.equal(getFlagCalls(), 0);
+  assert.equal(
+    captured.filter((c) => c.event === '$feature_flag_called').length,
+    0,
+    'local-path evaluation must not emit vendor $feature_flag_called',
+  );
+});
+
 test('exposure capture emits $feature_flag_called via the client', async () => {
   const captured: Array<{ distinctId: string; event: string; properties?: Record<string, unknown> }> = [];
+  const { snapshot } = localSnapshot();
   const fakeClient = {
-    evaluateFlags: async () => ({
-      isEnabled: () => true,
-      getFlag: () => true as const,
-      getFlagPayload: () => undefined,
-      keys: [],
-    }),
+    evaluateFlags: async () => snapshot,
     capture: (props: { distinctId: string; event: string; properties?: Record<string, unknown> }) => {
       captured.push(props);
     },
@@ -254,6 +319,7 @@ test('exposure capture emits $feature_flag_called via the client', async () => {
   assert.equal(captured[0]?.distinctId, 'u1');
   assert.equal(captured[0]?.properties?.['$feature_flag'], 'fw-x');
   assert.equal(captured[0]?.properties?.['$feature_flag_response'], 'on');
+  assert.equal(captured[0]?.properties?.['fireweave.exposure'], true);
   assert.equal(captured[0]?.properties?.['fireweave.rolloutId'], 'rollout_01HZX0000000000000000001');
 });
 
@@ -275,13 +341,9 @@ test('adapter enforces the default host allowlist at initialize (H-1)', async ()
 
 test('shutdown passes the configured deadline to the vendor client (no hardcoded 2s)', async () => {
   const timeouts: Array<number | undefined> = [];
+  const { snapshot } = localSnapshot();
   const fakeClient = {
-    evaluateFlags: async () => ({
-      isEnabled: () => true,
-      getFlag: () => true as const,
-      getFlagPayload: () => undefined,
-      keys: [],
-    }),
+    evaluateFlags: async () => snapshot,
     capture: () => {},
     flush: async () => {},
     shutdown: async (ms?: number) => {

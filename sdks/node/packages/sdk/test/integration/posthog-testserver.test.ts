@@ -218,6 +218,47 @@ test('exposures flow to /batch and are visible via the admin endpoint', async ()
   assert.equal(exposureEvents[0]?.properties?.['$feature_flag'], 'fw-bool-on');
 });
 
+const SECRET_KEY = 'phs_test_integration';
+
+test('RB-1/RB-2: hybrid local eval succeeds without /flags and emits no vendor $feature_flag_called', async () => {
+  const adapter = new PostHogAdapter({
+    projectApiKey: PROJECT_KEY,
+    secretApiKey: SECRET_KEY,
+    host: server.url,
+    featureFlagsRequestTimeoutMs: 2000,
+    waitForLocalDefinitions: true,
+    // Hybrid (default): local first, remote fallback — do NOT set onlyEvaluateLocally.
+  });
+  await adapter.initialize();
+  try {
+    const beforeFlags = server.state.requestLog.filter((r) => r.path === '/flags').length;
+    const res = await adapter.resolve('fw-bool-on', CTX);
+    assert.equal(res.found, true, 'local/hybrid serve must return a found Decision, not Network');
+    assert.equal(res.value, true);
+    const afterFlags = server.state.requestLog.filter((r) => r.path === '/flags').length;
+    assert.equal(
+      afterFlags,
+      beforeFlags,
+      'successful local definitions serve must not require a /flags round-trip',
+    );
+    await adapter.flush();
+  } finally {
+    await adapter.shutdown();
+  }
+  const eventsRes = await fetch(`${server.url}/_test/events`);
+  const body = (await eventsRes.json()) as {
+    events: Array<{ event: string; properties?: Record<string, unknown> }>;
+  };
+  const vendorAuto = body.events.filter(
+    (e) => e.event === '$feature_flag_called' && e.properties?.['fireweave.exposure'] !== true,
+  );
+  assert.equal(
+    vendorAuto.length,
+    0,
+    'local-path evaluation must not emit ungated vendor $feature_flag_called',
+  );
+});
+
 test('wrong project key -> Authentication', async () => {
   const adapter = new PostHogAdapter({
     projectApiKey: 'phc_wrong_key',

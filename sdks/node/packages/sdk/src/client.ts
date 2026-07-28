@@ -83,6 +83,43 @@ const failure = (err: FireweaveError, degraded = false): ExtensionResult => ({
   ...(degraded ? { degraded: true } : {}),
 });
 
+/** Crockford ULID alphabet (excludes I, L, O, U). */
+const STAMP_ID_RE = /^stmp_[0-9A-HJKMNP-TV-Z]{26}$/;
+const CHANGE_ID_RE = /^chg_[0-9A-HJKMNP-TV-Z]{26}$/;
+const ROLLOUT_ID_MAX_LEN = 128;
+const STAMP_IDS_MAX = 64;
+
+/**
+ * Ruling 15 / H-2: enforce exactly spec/release-context.schema.json.
+ * Messages are fixed strings — never echo caller values.
+ */
+function validateReleaseContext(context: ReleaseContext): string | undefined {
+  if (typeof context.rolloutId !== 'string' || context.rolloutId.length === 0) {
+    return 'release context requires rolloutId';
+  }
+  if (context.rolloutId.length > ROLLOUT_ID_MAX_LEN) {
+    return 'invalid release context';
+  }
+  if (!Array.isArray(context.stampIds) || context.stampIds.length === 0) {
+    return 'release context requires stampIds';
+  }
+  if (context.stampIds.length > STAMP_IDS_MAX) {
+    return 'invalid release context';
+  }
+  const seen = new Set<string>();
+  for (const stamp of context.stampIds) {
+    if (typeof stamp !== 'string' || !STAMP_ID_RE.test(stamp)) {
+      return 'invalid release context';
+    }
+    if (seen.has(stamp)) return 'invalid release context';
+    seen.add(stamp);
+  }
+  if (context.changeId !== undefined && (typeof context.changeId !== 'string' || !CHANGE_ID_RE.test(context.changeId))) {
+    return 'invalid release context';
+  }
+  return undefined;
+}
+
 /**
  * Lifecycle gate for extension calls (ruling 17, Go/Java model; fixture
  * ext-lifecycle-gating): READY/STALE proceed; post-shutdown degrades
@@ -114,12 +151,10 @@ class ReleasesApi {
   setContext(context: ReleaseContext): ReleaseResult {
     const gateError = lifecycleGate(this.runtime);
     if (gateError !== undefined) return failure(gateError, true);
-    // Ruling 15: exactly the spec's required set — rolloutId + stampIds.
-    if (typeof context.rolloutId !== 'string' || context.rolloutId.length === 0) {
-      return failure(new FireweaveError('InvalidContext', { message: 'release context requires rolloutId' }));
-    }
-    if (!Array.isArray(context.stampIds) || context.stampIds.length === 0) {
-      return failure(new FireweaveError('InvalidContext', { message: 'release context requires stampIds' }));
+    // Ruling 15: enforce exactly spec/release-context.schema.json (H-2).
+    const problem = validateReleaseContext(context);
+    if (problem !== undefined) {
+      return failure(new FireweaveError('InvalidContext', { message: problem }));
     }
     const copy: ReleaseContext = JSON.parse(JSON.stringify(context)) as ReleaseContext;
     this.state = { context: copy, status: 'set' };
@@ -240,6 +275,7 @@ class ExposuresApi {
     // Ratified dedup lifecycle (M-2, Python's model): the dedup window is one
     // flush cycle, so the seen-set cannot grow without bound.
     this.seen.clear();
+    this.runtime.clearEvaluateExposureDedup();
     for (const exposure of draining) {
       this.runtime.adapter.recordExposure?.(exposure);
     }

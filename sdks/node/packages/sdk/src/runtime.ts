@@ -53,6 +53,13 @@ export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10000;
 export interface EvaluateOptions {
   /** Attach flag payload as fireweave.payload metadata (sorted-key JSON string). */
   includePayload?: boolean;
+  /**
+   * When true (default), emit a Fireweave-owned exposure for a successful
+   * evaluation (H-4 / ADR-0001 §23). Opt out with `false` for pure reads.
+   * Vendor `$feature_flag_called` is never used for this path — see PostHog
+   * adapter side-effect-free snapshot reads (RB-2).
+   */
+  sendExposure?: boolean;
   signal?: AbortSignal;
 }
 
@@ -106,6 +113,8 @@ export class FireweaveRuntime {
   private clientContext: ContextInput | undefined;
   private initPromise: Promise<void> | undefined;
   private readonly stateListeners = new Set<(state: LifecycleState) => void>();
+  /** Dedup window for evaluate/OF-path exposures (cleared on flush / shutdown). */
+  private readonly evaluateExposureSeen = new Set<string>();
 
   constructor(adapter: BackendAdapter, config: FireweaveRuntimeConfig = {}) {
     this.adapter = adapter;
@@ -119,6 +128,11 @@ export class FireweaveRuntime {
       ],
       requireTargetingKey: config.requireTargetingKey ?? false,
     };
+  }
+
+  /** Clear evaluate-path exposure dedup (M-2 / clear-on-flush lifecycle). */
+  clearEvaluateExposureDedup(): void {
+    this.evaluateExposureSeen.clear();
   }
 
   getState(): LifecycleState {
@@ -207,6 +221,7 @@ export class FireweaveRuntime {
     try {
       await Promise.race([close, deadline]);
     } finally {
+      this.evaluateExposureSeen.clear();
       if (timer !== undefined) clearTimeout(timer);
       this.setState('SHUTDOWN');
     }
@@ -294,7 +309,37 @@ export class FireweaveRuntime {
 
     const decision: Decision = { flagKey, value, reason, metadata };
     if (resolution.variant !== undefined) decision.variant = resolution.variant;
+
+    // H-4: OF / detailed-eval default is side-effectful; opt out via sendExposure: false.
+    if (options.sendExposure !== false) {
+      this.emitEvaluateExposure({
+        targetingKey: context.targetingKey ?? '',
+        flagKey,
+        value,
+        ...(resolution.variant !== undefined ? { variant: resolution.variant } : {}),
+      });
+    }
+
     return decision;
+  }
+
+  private emitEvaluateExposure(exposure: {
+    targetingKey: string;
+    flagKey: string;
+    value: JsonValue;
+    variant?: string;
+  }): void {
+    if (exposure.targetingKey.length === 0) return;
+    if (this.adapter.recordExposure === undefined) return;
+    const key = `${exposure.targetingKey}\u0000${exposure.flagKey}\u0000${exposure.variant ?? ''}\u0000${stableStringify(exposure.value ?? null)}`;
+    if (this.evaluateExposureSeen.has(key)) return;
+    this.evaluateExposureSeen.add(key);
+    this.adapter.recordExposure({
+      targetingKey: exposure.targetingKey,
+      flagKey: exposure.flagKey,
+      value: exposure.value,
+      ...(exposure.variant !== undefined ? { variant: exposure.variant } : {}),
+    });
   }
 
   private lifecycleError(): FireweaveError | undefined {

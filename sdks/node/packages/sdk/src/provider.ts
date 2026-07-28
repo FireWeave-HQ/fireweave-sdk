@@ -56,6 +56,11 @@ export interface FireweaveProviderOptions {
   /** Attach flag payloads to flagMetadata as fireweave.payload. */
   includePayload?: boolean;
   /**
+   * When true (default), successful OF evaluations emit a Fireweave-owned
+   * exposure (H-4 / ADR-0001). Set false for side-effect-free OF reads.
+   */
+  sendExposure?: boolean;
+  /**
    * When true (default) initialize() resolves immediately and runtime readiness
    * is reflected in evaluation decisions (NotReady decisions carry fireweave
    * error metadata instead of the OF SDK short-circuiting evaluation).
@@ -105,12 +110,15 @@ export class FireweaveProvider implements Provider {
     defaultValue: T,
     context: EvaluationContext,
   ): Promise<ResolutionDetails<T>> {
+    const evalOpts: { includePayload?: boolean; sendExposure?: boolean } = {};
+    if (this.options.includePayload === true) evalOpts.includePayload = true;
+    if (this.options.sendExposure === false) evalOpts.sendExposure = false;
     const decision = await this.runtime.evaluate(
       flagKey,
       expectedType,
       defaultValue as unknown as JsonValue,
       toContextInput(context),
-      this.options.includePayload === true ? { includePayload: true } : {},
+      evalOpts,
     );
     return toResolutionDetails(decision, defaultValue);
   }

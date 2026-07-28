@@ -14,11 +14,14 @@ async function makeClient(telemetry?: { attributeAllowlist?: readonly string[] }
   return { client, adapter };
 }
 
+const VALID_STAMP = 'stmp_01HZXRE0000000000000000001';
+const VALID_ROLLOUT = 'rollout_01HZX0000000000000000001';
+
 test('releases: setContext -> start -> complete records outcome signal', async () => {
   const { client } = await makeClient();
   const set = client.releases.setContext({
-    stampIds: ['stamp_01HZX0000000000000000001'],
-    rolloutId: 'rollout_01HZX0000000000000000001',
+    stampIds: [VALID_STAMP],
+    rolloutId: VALID_ROLLOUT,
   });
   assert.equal(set.ok, true);
   assert.equal(client.releases.start().ok, true);
@@ -28,14 +31,14 @@ test('releases: setContext -> start -> complete records outcome signal', async (
   const outcomes = client.signals.getRecorded('outcome');
   assert.equal(outcomes.length, 1);
   assert.equal(outcomes[0]?.status, 'completed');
-  assert.equal(outcomes[0]?.rolloutId, 'rollout_01HZX0000000000000000001');
+  assert.equal(outcomes[0]?.rolloutId, VALID_ROLLOUT);
 });
 
 test('releases: fail redacts secrets from reason', async () => {
   const { client } = await makeClient();
   client.releases.setContext({
-    rolloutId: 'rollout_01HZX0000000000000000001',
-    stampIds: ['stmp_01HZX0000000000000000000001'],
+    rolloutId: VALID_ROLLOUT,
+    stampIds: [VALID_STAMP],
   });
   const failed = client.releases.fail({ reason: 'deploy hit phc_ABCDEF token error' });
   assert.equal(failed.ok, true);
@@ -60,10 +63,42 @@ test('releases: setContext rejects empty stampIds', async () => {
 test('releases: setContext requires rolloutId (ruling 15)', async () => {
   const { client } = await makeClient();
   const res = client.releases.setContext({
-    stampIds: ['stmp_01HZX0000000000000000000001'],
+    stampIds: [VALID_STAMP],
   } as unknown as Parameters<typeof client.releases.setContext>[0]);
   assert.equal(res.ok, false);
   assert.equal(res.errorKind, 'InvalidContext');
+});
+
+test('H-2: setContext rejects stamp_ prefix and malformed ULIDs', async () => {
+  const { client } = await makeClient();
+  const badPrefix = client.releases.setContext({
+    rolloutId: VALID_ROLLOUT,
+    stampIds: ['stamp_01HZX0000000000000000001'],
+  });
+  assert.equal(badPrefix.ok, false);
+  assert.equal(badPrefix.errorKind, 'InvalidContext');
+
+  const badLength = client.releases.setContext({
+    rolloutId: VALID_ROLLOUT,
+    stampIds: ['stmp_01HZX0000000000000000000001'], // 27 chars after prefix
+  });
+  assert.equal(badLength.ok, false);
+  assert.equal(badLength.errorKind, 'InvalidContext');
+
+  const badChange = client.releases.setContext({
+    rolloutId: VALID_ROLLOUT,
+    stampIds: [VALID_STAMP],
+    changeId: 'change_not_a_ulid',
+  });
+  assert.equal(badChange.ok, false);
+  assert.equal(badChange.errorKind, 'InvalidContext');
+
+  const dupStamps = client.releases.setContext({
+    rolloutId: VALID_ROLLOUT,
+    stampIds: [VALID_STAMP, VALID_STAMP],
+  });
+  assert.equal(dupStamps.ok, false);
+  assert.equal(dupStamps.errorKind, 'InvalidContext');
 });
 
 test('exposures: dedup by targetingKey+flagKey+variant+value', async () => {
@@ -206,7 +241,7 @@ test('extension calls before READY degrade with UnsupportedCapability, never thr
   const client = new FireweaveClient(new FireweaveRuntime(new InMemoryAdapter()));
   const release = client.releases.setContext({
     rolloutId: 'rollout_x',
-    stampIds: ['stmp_01HZX0000000000000000000001'],
+    stampIds: [VALID_STAMP],
   });
   assert.equal(release.ok, false);
   assert.equal(release.errorKind, 'UnsupportedCapability');
@@ -230,7 +265,7 @@ test('extension calls after shutdown degrade with AlreadyClosed, never throw', a
   const { client } = await makeClient();
   client.releases.setContext({
     rolloutId: 'rollout_x',
-    stampIds: ['stmp_01HZX0000000000000000000001'],
+    stampIds: [VALID_STAMP],
   });
   await client.shutdown();
   const release = client.releases.start();

@@ -2,14 +2,19 @@
  * PostHog backend adapter (ADR-0002). Wraps posthog-node@5.46.x behind the
  * canonical BackendAdapter boundary:
  *  - evaluateFlags() snapshot API only (no deprecated per-flag calls);
- *  - remote mode with a phc_ project key; local-eval mode when a secret
- *    (phs_/phx_) key is supplied;
+ *  - remote mode with a phc_ project key; local-eval / hybrid mode when a
+ *    secret (phs_/phx_) key is supplied;
  *  - injected-vs-owned client lifecycle (injected clients are never shut down);
- *  - exposure policy: side-effect-free reads (SDK-side $feature_flag_called is
- *    disabled; Fireweave exposures flow through recordExposure/capture);
+ *  - exposure policy: side-effect-free reads — local snapshot values are taken
+ *    from internal `_flags` records (never `getFlag`/`isEnabled`, which emit
+ *    vendor `$feature_flag_called`); owned clients also gate capture so stray
+ *    vendor exposures without `fireweave.exposure` are dropped. Fireweave
+ *    exposures flow only through {@link PostHogAdapter.recordExposure};
  *  - quotaLimited ⇒ FlagNotFound default + fireweave.quotaLimited metadata;
  *  - error mapping via an injected fetch observer, because posthog-node
  *    swallows /flags transport errors and returns empty snapshots.
+ *  - hybrid local serve (secret key, no /flags observation) returns a Decision
+ *    from the local snapshot — never maps success to Network (RB-1).
  *
  * No posthog-node types appear in this module's exported (public) API surface —
  * the client is accepted via the structural {@link PostHogClientLike} interface.
@@ -27,6 +32,32 @@ import type { CanonicalContext, Exposure, JsonValue, Signal } from '../types.js'
 /** Default bound on client shutdown (mirrors DEFAULT_SHUTDOWN_TIMEOUT_MS). */
 const DEFAULT_ADAPTER_SHUTDOWN_TIMEOUT_MS = 10000;
 
+/** Internal per-flag record shape (mirrors posthog-node EvaluatedFlagRecord). */
+export interface SnapshotFlagRecord {
+  key: string;
+  enabled: boolean;
+  variant?: string | null | undefined;
+  payload?: unknown;
+  id?: number | null | undefined;
+  version?: number | null | undefined;
+  reason?: string | null | undefined;
+  locallyEvaluated?: boolean | undefined;
+}
+
+/** Snapshot returned by evaluateFlags — prefer `_flags` for side-effect-free reads. */
+export interface EvaluateFlagsSnapshot {
+  isEnabled(key: string): boolean;
+  getFlag(key: string): string | boolean | undefined;
+  getFlagPayload(key: string): unknown;
+  keys: string[];
+  /**
+   * Internal flag records. Reading these does not emit `$feature_flag_called`
+   * (unlike `getFlag` / `isEnabled`). Real posthog-node snapshots expose this;
+   * test fakes should too when exercising the local path.
+   */
+  _flags?: Record<string, SnapshotFlagRecord>;
+}
+
 /** Minimal structural view of a posthog-node client (no vendor types leaked). */
 export interface PostHogClientLike {
   evaluateFlags(distinctId: string, options?: {
@@ -36,12 +67,7 @@ export interface PostHogClientLike {
     onlyEvaluateLocally?: boolean;
     disableGeoip?: boolean;
     flagKeys?: string[];
-  }): Promise<{
-    isEnabled(key: string): boolean;
-    getFlag(key: string): string | boolean | undefined;
-    getFlagPayload(key: string): unknown;
-    keys: string[];
-  }>;
+  }): Promise<EvaluateFlagsSnapshot>;
   capture(props: {
     distinctId: string;
     event: string;
@@ -230,6 +256,9 @@ export class PostHogAdapter implements BackendAdapter {
         fetchRetryCount: 0,
         flushAt: 100,
         disableCompression: true,
+        // Belt-and-suspenders for non-snapshot APIs. Snapshot getFlag/isEnabled
+        // still emit unless we read `_flags` (RB-2) — see fromSnapshot + gate.
+        sendFeatureFlagEvent: false,
       };
       if (this.options.featureFlagsRequestTimeoutMs !== undefined) {
         clientOptions['featureFlagsRequestTimeoutMs'] = this.options.featureFlagsRequestTimeoutMs;
@@ -241,7 +270,10 @@ export class PostHogAdapter implements BackendAdapter {
           clientOptions['featureFlagsPollingInterval'] = this.options.featureFlagsPollingInterval;
         }
       }
-      this.client = new mod.PostHog(this.options.projectApiKey, clientOptions) as unknown as PostHogClientLike;
+      const owned = new mod.PostHog(this.options.projectApiKey, clientOptions) as unknown as PostHogClientLike;
+      // Drop vendor auto-exposures that lack Fireweave's arming marker. Explicit
+      // recordExposure() sets fireweave.exposure=true so those still flow.
+      this.client = this.gateVendorExposureCapture(owned);
     }
     if (this.options.waitForLocalDefinitions === true && this.client.waitForLocalEvaluationReady !== undefined) {
       const ready = await this.client.waitForLocalEvaluationReady(5000);
@@ -293,7 +325,14 @@ export class PostHogAdapter implements BackendAdapter {
 
     if (!localOnly) {
       if (observation === undefined) {
-        // No request observed and not local eval — treat as network failure (offline).
+        // RB-1: hybrid/local mode with a secret key (or definitions already
+        // loaded) can satisfy evaluateFlags from the definitions poller without
+        // hitting /flags. That is a successful local serve — not Network.
+        if (this.canServeFromLocalSnapshot()) {
+          return this.fromSnapshot(flagKey, snapshot);
+        }
+        // Remote-only (no secret / no definitions): missing observation means
+        // the transport never reached /flags (offline).
         throw new FireweaveError('Network');
       }
       switch (observation.kind) {
@@ -310,8 +349,34 @@ export class PostHogAdapter implements BackendAdapter {
       }
     }
 
-    // Local evaluation path: read from the snapshot.
+    // Local-only evaluation path: read from the snapshot without vendor emit.
     return this.fromSnapshot(flagKey, snapshot);
+  }
+
+  /** True when local definitions can satisfy a resolve without a /flags round-trip. */
+  private canServeFromLocalSnapshot(): boolean {
+    if (this.options.secretApiKey !== undefined) return true;
+    if (this.definitionsLoaded) return true;
+    if (this.client?.isLocalEvaluationReady?.() === true) return true;
+    return false;
+  }
+
+  /**
+   * Wrap an owned posthog-node client so vendor `$feature_flag_called` events
+   * without Fireweave's arming marker are dropped (Go exposure-gate pattern).
+   */
+  private gateVendorExposureCapture(client: PostHogClientLike): PostHogClientLike {
+    const rawCapture = client.capture.bind(client);
+    client.capture = (props) => {
+      if (
+        props.event === '$feature_flag_called' &&
+        props.properties?.['fireweave.exposure'] !== true
+      ) {
+        return;
+      }
+      rawCapture(props);
+    };
+    return client;
   }
 
   private fromFlagsBody(flagKey: string, body: FlagsV2Body): AdapterResolution {
@@ -347,22 +412,48 @@ export class PostHogAdapter implements BackendAdapter {
     return resolution;
   }
 
+  /**
+   * Read a local/hybrid snapshot without calling getFlag/isEnabled (RB-2).
+   * Those accessors unconditionally emit `$feature_flag_called` in posthog-node
+   * and do not honor sendFeatureFlagEvent. Mirror Python: use `_flags` records.
+   */
   private fromSnapshot(
     flagKey: string,
-    snapshot: Awaited<ReturnType<PostHogClientLike['evaluateFlags']>>,
+    snapshot: EvaluateFlagsSnapshot,
   ): AdapterResolution {
-    const raw = snapshot.getFlag(flagKey);
-    if (raw === undefined) return { found: false };
-    const variant = typeof raw === 'string' ? raw : undefined;
-    const enabled = raw !== false;
+    const records = snapshot._flags;
+    if (records === undefined) {
+      // Structural fakes without `_flags` cannot be read side-effect-free.
+      // Prefer missing over calling getFlag (which would emit vendor exposure).
+      return { found: false };
+    }
+    const record = records[flagKey];
+    if (record === undefined) return { found: false };
+    const variant = record.variant ?? undefined;
+    const variantStr = typeof variant === 'string' ? variant : undefined;
+    const enabled = record.enabled;
     const resolution: AdapterResolution = {
       found: true,
       enabled,
-      value: enabled ? (variant ?? true) : false,
+      value: enabled ? (variantStr ?? true) : false,
     };
-    if (variant !== undefined) resolution.variant = variant;
-    const payload = snapshot.getFlagPayload(flagKey);
-    if (payload !== undefined && payload !== null) resolution.payload = payload as JsonValue;
+    if (variantStr !== undefined) resolution.variant = variantStr;
+    if (record.reason !== undefined && record.reason !== null) {
+      resolution.reasonCode = record.reason;
+    }
+    if (record.version !== undefined && record.version !== null) {
+      resolution.version = record.version;
+    }
+    if (record.id !== undefined && record.id !== null) {
+      resolution.vendorFlagId = record.id;
+    }
+    if (record.payload !== undefined && record.payload !== null) {
+      resolution.payload = record.payload as JsonValue;
+    } else {
+      // getFlagPayload does not emit; safe enrichment when `_flags` omits payload.
+      const payload = snapshot.getFlagPayload(flagKey);
+      if (payload !== undefined && payload !== null) resolution.payload = payload as JsonValue;
+    }
     if (this.definitionsStale) resolution.fromCache = true;
     return resolution;
   }
