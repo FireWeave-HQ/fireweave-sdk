@@ -9,21 +9,21 @@ Spec version **0.1.0**; OpenFeature specification compliance floor **v0.8.0**. S
 | **Package (working name)** | `@fireweaveai/sdk` | `fireweave` | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go` | `ai.fireweave:fireweave-{sdk,openfeature,adapter-posthog,testing}` |
 | **Language version** | Node ≥ 20.20 | Python ≥ 3.10 | Go 1.25 | Java ≥ 11 |
 | **OpenFeature SDK pin** | `@openfeature/server-sdk` 1.22.0 (peer) | `openfeature-sdk` ≥ 0.10, < 0.11 (**pre-1.0**) | `go-sdk` v1.17.2 | `dev.openfeature:sdk` **1.15.1** (newest published; orchestrator ruling 10) |
-| **PostHog SDK pin** | `posthog-node` 5.46.1 (optional peer) | `posthog` 7.31.0 (`[posthog]` extra) | `posthog-go` v1.22.0 | **none** — `com.posthog:posthog-server` not yet published; adapter behind `PostHogClientApi` seam |
-| **Remote evaluation** (`phc_`) | ✅ | ✅ | ✅ | ⚠️ injected `PostHogClientApi` only ([posthog.md](posthog.md#java)) |
-| **Local evaluation** (`phs_`/`phx_`) | ✅ `secretApiKey` | ✅ `secret_key`/`personal_api_key` + `local_evaluation` | ✅ `SecretKey` | ⏳ pending upstream artifact |
-| **Local-only mode** | ✅ `onlyEvaluateLocally` | ✅ `only_evaluate_locally` | ✅ `LocalEvaluationOnly` | ⏳ pending upstream |
+| **PostHog SDK pin** | `posthog-node` 5.46.1 (optional peer) | `posthog` 7.31.0 (`[posthog]` extra) | `posthog-go` v1.22.0 | **none** — seam only / not production-ready (no published PostHog server SDK; see [posthog.md](posthog.md#java)) |
+| **Remote evaluation** (`phc_`) | ✅ | ✅ | ✅ | ⚠️ **seam only** — injected `PostHogClientApi` stub/tests; `PostHogAdapter.create(config)` → `UnsupportedCapability` (API keys alone cannot create a live client) |
+| **Local evaluation** (`phs_`/`phx_`) | ✅ `secretApiKey` | ✅ `secret_key`/`personal_api_key` + `local_evaluation` | ✅ `SecretKey` | ❌ unsupported until upstream server SDK |
+| **Local-only mode** | ✅ `onlyEvaluateLocally` | ✅ `only_evaluate_locally` | ✅ `LocalEvaluationOnly` | ❌ unsupported until upstream server SDK |
 | **Structured (object) flags** | ✅ | ✅ | ✅ | ✅ |
 | **Multivariate variants** | ✅ | ✅ | ✅ | ✅ |
 | **Groups / group properties** | ✅ plain `groups` attribute | ✅ `fireweave.groups` / `fireweave.groupProperties` | ✅ plain `groups` / `groupProperties` attributes | ✅ context-builder `.group()` API |
 | **Flag payloads** (`fireweave.payload` metadata) | ✅ provider `includePayload` | ✅ `include_payload` | ✅ `fireweave.WithIncludePayload(ctx)` | ✅ `EvaluationOptions` |
-| **Exposure events** | Explicit API; vendor `$feature_flag_called` disabled (side-effect-free reads) | Explicit API; vendor events disabled | Explicit API + opt-in vendor events (`SendExposureEvents`); `$fw_*` telemetry | Explicit API via adapter seam |
+| **Exposure events** | Explicit API; vendor `$feature_flag_called` disabled (side-effect-free reads) | Explicit API; vendor events disabled | Explicit API + opt-in vendor events (`SendExposureEvents`); `$fw_*` telemetry | Explicit API + `EvaluationOptions.sendExposure` (default on) via seam/`InMemoryAdapter` |
 | **OpenFeature tracking (spec §6)** | ⏳ planned | ⏳ planned | ⏳ planned | ⏳ planned |
 | **Fireweave extensions** (releases / exposures / signals / capabilities) | ✅ | ✅ | ✅ | ✅ |
 | **Guardrails** | 🧪 stub (`UnsupportedCapability`) | 🧪 stub | 🧪 stub | 🧪 stub |
 | **In-memory adapter** | ✅ (+ typed fault injection) | ✅ | ✅ | ✅ (`fireweave-testing`, + fault simulation) |
 | **Async surface** | native async | sync core + `fireweave.aio` | sync + `context.Context` | sync |
-| **Conformance (63 fixtures)** | 61/63 | 63/63 | 63/63 | 62/63 |
+| **Conformance (65 fixtures)** | 63/65 (2 numeric skips) | 65/65 | 65/65 | 64/65 (1 numeric skip: `eval-int-beyond-safe-integer`) |
 
 ✅ works · ⚠️ works with caveat · ⏳ planned/blocked · 🧪 experimental stub
 
@@ -41,8 +41,9 @@ All conformance skips are **pre-declared** in the fixtures themselves (`skipped-
 
 | Area | Caveat |
 | --- | --- |
-| Java remote cache **[PostHog-specific]** | The vendor Java SDK caches per-user remote flag results up to ~5 min and keeps last-good local definitions; stale serves are labeled (`reason: STALE`, `fireweave.fromCache`), runtime shows `STALE` |
-| Exposure dedup cache sizes **[PostHog-specific]** | Vendor LRU sizes differ across SDKs (Node ~50k vs Java ~1k entries); Fireweave does not equalize them in phase one |
+| Java PostHog **[not production-ready]** | Seam only: `PostHogClientApi` injection for tests/stubs. No live create-from-config path until PostHog publishes a server SDK. Prefer `InMemoryAdapter` for Java apps today. |
+| Java remote cache **[PostHog-specific, seam]** | When an injected client returns aged snapshots, stale serves are labeled (`reason: STALE`, `fireweave.fromCache`), runtime shows `STALE` |
+| Exposure dedup cache sizes **[PostHog-specific]** | Vendor LRU sizes differ across SDKs where a real vendor client exists; Fireweave does not equalize them in phase one |
 | Polling default | Fireweave normalizes definitions polling toward 30 s where the vendor SDK allows override |
 | Go capture queue | posthog-go can drop telemetry on queue overflow; capture failures map to extension errors, flag evaluation is unaffected |
 | `$`-prefixed context attributes | Passed through as PostHog system directives, not person properties; stripped from telemetry context views |
@@ -54,7 +55,7 @@ All conformance skips are **pre-declared** in the fixtures themselves (`skipped-
 3. **Fireweave-native detailed evaluation naming differs**: Python `client.flags.get_details(...)`, Java `client.evaluate(...)`, Node `runtime.evaluate(...)`, Go `runtime.Evaluate(...)` (the architecture sketch's `client.flags.evaluate` shape exists only in Python).
 4. **Release/signal delivery**: Go (and Java via the adapter seam) deliver release transitions/signals to the backend telemetry sink; Node/Python currently record them in-process only.
 5. **`capabilities.get` return shape**: structured static∪runtime matrix in Node/Java; canonical name list in Python/Go.
-6. **Java PostHog binding** pending upstream publication (ruling 10) — `PostHogAdapter.create(config)` → `UnsupportedCapability`.
+6. **Java PostHog is seam only / not production-ready** (ruling 10 / RB-3): no published `com.posthog:posthog-server`; `PostHogAdapter.create(config)` → `UnsupportedCapability` with guidance to inject `PostHogClientApi` or use `InMemoryAdapter`. Docs/examples never imply API-key-only live PostHog construction for Java.
 7. **Readiness gating of extension calls**: Go/Java gate every extension call on runtime state (NotReady/AlreadyClosed); Node/Python accept records pre-ready and surface backend state at flush time.
 
 ## OpenFeature feature support (per ADR-0003)

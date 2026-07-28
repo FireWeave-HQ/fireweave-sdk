@@ -24,9 +24,10 @@ import java.util.Map;
 /**
  * Fireweave Java SDK walkthrough. OFFLINE BY DEFAULT: no network calls are made anywhere.
  *
- * <p>Part 1 registers a PostHog-backed provider (injected offline stub client — the pinned
- * com.posthog:posthog-server:2.9.0 artifact is not yet published; the wiring is identical once
- * it is). Part 2 shows the in-memory adapter for tests.
+ * <p>Part 1 shows the PostHog <em>seam</em> path: an injected {@link PostHogClientApi} stub.
+ * {@code PostHogAdapter.create(config)} is unsupported until PostHog publishes a Java server SDK
+ * — API keys alone cannot create a live PostHog-backed client. Part 2 shows {@link InMemoryAdapter}
+ * for production-safe offline / unit-test usage today.
  */
 public final class ExampleApp {
 
@@ -36,16 +37,16 @@ public final class ExampleApp {
         System.out.println("done.");
     }
 
-    // ------------------------------------------------------------ Part 1: PostHog-backed
+    // ------------------------------------------------------------ Part 1: PostHog seam (injected stub)
 
     static void posthogBackedProvider() throws Exception {
-        // 1. Plain-constructor wiring (DI-friendly, no framework, no statics):
-        //    config + adapter + runtime + provider.
+        // 1. Seam-only wiring: inject a PostHogClientApi. Do NOT call PostHogAdapter.create(config)
+        //    — that always returns UnsupportedCapability (no published PostHog server SDK).
         FireweaveConfig config = FireweaveConfig.builder()
                 .projectApiKey("phc_EXAMPLE00000000000000000000001") // stub key, never sent anywhere
                 .host("http://127.0.0.1:3901")                       // SSRF-allowlisted example host
                 .build();
-        PostHogAdapter adapter = new PostHogAdapter(new OfflinePostHogClient()); // injected client
+        PostHogAdapter adapter = new PostHogAdapter(new OfflinePostHogClient()); // injected stub
         FireweaveRuntime runtime = new FireweaveRuntime(config, adapter);
         FireweaveProvider provider = new FireweaveProvider(runtime);
 
@@ -112,8 +113,9 @@ public final class ExampleApp {
     }
 
     /**
-     * Offline stand-in for the real posthog-server client: serves a canned snapshot, captures
-     * nothing. Replace with the real binding once com.posthog:posthog-server is published.
+     * Offline {@link PostHogClientApi} stub: serves a canned snapshot, captures nothing.
+     * Not a production PostHog client — Java PostHog remains seam-only until upstream publishes
+     * a server SDK.
      */
     static final class OfflinePostHogClient implements PostHogClientApi {
 

@@ -77,12 +77,12 @@ representation. Additional reserved keys are configurable.
 1. **`dev.openfeature:sdk` pinned 1.21.0 → built against 1.15.1.** 1.15.1 is the newest version
    on Maven Central (verified 2026-07-27 via search.maven.org). No API gaps encountered for the
    features used.
-2. **`com.posthog:posthog-server:2.9.0` does not exist on Maven Central** (verified 2026-07-27;
-   only `com.posthog:posthog` 3.x Android/Kotlin and legacy `com.posthog.java:posthog` 1.2.0 —
-   the latter explicitly prohibited). `PostHogAdapter` is fully implemented and tested against
-   the Fireweave-owned `PostHogClientApi` transport seam (snapshot evaluation, explicit context
-   passing — no ThreadLocal); binding the real SDK is one adapter-internal class once published.
-   `PostHogAdapter.create(config)` fails with a clear `UnsupportedCapability` until then.
+2. **Java PostHog is seam only / not production-ready.** `com.posthog:posthog-server` does not
+   exist on Maven Central (verified 2026-07-27; only Android/`posthog` 3.x and prohibited legacy
+   `com.posthog.java:posthog` 1.2.0). Fireweave does not bind unpublished packages.
+   `PostHogAdapter` is tested against the Fireweave-owned `PostHogClientApi` injection seam;
+   `PostHogAdapter.create(config)` returns `UnsupportedCapability` (API keys alone cannot create
+   a live PostHog-backed client). Prefer `InMemoryAdapter` until upstream publishes a server SDK.
 3. **Fault fixtures run twice** (Phase 5 close-out of the original "stub not runnable"
    deviation): deterministically in-process via `InMemoryAdapter` (delay compares against the
    configured timeout — no sleeping) in `ConformanceTest`, AND against the real HTTP stub

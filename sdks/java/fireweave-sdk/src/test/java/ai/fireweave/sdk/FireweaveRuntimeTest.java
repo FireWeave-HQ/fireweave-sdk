@@ -245,6 +245,34 @@ class FireweaveRuntimeTest {
     }
 
     @Test
+    void sendExposureDefaultEmitsOnSuccessfulEvaluate() throws Exception {
+        StubAdapter adapter = new StubAdapter();
+        FireweaveRuntime rt = runtime(adapter);
+        rt.initialize();
+        EvaluationContext ctx = EvaluationContext.builder().targetingKey("user_1").build();
+        Decision d = rt.evaluate("checkout", FlagType.BOOLEAN, JsonValue.of(false), null, ctx, null);
+        assertNull(d.error());
+        assertTrue(d.exposureEmitted());
+        assertEquals(1, adapter.exposures.size());
+        assertEquals("checkout", adapter.exposures.get(0).flagKey());
+        assertEquals("user_1", adapter.exposures.get(0).targetingKey());
+    }
+
+    @Test
+    void sendExposureFalseSuppressesDelivery() throws Exception {
+        StubAdapter adapter = new StubAdapter();
+        FireweaveRuntime rt = runtime(adapter);
+        rt.initialize();
+        EvaluationContext ctx = EvaluationContext.builder().targetingKey("user_1").build();
+        Decision d = rt.evaluate("checkout", FlagType.BOOLEAN, JsonValue.of(false), null, ctx,
+                EvaluationOptions.builder().sendExposure(false).build());
+        assertNull(d.error());
+        assertTrue(d.exposureSuppressed());
+        assertTrue(!d.exposureEmitted());
+        assertEquals(0, adapter.exposures.size());
+    }
+
+    @Test
     void allowedLifecycleTransitions() {
         assertTrue(LifecycleState.UNINITIALIZED.canTransitionTo(LifecycleState.INITIALIZING));
         assertTrue(LifecycleState.READY.canTransitionTo(LifecycleState.STALE));

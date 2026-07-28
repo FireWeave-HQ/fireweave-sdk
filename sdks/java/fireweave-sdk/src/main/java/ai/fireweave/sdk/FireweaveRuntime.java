@@ -138,7 +138,34 @@ public final class FireweaveRuntime implements AutoCloseable {
             return errorDecision(flagKey, defaultValue,
                     new FireweaveException(ErrorKind.Internal, ErrorKind.Internal.defaultMessage(), e));
         }
-        return enrich(decision, opts);
+        return enrich(maybeEmitExposure(decision, merged, opts), opts);
+    }
+
+    /**
+     * Honor {@link EvaluationOptions#sendExposure()}: on successful decisions with a targeting
+     * key, deliver one exposure through the adapter (OF default path is side-effectful per
+     * ADR-0001 §6/§23). Opt out with {@code sendExposure(false)}. Never throws.
+     */
+    private Decision maybeEmitExposure(Decision d, EvaluationContext ctx, EvaluationOptions opts) {
+        if (d.error() != null) {
+            return d;
+        }
+        if (!opts.sendExposure()) {
+            return copyDecision(d).exposureSuppressed(true).build();
+        }
+        String targetingKey = ctx.targetingKey();
+        if (targetingKey == null || targetingKey.isEmpty()) {
+            return d;
+        }
+        try {
+            adapter.deliverExposure(new Exposure(
+                    targetingKey, d.flagKey(), d.variant(), d.value(), null));
+            return copyDecision(d).exposureEmitted(true).build();
+        } catch (RuntimeException ignored) {
+            // Evaluation never throws; a failed exposure sink must not fail the decision
+            // (FireweaveException is a RuntimeException subclass).
+            return d;
+        }
     }
 
     /** Attach fireweave.payload metadata when requested; leave everything else untouched. */
@@ -147,6 +174,12 @@ public final class FireweaveRuntime implements AutoCloseable {
                 || d.flagMetadata().containsKey("fireweave.payload")) {
             return d;
         }
+        Decision.Builder b = copyDecision(d);
+        b.metadata("fireweave.payload", d.payload().toCanonicalJson());
+        return b.build();
+    }
+
+    private static Decision.Builder copyDecision(Decision d) {
         Decision.Builder b = Decision.builder(d.flagKey())
                 .value(d.value())
                 .variant(d.variant())
@@ -158,8 +191,7 @@ public final class FireweaveRuntime implements AutoCloseable {
         for (Map.Entry<String, Object> e : d.flagMetadata().entrySet()) {
             b.metadata(e.getKey(), e.getValue());
         }
-        b.metadata("fireweave.payload", d.payload().toCanonicalJson());
-        return b.build();
+        return b;
     }
 
     /** Non-null exception when the current lifecycle state cannot serve evaluations. */

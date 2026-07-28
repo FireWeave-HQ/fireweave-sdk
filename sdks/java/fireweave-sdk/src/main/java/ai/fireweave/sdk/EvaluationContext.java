@@ -2,9 +2,7 @@ package ai.fireweave.sdk;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.ArrayList;
 
 /**
  * Canonical, immutable Fireweave evaluation context (mirrors
@@ -12,12 +10,14 @@ import java.util.ArrayList;
  *
  * <ul>
  *   <li>{@code targetingKey} is the stable cohort/identity key and maps 1:1 to PostHog
- *       {@code distinct_id}. It is REQUIRED at evaluation time (when the runtime is configured
- *       with {@code requireTargetingKey}, the default) and is never auto-generated.</li>
+ *       {@code distinct_id}. It is required at evaluation time when the runtime is configured
+ *       with {@code requireTargetingKey} (opt-in; defaults to {@code false}) and is never
+ *       auto-generated.</li>
  *   <li>Non-reserved attributes map to backend person properties.</li>
- *   <li>Reserved extensions (groups, group properties, evaluation-context tags) are modeled as
- *       first-class fields; the OpenFeature provider maps flattened {@code fireweave.*} keys
- *       into them.</li>
+ *   <li>Reserved extensions (groups, group properties) are modeled as first-class fields; the
+ *       OpenFeature provider maps flattened {@code fireweave.*} keys into them. Phase one
+ *       permits exactly {@code fireweave.groups} and {@code fireweave.groupProperties}
+ *       (rulings 12–14); unratified evaluation-context tags are not part of this API.</li>
  * </ul>
  *
  * <p>Thread-safety: deeply immutable; safe to share and reuse across threads.
@@ -33,7 +33,6 @@ public final class EvaluationContext {
     private final Map<String, JsonValue> attributes;
     private final Map<String, String> groups;
     private final Map<String, Map<String, JsonValue>> groupProperties;
-    private final List<String> evaluationContexts;
 
     private EvaluationContext(Builder b) {
         this.targetingKey = b.targetingKey;
@@ -44,7 +43,6 @@ public final class EvaluationContext {
             gp.put(e.getKey(), Collections.unmodifiableMap(new LinkedHashMap<>(e.getValue())));
         }
         this.groupProperties = Collections.unmodifiableMap(gp);
-        this.evaluationContexts = Collections.unmodifiableList(new ArrayList<>(b.evaluationContexts));
     }
 
     public static EvaluationContext empty() {
@@ -72,10 +70,6 @@ public final class EvaluationContext {
         return groupProperties;
     }
 
-    public List<String> evaluationContexts() {
-        return evaluationContexts;
-    }
-
     /** Later-wins merge: {@code other} overrides this context on key conflicts. */
     public EvaluationContext merge(EvaluationContext other) {
         if (other == null) {
@@ -92,9 +86,6 @@ public final class EvaluationContext {
                 b.groupProperty(e.getKey(), p.getKey(), p.getValue());
             }
         }
-        for (String tag : other.evaluationContexts) {
-            b.evaluationContext(tag);
-        }
         return b.build();
     }
 
@@ -106,7 +97,6 @@ public final class EvaluationContext {
         for (Map.Entry<String, Map<String, JsonValue>> e : groupProperties.entrySet()) {
             b.groupProperties.put(e.getKey(), new LinkedHashMap<>(e.getValue()));
         }
-        b.evaluationContexts.addAll(evaluationContexts);
         return b;
     }
 
@@ -130,11 +120,6 @@ public final class EvaluationContext {
             groupProperties.forEach((k, v) -> gp.put(k, JsonValue.ofObject(v)));
             reserved.put("groupProperties", JsonValue.ofObject(gp));
         }
-        if (!evaluationContexts.isEmpty()) {
-            List<JsonValue> tags = new ArrayList<>();
-            evaluationContexts.forEach(t -> tags.add(JsonValue.of(t)));
-            reserved.put("evaluationContexts", JsonValue.ofArray(tags));
-        }
         if (!reserved.isEmpty()) {
             root.put("reserved", JsonValue.ofObject(reserved));
         }
@@ -153,13 +138,12 @@ public final class EvaluationContext {
         return java.util.Objects.equals(targetingKey, c.targetingKey)
                 && attributes.equals(c.attributes)
                 && groups.equals(c.groups)
-                && groupProperties.equals(c.groupProperties)
-                && evaluationContexts.equals(c.evaluationContexts);
+                && groupProperties.equals(c.groupProperties);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(targetingKey, attributes, groups, groupProperties, evaluationContexts);
+        return java.util.Objects.hash(targetingKey, attributes, groups, groupProperties);
     }
 
     @Override
@@ -175,7 +159,6 @@ public final class EvaluationContext {
         private final Map<String, JsonValue> attributes = new LinkedHashMap<>();
         private final Map<String, String> groups = new LinkedHashMap<>();
         private final Map<String, Map<String, JsonValue>> groupProperties = new LinkedHashMap<>();
-        private final List<String> evaluationContexts = new ArrayList<>();
 
         public Builder targetingKey(String targetingKey) {
             this.targetingKey = targetingKey;
@@ -213,13 +196,6 @@ public final class EvaluationContext {
         public Builder groupProperty(String groupType, String key, JsonValue value) {
             groupProperties.computeIfAbsent(groupType, k -> new LinkedHashMap<>())
                     .put(key, value == null ? JsonValue.ofNull() : value);
-            return this;
-        }
-
-        public Builder evaluationContext(String tag) {
-            if (!evaluationContexts.contains(tag)) {
-                evaluationContexts.add(tag);
-            }
             return this;
         }
 

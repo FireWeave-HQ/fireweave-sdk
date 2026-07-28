@@ -438,8 +438,12 @@ public final class FireweaveClient implements AutoCloseable {
             staticFeatures.put("signals", cfg.signalsEnabled());
             staticFeatures.put("guardrails", false);
             staticFeatures.put("telemetryOptIn", cfg.telemetryAttributeAllowlist() != null);
-            staticFeatures.put("inMemoryAdapter", true);
-            staticFeatures.put("posthogAdapter", false);
+            staticFeatures.put("inMemoryAdapter",
+                    "inmemory".equalsIgnoreCase(runtime.adapter().name()));
+            // true when a PostHog adapter (injected seam) is bound; create(config) remains
+            // UnsupportedCapability until upstream publishes a Java server SDK (RB-3).
+            staticFeatures.put("posthogAdapter",
+                    "posthog".equalsIgnoreCase(runtime.adapter().name()));
 
             Map<String, Boolean> runtimeFeatures = new LinkedHashMap<>();
             runtimeFeatures.put("localEvaluation", cfg.localEvaluation());

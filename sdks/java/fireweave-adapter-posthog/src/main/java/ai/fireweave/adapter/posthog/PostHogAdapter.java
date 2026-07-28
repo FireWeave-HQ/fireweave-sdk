@@ -78,14 +78,21 @@ public final class PostHogAdapter implements BackendAdapter {
     }
 
     /**
-     * Config-owned client construction is BLOCKED: {@code com.posthog:posthog-server:2.9.0} is
-     * not published to Maven Central (verified 2026-07-27), and the legacy 1.x SDK is prohibited.
-     * Inject a {@link PostHogClientApi} until the artifact lands.
+     * Config-owned client construction is unsupported for production use.
+     *
+     * <p>PostHog has not published a Java <em>server</em> SDK on Maven Central
+     * ({@code com.posthog:posthog-server} — verified 2026-07-27; Android-only and legacy 1.x
+     * artifacts are out of scope / prohibited). Until an upstream server SDK exists, use
+     * {@link #PostHogAdapter(PostHogClientApi)} injection for tests/stubs, or
+     * {@code InMemoryAdapter} for offline development. API keys alone cannot construct a live
+     * PostHog-backed client.
      */
     public static PostHogAdapter create(FireweaveConfig config) throws FireweaveException {
         throw new FireweaveException(ErrorKind.UnsupportedCapability,
-                "posthog-server client binding unavailable: com.posthog:posthog-server:2.9.0 "
-                        + "is not published to Maven Central; inject a PostHogClientApi");
+                "Java PostHog create-from-config unsupported: no published PostHog server SDK "
+                        + "(com.posthog:posthog-server). Inject PostHogClientApi for the test "
+                        + "seam, or use InMemoryAdapter — API keys alone cannot create a live "
+                        + "PostHog-backed client");
     }
 
     @Override

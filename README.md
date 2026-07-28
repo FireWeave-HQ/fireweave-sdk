@@ -1,11 +1,11 @@
 # Fireweave SDK
 
-Open-source, [OpenFeature](https://openfeature.dev)-compatible, **server-first** feature-flag SDK for **Node.js, Python, Go, and Java**, with release-safety extensions (releases, exposures, signals, capabilities). Phase one evaluates flags through [PostHog](https://posthog.com) — the SDK wraps the official PostHog server SDKs behind a vendor-neutral adapter; it never reimplements flag evaluation and never leaks PostHog types into its public API.
+Open-source, [OpenFeature](https://openfeature.dev)-compatible, **server-first** feature-flag SDK for **Node.js, Python, Go, and Java**, with release-safety extensions (releases, exposures, signals, capabilities). Phase one evaluates flags through [PostHog](https://posthog.com) on Node, Python, and Go — the SDK wraps the official PostHog server SDKs behind a vendor-neutral adapter; it never reimplements flag evaluation and never leaks PostHog types into its public API. **Java PostHog is seam only / not production-ready** pending an upstream server SDK.
 
 > **Status: pre-release (0.1.0, unpublished).**
 >
 > - **No packages are published** to npm, PyPI, Go module proxy, or Maven Central. Install from a checkout of this repository (see [Quickstart](#quickstart)). Package names (`@fireweaveai/sdk`, `fireweave`, `ai.fireweave:*`) are working names pending company ratification.
-> - **Java's PostHog binding is pending upstream**: PostHog has not published a Java *server* SDK with local evaluation (verified against Maven Central 2026-07-27). The Java `PostHogAdapter` is fully implemented and tested behind a transport seam (`PostHogClientApi`); constructing it from config alone fails with a clear `UnsupportedCapability` until the upstream artifact exists. All other Java functionality (OpenFeature provider, in-memory adapter, extensions) works today.
+> - **Java PostHog: seam only / not production-ready.** PostHog has not published a Java *server* SDK (verified Maven Central 2026-07-27). `PostHogAdapter.create(config)` returns `UnsupportedCapability`; API keys alone cannot create a live PostHog-backed Java client. Use `InMemoryAdapter` or an injected `PostHogClientApi` stub for tests. OpenFeature provider, in-memory adapter, and extensions work today.
 > - **License**: this repository ships the MIT license text ([LICENSE](LICENSE)); formal ratification of MIT as the license is pending a company decision and is a release blocker (ADR-0001).
 
 ## Why OpenFeature
@@ -16,7 +16,7 @@ Flag evaluation goes through the standard OpenFeature client in every language, 
 - OpenFeature hooks, domains, events, and the never-throw evaluation contract work as specified;
 - Fireweave-specific functionality (release lifecycle, exposure recording, health/outcome signals, capability discovery) lives on a separate `FireweaveClient` that shares the same runtime — it never contaminates the standard flag-evaluation surface (ADR-0003).
 
-One architecture in all four languages: **FireweaveProvider (OpenFeature) + FireweaveClient (extensions) → FireweaveRuntime → BackendAdapter** (`PostHogAdapter` for production, `InMemoryAdapter` for tests). See [docs/architecture.md](docs/architecture.md).
+One architecture in all four languages: **FireweaveProvider (OpenFeature) + FireweaveClient (extensions) → FireweaveRuntime → BackendAdapter** (`PostHogAdapter` for production on Node/Python/Go; Java: `InMemoryAdapter` or injected PostHog seam only). See [docs/architecture.md](docs/architecture.md).
 
 ## Quickstart
 
@@ -103,10 +103,12 @@ api.shutdown();
 
 ## PostHog-backed evaluation
 
-Point the same code at PostHog by swapping the adapter — [docs/posthog.md](docs/posthog.md) covers key types, remote vs. local evaluation, polling, and quota behavior:
+On **Node, Python, and Go**, point the same code at PostHog by swapping the adapter — [docs/posthog.md](docs/posthog.md) covers key types, remote vs. local evaluation, polling, and quota behavior:
 
 - **`phc_…` project API key** — remote evaluation via `/flags?v=2`. Public-by-design, but this SDK is server-only (ADR-0004).
 - **`phs_…` / `phx_…` secret keys** — enable local evaluation (in-process, definitions polled in the background). **Secrets: server-side only, never in frontend bundles.**
+
+**Java:** PostHog is **seam only / not production-ready** — no create-from-config live client until upstream publishes a server SDK ([docs/posthog.md#java](docs/posthog.md#java)).
 
 Identity: the OpenFeature `targetingKey` maps 1:1 to the PostHog `distinct_id`. The SDK never fabricates anonymous IDs — see [docs/identity.md](docs/identity.md).
 
@@ -139,7 +141,7 @@ test-server/               Deterministic PostHog-protocol stub (Node, zero-dep)
 docs/                      User docs, architecture, ADRs
 ```
 
-Conformance: 63 shared fixtures run against every language. Current: Python 63/63, Go 63/63, Java 62/63, Node 61/63 — every skip is a pre-declared, documented numeric-representation limitation (see [docs/compatibility.md](docs/compatibility.md)).
+Conformance: **65** shared fixtures. Current: Python 65/65, Go 65/65, Java 64/65 (+1 numeric skip), Node 63/65 (+2 numeric skips) — every skip is a pre-declared, documented numeric-representation limitation (see [docs/compatibility.md](docs/compatibility.md)).
 
 ## Contributing
 

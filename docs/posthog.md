@@ -1,6 +1,6 @@
 # PostHog-backed usage
 
-Phase one evaluates flags through PostHog **[PostHog-specific]**. The `PostHogAdapter` in each language wraps the official PostHog server SDK (Node `posthog-node` 5.46.1, Python `posthog` 7.31.0, Go `posthog-go` v1.22.0; Java — see [caveat](#java)) behind the vendor-neutral `BackendAdapter` boundary. Your application code never sees PostHog types, and the SDK never reimplements PostHog's flag evaluator (ADR-0002).
+Phase one evaluates flags through PostHog **[PostHog-specific]** on Node, Python, and Go. The `PostHogAdapter` wraps the official PostHog server SDK (Node `posthog-node` 5.46.1, Python `posthog` 7.31.0, Go `posthog-go` v1.22.0) behind the vendor-neutral `BackendAdapter` boundary. **Java is seam only / not production-ready** — see [Java](#java). Your application code never sees PostHog types, and the SDK never reimplements PostHog's flag evaluator (ADR-0002).
 
 ## API key types
 
@@ -118,24 +118,24 @@ Config is validated during `Initialize` so failures map to the runtime's `FATAL`
 
 ### Java
 
-> **Upstream caveat (orchestrator ruling 10):** `com.posthog:posthog-server` — the pinned Java server SDK — **is not published on Maven Central** (verified 2026-07-27; only the Android artifact and the prohibited legacy `com.posthog.java:posthog` 1.2.0 exist). The Java `PostHogAdapter` is complete and tested against the Fireweave-owned `PostHogClientApi` transport seam, but **`PostHogAdapter.create(config)` fails with `UnsupportedCapability` until PostHog publishes the artifact**. Binding the real SDK is one adapter-internal class once it exists.
+> **Not production-ready (seam only).** PostHog has **not** published a Java *server* SDK on Maven Central (`com.posthog:posthog-server` — verified 2026-07-27; only Android and the prohibited legacy `com.posthog.java:posthog` 1.2.0 exist). Fireweave does **not** invent or bind an unpublished package. **`PostHogAdapter.create(config)` always fails with `UnsupportedCapability`** — API keys alone cannot create a live PostHog-backed Java client. Prefer [`InMemoryAdapter`](testing.md) for real apps until upstream ships a server SDK.
 
-Today you have two options:
+Supported today:
 
-1. **Inject a `PostHogClientApi` implementation** (your own thin HTTP client against `/flags?v=2`, or a test double — see `examples/java` for a working offline stub):
+1. **`InMemoryAdapter`** (recommended for Java production paths until upstream exists) — [testing.md](testing.md).
+2. **Injected `PostHogClientApi` seam** for tests / offline stubs only (see `examples/java`):
 
 ```java
+// Test/stub path only — not a live PostHog SDK binding.
 PostHogAdapter adapter = new PostHogAdapter(myPostHogClientApi);  // injected; never closed by Fireweave
 FireweaveConfig config = FireweaveConfig.builder()
-    .projectApiKey(System.getenv("POSTHOG_PROJECT_API_KEY"))
-    .host("https://us.i.posthog.com")
+    .projectApiKey("phc_EXAMPLE_FOR_STUBS_ONLY")
+    .host("http://127.0.0.1:3901")
     .build();
 FireweaveRuntime runtime = new FireweaveRuntime(config, adapter);
 ```
 
-2. **Use the `InMemoryAdapter`** for everything until the upstream artifact ships ([testing.md](testing.md)).
-
-The seam passes explicit `distinctId` + properties on every call (no ThreadLocal request context), and surfaces snapshot staleness: stale results resolve with reason `STALE` + `fireweave.fromCache`, and the runtime reflects `STALE` **[PostHog-specific]** (the vendor Java SDK's ~5-minute per-user remote cache is documented, never hidden).
+The seam passes explicit `distinctId` + properties on every call (no ThreadLocal request context), and surfaces snapshot staleness when the injected client reports aged data (`reason: STALE` + `fireweave.fromCache`).
 
 ## Context mapping (all languages)
 

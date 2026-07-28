@@ -244,6 +244,10 @@ class PostHogAdapterTest {
                 PostHogAdapter.create(FireweaveConfig.builder().build()));
         assertEquals(ErrorKind.UnsupportedCapability, e.kind());
         assertTrue(e.getMessage().contains("posthog-server"));
+        assertTrue(e.getMessage().contains("PostHogClientApi")
+                || e.getMessage().toLowerCase().contains("inject"));
+        assertTrue(e.getMessage().toLowerCase().contains("inmemory")
+                || e.getMessage().toLowerCase().contains("api keys alone"));
     }
 
     private static String nullIfNoSecret(String msg) {

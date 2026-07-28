@@ -194,11 +194,11 @@ public class Quickstart {
 
 Run the full example: `cd examples/java && mvn -q compile exec:java`.
 
-> **Java + PostHog caveat:** the PostHog-backed adapter currently requires injecting a `PostHogClientApi` implementation because PostHog has not published a Java server SDK — see [posthog.md](posthog.md#java).
+> **Java + PostHog:** **seam only / not production-ready.** There is no published PostHog Java server SDK; `PostHogAdapter.create(config)` returns `UnsupportedCapability`. Quickstart and examples use `InMemoryAdapter` (above) or an injected `PostHogClientApi` stub — never API-key-only live PostHog construction. See [posthog.md](posthog.md#java).
 
 ## Next steps
 
-- Point at PostHog: [posthog.md](posthog.md) (key types, remote vs local evaluation).
+- Point at PostHog (Node/Python/Go): [posthog.md](posthog.md). Java remains seam-only until upstream publishes a server SDK.
 - Detailed resolution, hooks, domains: [openfeature.md](openfeature.md).
 - Release contexts, health signals, exposures: [extensions.md](extensions.md).
 - Testing your integration without a network: [testing.md](testing.md).
