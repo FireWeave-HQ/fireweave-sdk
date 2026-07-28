@@ -127,3 +127,12 @@ Mandatory before acceptance: fix RB-1..RB-3 and all HIGH findings; re-run verifi
 **RB-1:** Node hybrid/local eval maps successful local serves to Network — fix error mapping.
 **RB-2:** Node local snapshot path still emits `$feature_flag_called` despite claims — disable or gate correctly.
 **RB-3:** Java `PostHogAdapter.create(config)` always UnsupportedCapability — either interim remote-only binding OR demote Java PostHog to explicitly unsupported in all public docs/examples/compatibility matrix (no false claims). Prefer honest unsupported + injection-only until PostHog publishes a server SDK, unless a safe remote-only legacy bind is trivial and tested.
+
+## Phase 6 fix wave (post–Agent M)
+
+- RB-1/RB-2 (Node) fixed — commit 8583b63
+- RB-3 (Java) honest unsupported — commit 436039f
+- H-2 (Node ULID) fixed in Node wave; H-7 (Java evaluationContexts) fixed in Java wave
+- Cross-lang HIGH wave: H-1/H-3/H-4(Py+Go+docs)/H-5/H-6/H-8
+
+**Ruling 20 (exposure default on evaluate):** Phase-one evaluate is **side-effect-free by default** (no automatic exposure emission). Callers opt in via `sendExposure: true` / language equivalent. Align Node to match Python/Go (default false). Fireweave still owns emission when opted in; vendor `$feature_flag_called` remains suppressed (RB-2). Update ADR/docs accordingly if needed.

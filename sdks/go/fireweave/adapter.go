@@ -28,6 +28,10 @@ type ResolveRequest struct {
 	DefaultValue   any
 	Context        EvaluationContext
 	IncludePayload bool
+	// SendExposure, when non-nil, overrides the adapter's configured
+	// exposure-emission default for this resolution only. Nil means "use
+	// adapter config" (PostHog SendExposureEvents; default false).
+	SendExposure *bool
 }
 
 // BackendAdapter is the small consumer-oriented contract between the shared

@@ -179,6 +179,44 @@ func NewClient(rt *Runtime) *Client {
 // Runtime returns the underlying runtime.
 func (c *Client) Runtime() *Runtime { return c.rt }
 
+// --- Flags (ruling 16: Decision API on Client, no Runtime reach-in) ---
+
+// Flags exposes Fireweave-native detailed evaluation on the Client surface
+// (ruling 16 / architecture §6.3). Call sites should use Flags().Evaluate
+// rather than Client.Runtime().Evaluate.
+type Flags struct{ c *Client }
+
+// Flags returns the evaluation facade.
+func (c *Client) Flags() Flags { return Flags{c} }
+
+// EvaluateOptions controls per-invocation evaluation behavior on the
+// Fireweave-native Flags API.
+type EvaluateOptions struct {
+	// IncludePayload attaches the flag payload as fireweave.payload metadata.
+	IncludePayload bool
+	// SendExposure, when non-nil, requests (true) or suppresses (false)
+	// vendor $feature_flag_called emission for this evaluation. Nil means
+	// "use the adapter's configured default" (PostHog: SendExposureEvents,
+	// which defaults to false — phase-one side-effect-free reads).
+	// Adapters that ignore the field keep their configured behavior.
+	SendExposure *bool
+}
+
+// Evaluate resolves a flag and returns a Decision. It never returns an
+// error: failures surface as Decision{Reason: ERROR, Error: …} carrying
+// the caller default (OpenFeature default semantics).
+func (f Flags) Evaluate(ctx context.Context, flagKey string, flagType FlagType, defaultValue any, evalCtx EvaluationContext, opts EvaluateOptions) Decision {
+	req := ResolveRequest{
+		FlagKey:        flagKey,
+		Type:           flagType,
+		DefaultValue:   defaultValue,
+		Context:        evalCtx,
+		IncludePayload: opts.IncludePayload,
+		SendExposure:   opts.SendExposure,
+	}
+	return f.c.rt.Evaluate(ctx, req)
+}
+
 // gate enforces ruling 17 lifecycle gating: extension calls degrade with a
 // structured typed error (never a panic/throw) — UnsupportedCapability
 // before the runtime is READY, AlreadyClosed after shutdown.
@@ -468,7 +506,10 @@ func (cs CapabilitySet) Get() Capabilities {
 	runtime := RuntimeCapabilities{
 		Backend:   "other",
 		Lifecycle: string(rt.State()),
-		Limits:    map[string]int64{"intSafeMaxAbs": intSafeMaxAbs},
+		Limits: map[string]int64{
+			"intSafeMaxAbs":             intSafeMaxAbs,
+			"shutdownTimeoutMsDefault":  10_000,
+		},
 	}
 	if reporter, ok := rt.Adapter().(CapabilityReporter); ok {
 		report := reporter.ReportCapabilities()
@@ -498,7 +539,7 @@ func (cs CapabilitySet) Get() Capabilities {
 				"exposures":       true,
 				"signals":         true,
 				"guardrails":      false, // phase-one stub (degrades typed)
-				"telemetryOptIn":  true,  // exposure emission is opt-in
+				"telemetryOptIn":  true,  // OF-path exposure emission is opt-in
 				"inMemoryAdapter": true,
 				"posthogAdapter":  true,
 			},

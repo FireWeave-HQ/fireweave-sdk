@@ -28,6 +28,8 @@ fireweave.Config{RequireTargetingKey: true}                        // Go
 FireweaveConfig.builder().requireTargetingKey(true).build()        // Java
 ```
 
+> **Note:** `requireTargetingKey` defaults to **false** in all four languages (opt-in). Javadoc or examples that call it "the default" are wrong — identity strictness is always explicit.
+
 ## Choosing a stable key
 
 Percentage rollouts are computed by hashing `(flag, targetingKey)` — the key must be **stable across requests** or users flip between variants.
@@ -57,19 +59,19 @@ They are sent to the backend for evaluation — treat them with the same PII car
 
 PostHog [group analytics](https://posthog.com/docs/product-analytics/group-analytics) **[PostHog-specific]** lets flags target group-level entities (company, project) rather than persons. Fireweave carries group membership and group properties in the evaluation context and maps them to PostHog `groups` / `group_properties`.
 
-> **Current per-language spelling differs** (a known pre-release inconsistency tracked in [compatibility.md](compatibility.md#known-gaps); the canonical spec names the reserved keys `fireweave.groups` / `fireweave.groupProperties`):
+**Canonical spelling (all languages, rulings 12–14):** reserved keys `fireweave.groups` and `fireweave.groupProperties`. **Plain alias (ruling 19):** `groups` / `groupProperties` are also accepted. Prefer the canonical keys in portable code; when both are present, the canonical keys win.
 
 ```js
-// Node — plain `groups` attribute (map groupType → groupKey); string values only.
+// Node — canonical keys (plain `groups` / `groupProperties` also accepted).
 await client.getBooleanValue('org-flag', false, {
   targetingKey: 'user_42',
-  groups: { company: 'org_123' },
+  'fireweave.groups': { company: 'org_123' },
+  'fireweave.groupProperties': { company: { plan: 'enterprise' } },
 });
 ```
 
 ```python
-# Python — reserved keys `fireweave.groups` / `fireweave.groupProperties`
-# (plain `groups` also accepted).
+# Python — canonical keys (plain `groups` / `groupProperties` also accepted).
 EvaluationContext("user_42", {
     "fireweave.groups": {"company": "org_123"},
     "fireweave.groupProperties": {"company": {"plan": "enterprise"}},
@@ -77,15 +79,15 @@ EvaluationContext("user_42", {
 ```
 
 ```go
-// Go — plain `groups` / `groupProperties` attributes.
+// Go — canonical helpers / attribute keys (plain alias also accepted).
 of.NewEvaluationContext("user_42", map[string]any{
-    "groups":          map[string]any{"company": "org_123"},
-    "groupProperties": map[string]any{"company": map[string]any{"plan": "enterprise"}},
+    "fireweave.groups":          map[string]any{"company": "org_123"},
+    "fireweave.groupProperties": map[string]any{"company": map[string]any{"plan": "enterprise"}},
 })
 ```
 
 ```java
-// Java — first-class builder API on the Fireweave context.
+// Java — first-class builder API (also accepts canonical attribute keys).
 EvaluationContext ctx = EvaluationContext.builder()
     .targetingKey("user_42")
     .group("company", "org_123")
@@ -96,4 +98,4 @@ Group **identify** (creating/updating group profiles) is not an evaluation side 
 
 ## Reserved keys
 
-`targetingKey`, `kind`, and the `fireweave.*` namespace are reserved in the evaluation context. Per the ratified spec rule, `fireweave.groups` and `fireweave.groupProperties` are the only permitted `fireweave.*` keys; anything else `fireweave.*`-prefixed is rejected with `INVALID_CONTEXT`. Don't name your own attributes after any of these.
+`targetingKey`, `kind`, and the `fireweave.*` namespace are reserved in the evaluation context. Per the ratified spec rule, `fireweave.groups` and `fireweave.groupProperties` are the only permitted `fireweave.*` keys; anything else `fireweave.*`-prefixed is rejected with `INVALID_CONTEXT`. Don't name your own attributes after any of these. (`fireweave.evaluationContexts` was **rejected** — ruling 13.)

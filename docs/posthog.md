@@ -108,7 +108,7 @@ adapter := posthog.New(posthog.Config{
     FlagRequestTimeout: 3 * time.Second,
     // FlagRequestRetries: 0,                                 // default: surface typed error
     // SendExposureEvents: true,                              // vendor $feature_flag_called (default false)
-    CloseTimeout:       5 * time.Second,                      // bound on shutdown
+    CloseTimeout:       10 * time.Second,                     // bound on shutdown (DefaultCloseTimeout = 10s)
     // AllowedHosts:    []string{"us.i.posthog.com"},         // SSRF allowlist override
 })
 runtime := fireweave.NewRuntime(adapter, fireweave.Config{RequireTargetingKey: true})

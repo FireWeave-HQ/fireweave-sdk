@@ -350,3 +350,25 @@ class TestShutdownFacade:
         with FireweaveClient(runtime) as client:
             assert client.flags.get_boolean_value("bool-on", False) is True
         assert runtime.state.wire_name == "CLOSED"
+
+    def test_flags_evaluate_decision_api(self, simple_flags):
+        """Ruling 16 / architecture flags.evaluate — Decision without OF."""
+        from fireweave import EvaluationContext, FlagType
+
+        runtime = FireweaveRuntime(InMemoryAdapter(simple_flags))
+        runtime.initialize()
+        client = FireweaveClient(runtime)
+        d = client.flags.evaluate(
+            "bool-on",
+            FlagType.BOOLEAN,
+            False,
+            EvaluationContext("user_42"),
+            send_exposure=False,
+        )
+        assert d.value is True
+        assert d.error_kind is None
+        # Alias parity with get_details.
+        d2 = client.flags.get_details(
+            "bool-on", FlagType.BOOLEAN, False, EvaluationContext("user_42")
+        )
+        assert d2.value == d.value

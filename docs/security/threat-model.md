@@ -63,12 +63,10 @@ Severity-ranked findings with recommended fixes live in [release-blockers.md](re
 
 **Verified mitigations:**
 
-- **Node:** `validateConfig` parses the host URL, requires http(s), and enforces exact-hostname allowlist matching *when `allowedHosts` is configured* (`runtime.ts` lines 54–78). Fails to FATAL before any adapter/network activity (`runtime.ts` 170–192).
-- **Python:** same semantics in `FireweaveConfig.validate` (`config.py` lines 57–63), `init_fatal=True` → `PROVIDER_FATAL`.
-- **Go:** allowlist **on by default** — `defaultAllowedHosts` pins the five PostHog hosts + loopback (`adapters/posthog/posthog.go` lines 49–56, 127–156).
-- **Java:** allowlist **on by default** — `DEFAULT_ALLOWED_HOSTS` (`FireweaveConfig.java` lines 18–20, 74–92).
+- **All four:** allowlist **on by default** — canonical five PostHog hosts + loopback; https required for non-loopback (Agent J H-1 **Fixed** — [findings-disposition.md](findings-disposition.md)). Explicit `allowedHosts: ["*"]` / language equivalent opts out for self-hosted.
+- **Go / Python / Node / Java:** config validation fails FATAL before network on unknown hosts (`sec-endpoint-ssrf-allowlist`).
 
-**Residual risk / divergence:** Node and Python enforce the allowlist only when the caller sets one; unset means *any* http(s) host. Go and Java are deny-by-default. The fixture passes in all four languages because it supplies `allowedHosts` explicitly, but the *default posture* diverges. **Finding H-1.** Additionally all languages accept `http://` for non-loopback hosts (needed for the local test-server) — **finding L-3**.
+**Residual risk:** encoded IP-literal SSRF bypass cases remain (adversarial F-3 / required-tests T6). Plain `http://` is loopback-only where Phase 5 https-off-loopback landed.
 
 ### R4 — Resource exhaustion via oversized/deep evaluation contexts
 

@@ -215,6 +215,39 @@ func TestReleaseSetContextValidation(t *testing.T) {
 	}
 }
 
+func TestFlagsEvaluateDoesNotRequireRuntimeReachIn(t *testing.T) {
+	// Ruling 16: portable detailed evaluation uses Client.Flags().Evaluate
+	// only — the call site must not name Runtime().
+	c := readyClient(t)
+	ctx := context.Background()
+	d := c.Flags().Evaluate(
+		ctx,
+		"fw-on",
+		FlagTypeBoolean,
+		false,
+		EvaluationContext{TargetingKey: "user_42"},
+		EvaluateOptions{},
+	)
+	if d.Error != nil {
+		t.Fatalf("decision error: %v", d.Error)
+	}
+	if d.Value != true {
+		t.Fatalf("value = %v, want true", d.Value)
+	}
+	send := false
+	d2 := c.Flags().Evaluate(
+		ctx,
+		"fw-on",
+		FlagTypeBoolean,
+		false,
+		EvaluationContext{TargetingKey: "user_42"},
+		EvaluateOptions{IncludePayload: true, SendExposure: &send},
+	)
+	if d2.Error != nil {
+		t.Fatalf("decision with options error: %v", d2.Error)
+	}
+}
+
 func TestCapabilitiesStructuredMatrix(t *testing.T) {
 	c := readyClient(t)
 	caps := c.Capabilities().Get()
@@ -243,6 +276,9 @@ func TestCapabilitiesStructuredMatrix(t *testing.T) {
 	}
 	if caps.Runtime.Limits["intSafeMaxAbs"] != int64(9007199254740991) {
 		t.Errorf("limits = %v", caps.Runtime.Limits)
+	}
+	if caps.Runtime.Limits["shutdownTimeoutMsDefault"] != int64(10_000) {
+		t.Errorf("shutdownTimeoutMsDefault = %v, want 10000", caps.Runtime.Limits["shutdownTimeoutMsDefault"])
 	}
 
 	// Lifecycle reflects the live state.

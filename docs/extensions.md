@@ -22,20 +22,48 @@ const fireweave = new FireweaveClient(runtime);            // Node
 fw = FireweaveClient(runtime)                              # Python
 ```
 ```go
-client := fireweave.NewClient(runtime)                     // Go (facades: client.Releases(), …)
+client := fireweave.NewClient(runtime)                     // Go (facades: client.Flags(), client.Releases(), …)
 ```
 ```java
 FireweaveClient fireweave = new FireweaveClient(runtime);  // Java (facades: fireweave.releases(), …)
 ```
 
-> **API shape note.** The operations and semantics are identical across languages, but argument shapes are idiomatic and currently differ in which release fields are required: Node's `releases.setContext` requires non-empty `stampIds`; Python and Go require `rolloutId`; Java requires only a non-null context. Pass **both** a `rolloutId` and at least one `stampId` and your code is portable everywhere. See [compatibility.md](compatibility.md#known-gaps).
+> **Release context portability.** Pass a `rolloutId` **and** 1–64 unique well-formed `stampIds` (`stmp_<26 Crockford ULID>`), with optional `changeId` (`chg_<26 Crockford ULID>`), matching `spec/release-context.schema.json`. Python/Go/Java enforce the patterns today; Node pattern validation is a residual (adversarial H-2).
+
+## Flags (Fireweave-native Decision API)
+
+Detailed evaluation without OpenFeature, on the client surface (ruling 16 / architecture §6.3):
+
+```python
+# Python
+d = fw.flags.evaluate("new-checkout", FlagType.BOOLEAN, False, EvaluationContext("user_42"))
+# alias: fw.flags.get_details(...)
+```
+
+```go
+// Go — prefer Flags().Evaluate over Runtime().Evaluate
+d := client.Flags().Evaluate(ctx, "new-checkout", fireweave.FlagTypeBoolean, false,
+    fireweave.EvaluationContext{TargetingKey: "user_42"}, fireweave.EvaluateOptions{})
+```
+
+```java
+// Java
+Decision d = fireweave.evaluate(...);
+```
+
+```js
+// Node — prefer FireweaveClient Decision API when present (ruling 16);
+// until landed, detailed eval may still go through runtime.evaluate.
+```
+
+Phase-one evaluate defaults are **side-effect-free** for exposures; use `exposures.*` (or Go `SendExposureEvents` / `EvaluateOptions.SendExposure`) when you need `$feature_flag_called`.
 
 ## Releases
 
 Bind the process to a rollout identity (typed IDs from `spec/release-context.schema.json`: `rolloutId`, `chg_…` change IDs, `stmp_…` stamp IDs), then report lifecycle transitions. Deploy-attestation ("boot beacon") semantics are carried by `setContext` + `start`.
 
 ```js
-// Node — setContext takes a ReleaseContext object; stampIds must be non-empty.
+// Node — setContext takes a ReleaseContext object.
 const res = fireweave.releases.setContext({
   rolloutId: 'rollout_01HZXEXAMPLE000000000001',
   changeId: 'chg_01HZXEXAMPLE0000000000001',
@@ -47,11 +75,15 @@ fireweave.releases.fail({ reason: 'canary regression' });  // reason is secret-r
 ```
 
 ```python
-# Python — rollout_id is the required first argument.
-fw.releases.set_context("rollout_01HZX3", change_id="chg_01HZX3", stamp_ids=["stmp_01HZX3"])
-fw.releases.start()                                # defaults to the bound rollout
+# Python — keyword / positional args; stamp_ids validated against the schema.
+fw.releases.set_context(
+    "rollout_01HZXEXAMPLE000000000001",
+    change_id="chg_01HZXEXAMPLE0000000000001",
+    stamp_ids=["stmp_01HZXEXAMPLE000000000001"],
+)
+fw.releases.start()
 fw.releases.complete()
-fw.releases.fail(reason="canary regression")       # reason is secret-redacted
+fw.releases.fail(reason="canary regression")
 ```
 
 ```go
@@ -61,8 +93,8 @@ rc := fireweave.ReleaseContext{
     ChangeID:  "chg_01HZXEXAMPLE0000000000001",
     StampIDs:  []string{"stmp_01HZXEXAMPLE000000000001"},
 }
-err := client.Releases().SetContext(ctx, rc)       // RolloutID required
-err = client.Releases().Start(ctx, rc.RolloutID)   // must match the bound rollout
+err := client.Releases().SetContext(ctx, rc)
+err = client.Releases().Start(ctx, rc.RolloutID)
 err = client.Releases().Complete(ctx, rc.RolloutID)
 err = client.Releases().Fail(ctx, rc.RolloutID, "canary regression")
 ```
@@ -81,11 +113,11 @@ fireweave.releases().fail("rollout_01HZXEXAMPLE000000000001", "canary regression
 
 Failure reasons pass the secret-redaction filter before being stored or emitted (`phc_`/`phs_`/`phx_` keys, bearer tokens → `[REDACTED]`).
 
-When a PostHog-backed adapter is attached, Go emits release transitions as `$fw_release_<status>` telemetry events; other languages currently record them in-process (see [compatibility.md](compatibility.md#known-gaps)).
+When a PostHog-backed adapter is attached, Go emits release transitions as `$fw_release_<status>` telemetry events; other languages may record them in-process depending on the adapter sink (see [compatibility.md](compatibility.md#known-gaps)).
 
 ## Exposures
 
-Explicit exposure recording, for the rare cases where the evaluation-path exposure policy isn't enough (e.g. you evaluated once and served many users, or you need `rolloutId` correlation). Records are queued in-process, deduplicated on `(targetingKey, flagKey, variant, value)`, and drained by `flush`.
+Explicit exposure recording, for the rare cases where the evaluation-path exposure policy isn't enough (e.g. you evaluated once and served many users, or you need `rolloutId` correlation). Records are queued in-process, deduplicated on `(targetingKey, flagKey, variant, value)`, and drained by `flush`. Dedup windows clear on flush (clear-on-flush lifecycle).
 
 ```js
 // Node
@@ -129,10 +161,10 @@ fireweave.signals.recordOutcome({ name: 'release', status: 'completed', rolloutI
 
 ```python
 # Python — keyword arguments.
-fw.signals.record_health("checkout-api", "healthy", rollout_id="rollout_01HZX3")
+fw.signals.record_health("checkout-api", "healthy", rollout_id="rollout_01HZXEXAMPLE000000000001")
 fw.signals.record_error("checkout-api", error_kind="Timeout", message="...")
 fw.signals.record_metric("p99_latency_ms", 187.0, unit="ms")
-fw.signals.record_outcome("release", "completed", rollout_id="rollout_01HZX3")
+fw.signals.record_outcome("release", "completed", rollout_id="rollout_01HZXEXAMPLE000000000001")
 ```
 
 ```go
@@ -153,7 +185,7 @@ fireweave.signals().record(Signal.builder(Signal.Kind.HEALTH, "checkout-api")
     .status("ok").rolloutId("rollout_…").build());
 ```
 
-Correlation fields (`rolloutId`, `changeId`, `stampId`, `flagKey`, `variant`) tie signals back to the bound release. Delivery: Go and Java hand signals to the adapter's telemetry sink immediately; Node and Python record in-process (retrievable for tests via `getRecorded()` / `signals.recorded`).
+Correlation fields (`rolloutId`, `changeId`, `stampId`, `flagKey`, `variant`) tie signals back to the bound release. Delivery: Go and Java hand signals to the adapter's telemetry sink immediately; Node and Python record in-process (retrievable for tests via `getRecorded()` / `signals.recorded`) unless a sink is attached.
 
 ## Guardrails
 
@@ -169,8 +201,10 @@ The static capability matrix reports `guardrails: false`.
 
 Discover what this SDK build and the attached adapter can do — used by harness tooling, useful for defensive feature-gating in your own code.
 
+All four languages return the **structured** matrix (`spec/capabilities.schema.json`: `static` ∪ `runtime`). Name-list sugar is also available where useful.
+
 ```js
-// Node — full matrix (spec/capabilities.schema.json): static ∪ runtime.
+// Node — full matrix.
 const caps = fireweave.capabilities.get();
 // caps.static.features  { flags: true, releases: true, …, guardrails: false }
 // caps.runtime.backend  'inmemory' | 'posthog'
@@ -179,20 +213,23 @@ fireweave.capabilities.list();   // canonical operation-name list
 ```
 
 ```python
-fw.capabilities.get()            # canonical operation-name list
+fw.capabilities.get()            # structured static/runtime matrix (ruling 18)
+fw.capabilities.names()          # canonical operation-name list
 fw.capabilities.invoke("releases.start")   # dynamic dispatch; degrades on unknown names
 ```
 
 ```go
-client.Capabilities().Get()      // []string of operation names
+client.Capabilities().Get()         // structured Capabilities matrix
+client.Capabilities().Operations()  // []string of operation names
 ```
 
 ```java
 Capabilities caps = fireweave.capabilities().get();  // names + static/runtime feature maps
+caps.names();  // sugar
 ```
 
-Shape note: Node and Java return a structured matrix (static package features + runtime adapter features); Python and Go return the canonical operation-name list. Unknown capability names passed to the dynamic dispatchers (`invokeCapability` / `capabilities.invoke` / `Capabilities().Invoke`) degrade with `UnsupportedCapability` — they never throw.
+Unknown capability names passed to the dynamic dispatchers (`invokeCapability` / `capabilities.invoke` / `Capabilities().Invoke`) degrade with `UnsupportedCapability` — they never throw.
 
 ## Lifecycle interaction
 
-Extension calls are gated on runtime state: before `READY` they fail with `NotReady`; after shutdown with `AlreadyClosed` (Go/Java gate every call; Node/Python queue-and-flush surfaces behave equivalently at flush time). All extension state (release context, exposure queue, recorded signals) is per-`FireweaveClient`-instance in Node/Python/Java and per-`Client` in Go — construct one client and share it.
+Extension calls are gated on runtime state in **all four languages** (ruling 17): before `READY` they fail/degrade with `NotReady` / `UnsupportedCapability`; after shutdown with `AlreadyClosed`. All extension state (release context, exposure queue, recorded signals) is per-`FireweaveClient`-instance in Node/Python/Java and per-`Client` in Go — construct one client and share it.

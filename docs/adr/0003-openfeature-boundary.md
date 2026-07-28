@@ -49,8 +49,14 @@ Provider receives the merged context (Go: `FlattenedContext` with `"targetingKey
 
 - **Compliance floor:** OpenFeature specification **v0.8.0**.
 - Build to **shipped SDK behavior**: SDK synthesizes READY/ERROR from `initialize` outcome (not provider-emitted init events from draft §2.8).
-- Pins: Node `@openfeature/server-sdk` 1.22.0 (peer `@openfeature/core` ^1.11); Python `openfeature-sdk` `>=0.10,<0.11`; Go `go-sdk` v1.17.2; Java `dev.openfeature:sdk` 1.21.0.
+- Pins: Node `@openfeature/server-sdk` 1.22.0 (peer `@openfeature/core` ^1.11); Python `openfeature-sdk` `>=0.10,<0.11`; Go `go-sdk` v1.17.2; Java `dev.openfeature:sdk` **1.15.1** (see superseded-pins errata).
 - Conformance: Appendix B `evaluation.feature` against Fireweave+InMemory; diff vs official in-memory provider oracle.
+
+### Superseded pins (errata, 2026-07-27)
+
+| Original pin in this ADR | Status | Current truth |
+|---|---|---|
+| Java `dev.openfeature:sdk` **1.21.0** | **Superseded** (orchestrator ruling 10) | **1.21.0 does not exist** on Maven Central. Live pin is **1.15.1** (newest published at research time). See `docs/compatibility.md` / `docs/openfeature.md`. |
 
 ### Provider contract (phase one)
 

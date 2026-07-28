@@ -1,15 +1,18 @@
 # Fireweave SDK — Security Findings & Release Gate
 
-**Status:** Phase-4 security review (Agent J, 2026-07-27).
-**Verdict: no RELEASE BLOCKERS.** The designed safeguards — secret hygiene, fixed error messages with redaction, pre-network context bounds, host allowlisting, bounded retries, TLS defaults, no disk persistence, no dynamic evaluation — were verified working in all four languages (evidence in [threat-model.md](threat-model.md)). The findings below are graded HIGH/MEDIUM/LOW and should be triaged before first publish; none involves an actual credential leak or an exploitable remote path in the default server-side deployment.
+**Status:** Phase-4 security review (Agent J, 2026-07-27).  
+**Disposition (2026-07-27):** Agent J HIGH items are **Fixed** — see [findings-disposition.md](findings-disposition.md). The historical findings below are retained as the original evidence trail; do **not** treat H-1/H-2 as still-open exit criteria.
 
-Counts: **0 RELEASE BLOCKER · 2 HIGH · 5 MEDIUM · 6 LOW.**
+**Verdict (Agent J):** no security RELEASE BLOCKERS from the Phase-4 review. (Product/functional adversarial RB-1/RB-2/RB-3 are tracked in [adversarial-review.md](../reviews/adversarial-review.md).)
+
+Counts at review time: **0 RELEASE BLOCKER · 2 HIGH · 5 MEDIUM · 6 LOW** — HIGH now dispositioned Fixed.
 
 ---
 
 ## HIGH
 
 ### H-1 · Host allowlist is off by default in Node and Python
+**Disposition: Fixed** — see [findings-disposition.md](findings-disposition.md).
 
 - **Where:** `sdks/node/packages/sdk/src/runtime.ts` lines 33–34 ("Empty/undefined ⇒ any http(s) host") and 70–78; `sdks/python/src/fireweave/config.py` lines 41, 61–63 (`allowed_hosts: Optional[…] = None`, checked only `if … is not None`).
 - **Contrast:** Go ships `defaultAllowedHosts` (five PostHog hosts + loopback, `sdks/go/adapters/posthog/posthog.go` lines 49–56); Java ships `DEFAULT_ALLOWED_HOSTS` (`FireweaveConfig.java` lines 18–20). Both deny unknown hosts out of the box.
@@ -17,8 +20,9 @@ Counts: **0 RELEASE BLOCKER · 2 HIGH · 5 MEDIUM · 6 LOW.**
 - **Fix (owners: Agents F, G):** adopt the Go/Java default allowlist in Node and Python; require an explicit `allowedHosts: ["*"]`-style opt-out for self-hosted PostHog. Behavior change is config-compatible for the documented PostHog hosts.
 
 ### H-2 · Node interpolates stringified vendor/internal errors into the outward `errorMessage`
+**Disposition: Fixed** — see [findings-disposition.md](findings-disposition.md).
 
-- **Where:** `sdks/node/packages/sdk/src/runtime.ts` line 246: `new FireweaveError('Internal', { cause: err, message: redactSecrets(String(err)) })`, surfaced verbatim via `errorDecision` (`errorMessage: err.message`, lines 310–323).
+- **Where (historical):** `sdks/node/packages/sdk/src/runtime.ts` line 246: `new FireweaveError('Internal', { cause: err, message: redactSecrets(String(err)) })`, surfaced verbatim via `errorDecision` (`errorMessage: err.message`, lines 310–323).
 - **Contrast:** Go documents and enforces "vendor error text never reaches Message" (`adapters/posthog/posthog.go` lines 428–429, `runtime.go` 199–208); Python wraps as `InternalError("evaluation failed")` with the cause on `__cause__` only (`runtime.py` 246–249); Java uses `ErrorKind.Internal.defaultMessage()` (`PostHogAdapter.java` line 129).
 - **Impact:** `redactSecrets` catches only known secret shapes; arbitrary third-party exception text (URLs with query strings, response fragments, echoes of person attributes from vendor code) can reach callers and their logs through OpenFeature `errorMessage`. This weakens the `sec-pii-redaction-in-messages` guarantee on exactly the path where errors are least predictable.
 - **Fix (owner: Agent F):** use the fixed taxonomy message (`safeMessage`) for non-Fireweave exceptions; keep the original on `cause` only. One-line change; `errors.ts` already defines `safeMessage` for this purpose (lines 103–104, 116).

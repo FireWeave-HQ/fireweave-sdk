@@ -43,8 +43,7 @@ All five bounds (count/key/value/depth/serialized) rejected with `networkCalls: 
 
 | Language | Status | Notes |
 |---|---|---|
-| Python | ✅ | `tests/test_context.py::test_sanctioned_fireweave_carriers_allowed` — allows `fireweave.groups`/`fireweave.groupProperties`/`fireweave.evaluationContexts` |
-| Node / Go / Java | ⚠️ | Reserved-prefix rejection is tested, but these languages reject **all** `fireweave.*` keys including the ruling-12 sanctioned carriers. Once finding M-4 is resolved, add the carve-out tests in all three (or remove Python's extra `fireweave.evaluationContexts` if ruling 12 stands as-is). |
+| All four | ✅ | Rulings 12–14 carve-out landed; fixture `ctx-fireweave-groups-carveout`. Canonical `fireweave.groups` / `fireweave.groupProperties` only; `fireweave.evaluationContexts` rejected (ruling 13). Plain `groups` alias per ruling 19. Disposition: [findings-disposition.md](findings-disposition.md) J-M-4 Fixed. |
 
 ## T6 — SSRF / endpoint allowlist
 
@@ -56,7 +55,7 @@ Non-allowlisted host (`http://169.254.169.254`) → FATAL `Configuration`, no ke
 | Python | ✅ | `tests/test_lifecycle.py::test_ssrf_allowlist_rejects_unlisted_host` + conformance |
 | Go | ✅ | adapter config validation tests in `posthog_test.go` + conformance |
 | Java | ✅ | `FireweaveRuntimeTest::ssrfAllowlistRejectsUnknownHost` + conformance |
-| All | ❌ | **Missing:** default-posture test ("no allowedHosts configured ⇒ metadata endpoint rejected") — currently only passable in Go/Java; required once H-1 lands for Node/Python. Also missing: IP-literal-in-different-encodings cases (`http://0xa9fea9fe/`, `http://[::ffff:169.254.169.254]/`). |
+| All | ⚠️ | Default-deny posture landed with J-H-1 (see [findings-disposition.md](findings-disposition.md)). Still missing: IP-literal-in-different-encodings cases (`http://0xa9fea9fe/`, `http://[::ffff:169.254.169.254]/`) — adversarial F-3. |
 
 ## T7 — Bounded retries / queues / shutdown
 

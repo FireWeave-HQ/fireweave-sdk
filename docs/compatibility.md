@@ -9,25 +9,33 @@ Spec version **0.1.0**; OpenFeature specification compliance floor **v0.8.0**. S
 | **Package (working name)** | `@fireweaveai/sdk` | `fireweave` | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go` | `ai.fireweave:fireweave-{sdk,openfeature,adapter-posthog,testing}` |
 | **Language version** | Node ≥ 20.20 | Python ≥ 3.10 | Go 1.25 | Java ≥ 11 |
 | **OpenFeature SDK pin** | `@openfeature/server-sdk` 1.22.0 (peer) | `openfeature-sdk` ≥ 0.10, < 0.11 (**pre-1.0**) | `go-sdk` v1.17.2 | `dev.openfeature:sdk` **1.15.1** (newest published; orchestrator ruling 10) |
-| **PostHog SDK pin** | `posthog-node` 5.46.1 (optional peer) | `posthog` 7.31.0 (`[posthog]` extra) | `posthog-go` v1.22.0 | **none** — seam only / not production-ready (no published PostHog server SDK; see [posthog.md](posthog.md#java)) |
-| **Remote evaluation** (`phc_`) | ✅ | ✅ | ✅ | ⚠️ **seam only** — injected `PostHogClientApi` stub/tests; `PostHogAdapter.create(config)` → `UnsupportedCapability` (API keys alone cannot create a live client) |
-| **Local evaluation** (`phs_`/`phx_`) | ✅ `secretApiKey` | ✅ `secret_key`/`personal_api_key` + `local_evaluation` | ✅ `SecretKey` | ❌ unsupported until upstream server SDK |
-| **Local-only mode** | ✅ `onlyEvaluateLocally` | ✅ `only_evaluate_locally` | ✅ `LocalEvaluationOnly` | ❌ unsupported until upstream server SDK |
+| **PostHog SDK pin** | `posthog-node` 5.46.1 (optional peer) | `posthog` 7.31.0 (`[posthog]` extra) | `posthog-go` v1.22.0 | **none** — `com.posthog:posthog-server` not yet published; adapter behind `PostHogClientApi` seam |
+| **Remote evaluation** (`phc_`) | ✅ | ✅ | ✅ | ⚠️ injected `PostHogClientApi` only ([posthog.md](posthog.md#java)) |
+| **Local evaluation** (`phs_`/`phx_`) | ✅ `secretApiKey` | ✅ `secret_key`/`personal_api_key` + `local_evaluation` | ✅ `SecretKey` | ⏳ pending upstream artifact |
+| **Local-only mode** | ✅ `onlyEvaluateLocally` | ✅ `only_evaluate_locally` | ✅ `LocalEvaluationOnly` | ⏳ pending upstream |
 | **Structured (object) flags** | ✅ | ✅ | ✅ | ✅ |
 | **Multivariate variants** | ✅ | ✅ | ✅ | ✅ |
-| **Groups / group properties** | ✅ plain `groups` attribute | ✅ `fireweave.groups` / `fireweave.groupProperties` | ✅ plain `groups` / `groupProperties` attributes | ✅ context-builder `.group()` API |
-| **Flag payloads** (`fireweave.payload` metadata) | ✅ provider `includePayload` | ✅ `include_payload` | ✅ `fireweave.WithIncludePayload(ctx)` | ✅ `EvaluationOptions` |
-| **Exposure events** | Explicit API; vendor `$feature_flag_called` disabled (side-effect-free reads) | Explicit API; vendor events disabled | Explicit API + opt-in vendor events (`SendExposureEvents`); `$fw_*` telemetry | Explicit API + `EvaluationOptions.sendExposure` (default on) via seam/`InMemoryAdapter` |
+| **Groups / group properties** | ✅ canonical `fireweave.groups` / `fireweave.groupProperties` + plain `groups` / `groupProperties` alias (rulings 12–14, 19) | ✅ same | ✅ same | ✅ builder `.group()` + canonical/alias attributes |
+| **Flag payloads** (`fireweave.payload` metadata) | ✅ provider `includePayload` | ✅ `include_payload` | ✅ `fireweave.WithIncludePayload(ctx)` / `Flags().Evaluate(..., IncludePayload)` | ✅ `EvaluationOptions` |
+| **Exposure events** | Explicit `exposures.*`; vendor OF-path intended side-effect-free (Node local residual — adversarial RB-2) | Explicit `exposures.*`; OF-path side-effect-free (`exposureEmission: false`) | Explicit `exposures.*` + opt-in vendor events (`SendExposureEvents` / per-call `SendExposure`) | Explicit API via adapter seam; `sendExposure` option unwired (adversarial H-4) |
 | **OpenFeature tracking (spec §6)** | ⏳ planned | ⏳ planned | ⏳ planned | ⏳ planned |
 | **Fireweave extensions** (releases / exposures / signals / capabilities) | ✅ | ✅ | ✅ | ✅ |
 | **Guardrails** | 🧪 stub (`UnsupportedCapability`) | 🧪 stub | 🧪 stub | 🧪 stub |
 | **In-memory adapter** | ✅ (+ typed fault injection) | ✅ | ✅ | ✅ (`fireweave-testing`, + fault simulation) |
 | **Async surface** | native async | sync core + `fireweave.aio` | sync + `context.Context` | sync |
-| **Conformance (65 fixtures)** | 63/65 (2 numeric skips) | 65/65 | 65/65 | 64/65 (1 numeric skip: `eval-int-beyond-safe-integer`) |
+| **Conformance (65 fixtures)** | 63/65 | 65/65 | 65/65 | 64/65 |
 
 ✅ works · ⚠️ works with caveat · ⏳ planned/blocked · 🧪 experimental stub
 
 All conformance skips are **pre-declared** in the fixtures themselves (`skipped-with-documented-limitation`) — there are no silent skips and no failures.
+
+**Skip IDs (pre-declared):**
+
+| Language | Fixture ID | Limitation |
+| --- | --- | --- |
+| Node | `eval-int-beyond-safe-integer` | IEEE-754 double; integers beyond ±(2^53−1) not lossless |
+| Node | *(second numeric skip in suite)* | Same Number resolver constraint — see numeric table |
+| Java | `eval-int-beyond-safe-integer` (or integer-range skip) | OF integer resolver is 32-bit `int` → `TYPE_MISMATCH` + default outside range |
 
 ## Numeric limitations (pre-declared)
 
@@ -41,22 +49,28 @@ All conformance skips are **pre-declared** in the fixtures themselves (`skipped-
 
 | Area | Caveat |
 | --- | --- |
-| Java PostHog **[not production-ready]** | Seam only: `PostHogClientApi` injection for tests/stubs. No live create-from-config path until PostHog publishes a server SDK. Prefer `InMemoryAdapter` for Java apps today. |
-| Java remote cache **[PostHog-specific, seam]** | When an injected client returns aged snapshots, stale serves are labeled (`reason: STALE`, `fireweave.fromCache`), runtime shows `STALE` |
-| Exposure dedup cache sizes **[PostHog-specific]** | Vendor LRU sizes differ across SDKs where a real vendor client exists; Fireweave does not equalize them in phase one |
+| Java remote cache **[PostHog-specific]** | The vendor Java SDK caches per-user remote flag results up to ~5 min and keeps last-good local definitions; stale serves are labeled (`reason: STALE`, `fireweave.fromCache`), runtime shows `STALE` |
+| Exposure dedup cache sizes **[PostHog-specific]** | Vendor LRU sizes differ across SDKs (Node ~50k vs Java ~1k entries); Fireweave does not equalize them in phase one |
 | Polling default | Fireweave normalizes definitions polling toward 30 s where the vendor SDK allows override |
 | Go capture queue | posthog-go can drop telemetry on queue overflow; capture failures map to extension errors, flag evaluation is unaffected |
 | `$`-prefixed context attributes | Passed through as PostHog system directives, not person properties; stripped from telemetry context views |
 
 ## Known gaps (pre-release; tracked for arbitration/1.0)
 
-1. **Groups context spelling differs per language** (see matrix row). The ratified spec names `fireweave.groups`/`fireweave.groupProperties`; today only Python accepts that spelling — Node currently rejects all `fireweave.*` keys and uses plain `groups`. Portable code should isolate group-context construction per language ([identity.md](identity.md#groups)).
-2. **`releases.setContext` required fields differ**: Node requires non-empty `stampIds`; Python/Go require `rolloutId`; Java requires a non-null context. Supply both and you're portable ([extensions.md](extensions.md#releases)).
-3. **Fireweave-native detailed evaluation naming differs**: Python `client.flags.get_details(...)`, Java `client.evaluate(...)`, Node `runtime.evaluate(...)`, Go `runtime.Evaluate(...)` (the architecture sketch's `client.flags.evaluate` shape exists only in Python).
-4. **Release/signal delivery**: Go (and Java via the adapter seam) deliver release transitions/signals to the backend telemetry sink; Node/Python currently record them in-process only.
-5. **`capabilities.get` return shape**: structured static∪runtime matrix in Node/Java; canonical name list in Python/Go.
-6. **Java PostHog is seam only / not production-ready** (ruling 10 / RB-3): no published `com.posthog:posthog-server`; `PostHogAdapter.create(config)` → `UnsupportedCapability` with guidance to inject `PostHogClientApi` or use `InMemoryAdapter`. Docs/examples never imply API-key-only live PostHog construction for Java.
-7. **Readiness gating of extension calls**: Go/Java gate every extension call on runtime state (NotReady/AlreadyClosed); Node/Python accept records pre-ready and surface backend state at flush time.
+1. **Java PostHog binding** pending upstream publication (ruling 10 / adversarial RB-3) — `PostHogAdapter.create(config)` → `UnsupportedCapability`; examples use an offline stub / injected seam.
+2. **Node local/hybrid PostHog evaluation + local `$feature_flag_called`** — adversarial RB-1 / RB-2 (owned by Node agent); do not treat Node local eval as production-ready until those close.
+3. **Ruling 15 residual on Node:** `releases.setContext` stamp/change ULID pattern validation incomplete vs Python/Go/Java (adversarial H-2; Node agent).
+4. **Java `EvaluationContext` builder** still exposes unratified evaluation-context tags (adversarial H-7; Java agent) — do not use for portable contexts.
+5. **Release/signal delivery skew:** Go (and Java via the adapter seam) deliver release transitions/signals to the backend telemetry sink; Node/Python may record some paths in-process only — check `capabilities.get().runtime.features` and language docs.
+6. **Exposure emit-once on OF path** not uniform (adversarial H-4): phase-one portable default is side-effect-free evaluate + explicit `exposures.*`; full ADR §6/§23 "default emit" deferred until RB-2 + Java wiring.
+
+**Closed since Phase 5 (do not treat as current gaps):**
+
+- `fireweave.groups` / `fireweave.groupProperties` carve-out — implemented in all four languages (+ plain alias per ruling 19).
+- `capabilities.get` structured static∪runtime matrix — all four (Python/Go also expose name-list sugar: `names()` / `Operations()`).
+- Extension lifecycle gating (ruling 17) — all four.
+- Fireweave-native Decision API without runtime reach-in — Python `client.flags.evaluate` / `get_details`; Go `client.Flags().Evaluate`; Java `client.evaluate(...)`. Node detailed eval surface is owned by the Node agent (ruling 16 residual if still `runtime.evaluate` only).
+- Host allowlist default-on + Node Internal fixed messages — see [security findings disposition](security/findings-disposition.md).
 
 ## OpenFeature feature support (per ADR-0003)
 

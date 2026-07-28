@@ -63,8 +63,9 @@ import (
 
 // DefaultCloseTimeout bounds Close when neither the caller's context nor
 // Config.CloseTimeout supplies a deadline. posthog-go's default is an
-// indefinite wait, which must not leak to Fireweave callers.
-const DefaultCloseTimeout = 5 * time.Second
+// indefinite wait, which must not leak to Fireweave callers. Aligned with
+// capabilities.runtime.limits.shutdownTimeoutMsDefault (10_000).
+const DefaultCloseTimeout = 10 * time.Second
 
 // defaultAllowedHosts is the canonical cross-language endpoint allowlist
 // applied when Config.AllowedHosts is empty (SSRF guard): the five official
@@ -106,7 +107,10 @@ type Config struct {
 	// caller decide (OpenFeature returns the default value either way).
 	FlagRequestRetries int
 	// SendExposureEvents enables $feature_flag_called exposure events
-	// (deduplicated per distinct_id/flag/value). Default false.
+	// (deduplicated per distinct_id/flag/value). Default false: phase-one
+	// OF/evaluate path is side-effect-free unless opted in (ADR-0001
+	// phase-one errata; matches Node/Python PostHog adapters). Per-call
+	// override: ResolveRequest.SendExposure.
 	SendExposureEvents bool
 	// CloseTimeout bounds Close when the caller's context carries no
 	// deadline. Default DefaultCloseTimeout.
@@ -136,7 +140,7 @@ func New(cfg Config) *Adapter {
 	}
 	return &Adapter{
 		cfg:  cfg,
-		gate: &exposureGate{send: cfg.SendExposureEvents, seen: map[string]bool{}, allow: map[string]int{}},
+		gate: &exposureGate{seen: map[string]bool{}, allow: map[string]int{}},
 	}
 }
 
@@ -318,8 +322,15 @@ func (a *Adapter) Resolve(ctx context.Context, req fireweave.ResolveRequest) fir
 	}
 
 	// Arm the exposure gate before touching value accessors (each access
-	// may fire a $feature_flag_called event through BeforeSend).
-	a.gate.arm(req.Context.TargetingKey, req.FlagKey)
+	// may fire a $feature_flag_called event through BeforeSend). Per-call
+	// ResolveRequest.SendExposure overrides the adapter config default.
+	shouldEmit := a.cfg.SendExposureEvents
+	if req.SendExposure != nil {
+		shouldEmit = *req.SendExposure
+	}
+	if shouldEmit {
+		a.gate.arm(req.Context.TargetingKey, req.FlagKey)
+	}
 
 	raw := snap.GetFlag(req.FlagKey)
 	var detail *capturedFlagDetail

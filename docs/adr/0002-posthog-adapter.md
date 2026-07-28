@@ -34,9 +34,16 @@ Phase-one flag evaluation must use PostHog without reimplementing local evaluati
 | Node | `posthog-node` **5.46.1** |
 | Python | `posthog` **7.31.0** |
 | Go | `posthog-go` **v1.22.0** |
-| Java | `com.posthog:posthog-server` **2.9.0** (not legacy `posthog-java` 1.x) |
+| Java | **none published** — see superseded-pins errata below |
 
 Revisit official OF providers only after 1.0 + four-language coverage.
+
+### Superseded pins (errata, 2026-07-27)
+
+| Original pin in this ADR | Status | Current truth |
+|---|---|---|
+| Java `com.posthog:posthog-server` **2.9.0** | **Superseded** (orchestrator ruling 10; adversarial RB-3) | Artifact is **not on Maven Central**. Java adapter is a `PostHogClientApi` seam only; `PostHogAdapter.create(config)` → `UnsupportedCapability`. Do not treat 2.9.0 as a live dependency pin. |
+| Context mapping row `fireweave.evaluationContexts` | **Rejected** (ruling 13) | Do not implement; strip any residual builder/API that reintroduces evaluation-context tags (adversarial H-7 on Java). |
 
 ## Adapter Responsibilities
 
@@ -86,14 +93,14 @@ UNINITIALIZED → INITIALIZING → READY
 | non-reserved context attrs | `person_properties` |
 | `fireweave.groups` | `groups` |
 | `fireweave.groupProperties` | `group_properties` |
-| `fireweave.evaluationContexts` | `evaluation_contexts` / `evaluationContexts` when supported |
+| ~~`fireweave.evaluationContexts`~~ | **Rejected** (ruling 13) — do not map |
 
 Never invent `distinct_id`. Missing key → Fireweave `InvalidContext` (OF `TARGETING_KEY_MISSING`).
 
 ### Exposure policy
 
-- Default: snapshot value accessors may emit `$feature_flag_called` (PostHog native dedup).
-- `sendExposure: false`: prefer non-emitting access patterns; document per-SDK limits.
+- **Phase-one default:** side-effect-free evaluate/OF reads (Python internal-record reads; Go gate off unless `SendExposureEvents` / per-call arm; Node remote body-parse — local path residual under adversarial RB-2).
+- Opt in to vendor `$feature_flag_called` where the adapter supports it (Go config / per-call `SendExposure`); otherwise use Fireweave `exposures.*`.
 - Payload-only reads must not emit (PostHog guarantee).
 - Fireweave must not emit a second exposure event for the same OF evaluation.
 

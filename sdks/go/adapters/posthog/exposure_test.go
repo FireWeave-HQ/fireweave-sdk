@@ -16,16 +16,17 @@ func flagCalledEvent(distinctID, flagKey string, response any) posthoggo.Capture
 	}
 }
 
-func TestGateDropsAllExposuresWhenDisabled(t *testing.T) {
-	g := &exposureGate{send: false, seen: map[string]bool{}, allow: map[string]int{}}
-	g.arm("u1", "f1") // arm is a no-op when disabled
+func TestGateDropsUnarmedExposures(t *testing.T) {
+	g := &exposureGate{seen: map[string]bool{}, allow: map[string]int{}}
+	// Without arm(), $feature_flag_called is always dropped (side-effect-free
+	// default / internal re-reads).
 	if msg := g.beforeSend(flagCalledEvent("u1", "f1", true)); msg != nil {
-		t.Fatal("disabled gate must drop $feature_flag_called")
+		t.Fatal("unarmed gate must drop $feature_flag_called")
 	}
 }
 
 func TestGateAllowsFirstExposureThenDedups(t *testing.T) {
-	g := &exposureGate{send: true, seen: map[string]bool{}, allow: map[string]int{}}
+	g := &exposureGate{seen: map[string]bool{}, allow: map[string]int{}}
 
 	g.arm("u1", "f1")
 	if msg := g.beforeSend(flagCalledEvent("u1", "f1", true)); msg == nil {
@@ -49,7 +50,7 @@ func TestGateAllowsFirstExposureThenDedups(t *testing.T) {
 }
 
 func TestGateSeenClearsOnFlush(t *testing.T) {
-	g := &exposureGate{send: true, seen: map[string]bool{}, allow: map[string]int{}}
+	g := &exposureGate{seen: map[string]bool{}, allow: map[string]int{}}
 
 	g.arm("u1", "f1")
 	if msg := g.beforeSend(flagCalledEvent("u1", "f1", true)); msg == nil {
@@ -86,14 +87,14 @@ func TestAdapterFlushTelemetryClearsGateSeen(t *testing.T) {
 }
 
 func TestGateSuppressesUnarmedInternalReads(t *testing.T) {
-	g := &exposureGate{send: true, seen: map[string]bool{}, allow: map[string]int{}}
+	g := &exposureGate{seen: map[string]bool{}, allow: map[string]int{}}
 	if msg := g.beforeSend(flagCalledEvent("u1", "f1", true)); msg != nil {
 		t.Fatal("unarmed snapshot access must not emit an exposure")
 	}
 }
 
 func TestGatePassesUnrelatedEvents(t *testing.T) {
-	g := &exposureGate{send: false, seen: map[string]bool{}, allow: map[string]int{}}
+	g := &exposureGate{seen: map[string]bool{}, allow: map[string]int{}}
 	ev := posthoggo.Capture{DistinctId: "u1", Event: "$fw_signal_health", Properties: posthoggo.NewProperties()}
 	if msg := g.beforeSend(ev); msg == nil {
 		t.Fatal("non-exposure telemetry must pass the gate")

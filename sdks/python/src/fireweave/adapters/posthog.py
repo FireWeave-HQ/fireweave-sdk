@@ -369,7 +369,10 @@ class PostHogAdapter:
             "remoteEvaluation": not cfg.only_evaluate_locally,
             "localEvaluation": bool(cfg.local_evaluation),
             "localOnly": bool(cfg.only_evaluate_locally),
-            "exposureEmission": True,
+            # OF/evaluate path never emits vendor $feature_flag_called
+            # (side-effect-free snapshot reads). Explicit exposures.record
+            # + flush remains the emission path (Agent M H-4 accuracy).
+            "exposureEmission": False,
             "sideEffectFreeReads": True,
             "groupAnalytics": True,
             # M-5 mirror: effective vendor bounds are auditable by operators.

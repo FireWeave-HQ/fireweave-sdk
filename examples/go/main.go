@@ -36,7 +36,7 @@ func buildAdapter() fireweave.BackendAdapter {
 			SecretKey:          os.Getenv("FW_SECRET_KEY"), // optional: enables local evaluation
 			Endpoint:           host,
 			FlagRequestTimeout: 3 * time.Second,
-			CloseTimeout:       5 * time.Second,
+			CloseTimeout:       10 * time.Second,
 		})
 	}
 
@@ -82,13 +82,27 @@ func main() {
 	enabled := ofClient.Boolean(ctx, "checkout-redesign", false, evalCtx)
 	fmt.Printf("checkout-redesign enabled: %v\n", enabled)
 
-	// 3. Detailed resolution: variant, reason, and fireweave.* metadata.
-	details, err := ofClient.StringValueDetails(ctx, "theme", "light", evalCtx)
-	if err != nil {
-		fmt.Printf("theme fell back to default %q (%s: %s)\n", details.Value, details.ErrorCode, details.ErrorMessage)
+	// 3. Detailed resolution via FireweaveClient.Flags().Evaluate (ruling 16)
+	// — no Runtime() reach-in required for Decision-shaped results.
+	fwCtx := fireweave.EvaluationContext{
+		TargetingKey: "org_01HZXEXAMPLE0000000000001",
+		Attributes:   map[string]any{"tier": "pro", "region": "us"},
+	}
+	decision := client.Flags().Evaluate(ctx, "theme", fireweave.FlagTypeString, "light", fwCtx, fireweave.EvaluateOptions{})
+	if decision.Error != nil {
+		fmt.Printf("theme fell back to default %q (%s: %s)\n",
+			decision.Value, decision.Error.Kind, decision.Error.Message)
 	} else {
 		fmt.Printf("theme = %q variant=%q reason=%s metadata=%v\n",
-			details.Value, details.Variant, details.Reason, details.FlagMetadata)
+			decision.Value, decision.Variant, decision.Reason, decision.Metadata)
+	}
+
+	// OpenFeature detailed resolution remains available for OF-native callers.
+	details, err := ofClient.StringValueDetails(ctx, "theme", "light", evalCtx)
+	if err != nil {
+		fmt.Printf("of theme fell back to default %q (%s: %s)\n", details.Value, details.ErrorCode, details.ErrorMessage)
+	} else {
+		fmt.Printf("of theme = %q variant=%q reason=%s\n", details.Value, details.Variant, details.Reason)
 	}
 
 	// 5. Fireweave extensions: bind the rollout and report health.

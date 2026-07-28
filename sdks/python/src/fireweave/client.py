@@ -617,13 +617,16 @@ class _FlagsNamespace:
         context: Optional[EvaluationContext],
         *,
         include_payload: bool = False,
+        send_exposure: bool = False,
     ) -> Decision:
         return self._client.runtime.evaluate(
             flag_key,
             flag_type,
             default,
             context,
-            EvaluationOptions(include_payload=include_payload),
+            EvaluationOptions(
+                include_payload=include_payload, send_exposure=send_exposure
+            ),
         )
 
     def get_boolean_value(
@@ -659,9 +662,38 @@ class _FlagsNamespace:
         context: Optional[EvaluationContext] = None,
         *,
         include_payload: bool = False,
+        send_exposure: bool = False,
     ) -> Decision:
         return self._eval(
-            flag_key, flag_type, default, context, include_payload=include_payload
+            flag_key,
+            flag_type,
+            default,
+            context,
+            include_payload=include_payload,
+            send_exposure=send_exposure,
+        )
+
+    def evaluate(
+        self,
+        flag_key: str,
+        flag_type: FlagType,
+        default: Any,
+        context: Optional[EvaluationContext] = None,
+        *,
+        include_payload: bool = False,
+        send_exposure: bool = False,
+    ) -> Decision:
+        """Decision-returning evaluate (architecture ``flags.evaluate`` / ruling 16).
+
+        Alias of :meth:`get_details` for portable FireweaveClient-only call sites.
+        """
+        return self.get_details(
+            flag_key,
+            flag_type,
+            default,
+            context,
+            include_payload=include_payload,
+            send_exposure=send_exposure,
         )
 
 

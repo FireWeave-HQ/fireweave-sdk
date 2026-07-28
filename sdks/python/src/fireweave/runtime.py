@@ -63,12 +63,24 @@ class LifecycleState(enum.Enum):
 
 
 class EvaluationOptions:
-    """Per-invocation options (currently: include payload in metadata)."""
+    """Per-invocation evaluation options.
 
-    __slots__ = ("include_payload",)
+    ``include_payload`` attaches the flag payload as ``fireweave.payload``
+    metadata. ``send_exposure`` requests OF-path exposure emission; the
+    phase-one Python PostHog adapter uses side-effect-free snapshot reads, so
+    ``True`` is accepted for API portability but does not emit vendor
+    ``$feature_flag_called`` on evaluate (use ``exposures.record`` /
+    ``exposures.flush``). Default ``False`` matches the ratified phase-one
+    side-effect-free evaluate contract (ADR-0001 errata / Agent M H-4).
+    """
 
-    def __init__(self, *, include_payload: bool = False) -> None:
+    __slots__ = ("include_payload", "send_exposure")
+
+    def __init__(
+        self, *, include_payload: bool = False, send_exposure: bool = False
+    ) -> None:
         self.include_payload = include_payload
+        self.send_exposure = send_exposure
 
 
 _PY_TYPES = {

@@ -306,7 +306,8 @@ def test_runtime_features_mirror_vendor_bounds():
     features = adapter.runtime_features()
     assert features["vendorRetriesDisabled"] is True
     assert features["boundedTelemetryQueue"] is True
-    assert features["exposureEmission"] is True
+    assert features["exposureEmission"] is False
+    assert features["sideEffectFreeReads"] is True
 
 
 # --- telemetry sink (ruling 17) ---------------------------------------------------
