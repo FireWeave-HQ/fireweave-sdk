@@ -136,3 +136,12 @@ Mandatory before acceptance: fix RB-1..RB-3 and all HIGH findings; re-run verifi
 - Cross-lang HIGH wave: H-1/H-3/H-4(Py+Go+docs)/H-5/H-6/H-8
 
 **Ruling 20 (exposure default on evaluate):** Phase-one evaluate is **side-effect-free by default** (no automatic exposure emission). Callers opt in via `sendExposure: true` / language equivalent. Align Node to match Python/Go (default false). Fireweave still owns emission when opted in; vendor `$feature_flag_called` remains suppressed (RB-2). Update ADR/docs accordingly if needed.
+
+## Phase 6 close + Phase 7 final acceptance (2026-07-27)
+
+- **Phase 6** (complete): Agent M adversarial review delivered; RB-1/RB-2/RB-3 and HIGH wave closed in code + docs honesty (Java PostHog seam-only). Re-verify: [phase6-verification.md](phase6-verification.md) → CONDITIONAL GO; residuals (gofmt, Java `sendExposure` default, stale known-gaps) cleared before/at Phase 7.
+- **Phase 7** (complete): Final acceptance report at [final-acceptance-report.md](final-acceptance-report.md). Verification re-run green:
+  - `bash scripts/test-all.sh` → exit 0 (Node 89u+16i; Python 239; Go gofmt+vet+build+race OK / 75 PASS verbose; Java 89 surefire; 4 offline examples)
+  - `bash scripts/conformance-all.sh` → exit 0 (65 fixtures; node 63+2sk / python 65 / go 65 / java 64+1sk; **0 undeclared divergences**)
+  - `bash scripts/build-all.sh` → exit 0 (dry-run artifacts + SHA256SUMS; nothing published)
+- **Go / no-go:** **GO for pre-release scaffolding** (CI, dry-run packaging, docs, tags-when-authorized). **NO-GO for public npm/PyPI/Maven publish** until company license/name ratification + registry provisioning (see `.github/RELEASE.md`). No packages published in Phase 7.
