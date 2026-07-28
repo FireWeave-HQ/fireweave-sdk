@@ -16,6 +16,14 @@
     (decision brief, risk 4). DO NOT PUBLISH.
   </description>
 
+  <licenses>
+    <license>
+      <name>MIT License</name>
+      <url>https://opensource.org/licenses/MIT</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
   <modules>
     <module>fireweave-sdk</module>
     <module>fireweave-openfeature</module>
