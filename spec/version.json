@@ -1,6 +1,6 @@
 {
   "name": "fireweave-sdk-spec",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "specDate": "2026-08-04",
   "openFeatureSpecFloor": "0.8.0",
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
