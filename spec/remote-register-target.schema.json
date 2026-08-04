@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fireweave.ai/spec/0.1.0/remote-register-target.schema.json",
+  "title": "FireweaveRemoteRegisterTarget",
+  "description": "Vendor-neutral wire protocol for POST /v1/targets/register (ADR-0005). Auth: Authorization: Bearer <Fireweave project/runtime key>. Registers a targeting target — a user or a device — so flag rules can match on DURABLE properties. Registered properties are stored server-side; `attributes` on POST /v1/flags/evaluate override them for a single evaluation. No provider field names — fw-server maps to the connected provider.",
+  "type": "object",
+  "$defs": {
+    "jsonValue": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "string", "maxLength": 16384 },
+        { "type": "number" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/jsonValue" },
+          "maxItems": 128
+        },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" },
+          "maxProperties": 128
+        }
+      ]
+    },
+    "registerTargetRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetingKey"],
+      "properties": {
+        "targetingKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The target's id — the SAME value later sent as targetingKey on evaluate and capture. fw-server scopes it to the calling project; two projects using the same raw id remain distinct targets."
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["user", "device"],
+          "default": "user",
+          "description": "What is being registered. Recorded on the target so rules can distinguish user-level from device-level targeting."
+        },
+        "environment": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Client-declared environment (e.g. production, staging). Recorded on the target for environment-scoped rules."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" },
+          "maxProperties": 100,
+          "description": "Durable targeting facts — plan, beta membership, region, device model. Keys prefixed `fw_` are reserved for server-authoritative tenancy stamps and are rejected/stripped."
+        }
+      }
+    },
+    "registerTargetResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "targetingKey": {
+          "type": "string",
+          "description": "Echoed back exactly as sent — the caller keeps using this value on evaluate."
+        }
+      }
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/registerTargetRequest" },
+    { "$ref": "#/$defs/registerTargetResponse" }
+  ]
+}

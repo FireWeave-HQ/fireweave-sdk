@@ -114,7 +114,7 @@ export interface Capabilities {
   static: {
     language: 'node';
     sdkVersion?: string;
-    specVersion?: '0.1.0';
+    specVersion?: '0.1.0' | '0.2.0';
     openFeature: {
       specFloor: '0.8.0';
       providerName: 'fireweave';

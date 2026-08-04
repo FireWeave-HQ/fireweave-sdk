@@ -428,7 +428,7 @@ class CapabilitiesApi {
       static: {
         language: 'node',
         sdkVersion: SDK_VERSION,
-        specVersion: '0.1.0',
+        specVersion: '0.2.0',
         openFeature: { specFloor: '0.8.0', providerName: 'fireweave', serverOnly: true },
         features: {
           flags: true,

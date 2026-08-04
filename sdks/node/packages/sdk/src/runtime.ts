@@ -15,7 +15,12 @@ import {
   type ContextLimits,
   type ContextPolicy,
 } from './context.js';
-import type { AdapterResolution, BackendAdapter } from './adapter.js';
+import type {
+  AdapterResolution,
+  BackendAdapter,
+  RegisterTargetOptions,
+  RegisterTargetResult,
+} from './adapter.js';
 import type {
   CanonicalContext,
   Decision,
@@ -322,6 +327,31 @@ export class FireweaveRuntime {
     }
 
     return decision;
+  }
+
+  /**
+   * Register a user or device so flag rules can target its DURABLE properties.
+   *
+   * Call once per login / device provisioning with the facts that outlive a
+   * request (plan, beta membership, region, device model), then send the same
+   * `targetingKey` on evaluation. Per-request context attributes still override
+   * the registered properties for a single evaluation — the two identity paths
+   * compose (spec/remote-protocol.md § Two identity paths).
+   *
+   * Resolves with `ok: false` instead of throwing: this runs in sign-in paths.
+   * Adapters without the capability (in-memory, local dev) report
+   * `Unsupported` so a dev harness does not silently look registered.
+   */
+  async registerTarget(
+    targetingKey: string,
+    options: RegisterTargetOptions = {},
+  ): Promise<RegisterTargetResult> {
+    const lifecycle = this.lifecycleError();
+    if (lifecycle !== undefined) return { ok: false, error: lifecycle };
+    if (this.adapter.registerTarget === undefined) {
+      return { ok: false, error: new FireweaveError('UnsupportedCapability') };
+    }
+    return this.adapter.registerTarget(targetingKey, options);
   }
 
   private emitEvaluateExposure(exposure: {

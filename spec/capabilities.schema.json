@@ -23,7 +23,8 @@
         },
         "specVersion": {
           "type": "string",
-          "const": "0.1.0"
+          "enum": ["0.1.0", "0.2.0"],
+          "description": "The spec version THIS SDK implements — not the newest spec that exists. 0.2.0 adds POST /v1/targets/register; SDKs that have not yet implemented it correctly continue to advertise 0.1.0."
         },
         "openFeature": {
           "type": "object",

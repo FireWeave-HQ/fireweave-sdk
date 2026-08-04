@@ -4,6 +4,7 @@
  * Speaks only the vendor-neutral Fireweave remote protocol to fw-server:
  *   POST /v1/flags/evaluate
  *   POST /v1/capture
+ *   POST /v1/targets/register
  *
  * Auth: Authorization: Bearer <FW_PROJECT_API_KEY> (project-api-key_…).
  * Never depends on posthog-node or PostHog hosts/keys in the customer process.
@@ -16,6 +17,8 @@ import type {
   AdapterResolution,
   AdapterRuntimeFeatures,
   BackendAdapter,
+  RegisterTargetOptions,
+  RegisterTargetResult,
   ResolveOptions,
 } from '../adapter.js';
 import type { CanonicalContext, Exposure, JsonValue, Signal } from '../types.js';
@@ -24,6 +27,7 @@ const DEFAULT_ADAPTER_SHUTDOWN_TIMEOUT_MS = 10000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 3000;
 const EVALUATE_PATH = '/v1/flags/evaluate';
 const CAPTURE_PATH = '/v1/capture';
+const REGISTER_TARGET_PATH = '/v1/targets/register';
 
 type FetchLike = (
   url: string,
@@ -223,6 +227,58 @@ export class FireweaveRemoteAdapter implements BackendAdapter {
       return missing;
     }
     return this.toResolution(item, response.quotaLimited === true);
+  }
+
+  /**
+   * Register a user or device so flag rules can target its DURABLE properties.
+   *
+   * Call once per login / device provisioning, then send the same
+   * `targetingKey` on evaluate. Per-request `attributes` still override the
+   * stored properties for a single evaluation — the two identity paths compose
+   * (see spec/remote-protocol.md § Two identity paths).
+   *
+   * Never throws for transport failures: registration sits in login paths, and
+   * an analytics call must not break sign-in. Retried ONCE when the error
+   * taxonomy marks the failure retryable (network / timeout / backend); a
+   * rejected payload or bad key is not retried, since it would be rejected
+   * identically. The result object reports what happened for callers that
+   * want to log it.
+   */
+  async registerTarget(
+    targetingKey: string,
+    options: RegisterTargetOptions = {},
+  ): Promise<RegisterTargetResult> {
+    if (this.closed) return { ok: false, error: new FireweaveError('AlreadyClosed') };
+    if (!this.ready) return { ok: false, error: new FireweaveError('NotReady') };
+    if (targetingKey === '') {
+      return {
+        ok: false,
+        error: new FireweaveError('InvalidContext', {
+          message: 'targeting key missing',
+          openFeatureErrorCode: 'TARGETING_KEY_MISSING',
+        }),
+      };
+    }
+
+    const body: Record<string, unknown> = { targetingKey };
+    if (options.kind !== undefined) body['kind'] = options.kind;
+    if (options.environment !== undefined) body['environment'] = options.environment;
+    if (options.properties !== undefined && Object.keys(options.properties).length > 0) {
+      body['properties'] = options.properties;
+    }
+
+    let lastError: FireweaveError | undefined;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await this.requestJson(REGISTER_TARGET_PATH, body, options.signal);
+        return { ok: true };
+      } catch (err) {
+        lastError =
+          err instanceof FireweaveError ? err : new FireweaveError('BackendUnavailable');
+        if (!lastError.retryable) break;
+      }
+    }
+    return { ok: false, ...(lastError !== undefined ? { error: lastError } : {}) };
   }
 
   recordExposure(exposure: Exposure): void {
