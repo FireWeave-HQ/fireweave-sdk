@@ -1,6 +1,6 @@
 {
   "name": "@fireweaveai/sdk",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "description": "Fireweave OpenFeature provider + client for Node servers. Default: FireweaveRemoteAdapter (FW key → fw-server). Optional PostHogAdapter for direct/advanced use.",
   "license": "MIT",
   "type": "module",
