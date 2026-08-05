@@ -41,7 +41,10 @@ export type {
   BackendAdapter,
   AdapterResolution,
   AdapterRuntimeFeatures,
+  RegisterTargetOptions,
+  RegisterTargetResult,
   ResolveOptions,
+  TargetKind,
 } from './adapter.js';
 
 export { InMemoryAdapter } from './adapters/inmemory.js';

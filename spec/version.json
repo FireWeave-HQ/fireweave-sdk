@@ -1,7 +1,7 @@
 {
   "name": "fireweave-sdk-spec",
   "version": "0.1.0",
-  "specDate": "2026-07-27",
+  "specDate": "2026-08-04",
   "openFeatureSpecFloor": "0.8.0",
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "schemas": [
@@ -13,11 +13,13 @@
     "errors.schema.json",
     "fireweave-sdk.schema.json",
     "remote-evaluate.schema.json",
-    "remote-capture.schema.json"
+    "remote-capture.schema.json",
+    "remote-register-target.schema.json"
   ],
   "remoteProtocol": {
     "evaluatePath": "/v1/flags/evaluate",
     "capturePath": "/v1/capture",
+    "registerTargetPath": "/v1/targets/register",
     "auth": "Authorization: Bearer <Fireweave project/runtime key>",
     "doc": "remote-protocol.md"
   }

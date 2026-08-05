@@ -1,4 +1,30 @@
+import type { FireweaveError } from './errors.js';
 import type { CanonicalContext, DecisionReason, Exposure, FlagValueType, JsonValue, Signal } from './types.js';
+
+/** What is being registered — see spec/remote-register-target.schema.json. */
+export type TargetKind = 'user' | 'device';
+
+export interface RegisterTargetOptions {
+  /** Defaults to 'user'. */
+  kind?: TargetKind;
+  /** Durable targeting facts: plan, beta membership, region, device model. */
+  properties?: Record<string, JsonValue>;
+  /** Client-declared environment (production, staging, …). */
+  environment?: string;
+  signal?: AbortSignal;
+}
+
+export interface RegisterTargetResult {
+  /**
+   * `false` means the target was NOT registered — rules that depend on its
+   * properties will not match until a later attempt succeeds. Callers in a
+   * login path normally ignore this; a careful caller logs it, because a
+   * silently unregistered target is exactly how targeting rules end up
+   * matching nobody.
+   */
+  readonly ok: boolean;
+  readonly error?: FireweaveError;
+}
 
 /** Result of a backend flag resolution (success path; faults throw FireweaveError). */
 export interface AdapterResolution {
@@ -50,6 +76,15 @@ export interface BackendAdapter {
   initialize(signal?: AbortSignal): Promise<void>;
   /** Resolve one flag. Throws FireweaveError for transport/auth/parse faults. */
   resolve(flagKey: string, context: CanonicalContext, options?: ResolveOptions): Promise<AdapterResolution>;
+  /**
+   * Register a user or device so rules can target its durable properties
+   * (optional capability). Resolves with `ok: false` rather than throwing —
+   * registration sits in login paths and must not break sign-in.
+   */
+  registerTarget?(
+    targetingKey: string,
+    options?: RegisterTargetOptions,
+  ): Promise<RegisterTargetResult>;
   /** Record an exposure event (optional capability). */
   recordExposure?(exposure: Exposure): void;
   /** Deliver a telemetry signal to the backend sink (optional capability, ruling 17). */
