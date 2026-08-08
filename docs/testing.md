@@ -1,9 +1,9 @@
 # Testing your integration
 
-Two Fireweave-provided tools mean your tests never need a PostHog account or network:
+Two Fireweave-provided tools mean your tests never need a backend account or network:
 
 1. **`InMemoryAdapter`** — a deterministic, fixture-driven `BackendAdapter` in every language. Bind the real provider + real OpenFeature client to it; assert on real evaluation behavior with zero I/O.
-2. **The PostHog-protocol test server** (`test-server/`) — a zero-dependency Node HTTP stub of `/flags?v=2`, the definitions poll, and `/batch/`, with scriptable fault modes. Use it when you specifically want to exercise the `PostHogAdapter`'s HTTP path.
+2. **The protocol test server** (`test-server/`) — a zero-dependency Node HTTP stub with scriptable fault modes. It serves the Fireweave-native routes (`/v1/flags/evaluate`, `/v1/capture`, `/v1/targets/register`) for exercising `FireweaveRemoteAdapter`'s HTTP path, plus legacy vendor routes for the languages that still ship a vendor adapter.
 
 Both are **[Fireweave extension]** test infrastructure; the evaluation semantics they exercise are the same canonical semantics as production.
 
@@ -110,7 +110,7 @@ boolean enabled = OpenFeatureAPI.getInstance().getClient("t")
 
 Fault simulation: `new InMemoryAdapter(flags, FaultConfig...)` deterministically simulates HTTP-status faults, invalid JSON, network errors, offline, quota-limiting, and delays (delay compares against the configured timeout — nothing sleeps). Assertion helpers: `evaluateCallCount()`, `lastContext()`, `deliveredExposures()`, `setStale(true)` for stale-cache scenarios.
 
-## The PostHog-protocol test server
+## The protocol test server
 
 Zero-dependency Node stub (loopback-only by default). Use it for adapter-level integration tests — anything where you want the real HTTP path rather than the in-memory seam.
 
@@ -119,29 +119,33 @@ node test-server/implementation/server.mjs            # http://127.0.0.1:3901
 node test-server/implementation/server.mjs --port 4000
 ```
 
-Endpoints: `POST /flags?v=2` (snapshot evaluation), `GET /flags/definitions?token=…` (local-eval definitions poll, `Authorization: Bearer phs_…`), `POST /batch/` (event capture, retrievable at `GET /_test/events`), `GET /health`.
+Fireweave-native endpoints (what `FireweaveRemoteAdapter` speaks): `POST /v1/flags/evaluate`, `POST /v1/capture`, `POST /v1/targets/register`, `GET /health`. Auth is `Authorization: Bearer <FW_PROJECT_API_KEY>`.
 
-Auth: any non-empty `token` is accepted unless the server was started with a configured key. Use obviously fake keys (`phc_example`).
+Legacy vendor endpoints, for the languages that still ship a vendor adapter: `POST /flags?v=2`, `GET /flags/definitions?token=…`, `POST /batch/`.
+
+Auth: any non-empty key is accepted unless the server was started with a configured one. Use obviously fake keys (`project-api-key_dev`).
 
 Control plane for tests:
 
 | Call | Effect |
 | --- | --- |
-| `POST /_test/fault` `{"mode":"500","ttlRequests":1,"applyTo":"flags"}` | Inject a fault: `delay`, `401`, `429`, `500`, `invalid_json`, `truncated`, `quota_limited` |
+| `POST /_test/fault` `{"mode":"500","ttlRequests":1,"applyTo":"evaluate"}` | Inject a fault: `delay`, `401`, `429`, `500`, `invalid_json`, `truncated`, `quota_limited`. `applyTo` selects the route: `evaluate` / `capture` for the Fireweave routes, `flags` / `definitions` / `batch` for the legacy ones, or `all` |
 | `POST /_test/flags` | Replace the `/flags?v=2` success body |
 | `POST /_test/definitions` | Replace the definitions body (bump `version` to simulate config change) |
 | `POST /_test/reset` | Restore fixture defaults, clear faults/events |
-| `GET /_test/events` | Captured batch events, insert order |
+| `GET /_test/events` | Captured events in insert order: `{ events }` from the legacy batch route, `{ fwEvents }` from `POST /v1/capture` |
+| `GET /_test/requests` | Request log — which routes the adapter actually called |
 
 Faults can also be triggered per-request with header `X-Fw-Test-Fault: <mode>` or query `?fault=<mode>`. Full contract: [`test-server/README.md`](../test-server/README.md).
 
 Point an adapter at it (works in every language — it is just a host):
 
 ```bash
-POSTHOG_HOST=http://127.0.0.1:3901 POSTHOG_API_KEY=phc_example node examples/node/index.mjs --posthog
+FW_API_URL=http://127.0.0.1:3901 FW_PROJECT_API_KEY=project-api-key_dev \
+  node examples/node/index.mjs --remote
 ```
 
-Note that the stub serves **its own fixture flags** (`fw-bool-on`, …, from `test-server/fixtures/flags-v2-success.json`) — flags your app expects will resolve `FLAG_NOT_FOUND` → default unless you `POST /_test/flags` a body containing them. This is a correct, useful test of your default-value behavior.
+Note that the stub serves **its own fixture control points** (`fw-bool-on`, …, from `test-server/fixtures/flags-v2-success.json`) — keys your app expects will resolve `FLAG_NOT_FOUND` → default unless you `POST /_test/flags` a body containing them. This is a correct, useful test of your default-value behavior.
 
 ## What to test (checklist)
 

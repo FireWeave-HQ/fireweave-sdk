@@ -71,14 +71,14 @@ const details = await client.getStringDetails('checkout-theme', 'classic', conte
 | --- | --- |
 | `fireweave.flagVersion` | Flag definition version reported by the backend |
 | `fireweave.errorKind` | Canonical Fireweave error kind on error decisions ([concepts.md](concepts.md#error-taxonomy)) |
-| `fireweave.quotaLimited` | `true` when the backend was quota-limited ([posthog.md](posthog.md#quota-behavior)) |
+| `fireweave.quotaLimited` | `true` when the backend was quota-limited — you get your default with `FLAG_NOT_FOUND`, deliberately not treated as an outage |
 | `fireweave.fromCache` | `true` when served from a last-good/stale cache |
 | `fireweave.vendorFlagId`, `fireweave.reasonCode` | Vendor diagnostics; emitted **only** when the backend reports both a flag id and a matched condition index |
 | `fireweave.payload` | Flag payload as a sorted-key JSON *string*; only when payload attachment is enabled (`includePayload` provider option) |
 
 ## Evaluation context
 
-Identity is caller-owned: set `targetingKey` to a stable identifier (it maps 1:1 to the PostHog `distinct_id`; see [identity.md](identity.md)). Non-reserved attributes become person properties on PostHog-backed evaluation.
+Identity is caller-owned: set `targetingKey` to a stable identifier (forwarded verbatim; see [identity.md](identity.md)). Non-reserved attributes are forwarded as person properties for targeting.
 
 The OpenFeature SDK merges context layers per spec §3.2.3 — later wins:
 
@@ -122,4 +122,4 @@ OpenFeature spec §6 tracking is **[Planned — not implemented]** in all four l
 
 ## Side effects of evaluation
 
-Whether an evaluation may emit a `$feature_flag_called`-style exposure event is controlled by adapter configuration / per-call options, not by the OpenFeature call site. **Phase-one portable default is side-effect-free:** Node and Python PostHog adapters use side-effect-free snapshot reads (exposures flow through the explicit `exposures` API); Go emits vendor exposure events only when `SendExposureEvents: true` or `EvaluateOptions.SendExposure` arms the gate. See [extensions.md](extensions.md#exposures), [posthog.md](posthog.md), and ADR-0001 §6/§23 errata.
+Whether an evaluation emits an exposure is controlled by adapter configuration / per-call options, not by the OpenFeature call site. **The portable default is side-effect-free:** exposures flow through the explicit `exposures` API, or per-call via `sendExposure`. Go additionally requires `SendExposureEvents: true` or `EvaluateOptions.SendExposure` to arm its vendor gate. See [extensions.md](extensions.md#exposures) and ADR-0001 §6/§23 errata.

@@ -1,8 +1,77 @@
 # Migration guides
 
+## From `@fireweaveai/sdk` v2 to v3 (Node)
+
+**One change is mandatory.** If you imported the direct vendor adapter, switch to `FireweaveRemoteAdapter`. Everything else in v2 still works — this section exists mostly to tell you what you *don't* have to do.
+
+The full step-by-step — including the rename-scoping rules — is in the [Node module README](../sdks/node/packages/sdk/README.md#upgrading-from-v2-to-v3). This page is the condensed, cross-language view.
+
+### Required
+
+```ts
+// before
+import { PostHogAdapter } from '@fireweaveai/sdk/posthog';
+const adapter = new PostHogAdapter({
+  projectApiKey: process.env.POSTHOG_API_KEY,
+  host: process.env.POSTHOG_HOST,
+  featureFlagsRequestTimeoutMs: 3000,
+});
+
+// after
+import { FireweaveRemoteAdapter } from '@fireweaveai/sdk';
+const adapter = new FireweaveRemoteAdapter({
+  apiUrl: process.env.FW_API_URL,
+  apiKey: process.env.FW_PROJECT_API_KEY,
+  requestTimeoutMs: 3000,
+});
+```
+
+| Before | After |
+| --- | --- |
+| `POSTHOG_HOST` | `FW_API_URL` — your fw-server base URL |
+| `POSTHOG_API_KEY` (`phc_…`) | `FW_PROJECT_API_KEY` (`project-api-key_…`) |
+| `featureFlagsRequestTimeoutMs` | `requestTimeoutMs` |
+| `secretApiKey` / `onlyEvaluateLocally` / `featureFlagsPollingInterval` | no equivalent — see "local evaluation" below |
+| `posthog-node` in your `package.json` | remove it, unless you use it for your own analytics |
+
+Also drop `projectApiKey`/`host` from `FireweaveRuntimeConfig` if you set them only to satisfy the old adapter's validation; the remote adapter takes its own options. Keep `host` if you relied on the runtime-level allowlist check.
+
+### Not required — v2 names still work
+
+| v2 | Status in v3 |
+| --- | --- |
+| `client.flags.evaluate/getBooleanValue/…` | works, identical object to `client.controlPoints` |
+| `new InMemoryAdapter({ flags })` | unchanged |
+| `Decision.flagKey`, `Exposure.flagKey`, `flagMetadata` | unchanged |
+| `FlagValueType`, `InMemoryFlagDefinition`, `ExpectedFlagType` | unchanged |
+| `capabilities.get().static.features.flags` | still `true` (`controlPoints: true` added beside it) |
+| every other v2 export | unchanged — pinned by `test/compat/v2-surface.compat.test.ts` |
+
+Renaming `client.flags` to `client.controlPoints` is cosmetic and can be deferred indefinitely. Set `FW_DEPRECATION_WARNINGS=1` to get one notice per process; the SDK is silent otherwise.
+
+### Type-level changes
+
+`'posthog'` is no longer a member of `BackendAdapter['name']` or `Capabilities['runtime']['backend']`. This affects you only if you wrote a custom adapter declaring `name: 'posthog'` (use `'other'`), or an exhaustive `switch` on `backend` with a `posthog` arm (that arm is now unreachable).
+
+### Local evaluation
+
+v2's vendor adapter could evaluate in-process from polled definitions with a secret key. v3 has no equivalent: caching is fw-server's concern, and both shipped adapters report `localEvaluation: false`. If in-process evaluation is load-bearing for you — an air-gapped service, or a hard latency floor below a network hop — stay on v2 for now and tell us; the interface seam for a Fireweave-native cache is deliberately preserved ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)).
+
+### Behavior worth re-checking
+
+1. **`DEFAULT_ALLOWED_HOSTS` changed contents.** Still exported, still the same name — but it now lists Fireweave hosts, not vendor hosts. Code doing `allowedHosts: [...DEFAULT_ALLOWED_HOSTS, 'mine.example']` keeps compiling and no longer permits the old endpoints. That is intended; verify it matches your deployment.
+2. **Person properties should move to `registerTarget`.** Attributes you sent on every evaluation can be registered once per login instead ([remote.md](remote.md#two-identity-paths)). Per-request attributes still override stored properties, so this is an optimization, not a cutover — but skipping it entirely means rules that expect stored properties match nobody.
+3. **`sdkVersion` is now accurate.** `capabilities.get().static.sdkVersion` returned `0.1.0` in v2 regardless of the package version; it now tracks `package.json` and is pinned by a test.
+
+### Runtimes
+
+v3 runs on Bun and Deno in addition to Node ([runtimes.md](runtimes.md)). Nothing to do if you are on Node.
+
 ## From direct PostHog SDK calls
 
-If your server calls `posthog-node` / `posthog` / `posthog-go` feature-flag APIs directly, Fireweave gives you the same PostHog evaluation (it wraps the same official SDK — no behavior re-implementation) plus: a vendor-neutral call surface (OpenFeature), a never-throw contract, a typed error taxonomy, in-memory testing, and the release-safety extensions.
+> **Scope:** the direct-vendor mapping below applies to the **Python, Go, and Java** SDKs, which still ship a vendor adapter that wraps the official SDK. The **Node** SDK removed it in v3 ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)) — on Node, evaluation goes through fw-server, so treat the API mapping as accurate and the "wraps the same official SDK" parity argument as no longer applying. Bucketing parity is then fw-server's responsibility rather than the SDK's; validate in staging.
+
+If your server calls `posthog-node` / `posthog` / `posthog-go` feature-flag APIs directly, Fireweave gives you the same evaluation semantics plus: a vendor-neutral call surface (OpenFeature), a never-throw contract, a typed error taxonomy, in-memory testing, and the release-safety extensions.
 
 ### API mapping (Node shown; other languages analogous)
 

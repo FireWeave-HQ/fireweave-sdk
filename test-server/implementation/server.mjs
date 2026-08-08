@@ -211,7 +211,18 @@ export async function startTestServer(options = {}) {
         return true;
       }
       case 'quota_limited':
-        sendJson(res, 200, FIXTURES.flagsQuotaLimited());
+        // Quota limiting is reported in the shape of whichever protocol was
+        // asked. The Fireweave route carries `quotaLimited: true` alongside
+        // `decisions`; the legacy vendor route carries the vendor body. Serving
+        // the vendor shape on /v1 would make the client see a parse failure
+        // instead of a quota signal.
+        sendJson(
+          res,
+          200,
+          scope === 'evaluate'
+            ? flagsToDecisions(FIXTURES.flagsQuotaLimited())
+            : FIXTURES.flagsQuotaLimited(),
+        );
         return true;
       default:
         return false;

@@ -26,13 +26,14 @@
         },
         "serverOnly": { "type": "boolean", "const": true },
         "backendsPhaseOne": {
+          "description": "Backends a language SDK ships. Node ships [\"fireweave\", \"inmemory\"] since v3 (docs/adr/0006); Python and Go additionally ship \"posthog\".",
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["posthog", "inmemory"]
+            "enum": ["fireweave", "posthog", "inmemory"]
           },
           "minItems": 2,
-          "maxItems": 2,
+          "maxItems": 3,
           "uniqueItems": true
         },
         "noPostHogTypesInPublicApi": { "type": "boolean", "const": true },

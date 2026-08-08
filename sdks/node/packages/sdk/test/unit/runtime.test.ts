@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FireweaveRuntime, InMemoryAdapter, FireweaveError, stableStringify } from '@fireweaveai/sdk';
+import {
+  DEFAULT_ALLOWED_HOSTS,
+  FireweaveError,
+  FireweaveRuntime,
+  InMemoryAdapter,
+  stableStringify,
+} from '@fireweaveai/sdk';
 import type {
   BackendAdapter,
   AdapterResolution,
@@ -173,17 +179,20 @@ test('H-1: host allowlist is ON by default — unlisted host is Configuration/FA
   assert.equal(runtime.getState(), 'FATAL');
 });
 
-test('H-1: canonical PostHog hosts pass the default allowlist over https', async () => {
+test('H-1: canonical Fireweave hosts pass the default allowlist over https', async () => {
   for (const host of [
-    'https://app.posthog.com',
-    'https://us.posthog.com',
-    'https://eu.posthog.com',
-    'https://us.i.posthog.com',
-    'https://eu.i.posthog.com',
+    'https://app-server.fireweave.ai',
+    'https://staging-app-server.fireweave.ai',
   ]) {
     const runtime = new FireweaveRuntime(adapterWith(BOOL_ON), { host });
     await runtime.initialize();
     assert.equal(runtime.getState(), 'READY');
+  }
+});
+
+test('H-1: the default allowlist names no backend vendor (ADR-0006)', () => {
+  for (const host of DEFAULT_ALLOWED_HOSTS) {
+    assert.ok(!/posthog/i.test(host), `vendor host still in the default allowlist: ${host}`);
   }
 });
 
@@ -193,7 +202,9 @@ test('H-1/L-3: http is loopback-only; https required for non-loopback hosts', as
   await loop.initialize();
   assert.equal(loop.getState(), 'READY');
   // http on an otherwise-allowlisted host is rejected:
-  const insecure = new FireweaveRuntime(adapterWith(BOOL_ON), { host: 'http://us.posthog.com' });
+  const insecure = new FireweaveRuntime(adapterWith(BOOL_ON), {
+    host: 'http://app-server.fireweave.ai',
+  });
   await assert.rejects(
     () => insecure.initialize(),
     (err: unknown) => err instanceof FireweaveError && err.kind === 'Configuration',
@@ -201,12 +212,12 @@ test('H-1/L-3: http is loopback-only; https required for non-loopback hosts', as
 });
 
 test('H-1: custom hosts require explicit allowedHosts config', async () => {
-  const denied = new FireweaveRuntime(adapterWith(BOOL_ON), { host: 'https://posthog.internal.example' });
+  const denied = new FireweaveRuntime(adapterWith(BOOL_ON), { host: 'https://fw.internal.example' });
   await assert.rejects(() => denied.initialize());
 
   const allowed = new FireweaveRuntime(adapterWith(BOOL_ON), {
-    host: 'https://posthog.internal.example',
-    allowedHosts: ['posthog.internal.example'],
+    host: 'https://fw.internal.example',
+    allowedHosts: ['fw.internal.example'],
   });
   await allowed.initialize();
   assert.equal(allowed.getState(), 'READY');

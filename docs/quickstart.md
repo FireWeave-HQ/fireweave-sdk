@@ -1,12 +1,16 @@
 # Quickstart
 
-Five minutes per language: install → configure a provider → evaluate a boolean flag → shut down cleanly.
+Five minutes per language: install → configure a backend → evaluate a boolean control point → shut down cleanly.
 
 > **Packages are not yet published.** Every path below installs from a checkout of this repository (path/workspace installs). The import names shown (`@fireweaveai/sdk`, `fireweave`, `ai.fireweave:*`) are the working package names and already work for local installs.
 
-Every snippet below runs **offline** using the deterministic `InMemoryAdapter` — no network needed. For production, use `FireweaveRemoteAdapter` with `FW_API_URL` + `FW_PROJECT_API_KEY` (Fireweave credentials → fw-server; see below). Direct PostHog is an advanced escape hatch in [posthog.md](posthog.md). Complete, runnable programs live in [`examples/`](../examples/) (`--remote` hits the test-server stub).
+Every snippet below runs **offline** using the deterministic `InMemoryAdapter` — no network needed. For production, use `FireweaveRemoteAdapter` with `FW_API_URL` + `FW_PROJECT_API_KEY` (Fireweave credentials → fw-server; see below). Complete, runnable programs live in [`examples/`](../examples/) (`--remote` hits the test-server stub).
 
-## Node.js (≥ 20.20)
+On Node, `FireweaveRemoteAdapter` is the only network adapter ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)). Python and Go still ship an optional direct-vendor escape hatch, documented in [posthog.md](posthog.md).
+
+## Node.js (≥ 20.20), Bun (≥ 1.2), Deno (≥ 2.0)
+
+The Node package is runtime-agnostic — the same build runs on all three ([runtimes.md](runtimes.md)).
 
 **Install (from repo checkout).** Build the SDK once, then depend on it by path:
 
@@ -45,7 +49,43 @@ console.log('new-checkout:', enabled);
 await OpenFeature.close();
 ```
 
-Run it: `node examples/node/index.mjs`.
+Run it: `node examples/node/index.mjs` — or `bun examples/node/index.mjs`, or
+`deno run --allow-net --allow-env --allow-read examples/node/index.mjs`.
+
+### The Fireweave-native surface
+
+The OpenFeature client above covers control-point evaluation. The release-safety
+capabilities live on `FireweaveClient`, sharing the same runtime:
+
+```js
+import { FireweaveClient } from '@fireweaveai/sdk';
+
+const fireweave = new FireweaveClient(runtime);
+
+// Register durable targeting properties once, at login.
+await runtime.registerTarget('user_42', {
+  kind: 'user',
+  properties: { plan: 'pro', region: 'eu-west' },
+});
+
+// Detailed, Decision-returning evaluation without OpenFeature.
+const decision = await fireweave.controlPoints.evaluate('new-checkout', 'boolean', false, {
+  targetingKey: 'user_42',
+});
+console.log(decision.reason, decision.variant, decision.metadata);
+
+// Release lifecycle + outcome reporting.
+fireweave.releases.setContext({
+  rolloutId: 'rollout_01HZXEXAMPE000000000000001',
+  stampIds: ['stmp_01HZXEXAMPE000000000000001'],
+});
+fireweave.releases.start();
+fireweave.signals.recordOutcome({ name: 'checkout', status: 'completed' });
+fireweave.releases.complete();
+```
+
+Details: [extensions.md](extensions.md). `client.flags` is a retained alias for
+`client.controlPoints` — see [ADR-0007](adr/0007-control-point-vocabulary.md).
 
 ### Production (Fireweave remote)
 
@@ -215,7 +255,7 @@ Run the full example: `cd examples/java && mvn -q compile exec:java`.
 
 ## Next steps
 
-- Point at PostHog (Node/Python/Go): [posthog.md](posthog.md). Java remains seam-only until upstream publishes a server SDK.
+- Direct-vendor escape hatch (Python/Go only): [posthog.md](posthog.md). Removed on Node in v3; Java remains seam-only until upstream publishes a server SDK.
 - Detailed resolution, hooks, domains: [openfeature.md](openfeature.md).
 - Release contexts, health signals, exposures: [extensions.md](extensions.md).
 - Testing your integration without a network: [testing.md](testing.md).

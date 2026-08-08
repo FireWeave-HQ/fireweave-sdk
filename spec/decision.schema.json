@@ -111,6 +111,7 @@
         "fireweave.requestId": { "type": "string" },
         "fireweave.quotaLimited": { "type": "boolean" },
         "fireweave.backend": {
+          "description": "Union across all SDK languages. `posthog` is reported only by a language still shipping the direct vendor adapter (Python, Go); the Node SDK dropped it in v3 (docs/adr/0006).",
           "type": "string",
           "enum": ["fireweave", "posthog", "inmemory", "other"]
         },

@@ -1,8 +1,8 @@
 /**
  * OpenFeature server provider (spec floor 0.8.0, @openfeature/server-sdk@1.22.x).
  * Thin mapping layer: OpenFeature types in, FireweaveRuntime decisions out.
- * Per ADR-0003 the provider owns targetingKey→distinct_id mapping and error-code
- * translation; it never leaks vendor types.
+ * Per ADR-0003 the provider owns targeting-key passthrough and error-code
+ * translation; it never leaks backend types.
  */
 import {
   ErrorCode,

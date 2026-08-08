@@ -54,7 +54,13 @@ export interface ContextInput {
   [key: string]: unknown;
 }
 
-const byteLength = (s: string): number => Buffer.byteLength(s, 'utf8');
+/**
+ * UTF-8 byte length. `TextEncoder` rather than `Buffer.byteLength`: `Buffer` is
+ * a Node global that Deno only exposes under npm compatibility, and this bound
+ * is enforced on every evaluation.
+ */
+const utf8Encoder = new TextEncoder();
+const byteLength = (s: string): number => utf8Encoder.encode(s).length;
 
 function deepCopyJson(value: unknown): JsonValue {
   // Structured clone of JSON-compatible data; drops functions/undefined like JSON round-trip.
@@ -218,8 +224,8 @@ export function canonicalizeContext(
 }
 
 /**
- * Resolved context for reporting/telemetry: PostHog system directives
- * ($-prefixed) are filtered out; empty attributes omitted.
+ * Resolved context for reporting/telemetry: `$`-prefixed system directives are
+ * filtered out; empty attributes omitted.
  */
 export function resolvedContextView(ctx: CanonicalContext): {
   targetingKey?: string;

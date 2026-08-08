@@ -33,7 +33,7 @@ The canonical data model in `spec/` carries its own version, currently **0.1.0**
 1. Deprecations are announced in the CHANGELOG and marked in-code (`@deprecated` / Python `DeprecationWarning` / Go `// Deprecated:` / Java `@Deprecated`), with the replacement named.
 2. Post-1.0, deprecated surfaces keep working for **at least one minor release** before removal in the next major. Pre-1.0, deprecated surfaces keep working for at least one 0.x minor.
 3. Behavior deprecations (e.g. changing an adapter default like exposure emission) get a transition flag where feasible.
-4. Deprecated **PostHog per-flag APIs are never used** (ADR-0002); vendor deprecations are absorbed inside the adapter without public-API change whenever possible.
+4. Deprecated **vendor per-flag APIs are never used** (ADR-0002); vendor deprecations are absorbed inside the adapter without public-API change whenever possible. On Node there is no vendor adapter to absorb them ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)).
 
 ## Dependency-update policy
 
@@ -41,7 +41,7 @@ Vendor SDKs are **pinned exactly** and updated deliberately, never automatically
 
 | Dependency | Policy |
 | --- | --- |
-| PostHog SDKs (`posthog-node` 5.46.1, `posthog` 7.31.0, `posthog-go` v1.22.0) | Exact pins; bumps require the conformance suite plus adapter integration tests against the test-server, and a CHANGELOG entry. Absorbs PostHog's `/flags` migration churn at the adapter boundary |
+| Vendor SDKs (`posthog` 7.31.0, `posthog-go` v1.22.0) | Exact pins; bumps require the conformance suite plus adapter integration tests against the test-server, and a CHANGELOG entry. Python and Go only — the Node package has no vendor dependency |
 | `com.posthog:posthog-server` (Java) | Adopted when published (orchestrator-gated decision); until then the seam stands ([posthog.md](posthog.md#java)) |
 | OpenFeature SDKs | Node: caret peer range (`^1.22.0`); Python: `>=0.10,<0.11` (pre-1.0 upstream — widened only after compatibility validation); Go/Java: pinned, bumped with conformance re-runs |
 | Language floors (Node 20.20 / Python 3.10 / Go 1.25 / Java 11) | Raising a floor is a breaking change (major post-1.0; called-out 0.x minor before) |
