@@ -1,10 +1,10 @@
 # Migration guides
 
-## From `@fireweaveai/sdk` v2 to v3 (Node)
+## From `@fireweaveai/sdk` v2.0 to 2.1 (Node)
 
 **One change is mandatory.** If you imported the direct vendor adapter, switch to `FireweaveRemoteAdapter`. Everything else in v2 still works — this section exists mostly to tell you what you *don't* have to do.
 
-The full step-by-step — including the rename-scoping rules — is in the [Node module README](../sdks/node/packages/sdk/README.md#upgrading-from-v2-to-v3). This page is the condensed, cross-language view.
+The full step-by-step — including the rename-scoping rules — is in the [Node module README](../sdks/node/packages/sdk/README.md#upgrading-from-v20-to-21). This page is the condensed, cross-language view.
 
 ### Required
 
@@ -38,7 +38,7 @@ Also drop `projectApiKey`/`host` from `FireweaveRuntimeConfig` if you set them o
 
 ### Not required — v2 names still work
 
-| v2 | Status in v3 |
+| v2 | Status in 2.1 |
 | --- | --- |
 | `client.flags.evaluate/getBooleanValue/…` | works, identical object to `client.controlPoints` |
 | `new InMemoryAdapter({ flags })` | unchanged |
@@ -55,7 +55,7 @@ Renaming `client.flags` to `client.controlPoints` is cosmetic and can be deferre
 
 ### Local evaluation
 
-v2's vendor adapter could evaluate in-process from polled definitions with a secret key. v3 has no equivalent: caching is fw-server's concern, and both shipped adapters report `localEvaluation: false`. If in-process evaluation is load-bearing for you — an air-gapped service, or a hard latency floor below a network hop — stay on v2 for now and tell us; the interface seam for a Fireweave-native cache is deliberately preserved ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)).
+v2's vendor adapter could evaluate in-process from polled definitions with a secret key. 2.1 has no equivalent: caching is fw-server's concern, and both shipped adapters report `localEvaluation: false`. If in-process evaluation is load-bearing for you — an air-gapped service, or a hard latency floor below a network hop — stay on v2 for now and tell us; the interface seam for a Fireweave-native cache is deliberately preserved ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)).
 
 ### Behavior worth re-checking
 
@@ -65,11 +65,11 @@ v2's vendor adapter could evaluate in-process from polled definitions with a sec
 
 ### Runtimes
 
-v3 runs on Bun and Deno in addition to Node ([runtimes.md](runtimes.md)). Nothing to do if you are on Node.
+2.1 runs on Bun and Deno in addition to Node ([runtimes.md](runtimes.md)). Nothing to do if you are on Node.
 
 ## From direct PostHog SDK calls
 
-> **Scope:** the direct-vendor mapping below applies to the **Python, Go, and Java** SDKs, which still ship a vendor adapter that wraps the official SDK. The **Node** SDK removed it in v3 ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)) — on Node, evaluation goes through fw-server, so treat the API mapping as accurate and the "wraps the same official SDK" parity argument as no longer applying. Bucketing parity is then fw-server's responsibility rather than the SDK's; validate in staging.
+> **Scope:** the direct-vendor mapping below applies to the **Python, Go, and Java** SDKs, which still ship a vendor adapter that wraps the official SDK. The **Node** SDK removed it in 2.1 ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)) — on Node, evaluation goes through fw-server, so treat the API mapping as accurate and the "wraps the same official SDK" parity argument as no longer applying. Bucketing parity is then fw-server's responsibility rather than the SDK's; validate in staging.
 
 If your server calls `posthog-node` / `posthog` / `posthog-go` feature-flag APIs directly, Fireweave gives you the same evaluation semantics plus: a vendor-neutral call surface (OpenFeature), a never-throw contract, a typed error taxonomy, in-memory testing, and the release-safety extensions.
 

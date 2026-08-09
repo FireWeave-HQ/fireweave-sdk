@@ -10,7 +10,7 @@ The Fireweave SDK is **server-first** (docs/adr/0004): it runs in your backend, 
 
 Sent on each evaluation in remote mode; not sent at all in in-memory mode, or in local-evaluation mode where a language still offers it.
 
-**Node (v3):** requests go to fw-server at `POST /v1/flags/evaluate` (`sdks/node/packages/sdk/src/adapters/remote.ts`). No vendor endpoint is contacted from the application process at all. Contains:
+**Node (2.1):** requests go to fw-server at `POST /v1/flags/evaluate` (`sdks/node/packages/sdk/src/adapters/remote.ts`). No vendor endpoint is contacted from the application process at all. Contains:
 
 - `targetingKey` — verbatim.
 - `attributes` — the evaluation-context attributes you supply, minus `groups`/`groupProperties`, `$`-prefixed system directives, and `fireweave.*` carriers.
@@ -21,7 +21,7 @@ Sent on each evaluation in remote mode; not sent at all in in-memory mode, or in
 - `distinct_id` — your `targetingKey`, verbatim.
 - **Person properties** — the context attributes you supply, passed through so the backend can target on them. Verified per language: Python forwards `plain_attributes` minus group keys (`sdks/python/src/fireweave/adapters/posthog.py` lines 282–291), Go forwards everything except `groups`/`groupProperties`/`$`-directives (`sdks/go/adapters/posthog/posthog.go` lines 297–343), Java passes attributes through the client seam (`PostHogAdapter.java` line 125).
 - **Group memberships and group properties** when you supply them (`groups`/`groupProperties` attributes; Python additionally accepts the spec carriers `fireweave.groups`/`fireweave.groupProperties`, `context.py` lines 29–31, 92–103).
-- GeoIP enrichment is disabled where the vendor SDK exposes the switch. (Not applicable to Node in v3 — there is no vendor SDK in the process.)
+- GeoIP enrichment is disabled where the vendor SDK exposes the switch. (Not applicable to Node as of 2.1 — there is no vendor SDK in the process.)
 
 **The SDK never invents attributes.** If you put PII (email, phone) into the context, it is forwarded — to fw-server on Node, to the vendor directly elsewhere — and becomes targetable. That is the targeting feature working as designed. The canonical spec marks this explicitly (`spec/evaluation-context.schema.json` → `piiAndRedaction.contextMayContainPii: true`). If you must target on sensitive fields, prefer derived attributes (e.g. `email_domain` as used in `contracts/context/ctx-person-and-groups.json`) over raw values.
 
@@ -29,7 +29,7 @@ Sent on each evaluation in remote mode; not sent at all in in-memory mode, or in
 
 **Fireweave-owned, deduplicated, never implicit.** Exposures are recorded only through Fireweave's explicit, deduplicated queue — evaluation itself is side-effect-free unless you opt in with `sendExposure`.
 
-**Node (v3):** exposures batch to `POST /v1/capture`; there is no vendor emission path to suppress, because there is no vendor SDK in the process.
+**Node (2.1):** exposures batch to `POST /v1/capture`; there is no vendor emission path to suppress, because there is no vendor SDK in the process.
 
 **Python / Go / Java:** each adapter suppresses the vendor SDK's implicit emission — Python reads snapshot records without touching accessor methods that fire events (`adapters/posthog.py` lines 142–148), Go installs a `BeforeSend` gate that drops implicit events unless armed (`adapters/posthog/exposure.go`, `posthog.go` lines 18–22, 285–287), Java dedups on `(distinctId, flagKey, variant, value)` (`PostHogAdapter.java` lines 46–50, 253–272).
 
@@ -51,7 +51,7 @@ Release failure reasons (`releases.fail(reason)`) are redacted in every language
 | | Node | Python | Go | Java |
 |---|---|---|---|---|
 | Context attributes forwarded on evaluate | yes → fw-server (`/v1/flags/evaluate`) | yes (remote mode) | yes (remote mode) | via injected client seam |
-| Vendor implicit exposure events (OF/evaluate path) | n/a — no vendor SDK in process (v3); evaluate opt-in via `sendExposure: true` (ruling 20) | disabled (`exposureEmission: false`); evaluate opt-in via `send_exposure=True` | gated (off unless `SendExposureEvents` / per-call arm + deduped) | Fireweave-owned via seam; evaluate opt-in via `sendExposure(true)` (default false; ruling 20) |
+| Vendor implicit exposure events (OF/evaluate path) | n/a — no vendor SDK in process (2.1); evaluate opt-in via `sendExposure: true` (ruling 20) | disabled (`exposureEmission: false`); evaluate opt-in via `send_exposure=True` | gated (off unless `SendExposureEvents` / per-call arm + deduped) | Fireweave-owned via seam; evaluate opt-in via `sendExposure(true)` (default false; ruling 20) |
 | Fireweave exposures | explicit queue, dedup, flush | explicit queue, dedup, flush | explicit queue, dedup, flush | explicit queue, dedup, flush |
 | Signals | opt-in per call | opt-in per call | opt-in per call | opt-in per call |
 | GeoIP | n/a — no vendor SDK in process | vendor default | vendor default | injected-client dependent |

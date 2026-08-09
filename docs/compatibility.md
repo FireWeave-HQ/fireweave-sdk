@@ -2,9 +2,9 @@
 
 Spec version **0.1.0**; OpenFeature specification compliance floor **v0.8.0**. Status date: 2026-08-09.
 
-> **Node is ahead of the other languages.** v3 of the Node package removed the direct vendor adapter ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)), adopted "control point" as the product noun ([ADR-0007](adr/0007-control-point-vocabulary.md)), and added Bun/Deno support ([ADR-0008](adr/0008-multi-runtime-support.md)). Python, Go, and Java still ship the vendor adapter and still lead with flag vocabulary. That asymmetry is **deliberate and temporary** — each language gets its own pass. Rows below marked *(Node v3)* record where the languages currently diverge. **Registry status:** `@fireweaveai/sdk` is published on npm at `0.1.0` and `2.0.0` (`latest` = 2.0.0); **2.1.0 is not published yet**, so an unpinned `npm install` still resolves to 2.0.0. Python, Go, and Java remain unpublished — install those from a checkout ([quickstart.md](quickstart.md)).
+> **Node is ahead of the other languages.** 2.1 of the Node package removed the direct vendor adapter ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)), adopted "control point" as the product noun ([ADR-0007](adr/0007-control-point-vocabulary.md)), and added Bun/Deno support ([ADR-0008](adr/0008-multi-runtime-support.md)). Python, Go, and Java still ship the vendor adapter and still lead with flag vocabulary. That asymmetry is **deliberate and temporary** — each language gets its own pass. Rows below marked *(Node 2.1)* record where the languages currently diverge. **Registry status:** `@fireweaveai/sdk` is published on npm at `0.1.0` and `2.0.0` (`latest` = 2.0.0); **2.1.0 is not published yet**, so an unpinned `npm install` still resolves to 2.0.0. Python, Go, and Java remain unpublished — install those from a checkout ([quickstart.md](quickstart.md)).
 
-> **On the "v3" wording below.** This release was drafted as 3.0.0 and ships as **2.1.0** (see the CHANGELOG version note); no 3.x ever reached a registry. Rows marked *(Node v3)* describe **this** release — the wording is being cleaned up separately so the change is a rename, not a semantic edit buried in a version bump.
+> **On the "2.1" wording below.** This release was drafted as 3.0.0 and ships as **2.1.0** (see the CHANGELOG version note); no 3.x ever reached a registry. Rows marked *(Node 2.1)* describe **this** release — the wording is being cleaned up separately so the change is a rename, not a semantic edit buried in a version bump.
 
 ## Core matrix
 
@@ -14,13 +14,13 @@ Spec version **0.1.0**; OpenFeature specification compliance floor **v0.8.0**. S
 | **Language version** | Node ≥ 20.20 · Bun ≥ 1.2 · Deno ≥ 2.0 | Python ≥ 3.10 | Go 1.25 | Java ≥ 11 |
 | **Package version** | `2.1.0` | `0.1.0` | `0.1.0` | `0.1.0-SNAPSHOT` |
 | **OpenFeature SDK pin** | `@openfeature/server-sdk` 1.22.0 (peer) | `openfeature-sdk` ≥ 0.10, < 0.11 (**pre-1.0**) | `go-sdk` v1.17.2 | `dev.openfeature:sdk` **1.15.1** (newest published; orchestrator ruling 10) |
-| **Vendor SDK pin** | **none** *(Node v3 — adapter removed; zero runtime deps)* | `posthog` 7.31.0 (`[posthog]` extra) | `posthog-go` v1.22.0 | **none** — `com.posthog:posthog-server` not yet published; adapter behind `PostHogClientApi` seam |
+| **Vendor SDK pin** | **none** *(Node 2.1 — adapter removed; zero runtime deps)* | `posthog` 7.31.0 (`[posthog]` extra) | `posthog-go` v1.22.0 | **none** — `com.posthog:posthog-server` not yet published; adapter behind `PostHogClientApi` seam |
 | **Fireweave remote** (`FireweaveRemoteAdapter`) | ✅ only network adapter | ✅ | ✅ | ✅ |
-| **Direct vendor adapter** | ❌ removed *(Node v3)* | ✅ escape hatch | ✅ escape hatch | ⚠️ seam only ([posthog.md](posthog.md#java)) |
-| **Local (in-process) evaluation** | ❌ none *(Node v3 — caching is fw-server's concern; the interface seam is preserved)* | ✅ `secret_key`/`personal_api_key` + `local_evaluation` | ✅ `SecretKey` | ⏳ pending upstream artifact |
-| **Local-only mode** | ❌ *(Node v3)* | ✅ `only_evaluate_locally` | ✅ `LocalEvaluationOnly` | ⏳ pending upstream |
+| **Direct vendor adapter** | ❌ removed *(Node 2.1)* | ✅ escape hatch | ✅ escape hatch | ⚠️ seam only ([posthog.md](posthog.md#java)) |
+| **Local (in-process) evaluation** | ❌ none *(Node 2.1 — caching is fw-server's concern; the interface seam is preserved)* | ✅ `secret_key`/`personal_api_key` + `local_evaluation` | ✅ `SecretKey` | ⏳ pending upstream artifact |
+| **Local-only mode** | ❌ *(Node 2.1)* | ✅ `only_evaluate_locally` | ✅ `LocalEvaluationOnly` | ⏳ pending upstream |
 | **Target registration** (`registerTarget`) | ✅ `/v1/targets/register` | ⏳ planned | ⏳ planned | ⏳ planned |
-| **Product vocabulary** | control points (`client.controlPoints`, `client.flags` retained) *(Node v3)* | flags | flags | flags |
+| **Product vocabulary** | control points (`client.controlPoints`, `client.flags` retained) *(Node 2.1)* | flags | flags | flags |
 | **Structured (object) flags** | ✅ | ✅ | ✅ | ✅ |
 | **Multivariate variants** | ✅ | ✅ | ✅ | ✅ |
 | **Groups / group properties** | ✅ canonical `fireweave.groups` / `fireweave.groupProperties` + plain `groups` / `groupProperties` alias (rulings 12–14, 19) | ✅ same | ✅ same | ✅ builder `.group()` + canonical/alias attributes |
@@ -97,14 +97,14 @@ The DOM is real enough to matter: `pagehide`, `visibilitychange → hidden`, lis
 
 | Area | Caveat |
 | --- | --- |
-| Node has no cache **(Node v3)** | Every evaluation is a fw-server round trip. `reason: STALE` / `fireweave.fromCache` can only originate upstream; `capabilities.get().runtime.features.localEvaluation` is `false` |
-| Node default host allowlist **(Node v3)** | `DEFAULT_ALLOWED_HOSTS` lists Fireweave hosts + loopback, not vendor hosts. Still exported under the same name, so code composing on it silently stops permitting the old endpoints — intended; see [migration](migration.md#behavior-worth-re-checking) |
+| Node has no cache **(Node 2.1)** | Every evaluation is a fw-server round trip. `reason: STALE` / `fireweave.fromCache` can only originate upstream; `capabilities.get().runtime.features.localEvaluation` is `false` |
+| Node default host allowlist **(Node 2.1)** | `DEFAULT_ALLOWED_HOSTS` lists Fireweave hosts + loopback, not vendor hosts. Still exported under the same name, so code composing on it silently stops permitting the old endpoints — intended; see [migration](migration.md#behavior-worth-re-checking) |
 | Java remote cache **[vendor-specific]** | The vendor Java SDK caches per-user remote flag results up to ~5 min and keeps last-good local definitions; stale serves are labeled (`reason: STALE`, `fireweave.fromCache`), runtime shows `STALE` |
 | Exposure dedup cache sizes **[vendor-specific]** | Vendor LRU sizes differ across SDKs; Fireweave does not equalize them in phase one |
-| Polling default | Fireweave normalizes definitions polling toward 30 s where the vendor SDK allows override (not applicable to Node v3) |
+| Polling default | Fireweave normalizes definitions polling toward 30 s where the vendor SDK allows override (not applicable to Node 2.1) |
 | Go capture queue | posthog-go can drop telemetry on queue overflow; capture failures map to extension errors, evaluation is unaffected |
 | `$`-prefixed context attributes | Passed through as backend system directives, not person properties; stripped from telemetry context views |
-| Node fault-conformance backend **(Node v3)** | The 9 `contracts/faults/*` fixtures run through `FireweaveRemoteAdapter` against `/v1/flags/evaluate`; the other languages still drive the legacy vendor routes. Same assertions, different transport |
+| Node fault-conformance backend **(Node 2.1)** | The 9 `contracts/faults/*` fixtures run through `FireweaveRemoteAdapter` against `/v1/flags/evaluate`; the other languages still drive the legacy vendor routes. Same assertions, different transport |
 
 ## Known gaps
 

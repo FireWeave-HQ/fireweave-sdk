@@ -126,7 +126,7 @@ Zero runtime dependencies, one peer dependency (`@openfeature/server-sdk`), no N
 
 Only one thing is mandatory: if you imported `PostHogAdapter` from `@fireweaveai/sdk/posthog`, switch to `FireweaveRemoteAdapter`. Everything else keeps working — `client.flags` still exists and is identical to `client.controlPoints`, and no type or option was renamed.
 
-Step-by-step, including what *not* to change and how to scope a `flags` → `controlPoints` rename safely: **[the Node module README](sdks/node/packages/sdk/README.md#upgrading-from-v2-to-v3)**. Cross-language migration notes: [docs/migration.md](docs/migration.md).
+Step-by-step, including what *not* to change and how to scope a `flags` → `controlPoints` rename safely: **[the Node module README](sdks/node/packages/sdk/README.md#upgrading-from-v20-to-21)**. Cross-language migration notes: [docs/migration.md](docs/migration.md).
 
 ## Documentation
 

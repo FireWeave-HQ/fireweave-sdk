@@ -255,7 +255,7 @@ Run the full example: `cd examples/java && mvn -q compile exec:java`.
 
 ## Next steps
 
-- Direct-vendor escape hatch (Python/Go only): [posthog.md](posthog.md). Removed on Node in v3; Java remains seam-only until upstream publishes a server SDK.
+- Direct-vendor escape hatch (Python/Go only): [posthog.md](posthog.md). Removed on Node in 2.1; Java remains seam-only until upstream publishes a server SDK.
 - Detailed resolution, hooks, domains: [openfeature.md](openfeature.md).
 - Release contexts, health signals, exposures: [extensions.md](extensions.md).
 - Testing your integration without a network: [testing.md](testing.md).

@@ -35,7 +35,7 @@ Passing `apiUrl` and `apiKey` explicitly means `--allow-env` is not required at 
 
 ## What makes it portable
 
-Two Node-isms were removed in v3, both of which would have worked on Node and Bun and failed only on Deno:
+Two Node-isms were removed in 2.1, both of which would have worked on Node and Bun and failed only on Deno:
 
 | Was | Now | Why |
 | --- | --- | --- |

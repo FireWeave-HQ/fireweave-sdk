@@ -2,7 +2,7 @@
 
 > **Not the production default, and not available on Node.**
 >
-> - **Node:** removed in v3 — see [ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md) and the [v2→v3 migration](migration.md#from-fireweaveaisdk-v2-to-v3-node). Use [`FireweaveRemoteAdapter`](remote.md).
+> - **Node:** removed in 2.1 — see [ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md) and the [v2.0→2.1 migration](migration.md#from-fireweaveaisdk-v20-to-21-node). Use [`FireweaveRemoteAdapter`](remote.md).
 > - **Python, Go:** still shipped, as an escape hatch for Fireweave-internal dogfood, migration, or when you explicitly want the app process to hold vendor keys.
 > - **Java:** seam only, never production-ready — use `FireweaveRemoteAdapter`.
 >
@@ -49,7 +49,7 @@ If your PostHog organization exceeds its feature-flag quota, `/flags?v=2` return
 
 ### Node
 
-**Removed in v3.** `@fireweaveai/sdk/posthog` no longer resolves and `posthog-node` is no longer a peer dependency. Node applications use [`FireweaveRemoteAdapter`](remote.md); the one-line change is in the [v2→v3 migration guide](migration.md#from-fireweaveaisdk-v2-to-v3-node).
+**Removed in 2.1.** `@fireweaveai/sdk/posthog` no longer resolves and `posthog-node` is no longer a peer dependency. Node applications use [`FireweaveRemoteAdapter`](remote.md); the one-line change is in the [v2.0→2.1 migration guide](migration.md#from-fireweaveaisdk-v20-to-21-node).
 
 The Node SDK is now the reference for where the other languages are heading: zero runtime dependencies, no vendor name anywhere in the published build (enforced by `test/unit/no-vendor-leak.test.ts`), and one network adapter.
 

@@ -72,6 +72,6 @@ The canonical operation-name list (identical in all four languages) is in [exten
 
 - **[OpenFeature standard]** — spec-defined behavior; portable to any OpenFeature provider.
 - **[Fireweave extension]** — Fireweave-owned API (`FireweaveClient`, `fireweave.*` metadata, capability matrix, context bounds).
-- **[vendor-specific]** — behavior of a direct vendor adapter (key types, quota, caches). Python and Go only; removed on Node in v3.
+- **[vendor-specific]** — behavior of a direct vendor adapter (key types, quota, caches). Python and Go only; removed on Node in 2.1.
 - **[Experimental]** — shipped but subject to change without a major version (guardrails stub, transaction-context usage).
 - **[Planned — not implemented]** — documented intent, no code yet (OpenFeature tracking §6, browser/mobile SDKs, real guardrail evaluation).

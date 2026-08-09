@@ -101,7 +101,7 @@ The per-call parameter is `flagKey`, not `controlPointKey` — that name is fixe
 
 ---
 
-# Upgrading from v2 to v3
+# Upgrading from v2.0 to 2.1
 
 **Only one change is mandatory.** If you imported the direct vendor adapter, swap it. Everything else from v2 still works, so most of this section exists to tell you what you *don't* have to do.
 
@@ -138,7 +138,7 @@ const adapter = new FireweaveRemoteAdapter({
 });
 ```
 
-| v2 option | v3 |
+| v2 option | 2.1 |
 | --- | --- |
 | `projectApiKey` (`phc_…`) | `apiKey` (`project-api-key_…`) |
 | `host` | `apiUrl` |
@@ -154,7 +154,7 @@ Then:
 
 ## 2. What you do *not* have to change
 
-| v2 | Status in v3 |
+| v2 | Status in 2.1 |
 | --- | --- |
 | `client.flags.evaluate` / `getBooleanValue` / … | works — the same object as `client.controlPoints` |
 | `new InMemoryAdapter({ flags })` | unchanged |
@@ -163,7 +163,7 @@ Then:
 | `capabilities.get().static.features.flags` | still `true` (`controlPoints: true` added beside it) |
 | every other v2 export | unchanged |
 
-`client.flags === client.controlPoints` — a getter returning the same instance, not a copy. It is marked `@deprecated` in JSDoc and **is not scheduled for removal in v3**; retiring it would need its own major and its own ADR. Renaming your call sites is cosmetic and can be deferred indefinitely.
+`client.flags === client.controlPoints` — a getter returning the same instance, not a copy. It is marked `@deprecated` in JSDoc and **is not scheduled for removal in the 2.x line**; retiring it would need its own major and its own ADR. Renaming your call sites is cosmetic and can be deferred indefinitely.
 
 The whole v2 surface is pinned by `test/compat/v2-surface.compat.test.ts` (runtime exports and behavior) and `test/compat/v2-types.compat.ts` (~40 type exports, checked by `tsc --noEmit`), so it cannot regress silently.
 
@@ -180,7 +180,7 @@ Both are rare, and `tsc` points straight at them.
 
 ## 4. Local evaluation is gone
 
-v2's vendor adapter could evaluate in-process from polled definitions with a secret key. v3 has no equivalent: caching is fw-server's concern, and both shipped adapters report `localEvaluation: false`.
+v2's vendor adapter could evaluate in-process from polled definitions with a secret key. 2.1 has no equivalent: caching is fw-server's concern, and both shipped adapters report `localEvaluation: false`.
 
 If in-process evaluation is load-bearing for you — an air-gapped service, or a latency floor below one network hop — **stay on v2 for now and tell us**. The interface seam (`AdapterRuntimeFeatures.localEvaluation` / `localOnly`, `AdapterResolution.fromCache`, the `STALE` reason) is deliberately preserved for a future Fireweave-native cache ([ADR-0006](../../../../docs/adr/0006-node-drops-direct-posthog-adapter.md)).
 
