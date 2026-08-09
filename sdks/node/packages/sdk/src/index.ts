@@ -57,6 +57,16 @@ export type { InMemoryAdapterOptions, InMemoryFlagDefinition, InMemoryFault } fr
 export { FireweaveRemoteAdapter } from './adapters/remote.js';
 export type { FireweaveRemoteAdapterOptions } from './adapters/remote.js';
 
+export { FireweaveLocalAdapter } from './adapters/local.js';
+export type { FireweaveLocalAdapterOptions } from './adapters/local.js';
+
+export {
+  makeFireweaveLocalProvider,
+  getFwLocalCaptures,
+  resetFwLocalCaptures,
+} from './local-provider.js';
+export type { FireweaveLocalProviderOptions, FwLocalCapture } from './local-provider.js';
+
 export { DEFAULT_ALLOWED_HOSTS, assertHostAllowed, isLoopbackHostname } from './hosts.js';
 
 export { FireweaveRuntime, stableStringify, DEFAULT_SHUTDOWN_TIMEOUT_MS } from './runtime.js';

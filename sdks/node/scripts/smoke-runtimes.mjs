@@ -19,6 +19,11 @@ import { FireweaveRuntime } from '../packages/sdk/dist/runtime.js';
 import { FireweaveClient } from '../packages/sdk/dist/client.js';
 import { InMemoryAdapter } from '../packages/sdk/dist/adapters/inmemory.js';
 import { FireweaveRemoteAdapter } from '../packages/sdk/dist/adapters/remote.js';
+// The dev substrate's ADAPTER only. `local-provider.js` is deliberately NOT
+// imported here: it pulls in `@openfeature/server-sdk`, a bare npm specifier,
+// which would cost this script its "resolves with no npm resolution on any
+// runtime" property — the same reason `provider.js` is absent.
+import { FireweaveLocalAdapter } from '../packages/sdk/dist/adapters/local.js';
 import { canonicalizeContext, DEFAULT_CONTEXT_LIMITS } from '../packages/sdk/dist/context.js';
 import { DEFAULT_ALLOWED_HOSTS } from '../packages/sdk/dist/hosts.js';
 import { isFireweaveError } from '../packages/sdk/dist/errors.js';
@@ -139,6 +144,32 @@ try {
   schemeErrorKind = isFireweaveError(err) ? err.kind : 'non-fireweave';
 }
 check('plain http on a non-loopback host is refused', schemeErrorKind === 'Configuration');
+
+// --- dev substrate (FireweaveLocalAdapter) ---------------------------------
+// Pure computation, no I/O and no env, so it must behave identically on every
+// runtime. Exercised here because the harness's DEV branch is the code path a
+// developer actually runs on a laptop — including a Bun or Deno one.
+const devRuntime = new FireweaveRuntime(
+  new FireweaveLocalAdapter({ devFlags: { 'fw-dogfood': true } }),
+);
+await devRuntime.initialize();
+
+const devOn = await devRuntime.evaluate('fw-dogfood', 'boolean', false, {
+  targetingKey: 'user_42',
+});
+check('devFlags override resolves STATIC', devOn.value === true && devOn.reason === 'STATIC');
+
+const devMiss = await devRuntime.evaluate('fw-unconfigured', 'boolean', false, {
+  targetingKey: 'user_42',
+});
+check('unconfigured control point carries the call-site default', devMiss.value === false);
+
+const devFeatures = new FireweaveLocalAdapter().features();
+check(
+  'local adapter reports a non-networked backend',
+  devFeatures.localOnly === true && devFeatures.remoteEvaluation === false,
+);
+await devRuntime.shutdown();
 
 await runtime.shutdown();
 check('runtime reaches SHUTDOWN', runtime.getState() === 'SHUTDOWN');
