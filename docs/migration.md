@@ -121,3 +121,66 @@ Rollback is symmetric: keep the old provider wiring behind a config switch until
 ## From `@fireweaveai/deploy-sdk` (proprietary)
 
 The deploy-attestation wire contract (boot beacon / stamp liveness, `FW_ATTEST_URL` / `FW_PROJECT_API_KEY` env vars) is carried by `releases.setContext` + `releases.start` in this SDK ([extensions.md](extensions.md#releases)) — re-specified for compatibility, not code-copied. The long-term relationship between the two packages is an open company decision (ADR-0001 §9); for new services prefer this SDK.
+
+Control-point evaluation has now moved here in full. deploy-sdk keeps release engineering — attestation, OTel wiring, flag-anchor scanning, `isProd()`, the eject codemod — and both of its local providers are deprecated with a one-notice-per-process warning pointing at the replacements below. They still work; nothing is removed.
+
+### Server dev provider → `makeFireweaveLocalProvider()`
+
+```ts
+// before — @fireweaveai/deploy-sdk/flags
+import { FireweaveLocalProvider } from '@fireweaveai/deploy-sdk/flags';
+return new FireweaveLocalProvider({ echo: true, devFlags: { 'my-feature': true } });
+
+// after — @fireweaveai/sdk ≥ 2.1.0
+import { makeFireweaveLocalProvider } from '@fireweaveai/sdk';
+return makeFireweaveLocalProvider({ echo: true, devFlags: { 'my-feature': true } });
+```
+
+Options are identical (`devFlags`, `echo`, `now`), and `getFwLocalCaptures()` / `resetFwLocalCaptures()` keep their names.
+
+**What changes underneath.** The deploy-sdk class was a standalone provider that bypassed the runtime. The replacement is a `FireweaveLocalAdapter` behind the ordinary `FireweaveRuntime`, so the DEV branch of a harness now inherits the same lifecycle gating and context canonicalization as its PROD branch — which is the point, since dev/prod skew in the harness is what the harness exists to prevent.
+
+**One behaviour difference, deliberate.** Reading a `devFlags` key as a string or number now yields `TYPE_MISMATCH` instead of silently returning the default. `devFlags` is `Record<string, boolean>`, so such a read is a call-site mistake, and surfacing it is the point. Unconfigured keys are unaffected: they still resolve to the caller's default with reason `DEFAULT`, never as an error.
+
+### Browser → `@fireweaveai/web-sdk`
+
+`@fireweaveai/deploy-sdk/flags/web` → `@fireweaveai/web-sdk` ([ADR-0009](adr/0009-browser-control-points.md)).
+
+```ts
+// before
+import {
+  makeFireweaveRemoteWebProvider,
+  resolveFireweaveWebCredentials,
+} from '@fireweaveai/deploy-sdk/flags/web';
+const provider = makeFireweaveRemoteWebProvider(import.meta.env);
+
+// after — credentials are passed IN; the SDK reads no environment at all
+import { FireweaveRemoteWebAdapter, FireweaveWebProvider, FireweaveWebRuntime }
+  from '@fireweaveai/web-sdk';
+import { resolveFireweaveWebCredentials } from '@fireweaveai/deploy-sdk/flags/web';
+
+const creds = resolveFireweaveWebCredentials(import.meta.env);
+const runtime = new FireweaveWebRuntime(new FireweaveRemoteWebAdapter(creds), {
+  globalContext: { targetingKey: 'anonymous' },
+});
+const provider = new FireweaveWebProvider(runtime);
+```
+
+| deploy-sdk `flags/web` | `@fireweaveai/web-sdk` |
+| --- | --- |
+| `makeFireweaveRemoteWebProvider(env)` | `new FireweaveWebProvider(new FireweaveWebRuntime(new FireweaveRemoteWebAdapter({ apiUrl, apiKey })))` |
+| `FireweaveLocalWebProvider` | `FireweaveLocalWebAdapter` behind the same runtime |
+| `provider.reloadFlags(key)` | `runtime.setContext({ targetingKey: key })` — returns the control points whose decisions moved |
+| `fireweaveRegisterTarget(creds, …)` | `client.identify(key, { properties })` — registers **and** re-prefetches |
+| `resolveFireweaveWebCredentials(env)` | **stays in deploy-sdk.** `PUBLIC_FW_*` is a build convention, not a wire concern |
+| `initFwTelemetry`, `registerFwWebFlagHooks`, `isProd` | **stay in deploy-sdk** — release engineering, not control points |
+
+**Three behaviour changes worth reading before you switch.**
+
+1. **A timed-out prefetch is now visible.** deploy-sdk raced the prefetch against a 5s ceiling and resolved silently, so a failed boot was indistinguishable from a successful one where every control point happened to be off. The runtime now enters `STALE` and serves defaults with `reason: 'STALE'`. Still fail-open — boot is never blocked — but no longer fail-silent. Under a progressive rollout this is the difference between "the ramp is at 0%" and "the SDK never reached the server".
+2. **No environment reads.** The package never touches `import.meta.env`, `process`, or `Deno.env`. Keep using `resolveFireweaveWebCredentials` from deploy-sdk and pass the result in.
+3. **Secret key shapes are refused at construction.** `phc_`/`phs_`/`phx_` throw `FireweaveError('Configuration')` before any request is made.
+
+**Before production**, note the credential caveat in [ADR-0009](adr/0009-browser-control-points.md): a browser key is public by construction and is currently the whole authorization boundary, so a scoped `fw_public_…` key family plus per-key rate limiting is required platform work.
+
+**No `flags` alias here.** `client.controlPoints` is the only name on the web client. The server SDK carries `client.flags` for v2 compatibility; this package has no v2 to be compatible with, so it starts with the current vocabulary and nothing to migrate off.

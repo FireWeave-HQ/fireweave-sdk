@@ -1,8 +1,10 @@
 # Compatibility matrix
 
-Spec version **0.1.0**; OpenFeature specification compliance floor **v0.8.0**. Status date: 2026-08-08.
+Spec version **0.1.0**; OpenFeature specification compliance floor **v0.8.0**. Status date: 2026-08-09.
 
-> **Node is ahead of the other languages.** v3 of the Node package removed the direct vendor adapter ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)), adopted "control point" as the product noun ([ADR-0007](adr/0007-control-point-vocabulary.md)), and added Bun/Deno support ([ADR-0008](adr/0008-multi-runtime-support.md)). Python, Go, and Java still ship the vendor adapter and still lead with flag vocabulary. That asymmetry is **deliberate and temporary** — each language gets its own pass. Rows below marked *(Node v3)* record where the languages currently diverge. All packages **unpublished** (pre-release; install from checkout — [quickstart.md](quickstart.md)).
+> **Node is ahead of the other languages.** v3 of the Node package removed the direct vendor adapter ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)), adopted "control point" as the product noun ([ADR-0007](adr/0007-control-point-vocabulary.md)), and added Bun/Deno support ([ADR-0008](adr/0008-multi-runtime-support.md)). Python, Go, and Java still ship the vendor adapter and still lead with flag vocabulary. That asymmetry is **deliberate and temporary** — each language gets its own pass. Rows below marked *(Node v3)* record where the languages currently diverge. **Registry status:** `@fireweaveai/sdk` is published on npm at `0.1.0` and `2.0.0` (`latest` = 2.0.0); **2.1.0 is not published yet**, so an unpinned `npm install` still resolves to 2.0.0. Python, Go, and Java remain unpublished — install those from a checkout ([quickstart.md](quickstart.md)).
+
+> **On the "v3" wording below.** This release was drafted as 3.0.0 and ships as **2.1.0** (see the CHANGELOG version note); no 3.x ever reached a registry. Rows marked *(Node v3)* describe **this** release — the wording is being cleaned up separately so the change is a rename, not a semantic edit buried in a version bump.
 
 ## Core matrix
 
@@ -10,7 +12,7 @@ Spec version **0.1.0**; OpenFeature specification compliance floor **v0.8.0**. S
 | --- | --- | --- | --- | --- |
 | **Package (working name)** | `@fireweaveai/sdk` | `fireweave` | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go` | `ai.fireweave:fireweave-{sdk,openfeature,adapter-posthog,testing}` |
 | **Language version** | Node ≥ 20.20 · Bun ≥ 1.2 · Deno ≥ 2.0 | Python ≥ 3.10 | Go 1.25 | Java ≥ 11 |
-| **Package version** | `3.0.0` | `0.1.0` | `0.1.0` | `0.1.0-SNAPSHOT` |
+| **Package version** | `2.1.0` | `0.1.0` | `0.1.0` | `0.1.0-SNAPSHOT` |
 | **OpenFeature SDK pin** | `@openfeature/server-sdk` 1.22.0 (peer) | `openfeature-sdk` ≥ 0.10, < 0.11 (**pre-1.0**) | `go-sdk` v1.17.2 | `dev.openfeature:sdk` **1.15.1** (newest published; orchestrator ruling 10) |
 | **Vendor SDK pin** | **none** *(Node v3 — adapter removed; zero runtime deps)* | `posthog` 7.31.0 (`[posthog]` extra) | `posthog-go` v1.22.0 | **none** — `com.posthog:posthog-server` not yet published; adapter behind `PostHogClientApi` seam |
 | **Fireweave remote** (`FireweaveRemoteAdapter`) | ✅ only network adapter | ✅ | ✅ | ✅ |
@@ -42,6 +44,46 @@ All conformance skips are **pre-declared** in the fixtures themselves (`skipped-
 | Node | `eval-int-beyond-safe-integer` | IEEE-754 double; integers beyond ±(2^53−1) not lossless |
 | Node | *(second numeric skip in suite)* | Same Number resolver constraint — see numeric table |
 | Java | `eval-int-beyond-safe-integer` (or integer-range skip) | OF integer resolver is 32-bit `int` → `TYPE_MISMATCH` + default outside range |
+
+## Web (browser) surface
+
+`@fireweaveai/web-sdk` ([ADR-0009](adr/0009-browser-control-points.md)) is a **fifth binding**, deliberately kept out of the table above: it is a different surface, not a fifth language, and its conformance suite is different in kind (see below).
+
+| | Web |
+| --- | --- |
+| **Package** | `@fireweaveai/web-sdk` |
+| **Version** | `2.1.0` (unpublished) |
+| **OpenFeature SDK pin** | `@openfeature/web-sdk` ^1.9.0 (peer) |
+| **Runtime deps** | **none** |
+| **Fireweave remote** | ✅ only adapter — batch `POST /v1/flags/evaluate`, one call per context |
+| **Direct vendor adapter** | ❌ none, structurally — no `posthog-js`, no vendor key shapes accepted |
+| **Local (in-process) evaluation** | ❌ **never** — `localEvaluation` is `false` and there is no path that could set it true |
+| **Target registration** | ✅ `/v1/targets/register` via `client.identify()` |
+| **Product vocabulary** | control points (`client.controlPoints`) |
+| **Fireweave extensions** | ✅ releases / exposures / signals / capabilities |
+| **Guardrails** | 🧪 stub (`UnsupportedCapability`) |
+| **In-memory adapter** | ✅ (+ fault injection) |
+| **Conformance** | 10/10 (`contracts/web/`) |
+
+### Surface differences from the server SDKs
+
+These are consequences of the OpenFeature web contract, not gaps:
+
+| | Server | Web |
+| --- | --- | --- |
+| `controlPoints.*` | `Promise`-returning | **synchronous** — reads happen in render paths, where awaiting is not an option |
+| Evaluation source | per-call backend round trip | prefetched cache, refreshed on `initialize` and `setContext` |
+| Lifecycle states | UNINITIALIZED → INITIALIZING → READY → SHUTDOWN | adds **STALE** — prefetch did not complete, so reads are defaults. Collapsing this into READY would make a timed-out boot indistinguishable from a rollout sitting at 0% |
+| Telemetry flush | shutdown hook | `visibilitychange` → hidden and `pagehide`, over `keepalive`/`sendBeacon` — a tab gets no shutdown hook |
+| Config source | env (`readEnv`) | **explicit constructor options only** — the SDK reads no environment at all |
+
+### Tested on Bun only
+
+`@fireweaveai/web-sdk` targets **browsers**. It ships no server entry point, reads no environment, and imports no runtime built-ins, so Node and Deno are not target runtimes — running the suite on them would assert a property no user depends on. **Bun** runs the unit suite and the conformance harness; **happy-dom** supplies the DOM (preloaded via `bunfig.toml`).
+
+The DOM is real enough to matter: `pagehide`, `visibilitychange → hidden`, listener detach, and the `keepalive` unload request are all dispatched and asserted, not stubbed.
+
+**Coverage boundary (stated, not glossed):** happy-dom is a DOM, not a browser. bfcache restore, beacon size limits, and whether a request actually leaves the socket during unload are browser behaviours no headless DOM can assert. If that path proves fragile in practice, the escalation is a small Playwright suite over exactly those invariants.
 
 ## Numeric limitations (pre-declared)
 

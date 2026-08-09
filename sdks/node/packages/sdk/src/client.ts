@@ -21,7 +21,7 @@ import type {
 } from './types.js';
 
 /** Must equal packages/sdk/package.json#version — pinned by v2-surface.compat.test.ts. */
-const SDK_VERSION = '3.0.0';
+const SDK_VERSION = '2.1.0';
 
 export interface ExtensionResult {
   ok: boolean;

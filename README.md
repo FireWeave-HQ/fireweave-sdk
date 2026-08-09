@@ -16,7 +16,7 @@ OpenFeature     read control points through the standard client
 
 Applications authenticate with a **Fireweave project key** and talk to **fw-server**. Which analytics or flag backend fw-server forwards to is fw-server's concern — no third-party SDK, key, or hostname ever enters your process ([ADR-0005](docs/adr/0005-fireweave-proxy-backend.md), [ADR-0006](docs/adr/0006-node-drops-direct-posthog-adapter.md)).
 
-> **Status: pre-release.** Node package `3.0.0`; spec `0.1.0`. Configure trusted publishers before the first non-dry-run release ([publish-readiness](docs/orchestration/publish-readiness.md)). **License:** [MIT](LICENSE).
+> **Status: pre-release.** Node package `2.1.0`; spec `0.1.0`. Configure trusted publishers before the first non-dry-run release ([publish-readiness](docs/orchestration/publish-readiness.md)). **License:** [MIT](LICENSE).
 
 ## Install
 
