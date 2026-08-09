@@ -1,0 +1,7 @@
+# Bun is the only runtime this package is tested on.
+#
+# It is a BROWSER package: Node and Deno are not target runtimes, so running
+# the suite on them would assert nothing a user depends on. Bun runs the tests
+# and the conformance harness; happy-dom supplies the DOM.
+[test]
+preload = ["./test/setup-happy-dom.ts"]

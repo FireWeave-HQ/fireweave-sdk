@@ -50,6 +50,18 @@ send only what genuinely varies per request.
 send that same id on evaluate and capture. fw-server scopes ids per project, so
 two projects using the same raw id are different targets.
 
+## Browser clients (ADR-0009)
+
+`@fireweaveai/web-sdk` speaks this same protocol from a browser. Three things differ, and each is a server-side obligation rather than an SDK one.
+
+**Any origin.** Browser callers arrive from origins fw-server cannot enumerate, so `/v1/flags/evaluate`, `/v1/capture`, and `/v1/targets/register` accept **any** `Origin`. The preflight must allow the `authorization` and `content-type` request headers, and should set a `Max-Age` so a preflight is not paid on every evaluate. This is not a relaxed boundary: these routes authenticate by bearer token and ignore cookies, so origin never protected them.
+
+**The key is the whole boundary.** A browser key is public by construction — anything in a bundle is readable. It must therefore be scoped to `flags:evaluate` + `events:write` and rate-limited per key. Do **not** issue a browser a key carrying `attest:write` or any deploy-time scope. Where the app has a same-origin backend, injecting the key server-side (a BFF) remains the better pattern and avoids the question entirely.
+
+**Batch, then read.** A browser evaluates synchronously against a prefetched cache, so it calls `/v1/flags/evaluate` **once per context** with no `flagKeys` filter (or a known subset) and reads every decision from the response. Servers should expect one batch call per page load and per identity change, not one call per control point.
+
+Capture from a browser may arrive via `navigator.sendBeacon` or `fetch(..., { keepalive: true })` during page unload. Both send `POST` with the JSON body unchanged; `sendBeacon` cannot set an `Authorization` header, so a browser using it must carry the key another way the server accepts (`x-api-key` is already accepted above, but not settable on a beacon either — a keepalive `fetch` is the portable choice when a header is required). Unload-time delivery is best-effort by definition: neither transport reports failure to the page.
+
 ## Config (SDK)
 
 | Option | Env | Description |

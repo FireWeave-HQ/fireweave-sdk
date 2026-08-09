@@ -14,8 +14,9 @@
       "required": ["language", "openFeature", "features"],
       "properties": {
         "language": {
+          "description": "SDK binding reporting these capabilities. `web` is the browser binding (ADR-0009) — a distinct surface, not a runtime of `node`: it resolves control points synchronously from a prefetched cache and never evaluates locally.",
           "type": "string",
-          "enum": ["node", "python", "go", "java"]
+          "enum": ["node", "web", "python", "go", "java"]
         },
         "sdkVersion": {
           "type": "string",

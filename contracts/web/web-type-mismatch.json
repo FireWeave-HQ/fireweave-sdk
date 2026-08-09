@@ -1,0 +1,20 @@
+{
+  "id": "web-type-mismatch",
+  "suite": "web",
+  "description": "Reading a boolean control point as a string surfaces TYPE_MISMATCH rather than silently defaulting",
+  "tags": ["type", "error"],
+  "given": {
+    "providerState": "READY",
+    "flags": { "web-bool": { "type": "boolean", "enabled": true, "value": true } }
+  },
+  "when": {
+    "operation": "evaluateSync",
+    "flagKey": "web-bool",
+    "flagType": "string",
+    "defaultValue": "fallback",
+    "invocationContext": { "targetingKey": "user_web_1" }
+  },
+  "expect": { "value": "fallback", "reason": "ERROR", "errorCode": "TYPE_MISMATCH" },
+  "schemaVersion": 1,
+  "provisional": false
+}

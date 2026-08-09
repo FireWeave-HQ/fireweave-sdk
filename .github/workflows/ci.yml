@@ -142,6 +142,47 @@ jobs:
         working-directory: sdks/node
         run: deno run --allow-read --allow-env scripts/smoke-runtimes.mjs
 
+  # ---------------------------------------------------------------- web
+  # The browser package (ADR-0009). Bun is the ONLY runtime this job uses.
+  #
+  # That is not a coverage compromise. `@fireweaveai/web-sdk` targets browsers:
+  # it ships no server entry point, reads no environment, and imports no runtime
+  # built-ins. Node and Deno are not target runtimes, so exercising it on them
+  # would assert a property no user depends on. Bun runs the suite and the
+  # conformance harness; happy-dom supplies the DOM (bunfig.toml preload).
+  #
+  # Coverage boundary, stated rather than glossed: happy-dom is a DOM, not a
+  # browser. `pagehide` / `visibilitychange` / `keepalive` are exercised for
+  # real, but bfcache restore, beacon size limits, and whether a request
+  # actually leaves the socket during unload are browser behaviours no headless
+  # DOM can assert. If that path proves fragile in practice, the escalation is a
+  # small Playwright suite over exactly those invariants.
+  web:
+    name: web (bun)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      # Node is present only to run `tsc` for the typecheck step; it never
+      # executes the package.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Install workspace dependencies
+        working-directory: sdks/web
+        run: bun install
+      - name: Typecheck (src + tests)
+        working-directory: sdks/web
+        run: bun run typecheck
+      - name: Unit tests + browser-portability guard
+        working-directory: sdks/web
+        run: bun run test
+      - name: Web conformance (contracts/web)
+        working-directory: sdks/web
+        run: bun run conformance
+
   # ---------------------------------------------------------------- python
   python:
     name: python (${{ matrix.python }})
