@@ -14,7 +14,7 @@ Quick start (in-memory, offline)::
     runtime = FireweaveRuntime(adapter)
     runtime.initialize()
     client = FireweaveClient(runtime)
-    client.flags.get_boolean_value("my-flag", False)
+    client.control_points.get_boolean_value("my-flag", False)
     client.shutdown()
 
 There are no hidden global clients: everything is constructed explicitly and
@@ -22,7 +22,15 @@ injectable for tests.
 """
 
 from ._version import SPEC_VERSION, __version__
-from .adapters import BackendAdapter, FlagResolution, FireweaveRemoteAdapter, InMemoryAdapter
+from .adapters import (
+    BackendAdapter,
+    FlagResolution,
+    FireweaveLocalAdapter,
+    FireweaveRemoteAdapter,
+    InMemoryAdapter,
+    RegisterTargetOptions,
+    RegisterTargetResult,
+)
 from .capabilities import CANONICAL_CAPABILITIES, CapabilityRegistry
 from .client import (
     CapabilityResult,
@@ -73,7 +81,10 @@ __all__ = [
     "BackendAdapter",
     "FlagResolution",
     "InMemoryAdapter",
+    "FireweaveLocalAdapter",
     "FireweaveRemoteAdapter",
+    "RegisterTargetOptions",
+    "RegisterTargetResult",
     # context / decisions
     "ContextLimits",
     "EvaluationContext",

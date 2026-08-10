@@ -1,6 +1,6 @@
 # Compatibility matrix
 
-Spec version **0.1.0**; OpenFeature specification compliance floor **v0.8.0**. Status date: 2026-07-27. All packages **unpublished** (pre-release; install from checkout — [quickstart.md](quickstart.md)).
+Spec version **0.1.0**; OpenFeature specification compliance floor **v0.8.0**. Status date: 2026-08-09. All packages **unpublished** (pre-release; install from checkout — [quickstart.md](quickstart.md)).
 
 ## Core matrix
 
@@ -13,6 +13,9 @@ Spec version **0.1.0**; OpenFeature specification compliance floor **v0.8.0**. S
 | **Remote evaluation** (`phc_`) | ✅ | ✅ | ✅ | ⚠️ injected `PostHogClientApi` only ([posthog.md](posthog.md#java)) |
 | **Local evaluation** (`phs_`/`phx_`) | ✅ `secretApiKey` | ✅ `secret_key`/`personal_api_key` + `local_evaluation` | ✅ `SecretKey` | ⏳ pending upstream artifact |
 | **Local-only mode** | ✅ `onlyEvaluateLocally` | ✅ `only_evaluate_locally` | ✅ `LocalEvaluationOnly` | ⏳ pending upstream |
+| **Target registration** (`registerTarget` / `register_target`) | ✅ `/v1/targets/register` | ✅ `/v1/targets/register` | ⏳ planned | ⏳ planned |
+| **Product vocabulary** | flags | control points (`client.control_points`, `client.flags` retained) | flags | flags |
+| **Local (dev) adapter** | ⏳ (Node local provider lands with 2.1) | ✅ `FireweaveLocalAdapter` + `make_fireweave_local_provider()` | ⏳ planned | ⏳ planned |
 | **Structured (object) flags** | ✅ | ✅ | ✅ | ✅ |
 | **Multivariate variants** | ✅ | ✅ | ✅ | ✅ |
 | **Groups / group properties** | ✅ canonical `fireweave.groups` / `fireweave.groupProperties` + plain `groups` / `groupProperties` alias (rulings 12–14, 19) | ✅ same | ✅ same | ✅ builder `.group()` + canonical/alias attributes |

@@ -1,7 +1,8 @@
 """Fireweave remote backend adapter (ADR-0005) — default production path.
 
-HTTP client for fw-server ``POST /v1/flags/evaluate`` and ``POST /v1/capture``.
-Auth: ``Authorization: Bearer <FW_PROJECT_API_KEY>``. No PostHog dependency.
+HTTP client for fw-server ``POST /v1/flags/evaluate``, ``POST /v1/capture``,
+and ``POST /v1/targets/register``. Auth: ``Authorization: Bearer
+<FW_PROJECT_API_KEY>``. No PostHog dependency.
 """
 
 from __future__ import annotations
@@ -23,19 +24,22 @@ from ..errors import (
     AuthorizationError,
     BackendUnavailableError,
     ConfigurationError,
+    FireweaveError,
     InvalidContextError,
     MalformedResponseError,
     NetworkError,
     NotReadyError,
     RateLimitedError,
+    TargetingKeyMissingError,
     TimeoutError_,
 )
-from .base import FlagResolution
+from .base import FlagResolution, RegisterTargetOptions, RegisterTargetResult
 
 __all__ = ["FireweaveRemoteAdapter"]
 
 _EVALUATE_PATH = "/v1/flags/evaluate"
 _CAPTURE_PATH = "/v1/capture"
+_REGISTER_TARGET_PATH = "/v1/targets/register"
 
 
 @dataclass
@@ -143,6 +147,49 @@ class FireweaveRemoteAdapter:
             fireweave_reason=item.get("reason"),
             quota_limited=bool(data.get("quotaLimited") or meta.get("fireweave.quotaLimited")),
         )
+
+    def register_target(
+        self,
+        targeting_key: str,
+        options: Optional[RegisterTargetOptions] = None,
+    ) -> RegisterTargetResult:
+        """Register a user or device for durable property targeting.
+
+        Never raises for transport failures: registration sits in login paths,
+        and an analytics call must not break sign-in. Retried once when the
+        error taxonomy marks the failure retryable.
+        """
+        if self._closed:
+            return RegisterTargetResult(ok=False, error=AlreadyClosedError())
+        if not self._ready:
+            return RegisterTargetResult(ok=False, error=NotReadyError())
+        if targeting_key == "":
+            return RegisterTargetResult(
+                ok=False, error=TargetingKeyMissingError("targeting key missing")
+            )
+
+        opts = options or RegisterTargetOptions()
+        body: Dict[str, Any] = {"targetingKey": targeting_key}
+        if opts.kind is not None:
+            body["kind"] = opts.kind
+        if opts.environment is not None:
+            body["environment"] = opts.environment
+        if opts.properties:
+            body["properties"] = dict(opts.properties)
+
+        last_error: Optional[FireweaveError] = None
+        for _attempt in range(2):
+            try:
+                self._request(_REGISTER_TARGET_PATH, body)
+                return RegisterTargetResult(ok=True)
+            except FireweaveError as err:
+                last_error = err
+                if not err.retryable:
+                    break
+            except Exception:
+                last_error = BackendUnavailableError()
+                break
+        return RegisterTargetResult(ok=False, error=last_error)
 
     def send_exposures(self, events: list) -> None:
         if self._closed or not self._ready:

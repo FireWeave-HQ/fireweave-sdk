@@ -887,11 +887,27 @@ def run_fixture(fixture: Dict[str, Any]) -> Dict[str, Any]:
         return result
 
 
+# Server-language suites. ``contracts/web/`` is a separate surface (ADR-0009)
+# exercised only by ``@fireweaveai/web-sdk`` — same exclusion Node's runner uses.
+_SERVER_SUITES = (
+    "evaluation",
+    "context",
+    "lifecycle",
+    "faults",
+    "security",
+    "extensions",
+)
+
+
 def load_fixtures(contracts_dir: Path) -> List[Dict[str, Any]]:
     fixtures = []
-    for path in sorted(contracts_dir.glob("*/*.json")):
-        with path.open() as fh:
-            fixtures.append(json.load(fh))
+    for suite in _SERVER_SUITES:
+        suite_dir = contracts_dir / suite
+        if not suite_dir.is_dir():
+            continue
+        for path in sorted(suite_dir.glob("*.json")):
+            with path.open() as fh:
+                fixtures.append(json.load(fh))
     return fixtures
 
 

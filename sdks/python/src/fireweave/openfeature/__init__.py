@@ -5,6 +5,18 @@ import of the vendor SDK is isolated inside this subpackage so the Fireweave
 core never depends on it.
 """
 
+from .local_provider import (
+    FwLocalCapture,
+    get_fw_local_captures,
+    make_fireweave_local_provider,
+    reset_fw_local_captures,
+)
 from .provider import FireweaveProvider
 
-__all__ = ["FireweaveProvider"]
+__all__ = [
+    "FireweaveProvider",
+    "make_fireweave_local_provider",
+    "get_fw_local_captures",
+    "reset_fw_local_captures",
+    "FwLocalCapture",
+]

@@ -1,7 +1,8 @@
 """FireweaveClient: evaluation facade + release-safety extensions (§6).
 
-Namespaces: ``flags``, ``releases``, ``exposures``, ``signals``,
-``guardrails`` (phase-one UnsupportedCapability stub), ``capabilities``.
+Namespaces: ``control_points`` (``flags`` retained as an alias), ``releases``,
+``exposures``, ``signals``, ``guardrails`` (phase-one UnsupportedCapability
+stub), ``capabilities``.
 
 Facade rules:
 
@@ -16,8 +17,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 import threading
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -511,7 +514,25 @@ class _GuardrailsNamespace:
 
 
 # runtime.backend enum per spec/capabilities.schema.json.
-_KNOWN_BACKENDS = frozenset({"posthog", "inmemory", "none", "other"})
+_KNOWN_BACKENDS = frozenset({"fireweave", "posthog", "inmemory", "none", "other"})
+
+# One notice per process, opt-in only (ADR-0007).
+_deprecation_notice_emitted = False
+
+
+def _note_deprecated_flags_alias() -> None:
+    global _deprecation_notice_emitted
+    if _deprecation_notice_emitted:
+        return
+    if os.environ.get("FW_DEPRECATION_WARNINGS") != "1":
+        return
+    _deprecation_notice_emitted = True
+    warnings.warn(
+        "client.flags has been renamed to client.control_points. "
+        "The old name remains fully supported — no migration is required.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
 
 
 class _CapabilitiesNamespace:
@@ -558,12 +579,16 @@ class _CapabilitiesNamespace:
                     "serverOnly": True,
                 },
                 "features": {
+                    "controlPoints": True,
+                    # Retained alongside controlPoints (ADR-0007); pinned by
+                    # contracts/extensions/ext-capabilities-get.json.
                     "flags": True,
                     "releases": registry.supports("releases.setContext"),
                     "exposures": registry.supports("exposures.record"),
                     "signals": registry.supports("signals.recordHealth"),
                     "guardrails": False,
                     "inMemoryAdapter": True,
+                    "remoteAdapter": True,
                     "posthogAdapter": importlib.util.find_spec("posthog") is not None,
                 },
             },
@@ -603,8 +628,12 @@ class _CapabilitiesNamespace:
             )
 
 
-class _FlagsNamespace:
-    """Typed evaluation helpers on the Fireweave-native surface."""
+class _ControlPointsNamespace:
+    """Typed evaluation helpers on the Fireweave-native surface.
+
+    Documented as ``client.control_points`` (ADR-0007). ``client.flags`` is
+    an identical alias retained for compatibility.
+    """
 
     def __init__(self, client: "FireweaveClient") -> None:
         self._client = client
@@ -683,7 +712,7 @@ class _FlagsNamespace:
         include_payload: bool = False,
         send_exposure: bool = False,
     ) -> Decision:
-        """Decision-returning evaluate (architecture ``flags.evaluate`` / ruling 16).
+        """Decision-returning evaluate (architecture control-point evaluate / ruling 16).
 
         Alias of :meth:`get_details` for portable FireweaveClient-only call sites.
         """
@@ -712,7 +741,7 @@ class FireweaveClient:
     ) -> None:
         self._runtime = runtime
         registry = capabilities or CapabilityRegistry()
-        self.flags = _FlagsNamespace(self)
+        self.control_points = _ControlPointsNamespace(self)
         self.releases = _ReleasesNamespace(self)
         self.exposures = _ExposuresNamespace(self)
         self.signals = _SignalsNamespace(self)
@@ -721,6 +750,17 @@ class FireweaveClient:
         self._register_capabilities(registry)
         self._shutdown_lock = threading.Lock()
         self._closed = False
+
+    @property
+    def flags(self) -> _ControlPointsNamespace:
+        """Control-point evaluation under its former name.
+
+        Identical to :attr:`control_points` — ``client.flags is
+        client.control_points``. Not scheduled for removal. Set
+        ``FW_DEPRECATION_WARNINGS=1`` to log one notice per process.
+        """
+        _note_deprecated_flags_alias()
+        return self.control_points
 
     def _register_capabilities(self, registry: CapabilityRegistry) -> None:
         registry.register("releases.setContext", self.releases.set_context)

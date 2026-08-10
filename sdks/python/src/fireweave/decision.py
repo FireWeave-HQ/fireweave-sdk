@@ -12,7 +12,7 @@ __all__ = ["Decision", "Reason"]
 
 
 class Reason:
-    """Canonical reason strings (spec/decision.schema.json)."""
+    """Canonical reason strings (spec/decision.schema.json + local STATIC)."""
 
     TARGETING_MATCH = "TARGETING_MATCH"
     SPLIT = "SPLIT"
@@ -20,6 +20,7 @@ class Reason:
     DEFAULT = "DEFAULT"
     STALE = "STALE"
     CACHED = "CACHED"
+    STATIC = "STATIC"
     ERROR = "ERROR"
 
 

@@ -20,12 +20,18 @@ import json
 import threading
 from typing import Any, Dict, Optional
 
-from .adapters.base import BackendAdapter, FlagResolution
+from .adapters.base import (
+    BackendAdapter,
+    FlagResolution,
+    RegisterTargetOptions,
+    RegisterTargetResult,
+)
 from .config import FireweaveConfig
 from .context import EvaluationContext, merge_contexts, validate_context
 from .decision import Decision, Reason
 from .errors import (
     AlreadyClosedError,
+    ConfigurationError,
     FireweaveError,
     FlagNotFoundError,
     InternalError,
@@ -232,6 +238,40 @@ class FireweaveRuntime:
         with self._lock:
             global_ctx, client_ctx = self._global_context, self._client_context
         return merge_contexts(global_ctx, client_ctx, invocation)
+
+    # -- target registration -------------------------------------------------
+
+    def register_target(
+        self,
+        targeting_key: str,
+        options: Optional[RegisterTargetOptions] = None,
+    ) -> RegisterTargetResult:
+        """Register a user or device so rules can target its durable properties.
+
+        Returns ``ok=False`` instead of raising: this runs in sign-in paths.
+        Adapters without the capability (in-memory, local dev) report
+        UnsupportedCapability so a dev harness does not silently look registered.
+        """
+        gate = self._lifecycle_error()
+        if gate is not None:
+            return RegisterTargetResult(ok=False, error=gate)
+        register = getattr(self._adapter, "register_target", None)
+        if not callable(register):
+            return RegisterTargetResult(
+                ok=False, error=UnsupportedCapabilityError()
+            )
+        return register(targeting_key, options)
+
+    def _lifecycle_error(self) -> Optional[FireweaveError]:
+        """Evaluation/registration lifecycle gate (NotReady / AlreadyClosed)."""
+        state = self.state
+        if state in (LifecycleState.READY, LifecycleState.STALE):
+            return None
+        if state is LifecycleState.SHUTDOWN:
+            return AlreadyClosedError()
+        if state is LifecycleState.FATAL:
+            return self._init_error or ConfigurationError()
+        return NotReadyError()
 
     # -- evaluation pipeline -------------------------------------------------
 
