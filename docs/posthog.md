@@ -1,10 +1,16 @@
-# Advanced: direct PostHog adapter
+# Advanced: direct PostHog adapter (Python, Go)
 
-> **Not the production default.** Prefer [Fireweave remote](remote.md) (`FireweaveRemoteAdapter`
-> + `FW_API_URL` / `FW_PROJECT_API_KEY`). Use this page only for Fireweave-internal dogfood,
-> migration, or when you explicitly want the app process to hold PostHog keys.
+> **Not the production default, and not available on Node.**
+>
+> - **Node:** removed in 2.1 — see [ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md) and the [v2.0→2.1 migration](migration.md#from-fireweaveaisdk-v20-to-21-node). Use [`FireweaveRemoteAdapter`](remote.md).
+> - **Python, Go:** still shipped, as an escape hatch for Fireweave-internal dogfood, migration, or when you explicitly want the app process to hold vendor keys.
+> - **Java:** seam only, never production-ready — use `FireweaveRemoteAdapter`.
+>
+> Prefer [Fireweave remote](remote.md) (`FW_API_URL` / `FW_PROJECT_API_KEY`) everywhere. The
+> direction of travel is that the other languages follow Node; treat this page as
+> documentation of a shrinking surface, not a supported architecture.
 
-Phase one’s optional `PostHogAdapter` wraps the official PostHog server SDK (Node `posthog-node` 5.46.1, Python `posthog` 7.31.0, Go `posthog-go` v1.22.0) behind the vendor-neutral `BackendAdapter` boundary. **Java PostHog adapter is seam only** — production Java should use `FireweaveRemoteAdapter`. Your application code never sees PostHog types on the Fireweave public API (ADR-0002).
+The optional `PostHogAdapter` wraps the official PostHog server SDK (Python `posthog` 7.31.0, Go `posthog-go` v1.22.0) behind the vendor-neutral `BackendAdapter` boundary. Your application code never sees PostHog types on the Fireweave public API (ADR-0002).
 
 ## API key types
 
@@ -43,34 +49,9 @@ If your PostHog organization exceeds its feature-flag quota, `/flags?v=2` return
 
 ### Node
 
-`PostHogAdapter` lives behind the `@fireweaveai/sdk/posthog` subpath (so the main entrypoint has no `posthog-node` dependency; `posthog-node` is an optional peer dependency you install yourself).
+**Removed in 2.1.** `@fireweaveai/sdk/posthog` no longer resolves and `posthog-node` is no longer a peer dependency. Node applications use [`FireweaveRemoteAdapter`](remote.md); the one-line change is in the [v2.0→2.1 migration guide](migration.md#from-fireweaveaisdk-v20-to-21-node).
 
-```js
-import { OpenFeature } from '@openfeature/server-sdk';
-import { FireweaveProvider, FireweaveRuntime } from '@fireweaveai/sdk';
-import { PostHogAdapter } from '@fireweaveai/sdk/posthog';
-
-const adapter = new PostHogAdapter({
-  projectApiKey: process.env.POSTHOG_PROJECT_API_KEY,   // phc_...
-  host: process.env.POSTHOG_HOST ?? 'https://us.i.posthog.com',
-  // Local evaluation (optional; server-side secret):
-  // secretApiKey: process.env.POSTHOG_FF_SECRET_KEY,   // phs_/phx_
-  // onlyEvaluateLocally: true,
-  // waitForLocalDefinitions: true,                     // block init on first poll
-  featureFlagsRequestTimeoutMs: 3000,
-  // featureFlagsPollingInterval: 30_000,
-});
-const runtime = new FireweaveRuntime(adapter, {
-  projectApiKey: process.env.POSTHOG_PROJECT_API_KEY,
-  host: process.env.POSTHOG_HOST ?? 'https://us.i.posthog.com',
-  // allowedHosts: ['us.i.posthog.com'],                // SSRF allowlist
-});
-await OpenFeature.setProviderAndWait(new FireweaveProvider(runtime, { lazyReady: false }));
-```
-
-Advanced: pass `client:` to inject an existing `posthog-node` client (structural interface, no vendor types); injected clients are never shut down by Fireweave.
-
-Exposure policy: the Node adapter reads snapshots side-effect-free (vendor-side `$feature_flag_called` is disabled); exposures flow through the explicit [exposures API](extensions.md#exposures).
+The Node SDK is now the reference for where the other languages are heading: zero runtime dependencies, no vendor name anywhere in the published build (enforced by `test/unit/no-vendor-leak.test.ts`), and one network adapter.
 
 ### Python
 

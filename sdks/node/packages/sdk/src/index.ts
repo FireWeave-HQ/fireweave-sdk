@@ -1,11 +1,15 @@
 /**
- * @fireweaveai/sdk — Fireweave OpenFeature provider + client for Node servers.
- * Public API per docs/architecture.md §6.
+ * @fireweaveai/sdk — Fireweave release-engineering SDK for server runtimes
+ * (Node, Bun, Deno). Public API per docs/architecture.md §6.
  *
- * Production default: {@link FireweaveRemoteAdapter} (FW key → fw-server).
- * InMemoryAdapter for offline/tests. PostHogAdapter (advanced/direct) lives
- * behind the "./posthog" subpath so the main entrypoint never depends on
- * posthog-node (vendor types never leak; verified by test).
+ * Control points, target registration, release lifecycle, exposures, and
+ * health/outcome signals, plus an OpenFeature provider for standards-compatible
+ * evaluation.
+ *
+ * Production default: {@link FireweaveRemoteAdapter} (Fireweave project key →
+ * fw-server). {@link InMemoryAdapter} for offline work and tests. The backend
+ * fw-server forwards to is fw-server's concern — no vendor SDK, key, or host
+ * appears in the application process (ADR-0005, ADR-0006).
  */
 export { FireweaveError, ERROR_TAXONOMY, redactSecrets, isFireweaveError } from './errors.js';
 export type { FireweaveErrorKind, OpenFeatureErrorCode, ErrorKindSpec } from './errors.js';
@@ -53,6 +57,16 @@ export type { InMemoryAdapterOptions, InMemoryFlagDefinition, InMemoryFault } fr
 export { FireweaveRemoteAdapter } from './adapters/remote.js';
 export type { FireweaveRemoteAdapterOptions } from './adapters/remote.js';
 
+export { FireweaveLocalAdapter } from './adapters/local.js';
+export type { FireweaveLocalAdapterOptions } from './adapters/local.js';
+
+export {
+  makeFireweaveLocalProvider,
+  getFwLocalCaptures,
+  resetFwLocalCaptures,
+} from './local-provider.js';
+export type { FireweaveLocalProviderOptions, FwLocalCapture } from './local-provider.js';
+
 export { DEFAULT_ALLOWED_HOSTS, assertHostAllowed, isLoopbackHostname } from './hosts.js';
 
 export { FireweaveRuntime, stableStringify, DEFAULT_SHUTDOWN_TIMEOUT_MS } from './runtime.js';
@@ -63,6 +77,7 @@ export type { FireweaveProviderOptions } from './provider.js';
 
 export { FireweaveClient, DEFAULT_SIGNAL_ATTRIBUTE_ALLOWLIST } from './client.js';
 export type {
+  ControlPointsApi,
   FireweaveClientOptions,
   ExtensionResult,
   ReleaseResult,

@@ -1,8 +1,9 @@
 /**
  * FireweaveClient — release-safety extensions beyond OpenFeature
- * (docs/architecture.md §6): releases, exposures, signals, guardrails (stub),
- * capabilities. Facade methods degrade instead of throwing.
+ * (docs/architecture.md §6): control points, releases, exposures, signals,
+ * guardrails (stub), capabilities. Facade methods degrade instead of throwing.
  */
+import { readEnv } from './env.js';
 import { FireweaveError, redactSecrets, type FireweaveErrorKind } from './errors.js';
 import { DEFAULT_SHUTDOWN_TIMEOUT_MS, stableStringify } from './runtime.js';
 import type { EvaluateOptions, ExpectedFlagType, FireweaveRuntime } from './runtime.js';
@@ -19,7 +20,8 @@ import type {
   SignalKind,
 } from './types.js';
 
-const SDK_VERSION = '0.1.0';
+/** Must equal packages/sdk/package.json#version — pinned by v2-surface.compat.test.ts. */
+const SDK_VERSION = '2.1.0';
 
 export interface ExtensionResult {
   ok: boolean;
@@ -345,11 +347,16 @@ class SignalsApi {
 }
 
 /**
- * Detailed evaluation on the public client surface (ruling 16): Decision-returning
- * evaluation without reaching into the runtime. Never throws — errors surface
- * as ERROR decisions, exactly like the OpenFeature path.
+ * Control-point evaluation on the public client surface (ruling 16):
+ * Decision-returning evaluation without reaching into the runtime. Never throws
+ * — errors surface as ERROR decisions, exactly like the OpenFeature path.
+ *
+ * "Control point" is the Fireweave product noun (ADR-0007). The per-call
+ * parameter stays `flagKey`, because that is the name fixed by the OpenFeature
+ * spec, by `spec/decision.schema.json`, and by the `/v1/flags/evaluate` wire
+ * contract shared with the Python, Go, and Java SDKs.
  */
-class FlagsApi {
+export class ControlPointsApi {
   private readonly runtime: FireweaveRuntime;
 
   constructor(runtime: FireweaveRuntime) {
@@ -431,6 +438,10 @@ class CapabilitiesApi {
         specVersion: '0.1.0',
         openFeature: { specFloor: '0.8.0', providerName: 'fireweave', serverOnly: true },
         features: {
+          controlPoints: true,
+          // Retained alongside `controlPoints` (ADR-0007) and pinned by
+          // contracts/extensions/ext-capabilities-get.json — removing it fails
+          // conformance in all four languages.
           flags: true,
           releases: true,
           exposures: true,
@@ -438,7 +449,7 @@ class CapabilitiesApi {
           guardrails: false,
           telemetryOptIn: true,
           inMemoryAdapter: true,
-          posthogAdapter: true,
+          remoteAdapter: true,
         },
       },
       runtime: {
@@ -466,18 +477,48 @@ export interface FireweaveClientOptions {
   telemetry?: TelemetryPolicy;
 }
 
+/**
+ * One notice per process, opt-in only. A per-call warning on a server SDK
+ * becomes log spam at request volume, which is how deprecation notices get
+ * suppressed wholesale and then ignored.
+ */
+let deprecationNoticeEmitted = false;
+
+function noteDeprecatedFlagsAlias(): void {
+  if (deprecationNoticeEmitted) return;
+  if (readEnv('FW_DEPRECATION_WARNINGS') !== '1') return;
+  deprecationNoticeEmitted = true;
+  console.warn(
+    '[fireweave] client.flags has been renamed to client.controlPoints. ' +
+      'The old name remains fully supported — no migration is required.',
+  );
+}
+
 export class FireweaveClient {
   readonly runtime: FireweaveRuntime;
-  readonly flags: FlagsApi;
+  readonly controlPoints: ControlPointsApi;
   readonly releases: ReleasesApi;
   readonly exposures: ExposuresApi;
   readonly signals: SignalsApi;
   readonly guardrails: GuardrailsApi;
   readonly capabilities: CapabilitiesApi;
 
+  /**
+   * Control-point evaluation under its former name.
+   *
+   * @deprecated Renamed to {@link FireweaveClient.controlPoints} (ADR-0007).
+   * Identical and fully supported — `client.flags === client.controlPoints`, so
+   * no migration is required and none is planned for v3. Set
+   * `FW_DEPRECATION_WARNINGS=1` to log one notice per process.
+   */
+  get flags(): ControlPointsApi {
+    noteDeprecatedFlagsAlias();
+    return this.controlPoints;
+  }
+
   constructor(runtime: FireweaveRuntime, options: FireweaveClientOptions = {}) {
     this.runtime = runtime;
-    this.flags = new FlagsApi(runtime);
+    this.controlPoints = new ControlPointsApi(runtime);
     this.signals = new SignalsApi(runtime, options.telemetry ?? {});
     this.releases = new ReleasesApi(runtime, this.signals);
     this.exposures = new ExposuresApi(runtime);

@@ -113,7 +113,7 @@ fireweave.releases().fail("rollout_01HZXEXAMPLE000000000001", "canary regression
 
 Failure reasons pass the secret-redaction filter before being stored or emitted (`phc_`/`phs_`/`phx_` keys, bearer tokens → `[REDACTED]`).
 
-When a PostHog-backed adapter is attached, Go emits release transitions as `$fw_release_<status>` telemetry events; other languages may record them in-process depending on the adapter sink (see [compatibility.md](compatibility.md#known-gaps)).
+Where a vendor adapter is attached, Go emits release transitions as `$fw_release_<status>` telemetry events; other languages record them through the adapter signal sink — `FireweaveRemoteAdapter` batches them to `POST /v1/capture` (see [compatibility.md](compatibility.md#known-gaps)).
 
 ## Exposures
 
@@ -145,7 +145,7 @@ fireweave.exposures().record(exposure);            // ExtensionResult<RecordOutc
 fireweave.exposures().flush();                     // ExtensionResult<FlushOutcome>
 ```
 
-Duplicates are acknowledged (`ok`, `deduped: true`) but not re-queued. On PostHog-backed runtimes, flushed exposures are delivered through the adapter's telemetry sink; on the in-memory adapter they are captured for test assertions. `FireweaveClient.shutdown()` (Node/Python) flushes the queue first; Go and Java require an explicit `Flush()`/`flush()` before shutdown if you want queued exposures delivered.
+Duplicates are acknowledged (`ok`, `deduped: true`) but not re-queued. Flushed exposures are delivered through the adapter telemetry sink — `POST /v1/capture` on `FireweaveRemoteAdapter`; on the in-memory adapter they are captured for test assertions. `FireweaveClient.shutdown()` (Node/Python) flushes the queue first; Go and Java require an explicit `Flush()`/`flush()` before shutdown if you want queued exposures delivered.
 
 ## Signals
 
@@ -207,7 +207,7 @@ All four languages return the **structured** matrix (`spec/capabilities.schema.j
 // Node — full matrix.
 const caps = fireweave.capabilities.get();
 // caps.static.features  { flags: true, releases: true, …, guardrails: false }
-// caps.runtime.backend  'inmemory' | 'posthog'
+// caps.runtime.backend  'fireweave' | 'inmemory' | 'none' | 'other'
 // caps.runtime.features { localEvaluation: true, sideEffectFreeReads: true, … }
 fireweave.capabilities.list();   // canonical operation-name list
 ```

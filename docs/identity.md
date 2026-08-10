@@ -1,8 +1,8 @@
 # Identity: targeting keys, anonymous users, groups
 
-## targetingKey → distinct_id
+## The targeting key
 
-The OpenFeature `targetingKey` **is** the cohort key, and on PostHog-backed evaluation it maps **1:1** to the PostHog `distinct_id`. This is the single identity join point between your app, flag targeting, and PostHog analytics — the same value that keys percentage rollouts also keys the `person` your exposure events attach to.
+The OpenFeature `targetingKey` **is** the cohort key. It is forwarded verbatim and never rewritten: as `targetingKey` to fw-server, and as the vendor `distinct_id` where a direct vendor adapter is in use. This is the single identity join point between your app, control-point targeting, and your analytics — the same value that keys percentage rollouts also keys the person your exposure events attach to.
 
 ```js
 await client.getBooleanValue('new-checkout', false, { targetingKey: 'user_42' });
@@ -10,8 +10,8 @@ await client.getBooleanValue('new-checkout', false, { targetingKey: 'user_42' })
 
 Two hard rules (ADR-0001 §8):
 
-1. **Fireweave never auto-generates an identity.** If no `targetingKey` is supplied, the SDK does not invent a per-evaluation anonymous ID (which would make every percentage rollout a coin flip per call and pollute PostHog with junk persons). Identity is caller-owned.
-2. **Missing `targetingKey` fails safe.** PostHog-backed evaluation without a targeting key returns your **default value** with `errorCode = TARGETING_KEY_MISSING` (Fireweave kind `InvalidContext`). With the in-memory adapter, keyless evaluation of unconditional flags is allowed unless you opt into strictness.
+1. **Fireweave never auto-generates an identity.** If no `targetingKey` is supplied, the SDK does not invent a per-evaluation anonymous ID (which would make every percentage rollout a coin flip per call and pollute your backend with junk persons). Identity is caller-owned.
+2. **Missing `targetingKey` fails safe.** Backend evaluation without a targeting key returns your **default value** with `errorCode = TARGETING_KEY_MISSING` (Fireweave kind `InvalidContext`). With the in-memory adapter, keyless evaluation of unconditional flags is allowed unless you opt into strictness.
 
 Opt into strictness so missing identity is caught uniformly, even in tests:
 
@@ -41,23 +41,25 @@ Percentage rollouts are computed by hashing `(flag, targetingKey)` — the key m
 | Anonymous visitor | A generated ID that you **persist** (server-set cookie / session record) and reuse on every subsequent request — generate once, store, resend |
 | Batch / worker jobs | A stable job- or tenant-scoped identifier, not a per-run UUID |
 
-Anti-patterns: fresh UUID per request (non-sticky, junk persons), request IDs, timestamps, or anything PII-bearing you would not send to your analytics backend (the key is stored by PostHog as `distinct_id`; prefer opaque IDs over email addresses).
+Anti-patterns: fresh UUID per request (non-sticky, junk persons), request IDs, timestamps, or anything PII-bearing you would not send to your analytics backend (the key is stored downstream as the person identifier; prefer opaque IDs over email addresses).
 
-If your frontend already uses PostHog (`posthog-js`), reuse its `distinct_id` server-side so flags and analytics agree on who the user is.
+If your frontend already identifies users to an analytics SDK, reuse that identifier server-side so control points and analytics agree on who the user is.
 
 ## Person properties
 
-Non-reserved context attributes become PostHog `person_properties` for targeting condition matching:
+Non-reserved context attributes are forwarded as person properties for targeting condition matching:
 
 ```python
 EvaluationContext("user_42", {"plan": "enterprise", "region": "eu"})
 ```
 
-They are sent to the backend for evaluation — treat them with the same PII care as analytics properties ([privacy docs](privacy.md); context bounds in [openfeature.md](openfeature.md#evaluation-context)). Attributes with a `$` prefix are passed through as PostHog system directives (e.g. `$process_person_profile`), not person properties.
+They are sent to the backend for evaluation — treat them with the same PII care as analytics properties ([privacy docs](privacy.md); context bounds in [openfeature.md](openfeature.md#evaluation-context)). Attributes with a `$` prefix are passed through as backend system directives (e.g. `$process_person_profile`), not person properties.
+
+**Prefer `registerTarget` for durable facts.** Properties that outlive a request — plan, beta membership, region — can be registered once at login instead of resent on every evaluation ([remote.md](remote.md#two-identity-paths)). Per-request attributes still override stored properties, so the two compose.
 
 ## Groups
 
-PostHog [group analytics](https://posthog.com/docs/product-analytics/group-analytics) **[PostHog-specific]** lets flags target group-level entities (company, project) rather than persons. Fireweave carries group membership and group properties in the evaluation context and maps them to PostHog `groups` / `group_properties`.
+Group analytics lets control points target group-level entities (company, project) rather than persons. Fireweave carries group membership and group properties in the evaluation context and forwards them to the backend as `groups` / `group_properties`.
 
 **Canonical spelling (all languages, rulings 12–14):** reserved keys `fireweave.groups` and `fireweave.groupProperties`. **Plain alias (ruling 19):** `groups` / `groupProperties` are also accepted. Prefer the canonical keys in portable code; when both are present, the canonical keys win.
 
@@ -94,7 +96,7 @@ EvaluationContext ctx = EvaluationContext.builder()
     .build();
 ```
 
-Group **identify** (creating/updating group profiles) is not an evaluation side effect and is not part of the phase-one extension surface — do it with your PostHog analytics SDK.
+Group **identify** (creating/updating group profiles) is not an evaluation side effect and is not part of the phase-one extension surface — do it with your analytics SDK.
 
 ## Reserved keys
 

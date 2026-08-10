@@ -1,0 +1,28 @@
+{
+  "id": "web-context-change-reprefetch",
+  "suite": "web",
+  "description": "setContext re-prefetches under the new identity and reports the control points whose decisions moved",
+  "tags": ["context", "identity", "events"],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "web-gated": {
+        "type": "boolean",
+        "enabled": true,
+        "value": true,
+        "matchTargetingKey": "user_web_1"
+      }
+    }
+  },
+  "when": {
+    "operation": "setContextThenEvaluate",
+    "flagKey": "web-gated",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": { "targetingKey": "user_web_1" },
+    "nextContext": { "targetingKey": "user_web_2" }
+  },
+  "expect": { "value": false, "changedKeys": ["web-gated"], "errorCode": "FLAG_NOT_FOUND" },
+  "schemaVersion": 1,
+  "provisional": false
+}

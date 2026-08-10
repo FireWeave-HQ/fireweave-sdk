@@ -32,13 +32,16 @@ import type {
 export type ExpectedFlagType = 'boolean' | 'string' | 'number' | 'object';
 
 export interface FireweaveRuntimeConfig {
-  /** PostHog project API key (phc_...) — required only for the PostHog adapter. */
+  /**
+   * Fireweave project/runtime key (`project-api-key_…`). Adapters may also read
+   * it from their own options or `FW_PROJECT_API_KEY`.
+   */
   projectApiKey?: string;
   /** Backend host (must be http(s) and pass the allowlist). */
   host?: string;
   /**
    * SSRF allowlist: hostnames the SDK may talk to. Empty/undefined ⇒ the
-   * canonical PostHog default allowlist + loopback (DEFAULT_ALLOWED_HOSTS).
+   * canonical Fireweave default allowlist + loopback (DEFAULT_ALLOWED_HOSTS).
    * Custom/self-hosted endpoints must be listed explicitly; ['*'] opts out.
    */
   allowedHosts?: readonly string[];
@@ -69,15 +72,10 @@ export interface EvaluateOptions {
   signal?: AbortSignal;
 }
 
-function validateConfig(config: FireweaveRuntimeConfig, adapterName: string): void {
-  if (adapterName === 'posthog') {
-    if (config.projectApiKey === undefined || config.projectApiKey.length === 0) {
-      throw new FireweaveError('Configuration');
-    }
-  }
+function validateConfig(config: FireweaveRuntimeConfig): void {
   if (config.host !== undefined) {
     // Allowlist is ON by default (release-blockers H-1): undefined/empty
-    // allowedHosts falls back to the canonical PostHog + loopback list.
+    // allowedHosts falls back to the canonical Fireweave + loopback list.
     assertHostAllowed(config.host, config.allowedHosts);
   }
   if (config.limits !== undefined) {
@@ -181,7 +179,7 @@ export class FireweaveRuntime {
     this.initPromise = (async () => {
       this.setState('INITIALIZING');
       try {
-        validateConfig(this.config, this.adapter.name);
+        validateConfig(this.config);
       } catch (err) {
         this.setState('FATAL');
         throw err;

@@ -14,3 +14,9 @@ results.*.json
 
 # Compiled Go example binary (`go build` output in examples/go/)
 examples/go/go
+
+# Bun writes this when `bun install` runs in sdks/node. The lockfile of record
+# is npm's package-lock.json — `bun install --frozen-lockfile` reads it directly
+# (verified), so a second lockfile would only add drift.
+bun.lock
+bun.lockb

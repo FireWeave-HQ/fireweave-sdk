@@ -57,7 +57,7 @@ Language surfaces are idiomatic: Node `FireweaveError` (with `kind`, `openFeatur
 
 ## Capability matrix
 
-`capabilities.get` **[Fireweave extension]** reports what a build + attached adapter can do (`spec/capabilities.schema.json`), as **static** (compile-time: `flags`, `releases`, `exposures`, `signals`, `guardrails: false`, `inMemoryAdapter`, `posthogAdapter`, …) and **runtime** (adapter-backed: `remoteEvaluation`, `localEvaluation`, `localOnly`, `exposureEmission`, `sideEffectFreeReads`, `groupAnalytics`, plus limits like `intSafeMaxAbs`) feature maps.
+`capabilities.get` **[Fireweave extension]** reports what a build + attached adapter can do (`spec/capabilities.schema.json`), as **static** (compile-time: `controlPoints`, `flags`, `releases`, `exposures`, `signals`, `guardrails: false`, `inMemoryAdapter`, `remoteAdapter`, …) and **runtime** (adapter-backed: `remoteEvaluation`, `localEvaluation`, `localOnly`, `exposureEmission`, `sideEffectFreeReads`, `groupAnalytics`, plus limits like `intSafeMaxAbs`) feature maps.
 
 Use it for defensive gating instead of version sniffing:
 
@@ -66,12 +66,12 @@ const caps = fireweave.capabilities.get();
 if (caps.runtime.features.localEvaluation) { /* low-latency path */ }
 ```
 
-The canonical operation-name list (identical in all four languages) is in [extensions.md](extensions.md). Phase-one truths: `guardrails` is always `false`; Java reports `posthogAdapter: false` in static features until the upstream artifact ships ([posthog.md](posthog.md#java)).
+The canonical operation-name list (identical in all four languages) is in [extensions.md](extensions.md). Phase-one truths: `guardrails` is always `false`; Node reports `controlPoints: true` alongside the retained `flags: true` ([ADR-0007](adr/0007-control-point-vocabulary.md)) and no longer reports `posthogAdapter` at all ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)); Java reports `posthogAdapter: false` until the upstream artifact ships ([posthog.md](posthog.md#java)).
 
 ## Feature-labeling convention used across these docs
 
 - **[OpenFeature standard]** — spec-defined behavior; portable to any OpenFeature provider.
 - **[Fireweave extension]** — Fireweave-owned API (`FireweaveClient`, `fireweave.*` metadata, capability matrix, context bounds).
-- **[PostHog-specific]** — behavior of the PostHog backend adapter (key types, quota, caches).
+- **[vendor-specific]** — behavior of a direct vendor adapter (key types, quota, caches). Python and Go only; removed on Node in 2.1.
 - **[Experimental]** — shipped but subject to change without a major version (guardrails stub, transaction-context usage).
 - **[Planned — not implemented]** — documented intent, no code yet (OpenFeature tracking §6, browser/mobile SDKs, real guardrail evaluation).

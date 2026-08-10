@@ -1,9 +1,17 @@
 # ADR-0002: PostHog Adapter
 
-- **Status:** Accepted
+- **Status:** **Partially superseded** — still Accepted for Python and Go; **superseded for Node** by [ADR-0006](0006-node-drops-direct-posthog-adapter.md) (2026-08-08), which deleted the adapter from `sdks/node`. Java's binding was never production-ready (seam only).
 - **Date:** 2026-07-27
 - **Deciders:** Agent D (Architecture & API lead)
 - **Tags:** posthog, adapter, evaluation, lifecycle
+
+> **Read this as a record, not as current guidance for Node.** Everything below
+> described the adapter as it existed in all four languages. The Node SDK no
+> longer ships it: applications use `FireweaveRemoteAdapter` and hold no vendor
+> credentials ([ADR-0005](0005-fireweave-proxy-backend.md),
+> [ADR-0006](0006-node-drops-direct-posthog-adapter.md)). Python and Go still
+> ship it as an escape hatch, and the reasoning here still governs them until
+> each takes its own pass.
 
 ## Context and Problem Statement
 

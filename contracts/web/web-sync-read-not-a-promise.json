@@ -1,0 +1,20 @@
+{
+  "id": "web-sync-read-not-a-promise",
+  "suite": "web",
+  "description": "resolve*Evaluation returns ResolutionDetails, never a Promise — the load-bearing web invariant",
+  "tags": ["sync", "structural"],
+  "given": {
+    "providerState": "READY",
+    "flags": { "web-sync": { "type": "boolean", "enabled": true, "value": true } }
+  },
+  "when": {
+    "operation": "assertSyncProvider",
+    "flagKey": "web-sync",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": { "targetingKey": "user_web_1" }
+  },
+  "expect": { "isPromise": false, "value": true },
+  "schemaVersion": 1,
+  "provisional": false
+}

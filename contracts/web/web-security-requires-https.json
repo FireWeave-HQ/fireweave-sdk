@@ -1,0 +1,11 @@
+{
+  "id": "web-security-requires-https",
+  "suite": "web",
+  "description": "Plain http off-loopback is refused; loopback is permitted for local development",
+  "tags": ["security", "transport"],
+  "given": { "providerState": "READY", "flags": {} },
+  "when": { "operation": "initializeRemoteAdapter", "apiUrl": "http://evil.example.com", "apiKey": "project-api-key_x" },
+  "expect": { "throws": true, "errorKind": "Configuration" },
+  "schemaVersion": 1,
+  "provisional": false
+}

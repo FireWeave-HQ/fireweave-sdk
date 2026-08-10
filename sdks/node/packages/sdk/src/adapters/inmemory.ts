@@ -1,7 +1,7 @@
 /**
  * Deterministic in-memory adapter for tests and conformance fixtures.
  * Resolution model mirrors contracts/ fixture flag definitions: flags, variants,
- * payloads, targeting by distinct_id / person attributes / groups.
+ * payloads, targeting by targeting key / person attributes / groups.
  * Deliberately NO bucketing / percentage logic.
  */
 import { FireweaveError, type FireweaveErrorKind } from '../errors.js';

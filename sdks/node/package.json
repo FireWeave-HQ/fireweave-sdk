@@ -2,7 +2,7 @@
   "name": "fireweave-sdk-node-workspace",
   "private": true,
   "version": "0.1.0",
-  "description": "Fireweave polyglot SDK — Node workspace (packages, tests, conformance)",
+  "description": "Fireweave polyglot SDK \u2014 Node workspace (packages, tests, conformance)",
   "type": "module",
   "engines": {
     "node": ">=20.20"
@@ -11,18 +11,19 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspace @fireweaveai/sdk",
+    "build": "tsc -p packages/sdk/tsconfig.json",
     "typecheck": "npm run build && tsc -p packages/sdk/tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
-    "test": "npm run test:unit && npm run test:integration",
+    "test": "npm run test:unit && npm run test:integration && npm run test:compat",
     "test:unit": "npm run build && tsx --test packages/sdk/test/unit/*.test.ts",
     "test:integration": "npm run build && tsx --test packages/sdk/test/integration/*.test.ts",
+    "test:compat": "npm run build && tsx --test packages/sdk/test/compat/*.compat.test.ts",
     "conformance": "npm run build && tsx test/conformance/run.ts",
-    "verify": "npm run typecheck && npm run test && npm run conformance"
+    "smoke": "npm run build && node scripts/smoke-runtimes.mjs",
+    "verify": "npm run typecheck && npm run test && npm run conformance && npm run smoke"
   },
   "devDependencies": {
     "@openfeature/server-sdk": "1.22.0",
     "@types/node": "^24.0.0",
-    "posthog-node": "5.46.1",
     "tsx": "^4.20.3",
     "typescript": "^5.6.0"
   }

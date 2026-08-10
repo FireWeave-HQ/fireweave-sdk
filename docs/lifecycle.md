@@ -77,7 +77,7 @@ Shutdown belongs to the **runtime**; every entry point converges on it and it is
 | Go | `of.Shutdown()` / `of.ShutdownWithContext(ctx)` | `runtime.Shutdown(ctx)` |
 | Java | `api.shutdown()` | `client.close()` (AutoCloseable) / `runtime.shutdown()` |
 
-Semantics: stop accepting new work → flush pending telemetry → close the adapter under a **deadline** (default 10 s; Go bounds posthog-go's otherwise-indefinite `Close`, configurable via `CloseTimeout`/`shutdownTimeoutMs`/`shutdown_timeout_ms`). Shutdown never throws; flush failures are swallowed (telemetry loss is acceptable, evaluation correctness is not).
+Semantics: stop accepting new work → flush pending telemetry → close the adapter under a **deadline** (default 10 s; Go bounds its vendor client's otherwise-indefinite `Close`, configurable via `CloseTimeout`/`shutdownTimeoutMs`/`shutdown_timeout_ms`). Shutdown never throws; flush failures are swallowed (telemetry loss is acceptable, evaluation correctness is not).
 
 Injected vendor clients (advanced init) are **not** shut down by Fireweave — whoever constructed the client owns its lifecycle.
 

@@ -1,0 +1,16 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "..",
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "checkJs": false,
+    // Tests (not src/) run on Node via tsx and read fixtures off disk, so they
+    // legitimately need node types. src/ deliberately does not — see
+    // tsconfig.base.json.
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"]
+  },
+  "include": ["./**/*.ts", "../packages/sdk/test/**/*.ts"]
+}

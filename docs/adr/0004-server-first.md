@@ -46,7 +46,7 @@ Fireweave's product surface includes server, web, and future mobile/harness surf
 
 | Item | Notes |
 |---|---|
-| Browser package | Design reference: deploy-sdk `flags/web`; new MIT implementation under OF web SDK + posthog-js; remote-only; no secret keys |
+| ~~Browser package~~ | **Superseded by [ADR-0009](0009-browser-control-points.md)** (2026-08-09) — shipped as `@fireweaveai/web-sdk`, remote-only, no secret keys, no `posthog-js`. The rest of this ADR stands: mobile, Dart, and edge remain out of scope |
 | Mobile | No prior art; greenfield after server GA |
 | Dart surface | Enum exists in internal registry with `NO_PROD_VENDORS`; not this repo's phase one |
 | Upstream `java` harness surface | File against main FireWeave `SURFACE_REGISTRY` / manifest schemas |

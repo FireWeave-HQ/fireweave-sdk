@@ -1,0 +1,20 @@
+{
+  "id": "web-disabled-flag",
+  "suite": "web",
+  "description": "A control point the backend reports as disabled resolves DISABLED, carrying its stored value",
+  "tags": ["disabled"],
+  "given": {
+    "providerState": "READY",
+    "flags": { "web-off": { "type": "boolean", "enabled": false, "value": false } }
+  },
+  "when": {
+    "operation": "evaluateSync",
+    "flagKey": "web-off",
+    "flagType": "boolean",
+    "defaultValue": true,
+    "invocationContext": { "targetingKey": "user_web_1" }
+  },
+  "expect": { "value": false, "reason": "DISABLED" },
+  "schemaVersion": 1,
+  "provisional": false
+}
