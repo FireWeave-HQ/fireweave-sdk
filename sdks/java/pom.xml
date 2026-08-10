@@ -41,7 +41,7 @@
     -->
     <openfeature.version>1.15.1</openfeature.version>
     <junit.version>5.10.2</junit.version>
-    <jackson.version>2.17.1</jackson.version>
+    <jackson.version>2.18.9</jackson.version>
   </properties>
 
   <dependencyManagement>
