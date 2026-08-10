@@ -66,7 +66,7 @@ signing into the workflow.
 | Ecosystem | Registry | Name | Status |
 | --- | --- | --- | --- |
 | Node | npmjs.com | `@fireweaveai/sdk` | Working name pending company ratification (ADR-0001). Publish via **OIDC trusted publishing** (no long-lived `NPM_TOKEN`). |
-| Python | pypi.org | `fireweave` | Publish via **PyPI trusted publisher** (OIDC). Preferred auto path: push tag `python/v<semver>` → `publish-python.yml`. |
+| Python | pypi.org | `fireweave` | Publish via **`PYPI_API_TOKEN`** GitHub secret (repo or `release` env) with `pypa/gh-action-pypi-publish`. Preferred auto path: push tag `python/v<semver>` → `publish-python.yml`. OIDC Trusted Publisher remains optional. |
 | Go | proxy.golang.org | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go` | No registry credentials — "publishing" is pushing the `sdks/go/v*` tag on the public repo; the proxy picks it up. |
 | Java | Maven Central | groupId `ai.fireweave` | **Pending namespace verification** on the Central portal (DNS TXT proof for `fireweave.ai`). Do not publish until verified. |
 

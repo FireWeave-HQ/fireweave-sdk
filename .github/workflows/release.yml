@@ -245,7 +245,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: release
     permissions:
-      id-token: write # PyPI OIDC trusted publishing
+      id-token: write # optional OIDC; token path uses PYPI_API_TOKEN
       contents: read
     steps:
       - uses: actions/checkout@v5
@@ -269,6 +269,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+          password: ${{ secrets.PYPI_API_TOKEN }}
           verbose: true
 
   publish-maven:
