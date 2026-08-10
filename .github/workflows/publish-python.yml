@@ -1,16 +1,14 @@
-# Publish the Python SDK (`fireweave`) to PyPI via Trusted Publishing (OIDC).
+# Publish the Python SDK (`fireweave`) to PyPI.
 #
 # Triggers:
 #   - push of org tag `python/v<semver>` (e.g. python/v0.1.0)
 #   - workflow_dispatch with an explicit version (must match pyproject.toml)
 #
-# Prerequisites (one-time, browser):
-#   PyPI → project `fireweave` → Publishing → Trusted Publishers:
-#     Owner:       FireWeave-HQ
-#     Repository:  fireweave-sdk
-#     Workflow:    publish-python.yml
-#     Environment: release
-#   See .github/RELEASE.md. No long-lived PYPI_API_TOKEN is required.
+# Auth (prefer token; OIDC optional):
+#   - Repository or `release` environment secret: PYPI_API_TOKEN
+#     (PyPI → Account settings → API tokens → scoped to project `fireweave`)
+#   - Optional: PyPI Trusted Publisher (OIDC) for the same workflow + environment
+#     if you later migrate off long-lived tokens. See .github/RELEASE.md.
 name: Publish Python SDK
 
 on:
@@ -37,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: release
     permissions:
-      id-token: write # PyPI OIDC trusted publishing
+      id-token: write # optional OIDC trusted publishing (token path is primary)
       contents: read
     steps:
       - uses: actions/checkout@v5
@@ -74,10 +72,12 @@ jobs:
           echo "version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
           echo "Publishing fireweave==$PKG_VERSION"
 
-      - name: Assert OIDC preconditions
+      - name: Require PYPI_API_TOKEN
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
-            echo "::error::OIDC id-token request vars absent — configure PyPI Trusted Publisher for workflow publish-python.yml (environment: release) and permissions.id-token: write"
+          if [ -z "${PYPI_API_TOKEN:-}" ]; then
+            echo "::error::PYPI_API_TOKEN secret is missing (set on repo or environment 'release')"
             exit 1
           fi
 
@@ -91,5 +91,5 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
-          # Fail loudly if the Trusted Publisher is not configured yet.
+          password: ${{ secrets.PYPI_API_TOKEN }}
           verbose: true
