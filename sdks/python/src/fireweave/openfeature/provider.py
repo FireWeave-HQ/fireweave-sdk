@@ -42,6 +42,7 @@ _OF_REASONS = {
     "DEFAULT": OFReason.DEFAULT,
     "STALE": OFReason.STALE,
     "CACHED": OFReason.CACHED,
+    "STATIC": OFReason.STATIC,
     "ERROR": OFReason.ERROR,
 }
 

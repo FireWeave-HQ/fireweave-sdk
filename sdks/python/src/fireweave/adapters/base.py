@@ -8,12 +8,47 @@ runtime and public API only ever see Fireweave-owned shapes.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Protocol, runtime_checkable
+from typing import Any, Dict, Literal, Optional, Protocol, runtime_checkable
 
 from ..context import EvaluationContext
+from ..errors import FireweaveError
 from ..types import JsonValue
 
-__all__ = ["BackendAdapter", "FlagResolution"]
+__all__ = [
+    "BackendAdapter",
+    "FlagResolution",
+    "TargetKind",
+    "RegisterTargetOptions",
+    "RegisterTargetResult",
+]
+
+TargetKind = Literal["user", "device"]
+
+
+@dataclass(frozen=True)
+class RegisterTargetOptions:
+    """Options for ``POST /v1/targets/register`` (spec/remote-register-target).
+
+    Omitted fields are left off the wire rather than sent as null/default —
+    the server defaults ``kind`` to ``user`` when absent.
+    """
+
+    kind: Optional[TargetKind] = None
+    properties: Optional[Dict[str, JsonValue]] = None
+    environment: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class RegisterTargetResult:
+    """Outcome of target registration.
+
+    ``ok=False`` means the target was NOT registered — rules that depend on its
+    properties will not match until a later attempt succeeds. Callers in a
+    login path normally ignore this; a careful caller logs it.
+    """
+
+    ok: bool
+    error: Optional[FireweaveError] = None
 
 
 @dataclass(frozen=True)
@@ -64,10 +99,13 @@ class BackendAdapter(Protocol):
 
 # Optional adapter surface (duck-typed, ruling 17 / capabilities matrix):
 #
-# - ``backend_name: str`` — "posthog" | "inmemory" | "none" | "other"
+# - ``backend_name: str`` — "fireweave" | "posthog" | "inmemory" | "none" | "other"
 #   (spec/capabilities.schema.json runtime.backend).
 # - ``runtime_features() -> Dict[str, bool]`` — adapter-dependent runtime
 #   capability booleans merged into ``capabilities.get()``.
+# - ``register_target(targeting_key, options) -> RegisterTargetResult`` —
+#   durable identity registration (``POST /v1/targets/register``). Returns
+#   ``ok=False`` rather than raising — registration sits in login paths.
 # - ``send_exposures(events: list) -> None`` — telemetry sink for flushed
 #   exposure events.
 # - ``deliver_signal(signal: Dict) -> None`` — telemetry sink for recorded

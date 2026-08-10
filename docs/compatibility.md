@@ -2,7 +2,7 @@
 
 Spec version **0.1.0**; OpenFeature specification compliance floor **v0.8.0**. Status date: 2026-08-09.
 
-> **Node is ahead of the other languages.** 2.1 of the Node package removed the direct vendor adapter ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)), adopted "control point" as the product noun ([ADR-0007](adr/0007-control-point-vocabulary.md)), and added Bun/Deno support ([ADR-0008](adr/0008-multi-runtime-support.md)). Python, Go, and Java still ship the vendor adapter and still lead with flag vocabulary. That asymmetry is **deliberate and temporary** — each language gets its own pass. Rows below marked *(Node 2.1)* record where the languages currently diverge. **Registry status:** `@fireweaveai/sdk` is published on npm at `0.1.0` and `2.0.0` (`latest` = 2.0.0); **2.1.0 is not published yet**, so an unpinned `npm install` still resolves to 2.0.0. Python, Go, and Java remain unpublished — install those from a checkout ([quickstart.md](quickstart.md)).
+> **Node is ahead of the other languages.** 2.1 of the Node package removed the direct vendor adapter ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)), adopted "control point" as the product noun ([ADR-0007](adr/0007-control-point-vocabulary.md)), and added Bun/Deno support ([ADR-0008](adr/0008-multi-runtime-support.md)). Python now also exposes control-point vocabulary, `register_target`, and a local (dev) adapter, but still ships the vendor adapter escape hatch. Go and Java still lead with flag vocabulary. That asymmetry is **deliberate and temporary** — each language gets its own pass. Rows below marked *(Node 2.1)* record where the languages currently diverge. **Registry status:** `@fireweaveai/sdk` is published on npm at `0.1.0` and `2.0.0` (`latest` = 2.0.0); **2.1.0 is not published yet**, so an unpinned `npm install` still resolves to 2.0.0. Python, Go, and Java remain unpublished — install those from a checkout ([quickstart.md](quickstart.md)).
 
 > **On the "2.1" wording below.** This release was drafted as 3.0.0 and ships as **2.1.0** (see the CHANGELOG version note); no 3.x ever reached a registry. Rows marked *(Node 2.1)* describe **this** release — the wording is being cleaned up separately so the change is a rename, not a semantic edit buried in a version bump.
 
@@ -19,8 +19,9 @@ Spec version **0.1.0**; OpenFeature specification compliance floor **v0.8.0**. S
 | **Direct vendor adapter** | ❌ removed *(Node 2.1)* | ✅ escape hatch | ✅ escape hatch | ⚠️ seam only ([posthog.md](posthog.md#java)) |
 | **Local (in-process) evaluation** | ❌ none *(Node 2.1 — caching is fw-server's concern; the interface seam is preserved)* | ✅ `secret_key`/`personal_api_key` + `local_evaluation` | ✅ `SecretKey` | ⏳ pending upstream artifact |
 | **Local-only mode** | ❌ *(Node 2.1)* | ✅ `only_evaluate_locally` | ✅ `LocalEvaluationOnly` | ⏳ pending upstream |
-| **Target registration** (`registerTarget`) | ✅ `/v1/targets/register` | ⏳ planned | ⏳ planned | ⏳ planned |
-| **Product vocabulary** | control points (`client.controlPoints`, `client.flags` retained) *(Node 2.1)* | flags | flags | flags |
+| **Target registration** (`registerTarget` / `register_target`) | ✅ `/v1/targets/register` | ✅ `/v1/targets/register` | ⏳ planned | ⏳ planned |
+| **Product vocabulary** | control points (`client.controlPoints`, `client.flags` retained) *(Node 2.1)* | control points (`client.control_points`, `client.flags` retained) | flags | flags |
+| **Local (dev) adapter** | ✅ `FireweaveLocalAdapter` + `makeFireweaveLocalProvider()` *(Node 2.1)* | ✅ `FireweaveLocalAdapter` + `make_fireweave_local_provider()` | ⏳ planned | ⏳ planned |
 | **Structured (object) flags** | ✅ | ✅ | ✅ | ✅ |
 | **Multivariate variants** | ✅ | ✅ | ✅ | ✅ |
 | **Groups / group properties** | ✅ canonical `fireweave.groups` / `fireweave.groupProperties` + plain `groups` / `groupProperties` alias (rulings 12–14, 19) | ✅ same | ✅ same | ✅ builder `.group()` + canonical/alias attributes |

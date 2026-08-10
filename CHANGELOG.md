@@ -124,6 +124,18 @@ README rewritten around the release-engineering surface with OpenFeature as one 
 - **Examples (`examples/`)** — runnable Node, Python, Go, and Java walkthroughs, offline by default.
 - **Documentation** — architecture + ADRs 0001–0004, user docs under `docs/`, community files.
 
+
+### Python SDK `fireweave` — parity with Node surfaces (Aug 2026)
+
+Additive (package remains `0.1.0`). PostHog escape hatch retained.
+
+#### Added
+
+- **`runtime.register_target()` / `FireweaveRemoteAdapter.register_target()`** — `POST /v1/targets/register` with one retry on retryable failures; returns `{ok: false}` rather than raising.
+- **`client.control_points`** — documented evaluation namespace; `client.flags` is the same object (ADR-0007). Capabilities advertise `controlPoints` and `remoteAdapter` beside retained `flags` / `posthogAdapter`.
+- **`FireweaveLocalAdapter` + `make_fireweave_local_provider()`** — DEV-branch substrate with `FLAG_NOT_FOUND` → `DEFAULT` rewrite; `get_fw_local_captures` / `reset_fw_local_captures`.
+- Conformance runner excludes `contracts/web/` (web-only surface).
+
 ### Known limitations
 
 - Java's PostHog adapter cannot be constructed from config alone (`UnsupportedCapability`) until PostHog publishes a Java server SDK with local evaluation; use the `PostHogClientApi` injection seam.
