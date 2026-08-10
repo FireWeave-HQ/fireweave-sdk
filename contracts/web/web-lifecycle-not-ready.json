@@ -1,0 +1,20 @@
+{
+  "id": "web-lifecycle-not-ready",
+  "suite": "web",
+  "description": "Reads before initialize() degrade with PROVIDER_NOT_READY rather than throwing",
+  "tags": ["lifecycle", "gating"],
+  "given": {
+    "providerState": "UNINITIALIZED",
+    "flags": { "web-any": { "type": "boolean", "enabled": true, "value": true } }
+  },
+  "when": {
+    "operation": "evaluateSync",
+    "flagKey": "web-any",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": { "targetingKey": "user_web_1" }
+  },
+  "expect": { "value": false, "reason": "ERROR", "errorCode": "PROVIDER_NOT_READY" },
+  "schemaVersion": 1,
+  "provisional": false
+}

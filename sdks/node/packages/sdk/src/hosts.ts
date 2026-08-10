@@ -2,23 +2,29 @@
  * Backend host allowlist (SSRF guard, release-blockers H-1).
  *
  * The allowlist is ON by default: when no explicit `allowedHosts` is
- * configured, only the canonical PostHog hosts plus loopback are permitted.
- * The canonical default list is identical across all four SDK languages
- * (orchestrator ruling, Phase 5). Custom/self-hosted endpoints require an
- * explicit `allowedHosts` entry; `['*']` opts out entirely.
+ * configured, only the canonical Fireweave hosts plus loopback are permitted,
+ * so a typo'd or tampered `host` cannot be aimed at cloud metadata endpoints.
+ * Custom / self-hosted deployments require an explicit `allowedHosts` entry;
+ * `['*']` opts out entirely.
  *
  * Scheme policy: https is required for non-loopback hosts; plain http is
  * permitted on loopback only (the repo's test-server stub).
  */
 import { FireweaveError } from './errors.js';
 
-/** Canonical default host allowlist (same across all SDK languages). */
+/**
+ * Canonical default host allowlist.
+ *
+ * v3 replaced the third-party analytics hostnames this list used to carry
+ * (ADR-0006) with Fireweave's own fw-server hostnames. The security property is
+ * unchanged — an unconfigured allowlist still denies everything it does not name
+ * — but the *contents* changed: code doing
+ * `allowedHosts: [...DEFAULT_ALLOWED_HOSTS, …]` no longer reaches the former
+ * vendor endpoints, which is the intent.
+ */
 export const DEFAULT_ALLOWED_HOSTS: readonly string[] = Object.freeze([
-  'app.posthog.com',
-  'us.posthog.com',
-  'eu.posthog.com',
-  'us.i.posthog.com',
-  'eu.i.posthog.com',
+  'app-server.fireweave.ai',
+  'staging-app-server.fireweave.ai',
   'localhost',
   '127.0.0.1',
   '::1',

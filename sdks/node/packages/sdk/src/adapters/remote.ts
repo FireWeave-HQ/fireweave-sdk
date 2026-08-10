@@ -7,10 +7,12 @@
  *   POST /v1/targets/register
  *
  * Auth: Authorization: Bearer <FW_PROJECT_API_KEY> (project-api-key_…).
- * Never depends on posthog-node or PostHog hosts/keys in the customer process.
+ * Which backend fw-server forwards to is fw-server's concern: no vendor SDK,
+ * key, or host ever enters the application process.
  *
  * See spec/remote-protocol.md.
  */
+import { readEnv } from '../env.js';
 import { FireweaveError } from '../errors.js';
 import { assertHostAllowed, isLoopbackHostname } from '../hosts.js';
 import type {
@@ -110,8 +112,8 @@ function resolveFromEnv(options: FireweaveRemoteAdapterOptions): {
   apiUrl: string;
   apiKey: string;
 } {
-  const apiUrl = (options.apiUrl ?? process.env['FW_API_URL'] ?? '').replace(/\/+$/, '');
-  const apiKey = options.apiKey ?? process.env['FW_PROJECT_API_KEY'] ?? '';
+  const apiUrl = (options.apiUrl ?? readEnv('FW_API_URL') ?? '').replace(/\/+$/, '');
+  const apiKey = options.apiKey ?? readEnv('FW_PROJECT_API_KEY') ?? '';
   return { apiUrl, apiKey };
 }
 

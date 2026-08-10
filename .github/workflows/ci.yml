@@ -6,6 +6,10 @@
 # docs link check, and package build DRY RUNS (artifacts only — publishing is
 # hard-disabled everywhere; see release.yml + RELEASE.md).
 #
+# Runtime policy (ADR-0008): the Node SDK is published as a runtime-agnostic
+# ESM package and gated on Node, Bun, and Deno. Node and Bun run the full suite;
+# Deno runs a typecheck plus the cross-runtime smoke (see the deno job comment).
+#
 # Lint policy (matches the code as written — no invented configs):
 #   node   : tsc --noEmit only (no eslint/prettier config exists)
 #   python : ruff --select F (pyflakes-level; no ruff/black config exists),
@@ -62,6 +66,125 @@ jobs:
       - name: Conformance runner (per-version sanity; differential job is the gate)
         working-directory: sdks/node
         run: npm run conformance
+      - name: Cross-runtime smoke (Node leg)
+        working-directory: sdks/node
+        run: node scripts/smoke-runtimes.mjs
+
+  # ---------------------------------------------------------------- bun
+  # The published package is runtime-agnostic (ADR-0008). Bun's native test
+  # runner does not yet implement node:test (oven-sh/bun#5090), so unit suites
+  # stay on the node job; this job builds with the shared tsc script and runs
+  # the cross-runtime smoke under Bun.
+  bun:
+    name: bun (${{ matrix.bun }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        bun: ['1.2.0', 'latest'] # minimum supported + current
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: sdks/node/package-lock.json
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ matrix.bun }}
+      - name: Install workspace dependencies (npm workspaces for package link)
+        working-directory: sdks/node
+        run: npm ci
+      - name: Build SDK (emit dist/ for package exports)
+        working-directory: sdks/node
+        run: npm run build
+      - name: Cross-runtime smoke (Bun leg)
+        working-directory: sdks/node
+        run: bun scripts/smoke-runtimes.mjs
+
+  # ---------------------------------------------------------------- deno
+  # Deno lacks the Node globals `Buffer` and `process` outside npm compatibility
+  # mode, which is why src/ uses TextEncoder and src/env.ts#readEnv instead.
+  #
+  # The smoke script imports deep RELATIVE paths, so it carries no bare
+  # specifiers and needs no npm resolution. That covers every module except
+  # provider.js, whose `@openfeature/server-sdk` import is a bare npm specifier —
+  # that path is gated by the node and bun jobs above.
+  deno:
+    name: deno (${{ matrix.deno }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        deno: ['v2.x', 'canary']
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: sdks/node/package-lock.json
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ matrix.deno }}
+      # dist/ is gitignored and Deno does not run the TypeScript build, so the
+      # artifact under test is produced by the Node toolchain first.
+      - name: Install workspace dependencies (build toolchain only)
+        working-directory: sdks/node
+        run: npm ci
+      - name: Build SDK (emit dist/ for Deno to consume)
+        working-directory: sdks/node
+        run: npm run build
+      - name: Typecheck the published build under Deno
+        working-directory: sdks/node
+        run: deno check --no-npm packages/sdk/dist/client.js packages/sdk/dist/adapters/remote.js
+      - name: Cross-runtime smoke (Deno leg, least privilege)
+        working-directory: sdks/node
+        run: deno run --allow-read scripts/smoke-runtimes.mjs
+      - name: Cross-runtime smoke (Deno leg, with env access)
+        working-directory: sdks/node
+        run: deno run --allow-read --allow-env scripts/smoke-runtimes.mjs
+
+  # ---------------------------------------------------------------- web
+  # The browser package (ADR-0009). Bun is the ONLY runtime this job uses.
+  #
+  # That is not a coverage compromise. `@fireweaveai/web-sdk` targets browsers:
+  # it ships no server entry point, reads no environment, and imports no runtime
+  # built-ins. Node and Deno are not target runtimes, so exercising it on them
+  # would assert a property no user depends on. Bun runs the suite and the
+  # conformance harness; happy-dom supplies the DOM (bunfig.toml preload).
+  #
+  # Coverage boundary, stated rather than glossed: happy-dom is a DOM, not a
+  # browser. `pagehide` / `visibilitychange` / `keepalive` are exercised for
+  # real, but bfcache restore, beacon size limits, and whether a request
+  # actually leaves the socket during unload are browser behaviours no headless
+  # DOM can assert. If that path proves fragile in practice, the escalation is a
+  # small Playwright suite over exactly those invariants.
+  web:
+    name: web (bun)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      # Node is present only to run `tsc` for the typecheck step; it never
+      # executes the package.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Install workspace dependencies
+        working-directory: sdks/web
+        run: bun install
+      - name: Typecheck (src + tests)
+        working-directory: sdks/web
+        run: bun run typecheck
+      - name: Unit tests + browser-portability guard
+        working-directory: sdks/web
+        run: bun run test
+      - name: Web conformance (contracts/web)
+        working-directory: sdks/web
+        run: bun run conformance
 
   # ---------------------------------------------------------------- python
   python:

@@ -1,0 +1,17 @@
+{
+  "id": "web-stale-on-prefetch-timeout",
+  "suite": "web",
+  "description": "A prefetch that exceeds the ready ceiling leaves the runtime STALE and serves defaults with reason STALE — a timed-out boot must not look like a successful one",
+  "tags": ["stale", "fail-open", "lifecycle"],
+  "given": { "providerState": "HANGS", "flags": {} },
+  "when": {
+    "operation": "evaluateSync",
+    "flagKey": "web-anything",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": { "targetingKey": "user_web_1" }
+  },
+  "expect": { "value": false, "reason": "STALE", "lifecycle": "STALE" },
+  "schemaVersion": 1,
+  "provisional": false
+}

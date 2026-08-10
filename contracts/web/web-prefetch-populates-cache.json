@@ -1,0 +1,22 @@
+{
+  "id": "web-prefetch-populates-cache",
+  "suite": "web",
+  "description": "initialize() prefetches decisions; a synchronous read returns the backend value",
+  "tags": ["prefetch", "sync"],
+  "given": {
+    "providerState": "READY",
+    "flags": {
+      "web-checkout": { "type": "boolean", "enabled": true, "variant": "on", "value": true }
+    }
+  },
+  "when": {
+    "operation": "evaluateSync",
+    "flagKey": "web-checkout",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": { "targetingKey": "user_web_1" }
+  },
+  "expect": { "value": true, "variant": "on", "reason": "TARGETING_MATCH" },
+  "schemaVersion": 1,
+  "provisional": false
+}

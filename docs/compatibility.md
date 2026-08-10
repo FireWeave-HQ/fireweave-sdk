@@ -1,18 +1,26 @@
 # Compatibility matrix
 
-Spec version **0.1.0**; OpenFeature specification compliance floor **v0.8.0**. Status date: 2026-07-27. All packages **unpublished** (pre-release; install from checkout — [quickstart.md](quickstart.md)).
+Spec version **0.1.0**; OpenFeature specification compliance floor **v0.8.0**. Status date: 2026-08-09.
+
+> **Node is ahead of the other languages.** 2.1 of the Node package removed the direct vendor adapter ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)), adopted "control point" as the product noun ([ADR-0007](adr/0007-control-point-vocabulary.md)), and added Bun/Deno support ([ADR-0008](adr/0008-multi-runtime-support.md)). Python, Go, and Java still ship the vendor adapter and still lead with flag vocabulary. That asymmetry is **deliberate and temporary** — each language gets its own pass. Rows below marked *(Node 2.1)* record where the languages currently diverge. **Registry status:** `@fireweaveai/sdk` is published on npm at `0.1.0` and `2.0.0` (`latest` = 2.0.0); **2.1.0 is not published yet**, so an unpinned `npm install` still resolves to 2.0.0. Python, Go, and Java remain unpublished — install those from a checkout ([quickstart.md](quickstart.md)).
+
+> **On the "2.1" wording below.** This release was drafted as 3.0.0 and ships as **2.1.0** (see the CHANGELOG version note); no 3.x ever reached a registry. Rows marked *(Node 2.1)* describe **this** release — the wording is being cleaned up separately so the change is a rename, not a semantic edit buried in a version bump.
 
 ## Core matrix
 
 | | Node | Python | Go | Java |
 | --- | --- | --- | --- | --- |
 | **Package (working name)** | `@fireweaveai/sdk` | `fireweave` | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go` | `ai.fireweave:fireweave-{sdk,openfeature,adapter-posthog,testing}` |
-| **Language version** | Node ≥ 20.20 | Python ≥ 3.10 | Go 1.25 | Java ≥ 11 |
+| **Language version** | Node ≥ 20.20 · Bun ≥ 1.2 · Deno ≥ 2.0 | Python ≥ 3.10 | Go 1.25 | Java ≥ 11 |
+| **Package version** | `2.1.0` | `0.1.0` | `0.1.0` | `0.1.0-SNAPSHOT` |
 | **OpenFeature SDK pin** | `@openfeature/server-sdk` 1.22.0 (peer) | `openfeature-sdk` ≥ 0.10, < 0.11 (**pre-1.0**) | `go-sdk` v1.17.2 | `dev.openfeature:sdk` **1.15.1** (newest published; orchestrator ruling 10) |
-| **PostHog SDK pin** | `posthog-node` 5.46.1 (optional peer) | `posthog` 7.31.0 (`[posthog]` extra) | `posthog-go` v1.22.0 | **none** — `com.posthog:posthog-server` not yet published; adapter behind `PostHogClientApi` seam |
-| **Remote evaluation** (`phc_`) | ✅ | ✅ | ✅ | ⚠️ injected `PostHogClientApi` only ([posthog.md](posthog.md#java)) |
-| **Local evaluation** (`phs_`/`phx_`) | ✅ `secretApiKey` | ✅ `secret_key`/`personal_api_key` + `local_evaluation` | ✅ `SecretKey` | ⏳ pending upstream artifact |
-| **Local-only mode** | ✅ `onlyEvaluateLocally` | ✅ `only_evaluate_locally` | ✅ `LocalEvaluationOnly` | ⏳ pending upstream |
+| **Vendor SDK pin** | **none** *(Node 2.1 — adapter removed; zero runtime deps)* | `posthog` 7.31.0 (`[posthog]` extra) | `posthog-go` v1.22.0 | **none** — `com.posthog:posthog-server` not yet published; adapter behind `PostHogClientApi` seam |
+| **Fireweave remote** (`FireweaveRemoteAdapter`) | ✅ only network adapter | ✅ | ✅ | ✅ |
+| **Direct vendor adapter** | ❌ removed *(Node 2.1)* | ✅ escape hatch | ✅ escape hatch | ⚠️ seam only ([posthog.md](posthog.md#java)) |
+| **Local (in-process) evaluation** | ❌ none *(Node 2.1 — caching is fw-server's concern; the interface seam is preserved)* | ✅ `secret_key`/`personal_api_key` + `local_evaluation` | ✅ `SecretKey` | ⏳ pending upstream artifact |
+| **Local-only mode** | ❌ *(Node 2.1)* | ✅ `only_evaluate_locally` | ✅ `LocalEvaluationOnly` | ⏳ pending upstream |
+| **Target registration** (`registerTarget`) | ✅ `/v1/targets/register` | ⏳ planned | ⏳ planned | ⏳ planned |
+| **Product vocabulary** | control points (`client.controlPoints`, `client.flags` retained) *(Node 2.1)* | flags | flags | flags |
 | **Structured (object) flags** | ✅ | ✅ | ✅ | ✅ |
 | **Multivariate variants** | ✅ | ✅ | ✅ | ✅ |
 | **Groups / group properties** | ✅ canonical `fireweave.groups` / `fireweave.groupProperties` + plain `groups` / `groupProperties` alias (rulings 12–14, 19) | ✅ same | ✅ same | ✅ builder `.group()` + canonical/alias attributes |
@@ -37,6 +45,46 @@ All conformance skips are **pre-declared** in the fixtures themselves (`skipped-
 | Node | *(second numeric skip in suite)* | Same Number resolver constraint — see numeric table |
 | Java | `eval-int-beyond-safe-integer` (or integer-range skip) | OF integer resolver is 32-bit `int` → `TYPE_MISMATCH` + default outside range |
 
+## Web (browser) surface
+
+`@fireweaveai/web-sdk` ([ADR-0009](adr/0009-browser-control-points.md)) is a **fifth binding**, deliberately kept out of the table above: it is a different surface, not a fifth language, and its conformance suite is different in kind (see below).
+
+| | Web |
+| --- | --- |
+| **Package** | `@fireweaveai/web-sdk` |
+| **Version** | `2.1.0` (unpublished) |
+| **OpenFeature SDK pin** | `@openfeature/web-sdk` ^1.9.0 (peer) |
+| **Runtime deps** | **none** |
+| **Fireweave remote** | ✅ only adapter — batch `POST /v1/flags/evaluate`, one call per context |
+| **Direct vendor adapter** | ❌ none, structurally — no `posthog-js`, no vendor key shapes accepted |
+| **Local (in-process) evaluation** | ❌ **never** — `localEvaluation` is `false` and there is no path that could set it true |
+| **Target registration** | ✅ `/v1/targets/register` via `client.identify()` |
+| **Product vocabulary** | control points (`client.controlPoints`) |
+| **Fireweave extensions** | ✅ releases / exposures / signals / capabilities |
+| **Guardrails** | 🧪 stub (`UnsupportedCapability`) |
+| **In-memory adapter** | ✅ (+ fault injection) |
+| **Conformance** | 10/10 (`contracts/web/`) |
+
+### Surface differences from the server SDKs
+
+These are consequences of the OpenFeature web contract, not gaps:
+
+| | Server | Web |
+| --- | --- | --- |
+| `controlPoints.*` | `Promise`-returning | **synchronous** — reads happen in render paths, where awaiting is not an option |
+| Evaluation source | per-call backend round trip | prefetched cache, refreshed on `initialize` and `setContext` |
+| Lifecycle states | UNINITIALIZED → INITIALIZING → READY → SHUTDOWN | adds **STALE** — prefetch did not complete, so reads are defaults. Collapsing this into READY would make a timed-out boot indistinguishable from a rollout sitting at 0% |
+| Telemetry flush | shutdown hook | `visibilitychange` → hidden and `pagehide`, over `keepalive`/`sendBeacon` — a tab gets no shutdown hook |
+| Config source | env (`readEnv`) | **explicit constructor options only** — the SDK reads no environment at all |
+
+### Tested on Bun only
+
+`@fireweaveai/web-sdk` targets **browsers**. It ships no server entry point, reads no environment, and imports no runtime built-ins, so Node and Deno are not target runtimes — running the suite on them would assert a property no user depends on. **Bun** runs the unit suite and the conformance harness; **happy-dom** supplies the DOM (preloaded via `bunfig.toml`).
+
+The DOM is real enough to matter: `pagehide`, `visibilitychange → hidden`, listener detach, and the `keepalive` unload request are all dispatched and asserted, not stubbed.
+
+**Coverage boundary (stated, not glossed):** happy-dom is a DOM, not a browser. bfcache restore, beacon size limits, and whether a request actually leaves the socket during unload are browser behaviours no headless DOM can assert. If that path proves fragile in practice, the escalation is a small Playwright suite over exactly those invariants.
+
 ## Numeric limitations (pre-declared)
 
 | Language | Limitation | Behavior |
@@ -49,11 +97,14 @@ All conformance skips are **pre-declared** in the fixtures themselves (`skipped-
 
 | Area | Caveat |
 | --- | --- |
-| Java remote cache **[PostHog-specific]** | The vendor Java SDK caches per-user remote flag results up to ~5 min and keeps last-good local definitions; stale serves are labeled (`reason: STALE`, `fireweave.fromCache`), runtime shows `STALE` |
-| Exposure dedup cache sizes **[PostHog-specific]** | Vendor LRU sizes differ across SDKs (Node ~50k vs Java ~1k entries); Fireweave does not equalize them in phase one |
-| Polling default | Fireweave normalizes definitions polling toward 30 s where the vendor SDK allows override |
-| Go capture queue | posthog-go can drop telemetry on queue overflow; capture failures map to extension errors, flag evaluation is unaffected |
-| `$`-prefixed context attributes | Passed through as PostHog system directives, not person properties; stripped from telemetry context views |
+| Node has no cache **(Node 2.1)** | Every evaluation is a fw-server round trip. `reason: STALE` / `fireweave.fromCache` can only originate upstream; `capabilities.get().runtime.features.localEvaluation` is `false` |
+| Node default host allowlist **(Node 2.1)** | `DEFAULT_ALLOWED_HOSTS` lists Fireweave hosts + loopback, not vendor hosts. Still exported under the same name, so code composing on it silently stops permitting the old endpoints — intended; see [migration](migration.md#behavior-worth-re-checking) |
+| Java remote cache **[vendor-specific]** | The vendor Java SDK caches per-user remote flag results up to ~5 min and keeps last-good local definitions; stale serves are labeled (`reason: STALE`, `fireweave.fromCache`), runtime shows `STALE` |
+| Exposure dedup cache sizes **[vendor-specific]** | Vendor LRU sizes differ across SDKs; Fireweave does not equalize them in phase one |
+| Polling default | Fireweave normalizes definitions polling toward 30 s where the vendor SDK allows override (not applicable to Node 2.1) |
+| Go capture queue | posthog-go can drop telemetry on queue overflow; capture failures map to extension errors, evaluation is unaffected |
+| `$`-prefixed context attributes | Passed through as backend system directives, not person properties; stripped from telemetry context views |
+| Node fault-conformance backend **(Node 2.1)** | The 9 `contracts/faults/*` fixtures run through `FireweaveRemoteAdapter` against `/v1/flags/evaluate`; the other languages still drive the legacy vendor routes. Same assertions, different transport |
 
 ## Known gaps
 

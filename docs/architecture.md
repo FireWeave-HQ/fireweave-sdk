@@ -1,14 +1,16 @@
 # Fireweave Polyglot SDK — Architecture
 
 **Status:** Phase-one design (2026-07-27)  
-**ADRs:** [0001](adr/0001-sdk-architecture.md) · [0002](adr/0002-posthog-adapter.md) · [0003](adr/0003-openfeature-boundary.md) · [0004](adr/0004-server-first.md)  
+**ADRs:** [0001](adr/0001-sdk-architecture.md) · [0002](adr/0002-posthog-adapter.md) · [0003](adr/0003-openfeature-boundary.md) · [0004](adr/0004-server-first.md) · [0005](adr/0005-fireweave-proxy-backend.md) · [0006](adr/0006-node-drops-direct-posthog-adapter.md) · [0007](adr/0007-control-point-vocabulary.md) · [0008](adr/0008-multi-runtime-support.md)  
 **Schemas:** [`spec/`](../spec/) (v0.1.0)
 
 ## 1. Goal
 
 Open-source, OpenFeature-compatible, server-first SDK for Node, Python, Go, and Java. One shared architectural pattern per language: **FireweaveProvider + FireweaveClient → FireweaveRuntime → BackendAdapter**.
 
-**Production credential model (ADR-0005):** apps use a **Fireweave** API key/secret and call **fw-server**; fw-server proxies to PostHog (or a future vendor). Apps do **not** hold PostHog `phc_`/`phs_`/`phx_` keys. The direct `PostHogAdapter` (ADR-0002) is an optional advanced escape hatch. Test adapter: InMemory. No custom flag evaluator. No PostHog types in public APIs. Side-effect-controlled evaluation.
+**Production credential model (ADR-0005):** apps use a **Fireweave** project key and call **fw-server**; fw-server resolves the project's connected provider and forwards. Apps hold no vendor keys and reference no vendor hosts.
+
+**Adapter availability differs by language.** Node ships `FireweaveRemoteAdapter` + `InMemoryAdapter` only — the direct vendor adapter was removed in v3 ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)). Python and Go still ship an optional direct `PostHogAdapter` (ADR-0002) as an escape hatch; Java's is seam-only. No custom flag evaluator anywhere. No vendor types in public APIs. Side-effect-controlled evaluation.
 
 This repo implements internal ADR-017's thin-provider decision and **supersedes** its in-repo language packs.
 
@@ -28,16 +30,17 @@ This repo implements internal ADR-017's thin-provider decision and **supersedes*
                               │
 ┌─────────────────────────────▼───────────────────────────────┐
 │  BackendAdapter (interface)                                  │
-│  ┌──────────────────────┐ ┌───────────────┐ ┌─────────────┐ │
-│  │ FireweaveRemoteAdapter│ │ PostHogAdapter│ │ InMemory    │ │
-│  │ (default / ADR-0005) │ │ (advanced)    │ │ (tests)     │ │
-│  │ FW key → fw-server   │ │ direct PH SDK │ │ fixtures    │ │
-│  └──────────────────────┘ └───────────────┘ └─────────────┘ │
+│  ┌──────────────────────┐ ┌─────────────┐ ┌───────────────┐ │
+│  │ FireweaveRemoteAdapter│ │ InMemory    │ │ PostHogAdapter│ │
+│  │ (default / ADR-0005) │ │ (tests)     │ │ (py/go only)  │ │
+│  │ FW key → fw-server   │ │ fixtures    │ │ escape hatch  │ │
+│  └──────────────────────┘ └─────────────┘ └───────────────┘ │
+│         Node ships the first two only — ADR-0006             │
 └─────────────────────────────────────────────────────────────┘
                               │
-              fw-server /v1/flags · /v1/capture  (prod)
-              optional direct PostHog            (advanced)
-              none                               (InMemory)
+       fw-server /v1/flags/evaluate · /v1/capture       (prod)
+       none                                             (InMemory)
+       direct vendor SDK — Python / Go only             (advanced)
 ```
 
 | Layer | Responsibility |
@@ -46,7 +49,7 @@ This repo implements internal ADR-017's thin-provider decision and **supersedes*
 | FireweaveProvider | OF `FeatureProvider`; maps context/errors; delegates to runtime |
 | FireweaveClient | Releases, exposures helpers, signals, guardrails, capabilities, telemetry, detailed eval |
 | FireweaveRuntime | Shared init/shutdown, config, adapter ownership, exposure policy |
-| BackendAdapter | Vendor-neutral evaluate/capture/lifecycle; **production: Fireweave remote**; PostHog types only inside optional direct adapter |
+| BackendAdapter | Vendor-neutral evaluate/capture/lifecycle; **production: Fireweave remote**; vendor types confined to the optional direct adapter (Python / Go only) |
 | Spec / contracts | Canonical JSON Schema (`spec/`); fixtures owned by Agent E (`contracts/`) |
 
 ## 3. Lifecycle state machine
@@ -87,7 +90,7 @@ Working names (company-open where noted):
 
 | Language | Package | Notes |
 |---|---|---|
-| Node | `@fireweaveai/sdk` | Peer: `@openfeature/server-sdk`. Optional dependency / subpath for PostHog adapter. |
+| Node | `@fireweaveai/sdk` | Peer: `@openfeature/server-sdk` (only). Zero runtime dependencies. Runs on Node / Bun / Deno — [ADR-0008](adr/0008-multi-runtime-support.md). |
 | Python | `fireweave` | Extra: `fireweave[posthog]` pulls `posthog`. OF: `openfeature-sdk>=0.10,<0.11`. |
 | Go | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go` | Module in `sdks/go`. |
 | Java | `ai.fireweave:sdk` | GroupId **`ai.fireweave`** (Central verification open). PostHog via `com.posthog:posthog-server`. |

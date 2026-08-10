@@ -1,22 +1,25 @@
 {
   "name": "@fireweaveai/sdk",
-  "version": "2.0.0",
-  "description": "Fireweave OpenFeature provider + client for Node servers. Default: FireweaveRemoteAdapter (FW key → fw-server). Optional PostHogAdapter for direct/advanced use.",
+  "version": "2.1.0",
+  "description": "Fireweave release-engineering SDK for server runtimes: control points, target registration, release lifecycle, exposures, and health/outcome signals — with an OpenFeature provider. Runs on Node, Bun, and Deno.",
   "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=20.20"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FireWeave-HQ/fireweave-sdk.git",
+    "directory": "sdks/node/packages/sdk"
+  },
+  "homepage": "https://github.com/FireWeave-HQ/fireweave-sdk/tree/master/sdks/node/packages/sdk#readme",
+  "bugs": "https://github.com/FireWeave-HQ/fireweave-sdk/issues",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./posthog": {
-      "types": "./dist/adapters/posthog.d.ts",
-      "default": "./dist/adapters/posthog.js"
     }
   },
   "files": [
@@ -26,19 +29,17 @@
     "build": "tsc -p tsconfig.json"
   },
   "peerDependencies": {
-    "@openfeature/server-sdk": "^1.22.0",
-    "posthog-node": "^5.46.1"
-  },
-  "peerDependenciesMeta": {
-    "posthog-node": {
-      "optional": true
-    }
+    "@openfeature/server-sdk": "^1.22.0"
   },
   "keywords": [
-    "openfeature",
-    "feature-flags",
     "fireweave",
-    "posthog",
-    "server"
+    "release-engineering",
+    "progressive-delivery",
+    "control-points",
+    "feature-flags",
+    "openfeature",
+    "server",
+    "bun",
+    "deno"
   ]
 }

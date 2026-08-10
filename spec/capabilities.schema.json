@@ -14,8 +14,9 @@
       "required": ["language", "openFeature", "features"],
       "properties": {
         "language": {
+          "description": "SDK binding reporting these capabilities. `web` is the browser binding (ADR-0009) — a distinct surface, not a runtime of `node`: it resolves control points synchronously from a prefetched cache and never evaluates locally.",
           "type": "string",
-          "enum": ["node", "python", "go", "java"]
+          "enum": ["node", "web", "python", "go", "java"]
         },
         "sdkVersion": {
           "type": "string",
@@ -39,6 +40,7 @@
           "type": "object",
           "additionalProperties": { "type": "boolean" },
           "properties": {
+            "controlPoints": { "type": "boolean" },
             "flags": { "type": "boolean", "const": true },
             "releases": { "type": "boolean" },
             "exposures": { "type": "boolean" },
@@ -46,6 +48,7 @@
             "guardrails": { "type": "boolean" },
             "telemetryOptIn": { "type": "boolean" },
             "inMemoryAdapter": { "type": "boolean", "const": true },
+            "remoteAdapter": { "type": "boolean" },
             "posthogAdapter": { "type": "boolean" }
           }
         }
@@ -58,6 +61,7 @@
       "required": ["backend", "lifecycle"],
       "properties": {
         "backend": {
+          "description": "Union across all SDK languages. `posthog` is reported only by a language still shipping the direct vendor adapter (Python, Go); the Node SDK dropped it in v3 (docs/adr/0006).",
           "type": "string",
           "enum": ["fireweave", "posthog", "inmemory", "none", "other"]
         },

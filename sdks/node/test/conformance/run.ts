@@ -8,9 +8,10 @@
  *
  * Backends:
  *  - evaluation/context/lifecycle/security/extensions → InMemoryAdapter from given.flags
- *  - faults (HTTP semantics) → PostHogAdapter against the test-server stub
- *    (fault-stale-cache runs on the InMemoryAdapter: local-eval cache staleness
- *    is provisioned directly per given.flags.fromCache + providerState STALE)
+ *  - faults (HTTP semantics) → FireweaveRemoteAdapter against the test-server's
+ *    Fireweave-native route (POST /v1/flags/evaluate), fault scope 'evaluate'
+ *    (fault-stale-cache runs on the InMemoryAdapter: cache staleness is
+ *    provisioned directly per given.flags.fromCache + providerState STALE)
  */
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -19,6 +20,7 @@ import { OpenFeature } from '@openfeature/server-sdk';
 import {
   FireweaveClient,
   FireweaveProvider,
+  FireweaveRemoteAdapter,
   FireweaveRuntime,
   InMemoryAdapter,
   isFireweaveError,
@@ -32,7 +34,6 @@ import {
   type JsonValue,
   type LifecycleState,
 } from '@fireweaveai/sdk';
-import { PostHogAdapter } from '@fireweaveai/sdk/posthog';
 // The test-server stub is plain JS by design (test-server/implementation/PLAN.md).
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore -- no type declarations for the stub
@@ -664,19 +665,20 @@ async function runFaultFixture(fixture: Fixture): Promise<ActualOutput> {
       quotaLimited: null,
     };
 
-    // Arm fault.
+    // Arm fault. Scope is 'evaluate': faults must hit POST /v1/flags/evaluate,
+    // the Fireweave-native route the remote adapter speaks.
     switch (fault.mode) {
       case 'httpStatus':
-        server.state.fault = { mode: String(fault.status ?? 500), applyTo: 'flags' };
+        server.state.fault = { mode: String(fault.status ?? 500), applyTo: 'evaluate' };
         break;
       case 'invalidJson':
-        server.state.fault = { mode: 'invalid_json', body: fault.body ?? '{not-json', applyTo: 'flags' };
+        server.state.fault = { mode: 'invalid_json', body: fault.body ?? '{not-json', applyTo: 'evaluate' };
         break;
       case 'quotaLimited':
-        server.state.fault = { mode: 'quota_limited', applyTo: 'flags' };
+        server.state.fault = { mode: 'quota_limited', applyTo: 'evaluate' };
         break;
       case 'delay':
-        server.state.fault = { mode: 'delay', delayMs: fault.delayMs ?? 1000, applyTo: 'flags' };
+        server.state.fault = { mode: 'delay', delayMs: fault.delayMs ?? 1000, applyTo: 'evaluate' };
         break;
       default:
         break;
@@ -689,11 +691,15 @@ async function runFaultFixture(fixture: Fixture): Promise<ActualOutput> {
     }
 
     const timeoutMs = (given.config?.['featureFlagsRequestTimeoutMs'] as number | undefined) ?? 3000;
+    // The fixture's key is passed through verbatim rather than replaced with a
+    // Fireweave-shaped one: sec-secrets-not-in-errors asserts that no `phc_`
+    // substring reaches an error message, and substituting the key would make
+    // that assertion pass trivially instead of exercising redaction.
     const projectApiKey = (given.config?.['projectApiKey'] as string | undefined) ?? 'phc_TESTKEY0000000000000000000001';
-    const adapter = new PostHogAdapter({
-      projectApiKey,
-      host,
-      featureFlagsRequestTimeoutMs: timeoutMs,
+    const adapter = new FireweaveRemoteAdapter({
+      apiUrl: host,
+      apiKey: projectApiKey,
+      requestTimeoutMs: timeoutMs,
     });
     const runtime = new FireweaveRuntime(adapter, { projectApiKey, host });
     await runtime.initialize();

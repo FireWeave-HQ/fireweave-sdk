@@ -1,3 +1,15 @@
+/**
+ * Vendor-leak guard.
+ *
+ * v2 allowed one carve-out: `dist/adapters/posthog.js` could name `posthog-node`
+ * as long as it loaded it lazily. v3 removed that adapter (ADR-0006), so the
+ * guard is now absolute — the string `posthog` must not appear anywhere in the
+ * published build, in any form: import, type, identifier, or comment.
+ *
+ * This is the test that keeps the cleanup from silently regressing. If it fails
+ * because a vendor name came back, the fix is to remove the vendor reference,
+ * not to add an exemption here.
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -8,44 +20,50 @@ import * as sdk from '@fireweaveai/sdk';
 const here = dirname(fileURLToPath(import.meta.url));
 const distDir = join(here, '..', '..', 'dist');
 
-/** Matches actual module references (import/export/require/import() types), not comments. */
-const VENDOR_REF = /(?:from\s+['"]posthog-node['"]|import\(['"]posthog-node['"]\)|require\(['"]posthog-node['"]\)|import\s+['"]posthog-node['"])/;
+const walk = (dir: string): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)],
+  );
 
-test('main entrypoint exports contain no posthog identifiers', () => {
+test('no export name references a backend vendor', () => {
   for (const name of Object.keys(sdk)) {
     assert.ok(!/posthog/i.test(name), `unexpected vendor export: ${name}`);
   }
 });
 
-test('main entrypoint modules never import posthog-node (even transitively within dist, except the posthog adapter)', () => {
-  const walk = (dir: string): string[] =>
-    readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
-      entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)],
-    );
-  for (const file of walk(distDir)) {
-    if (!file.endsWith('.js') && !file.endsWith('.d.ts')) continue;
-    const source = readFileSync(file, 'utf8');
-    if (file.endsWith(join('adapters', 'posthog.js'))) {
-      // The adapter may only load posthog-node lazily (dynamic import at runtime).
-      assert.ok(
-        !/^\s*import\b[^;]*['"]posthog-node['"]/m.test(source),
-        'posthog adapter must not statically import posthog-node',
-      );
-      continue;
-    }
-    assert.ok(!VENDOR_REF.test(source), `vendor dependency leaked into ${file}`);
+test('the published build contains no vendor reference at all', () => {
+  const files = walk(distDir).filter((f) => f.endsWith('.js') || f.endsWith('.d.ts'));
+  assert.ok(files.length > 0, 'expected build output in dist');
+
+  const offenders: string[] = [];
+  for (const file of files) {
+    if (/posthog/i.test(readFileSync(file, 'utf8'))) offenders.push(file);
   }
+  assert.deepEqual(
+    offenders,
+    [],
+    `vendor reference leaked into: ${offenders.join(', ')}`,
+  );
 });
 
-test('published API declaration files reference no posthog-node types anywhere', () => {
-  const walk = (dir: string): string[] =>
-    readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
-      entry.isDirectory() ? walk(join(dir, entry.name)) : [join(dir, entry.name)],
-    );
-  const dtsFiles = walk(distDir).filter((f) => f.endsWith('.d.ts'));
-  assert.ok(dtsFiles.length > 0, 'expected declaration files in dist');
-  for (const file of dtsFiles) {
-    const source = readFileSync(file, 'utf8');
-    assert.ok(!VENDOR_REF.test(source), `vendor types leaked into ${file}`);
-  }
+test('the published build declares no runtime dependency beyond OpenFeature', () => {
+  const manifest = JSON.parse(
+    readFileSync(join(here, '..', '..', 'package.json'), 'utf8'),
+  ) as {
+    dependencies?: Record<string, string>;
+    peerDependencies?: Record<string, string>;
+    exports?: Record<string, unknown>;
+  };
+
+  assert.equal(manifest.dependencies, undefined, 'the SDK must stay dependency-free');
+  assert.deepEqual(
+    Object.keys(manifest.peerDependencies ?? {}),
+    ['@openfeature/server-sdk'],
+    'OpenFeature is the only permitted peer dependency',
+  );
+  assert.deepEqual(
+    Object.keys(manifest.exports ?? {}),
+    ['.'],
+    'the entrypoint is the only export subpath',
+  );
 });

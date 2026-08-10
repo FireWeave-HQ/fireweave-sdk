@@ -1,0 +1,17 @@
+{
+  "id": "web-missing-flag-not-found",
+  "suite": "web",
+  "description": "A genuinely unknown control point reports FLAG_NOT_FOUND while READY",
+  "tags": ["missing", "default"],
+  "given": { "providerState": "READY", "flags": {} },
+  "when": {
+    "operation": "evaluateSync",
+    "flagKey": "web-does-not-exist",
+    "flagType": "boolean",
+    "defaultValue": false,
+    "invocationContext": { "targetingKey": "user_web_1" }
+  },
+  "expect": { "value": false, "reason": "ERROR", "errorCode": "FLAG_NOT_FOUND" },
+  "schemaVersion": 1,
+  "provisional": false
+}
