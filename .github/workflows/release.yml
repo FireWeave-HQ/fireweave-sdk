@@ -6,8 +6,10 @@
 # enabled only when dry_run=false AND channel=staging AND the matching
 # component is selected. Requires trusted publishers (see RELEASE.md).
 #
-# STILL HARD-DISABLED: Maven Central (namespace pending), and ALL production
-# channel publishes (npm latest / real PyPI / Maven release).
+# Production PyPI is enabled via channel=production (component=python) and also
+# via the dedicated tag-triggered workflow publish-python.yml (python/v*).
+# STILL HARD-DISABLED: Maven Central (namespace pending), and production npm
+# (dist-tag latest) until a second written authorization.
 #
 # Tag convention (org): <component>/v<semver>
 #   node   -> node/v0.1.0
@@ -237,15 +239,37 @@ jobs:
           packages-dir: dist/
 
   publish-pypi-production:
-    name: publish PyPI production (HARD-DISABLED)
+    name: publish PyPI (production)
     needs: [validate, build]
-    if: ${{ false }} # HARD-DISABLED — second authorization required for real PyPI
+    if: ${{ inputs.dry_run == false && inputs.channel == 'production' && inputs.component == 'python' }}
     runs-on: ubuntu-latest
+    environment: release
     permissions:
-      id-token: write
+      id-token: write # PyPI OIDC trusted publishing
       contents: read
     steps:
-      - run: echo "production PyPI publish is hard-disabled"
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - name: Verify pyproject version matches release input
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          PKG_VERSION="$(python -c "import tomllib; print(tomllib.load(open('sdks/python/pyproject.toml','rb'))['project']['version'])")"
+          if [ "$PKG_VERSION" != "$VERSION" ]; then
+            echo "::error::pyproject.toml version ($PKG_VERSION) != release version ($VERSION)"
+            exit 1
+          fi
+      - name: Build sdist + wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --outdir dist/ sdks/python
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          verbose: true
 
   publish-maven:
     name: publish Maven Central (HARD-DISABLED)

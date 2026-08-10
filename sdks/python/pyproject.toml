@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,8 +8,9 @@ version = "0.1.0"
 description = "Fireweave polyglot SDK for Python — OpenFeature-compatible, server-first flag evaluation and release-safety extensions (spec v0.1.0)."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
-authors = [{ name = "Fireweave" }]
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Fireweave AI, Inc." }]
 keywords = ["feature-flags", "openfeature", "posthog", "rollout", "release"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -26,6 +27,14 @@ classifiers = [
 # adapter are optional integrations behind extras. `import fireweave` plus the
 # InMemory adapter work with the standard library only.
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/FireWeave-HQ/fireweave-sdk"
+Documentation = "https://github.com/FireWeave-HQ/fireweave-sdk/tree/master/docs"
+Repository = "https://github.com/FireWeave-HQ/fireweave-sdk"
+Issues = "https://github.com/FireWeave-HQ/fireweave-sdk/issues"
+Changelog = "https://github.com/FireWeave-HQ/fireweave-sdk/blob/master/CHANGELOG.md"
+"Source" = "https://github.com/FireWeave-HQ/fireweave-sdk/tree/master/sdks/python"
 
 [project.optional-dependencies]
 # ADR-0002 pin: PostHog snapshot API (`evaluate_flags`) — exact pin to absorb
