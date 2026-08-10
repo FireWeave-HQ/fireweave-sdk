@@ -1,12 +1,16 @@
 # Fireweave SDK — Release Process
 
 Owner: release engineering (Agent K scope: `.github/`, `scripts/`, `tools/`).
-Status (2026-07-27): **staging publish authorized** for npm (`@fireweaveai/sdk`
+Status (2026-08-10): **staging publish authorized** for npm (`@fireweaveai/sdk`
 dist-tag `next`), TestPyPI (`fireweave`), and Go proxy warm — only when
-`workflow_dispatch` has `dry_run=false` and `channel=staging`. **Production**
-npm/PyPI and **all Maven** jobs remain hard-disabled (`if: false`) until a
-second authorization and Central namespace provisioning. Configure trusted
-publishers below **before** the first non-dry-run staging release.
+`workflow_dispatch` has `dry_run=false` and `channel=staging`. **Production
+PyPI** is enabled for `fireweave` via:
+- tag push `python/v<semver>` → [`.github/workflows/publish-python.yml`](workflows/publish-python.yml)
+- or `release.yml` with `component=python`, `channel=production`, `dry_run=false`
+
+**Production npm** (`latest`) and **all Maven** jobs remain hard-disabled
+(`if: false`) until separate authorization / Central namespace provisioning.
+Configure trusted publishers below **before** the first non-dry-run publish.
 
 ## Overview
 
@@ -62,7 +66,7 @@ signing into the workflow.
 | Ecosystem | Registry | Name | Status |
 | --- | --- | --- | --- |
 | Node | npmjs.com | `@fireweaveai/sdk` | Working name pending company ratification (ADR-0001). Publish via **OIDC trusted publishing** (no long-lived `NPM_TOKEN`). |
-| Python | pypi.org | `fireweave` | **Name TBD / unreserved** — verify availability and reserve before first publish. Publish via **PyPI trusted publisher** (OIDC). |
+| Python | pypi.org | `fireweave` | Publish via **PyPI trusted publisher** (OIDC). Preferred auto path: push tag `python/v<semver>` → `publish-python.yml`. |
 | Go | proxy.golang.org | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go` | No registry credentials — "publishing" is pushing the `sdks/go/v*` tag on the public repo; the proxy picks it up. |
 | Java | Maven Central | groupId `ai.fireweave` | **Pending namespace verification** on the Central portal (DNS TXT proof for `fireweave.ai`). Do not publish until verified. |
 
@@ -71,7 +75,7 @@ signing into the workflow.
 | Ecosystem | `channel: staging` | Promotion to production |
 | --- | --- | --- |
 | npm | publish with dist-tag `next` (`npm install @fireweaveai/sdk@next`) | `npm dist-tag add @fireweaveai/sdk@<ver> latest` |
-| PyPI | upload to **TestPyPI** (`test.pypi.org`) | re-run with `channel: production` → real PyPI (same artifacts, new upload) |
+| PyPI | upload to **TestPyPI** (`test.pypi.org`) | push tag `python/vX.Y.Z` (preferred) or re-run `release.yml` with `channel: production` |
 | Maven | deploy to Central **portal staging** (no auto-release); validate, then release or drop in the portal UI | release the staged deployment |
 | Go | pre-release semver tag (`sdks/go/v0.2.0-rc.1`) — Go treats `-rc.1` as a pre-release; `go get` won't auto-select it | tag the final `sdks/go/vX.Y.Z` |
 
@@ -81,9 +85,23 @@ signing into the workflow.
    trusted publisher for `FireWeave-HQ/fireweave-sdk` → workflow
    `release.yml` (OIDC). No token secret needed. First-ever publish of a new
    package may require a one-time granular token with 2FA.
-2. **PyPI + TestPyPI**: reserve the project name; add a **trusted publisher**
-   (owner `FireWeave-HQ`, repo `fireweave-sdk`, workflow `release.yml`,
-   environment optional) on both indexes. No token secret needed.
+2. **PyPI + TestPyPI**: reserve / create the project name `fireweave`; add
+   **trusted publishers** (OIDC — no token secret) on both indexes:
+
+   | Index | Workflow file | Environment |
+   | --- | --- | --- |
+   | **pypi.org** (production) | `publish-python.yml` | `release` |
+   | **pypi.org** (optional alternate) | `release.yml` | `release` |
+   | **test.pypi.org** (staging) | `release.yml` | optional |
+
+   Field values for each publisher:
+   - Owner: `FireWeave-HQ`
+   - Repository: `fireweave-sdk`
+   - Workflow name: exact filename above (e.g. `publish-python.yml`)
+   - Environment name: `release` (must match the job `environment:`)
+
+   Pending publishers are supported: configure before the first upload and the
+   project is created on first successful publish.
 3. **Maven Central**: verify namespace `ai.fireweave` (portal + DNS TXT);
    generate portal user tokens → repo secrets `MAVEN_CENTRAL_USERNAME`,
    `MAVEN_CENTRAL_PASSWORD`; provision a release GPG key → secrets
