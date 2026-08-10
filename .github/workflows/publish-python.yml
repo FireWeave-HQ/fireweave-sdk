@@ -1,0 +1,95 @@
+# Publish the Python SDK (`fireweave`) to PyPI via Trusted Publishing (OIDC).
+#
+# Triggers:
+#   - push of org tag `python/v<semver>` (e.g. python/v0.1.0)
+#   - workflow_dispatch with an explicit version (must match pyproject.toml)
+#
+# Prerequisites (one-time, browser):
+#   PyPI → project `fireweave` → Publishing → Trusted Publishers:
+#     Owner:       FireWeave-HQ
+#     Repository:  fireweave-sdk
+#     Workflow:    publish-python.yml
+#     Environment: release
+#   See .github/RELEASE.md. No long-lived PYPI_API_TOKEN is required.
+name: Publish Python SDK
+
+on:
+  push:
+    tags:
+      - 'python/v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Semver WITHOUT leading v (must match sdks/python/pyproject.toml)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  publish:
+    name: build and publish fireweave to PyPI
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write # PyPI OIDC trusted publishing
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Resolve + verify package version
+        id: ver
+        run: |
+          set -euo pipefail
+          PKG_VERSION="$(python -c "import tomllib; print(tomllib.load(open('sdks/python/pyproject.toml','rb'))['project']['version'])")"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            EXPECTED="${{ inputs.version }}"
+          else
+            REF="${GITHUB_REF_NAME}"
+            case "$REF" in
+              python/v*) EXPECTED="${REF#python/v}" ;;
+              *)
+                echo "::error::Unexpected tag '$REF' (expected python/v<semver>)"
+                exit 1
+                ;;
+            esac
+          fi
+          if [ "$PKG_VERSION" != "$EXPECTED" ]; then
+            echo "::error::pyproject.toml version ($PKG_VERSION) != release version ($EXPECTED)"
+            exit 1
+          fi
+          if ! printf '%s' "$PKG_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+            echo "::error::version '$PKG_VERSION' is not valid semver"
+            exit 1
+          fi
+          echo "version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Publishing fireweave==$PKG_VERSION"
+
+      - name: Assert OIDC preconditions
+        run: |
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo "::error::OIDC id-token request vars absent — configure PyPI Trusted Publisher for workflow publish-python.yml (environment: release) and permissions.id-token: write"
+            exit 1
+          fi
+
+      - name: Build sdist + wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --outdir dist/ sdks/python
+          ls -la dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          # Fail loudly if the Trusted Publisher is not configured yet.
+          verbose: true

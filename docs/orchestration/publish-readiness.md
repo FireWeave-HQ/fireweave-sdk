@@ -9,11 +9,11 @@ Goal: unblock **staging** publish of `0.1.0` without shipping broken claims (Jav
 | --- | --- | --- |
 | License file | ✅ MIT already in repo | `LICENSE` — Copyright (c) 2026 Fireweave AI, Inc. |
 | CI / dry-run packaging | ✅ | `scripts/build-all.sh`, `release.yml` dry-run path |
-| Publish jobs | 🔒 hard-disabled | `.github/workflows/release.yml` `if: false` |
+| Publish jobs | ✅ staging + PyPI production wired | TestPyPI via `release.yml` staging; real PyPI via `publish-python.yml` (tag `python/v*`) / `release.yml` production. npm `latest` + Maven still hard-disabled. |
 | GitHub repo `FireWeave-HQ/fireweave-sdk` | ❌ **missing** | `gh repo view` → cannot resolve; local git has **no remote** |
 | npm scope `@fireweaveai` | ✅ exists | `@fireweaveai/deploy-sdk@0.2.0` published |
 | npm `@fireweaveai/sdk` | ✅ name free | registry 404 (ready to create on first publish) |
-| PyPI `fireweave` / `fireweave-sdk` | ✅ both free | pypi.org + test.pypi.org 404 |
+| PyPI `fireweave` / `fireweave-sdk` | ✅ both free (configure Trusted Publisher before first upload) | pypi.org + test.pypi.org 404 as of last check |
 | Maven `ai.fireweave` | ❌ unclaimed | Maven Central search numFound=0 |
 | Local `npm whoami` | ❌ not logged in | expected — use OIDC in CI, not local token |
 
@@ -49,8 +49,9 @@ Ratified by release owner (niketh) 2026-07-27 — reply "yes" to publish-readine
    - Note: first publish of a *new* package may need a one-time granular token + 2FA; thereafter OIDC only.  
    - Must use **GitHub-hosted** runners for npm OIDC (already true in this repo’s workflows).
 4. **PyPI + TestPyPI Trusted Publishers**:  
-   - Create project / reserve `fireweave` on TestPyPI first, then PyPI.  
-   - Trusted publisher: owner `FireWeave-HQ`, repo `fireweave-sdk`, workflow `release.yml`.
+   - Create / pending-publish `fireweave` on PyPI and TestPyPI.  
+   - Production PyPI trusted publisher: owner `FireWeave-HQ`, repo `fireweave-sdk`, workflow `publish-python.yml`, environment `release`.  
+   - Also add `release.yml` + environment `release` if using the dispatch-based production path; TestPyPI needs `release.yml` for staging.
 5. **Maven Central** (slowest):  
    - Verify namespace `ai.fireweave` at [Central Portal](https://central.sonatype.com/) (DNS TXT for `fireweave.ai`).  
    - Secrets: `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`, `MAVEN_GPG_PASSPHRASE`.  
