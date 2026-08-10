@@ -6,6 +6,9 @@
  * adapter with explicit options must never fail because of a permission it does
  * not actually need.
  *
+ * Deno's Node-compat `process.env` also throws NotCapable without `--allow-env`,
+ * so the process.env path is try/caught the same way.
+ *
  * Returns undefined on any runtime that offers neither.
  */
 interface ProcessLike {
@@ -18,8 +21,14 @@ interface DenoLike {
 
 export function readEnv(name: string): string | undefined {
   const proc = (globalThis as { process?: ProcessLike }).process;
-  const fromProcess = proc?.env?.[name];
-  if (fromProcess !== undefined) return fromProcess;
+  if (proc?.env !== undefined) {
+    try {
+      const fromProcess = proc.env[name];
+      if (fromProcess !== undefined) return fromProcess;
+    } catch {
+      // Deno node-compat process.env without --allow-env: absent, not fatal.
+    }
+  }
 
   const deno = (globalThis as { Deno?: DenoLike }).Deno;
   if (deno?.env === undefined) return undefined;

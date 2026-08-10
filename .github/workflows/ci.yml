@@ -71,9 +71,10 @@ jobs:
         run: node scripts/smoke-runtimes.mjs
 
   # ---------------------------------------------------------------- bun
-  # The published package is runtime-agnostic (ADR-0008). Bun runs the same
-  # sources; `bun test` — not `bun <file>` — is required, because the suites use
-  # node:test and Bun routes describe/test through its own runner.
+  # The published package is runtime-agnostic (ADR-0008). Bun's native test
+  # runner does not yet implement node:test (oven-sh/bun#5090), so unit suites
+  # stay on the node job; this job builds with the shared tsc script and runs
+  # the cross-runtime smoke under Bun.
   bun:
     name: bun (${{ matrix.bun }})
     runs-on: ubuntu-latest
@@ -83,18 +84,20 @@ jobs:
         bun: ['1.2.0', 'latest'] # minimum supported + current
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: sdks/node/package-lock.json
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ matrix.bun }}
-      - name: Install workspace dependencies
+      - name: Install workspace dependencies (npm workspaces for package link)
         working-directory: sdks/node
-        run: bun install --frozen-lockfile
+        run: npm ci
       - name: Build SDK (emit dist/ for package exports)
         working-directory: sdks/node
-        run: bun run build
-      - name: Unit + integration + compat tests
-        working-directory: sdks/node
-        run: bun test packages/sdk/test/unit packages/sdk/test/integration packages/sdk/test/compat
+        run: npm run build
       - name: Cross-runtime smoke (Bun leg)
         working-directory: sdks/node
         run: bun scripts/smoke-runtimes.mjs
