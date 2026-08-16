@@ -2,7 +2,7 @@
 
 Spec version **0.1.0**; OpenFeature specification compliance floor **v0.8.0**. Status date: 2026-08-09.
 
-> **Node is ahead of the other languages.** 2.1 of the Node package removed the direct vendor adapter ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)), adopted "control point" as the product noun ([ADR-0007](adr/0007-control-point-vocabulary.md)), and added Bun/Deno support ([ADR-0008](adr/0008-multi-runtime-support.md)). Python now also exposes control-point vocabulary, `register_target`, and a local (dev) adapter, but still ships the vendor adapter escape hatch. Go and Java still lead with flag vocabulary. That asymmetry is **deliberate and temporary** — each language gets its own pass. Rows below marked *(Node 2.1)* record where the languages currently diverge. **Registry status:** `@fireweaveai/sdk` is published on npm at `0.1.0` and `2.0.0` (`latest` = 2.0.0); **2.1.0 is not published yet**, so an unpinned `npm install` still resolves to 2.0.0. Python, Go, and Java remain unpublished — install those from a checkout ([quickstart.md](quickstart.md)).
+> **Node is ahead of Go on vocabulary.** 2.1 of the Node package removed the direct vendor adapter ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)), adopted "control point" as the product noun ([ADR-0007](adr/0007-control-point-vocabulary.md)), and added Bun/Deno support ([ADR-0008](adr/0008-multi-runtime-support.md)). Python and Java now also expose control-point vocabulary, `registerTarget` / `register_target`, and a local (dev) adapter. Go still leads with flag vocabulary. That remaining asymmetry is **deliberate and temporary**. Rows below marked *(Node 2.1)* record where languages still diverge. **Registry status:** `@fireweaveai/sdk` is published on npm at `0.1.0` and `2.0.0` (`latest` = 2.0.0); **2.1.0 is not published yet**. Python, Go, and Java remain unpublished — install those from a checkout ([quickstart.md](quickstart.md)). Java Maven coordinates are prepared (`ai.fireweave:*`) but **not claimed as published**.
 
 > **On the "2.1" wording below.** This release was drafted as 3.0.0 and ships as **2.1.0** (see the CHANGELOG version note); no 3.x ever reached a registry. Rows marked *(Node 2.1)* describe **this** release — the wording is being cleaned up separately so the change is a rename, not a semantic edit buried in a version bump.
 
@@ -19,9 +19,9 @@ Spec version **0.1.0**; OpenFeature specification compliance floor **v0.8.0**. S
 | **Direct vendor adapter** | ❌ removed *(Node 2.1)* | ✅ escape hatch | ✅ escape hatch | ⚠️ seam only ([posthog.md](posthog.md#java)) |
 | **Local (in-process) evaluation** | ❌ none *(Node 2.1 — caching is fw-server's concern; the interface seam is preserved)* | ✅ `secret_key`/`personal_api_key` + `local_evaluation` | ✅ `SecretKey` | ⏳ pending upstream artifact |
 | **Local-only mode** | ❌ *(Node 2.1)* | ✅ `only_evaluate_locally` | ✅ `LocalEvaluationOnly` | ⏳ pending upstream |
-| **Target registration** (`registerTarget` / `register_target`) | ✅ `/v1/targets/register` | ✅ `/v1/targets/register` | ⏳ planned | ⏳ planned |
-| **Product vocabulary** | control points (`client.controlPoints`, `client.flags` retained) *(Node 2.1)* | control points (`client.control_points`, `client.flags` retained) | flags | flags |
-| **Local (dev) adapter** | ✅ `FireweaveLocalAdapter` + `makeFireweaveLocalProvider()` *(Node 2.1)* | ✅ `FireweaveLocalAdapter` + `make_fireweave_local_provider()` | ⏳ planned | ⏳ planned |
+| **Target registration** (`registerTarget` / `register_target`) | ✅ `/v1/targets/register` | ✅ `/v1/targets/register` | ⏳ planned | ✅ `/v1/targets/register` |
+| **Product vocabulary** | control points (`client.controlPoints`, `client.flags` retained) *(Node 2.1)* | control points (`client.control_points`, `client.flags` retained) | flags | control points (`client.controlPoints()`, `client.flags()` retained) |
+| **Local (dev) adapter** | ✅ `FireweaveLocalAdapter` + `makeFireweaveLocalProvider()` *(Node 2.1)* | ✅ `FireweaveLocalAdapter` + `make_fireweave_local_provider()` | ⏳ planned | ✅ `FireweaveLocalAdapter` + `FireweaveLocalProvider` |
 | **Structured (object) flags** | ✅ | ✅ | ✅ | ✅ |
 | **Multivariate variants** | ✅ | ✅ | ✅ | ✅ |
 | **Groups / group properties** | ✅ canonical `fireweave.groups` / `fireweave.groupProperties` + plain `groups` / `groupProperties` alias (rulings 12–14, 19) | ✅ same | ✅ same | ✅ builder `.group()` + canonical/alias attributes |
@@ -111,16 +111,18 @@ The DOM is real enough to matter: `pagehide`, `visibilitychange → hidden`, lis
 
 Pre-release; tracked for arbitration/1.0.
 
-1. **Java PostHog binding** pending upstream publication (ruling 10 / adversarial RB-3) — `PostHogAdapter.create(config)` → `UnsupportedCapability`; production use requires an injected `PostHogClientApi` seam / offline stub. No published `com.posthog:posthog-server` artifact yet.
-2. **Release/signal delivery skew:** Go (and Java via the adapter seam) deliver release transitions/signals to the backend telemetry sink; Node/Python may record some paths in-process only — check `capabilities.get().runtime.features` and language docs.
-3. **ADR §6/§23 "default emit on OF evaluation"** remains deferred: phase-one portable default is side-effect-free evaluate (ruling 20) + explicit `exposures.*` / opt-in `sendExposure`; full emit-once-on-OF is not phase-one scope.
+1. **Java PostHog binding** pending upstream publication (ruling 10 / adversarial RB-3) — `PostHogAdapter.create(config)` → `UnsupportedCapability`; production use requires an injected `PostHogClientApi` seam / offline stub, or (preferred) `FireweaveRemoteAdapter`. No published `com.posthog:posthog-server` artifact yet.
+2. **Go control-point vocabulary / registerTarget / local adapter** still planned — Java and Python have taken that pass; Go has not.
+3. **Maven Central namespace** `ai.fireweave` is prepared in POMs and release workflows but not verified on the Central Publisher Portal. Java artifacts are **not published**.
+4. **Release/signal delivery skew:** Go (and Java via the adapter seam) deliver release transitions/signals to the backend telemetry sink; Node/Python may record some paths in-process only — check `capabilities.get().runtime.features` and language docs.
+5. **ADR §6/§23 "default emit on OF evaluation"** remains deferred: phase-one portable default is side-effect-free evaluate (ruling 20) + explicit `exposures.*` / opt-in `sendExposure`; full emit-once-on-OF is not phase-one scope.
 
 **Closed since Phase 5 / Phase 6 (do not treat as current gaps):**
 
 - `fireweave.groups` / `fireweave.groupProperties` carve-out — implemented in all four languages (+ plain alias per ruling 19).
 - `capabilities.get` structured static∪runtime matrix — all four (Python/Go also expose name-list sugar: `names()` / `Operations()`).
 - Extension lifecycle gating (ruling 17) — all four.
-- Fireweave-native Decision API without runtime reach-in — Python `client.flags.evaluate` / `get_details`; Go `client.Flags().Evaluate`; Java `client.evaluate(...)`. Node detailed eval surface is owned by the Node agent (ruling 16 residual if still `runtime.evaluate` only).
+- Fireweave-native Decision API without runtime reach-in — Python `client.flags.evaluate` / `get_details`; Go `client.Flags().Evaluate`; Java `client.controlPoints().evaluate(...)`. Node detailed eval surface is owned by the Node agent (ruling 16 residual if still `runtime.evaluate` only).
 - Host allowlist default-on + Node Internal fixed messages — see [security findings disposition](security/findings-disposition.md).
 - RB-1 / RB-2 (Node hybrid local serve + vendor `$feature_flag_called` suppression on local path) — closed in Node adapter.
 - Adversarial H-2 (Node stamp/change ULID validation) — closed.

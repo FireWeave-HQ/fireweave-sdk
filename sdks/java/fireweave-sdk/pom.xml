@@ -13,10 +13,17 @@
   <artifactId>fireweave-sdk</artifactId>
   <name>Fireweave SDK core (runtime + client)</name>
   <description>
-    FireweaveRuntime, FireweaveClient extension facades, canonical types (EvaluationContext,
-    Decision, errors), and the BackendAdapter seam. Zero runtime dependencies by design
-    (DI-friendly, no framework required). No vendor types in the public API.
+    FireweaveRuntime, FireweaveClient (control points, target registration, releases,
+    exposures, signals), canonical types, FireweaveRemoteAdapter, FireweaveLocalAdapter,
+    and the BackendAdapter seam. Zero runtime dependencies.
   </description>
+  <url>https://github.com/FireWeave-HQ/fireweave-sdk</url>
+
+  <properties>
+    <automatic.module.name>ai.fireweave.sdk</automatic.module.name>
+    <!-- Library module — CLI exec:java is for examples/java and fireweave-testing. -->
+    <exec.skip>true</exec.skip>
+  </properties>
 
   <dependencies>
     <dependency>

@@ -13,14 +13,17 @@
   <artifactId>fireweave-adapter-posthog</artifactId>
   <name>Fireweave PostHog adapter</name>
   <description>
-    PostHog-backed BackendAdapter per ADR-0002. BLOCKED DEPENDENCY: the decision brief pins
-    com.posthog:posthog-server:2.9.0, which does not exist on Maven Central (verified 2026-07-27;
-    only com.posthog:posthog 3.x Android and legacy com.posthog.java:posthog 1.2.0 exist — the
-    latter is explicitly prohibited). The adapter is implemented against the internal
-    PostHogClientApi transport seam (snapshot flag evaluation, explicit context passing — no
-    ThreadLocal); binding the real SDK is a one-class task once the artifact is published.
-    Reported for orchestrator arbitration.
+    Optional PostHog BackendAdapter seam for Java. There is no published
+    com.posthog:posthog-server artifact; PostHogAdapter.create(config) returns
+    UnsupportedCapability. Inject PostHogClientApi for tests. Production evaluations
+    should use FireweaveRemoteAdapter.
   </description>
+  <url>https://github.com/FireWeave-HQ/fireweave-sdk</url>
+
+  <properties>
+    <automatic.module.name>ai.fireweave.adapter.posthog</automatic.module.name>
+    <exec.skip>true</exec.skip>
+  </properties>
 
   <dependencies>
     <dependency>

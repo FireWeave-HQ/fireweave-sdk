@@ -70,6 +70,27 @@ final class FireweaveRemoteAdapterTest {
     }
 
     @Test
+    void evaluateSendsGroupProperties() throws Exception {
+        FireweaveRemoteAdapter adapter = new FireweaveRemoteAdapter();
+        adapter.initialize(FireweaveConfig.builder()
+                .host(baseUrl)
+                .projectApiKey("project-api-key_test")
+                .build());
+        EvaluationContext ctx = EvaluationContext.builder()
+                .targetingKey("user-1")
+                .group("company", "acme")
+                .groupProperty("company", "plan", JsonValue.of("pro"))
+                .build();
+        adapter.evaluate(new EvaluationRequest(
+                "checkout-v2", FlagType.BOOLEAN, JsonValue.of(false), ctx, EvaluationOptions.defaults()));
+        String body = lastBody.get();
+        assertTrue(body.contains("\"groups\""));
+        assertTrue(body.contains("\"groupProperties\""));
+        assertTrue(body.contains("\"plan\":\"pro\""));
+        adapter.shutdown();
+    }
+
+    @Test
     void initializeRequiresCredentials() {
         FireweaveRemoteAdapter adapter = new FireweaveRemoteAdapter();
         assertThrows(FireweaveException.class, () ->

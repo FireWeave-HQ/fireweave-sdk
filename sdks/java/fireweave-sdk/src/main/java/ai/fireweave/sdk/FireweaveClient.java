@@ -10,20 +10,31 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * User-facing Fireweave client: flag evaluation plus release-safety extension facades
+ * User-facing Fireweave client: control-point evaluation plus release-safety extension facades
  * ({@link Releases}, {@link Exposures}, {@link Signals}, {@link Guardrails},
  * {@link CapabilitiesApi}). Plain constructor — DI-friendly, no framework, no statics.
+ *
+ * <h2>Evaluation</h2>
+ * The documented namespace is {@link #controlPoints()} (ADR-0007). {@link #flags()} is the
+ * same object, retained for compatibility. Existing client-level {@link #evaluate},
+ * {@link #getBooleanValue}, and {@link #getStringValue} remain as delegates.
  *
  * <h2>Thread-safety</h2>
  * Fully thread-safe: evaluation delegates to {@link FireweaveRuntime}; extension state (release
  * status, exposure queue) uses concurrent structures with facade-level synchronization on the
  * exposure queue. Extension facades never throw on the normal path — they return
- * {@link ExtensionResult}.
+ * {@link ExtensionResult}. {@link #registerTarget} never throws.
  */
 public final class FireweaveClient implements AutoCloseable {
 
+    private static final java.util.logging.Logger LOG =
+            java.util.logging.Logger.getLogger(FireweaveClient.class.getName());
+    private static final java.util.concurrent.atomic.AtomicBoolean FLAGS_DEPRECATION_NOTICED =
+            new java.util.concurrent.atomic.AtomicBoolean();
+
     private final FireweaveRuntime runtime;
     private final EvaluationContext clientContext;
+    private final ControlPoints controlPoints = new ControlPoints();
     private final Releases releases = new Releases();
     private final Exposures exposures = new Exposures();
     private final Signals signals = new Signals();
@@ -52,23 +63,68 @@ public final class FireweaveClient implements AutoCloseable {
         return new FireweaveClient(runtime, ctx);
     }
 
+    /** Documented evaluation namespace (ADR-0007). */
+    public ControlPoints controlPoints() {
+        return controlPoints;
+    }
+
+    /**
+     * Control-point evaluation under its former name.
+     *
+     * <p>Identical to {@link #controlPoints()} — {@code client.flags() == client.controlPoints()}.
+     * Not scheduled for removal. Set {@code FW_DEPRECATION_WARNINGS=1} to log one notice per JVM.
+     *
+     * @deprecated use {@link #controlPoints()}
+     */
+    @Deprecated
+    public ControlPoints flags() {
+        noteDeprecatedFlagsAlias();
+        return controlPoints;
+    }
+
+    /**
+     * Register a user or device so rules can target its durable properties
+     * ({@code POST /v1/targets/register}). Never throws.
+     */
+    public RegisterTargetResult registerTarget(String targetingKey) {
+        return runtime.registerTarget(targetingKey, RegisterTargetOptions.empty());
+    }
+
+    /**
+     * Register a user or device so rules can target its durable properties
+     * ({@code POST /v1/targets/register}). Never throws.
+     */
+    public RegisterTargetResult registerTarget(String targetingKey, RegisterTargetOptions options) {
+        return runtime.registerTarget(targetingKey, options);
+    }
+
     /** Detailed evaluation; never throws (defaults degrade with reason=ERROR). */
     public Decision evaluate(String flagKey,
                              FlagType type,
                              JsonValue defaultValue,
                              EvaluationContext invocationContext,
                              EvaluationOptions options) {
-        return runtime.evaluate(flagKey, type, defaultValue, clientContext, invocationContext, options);
+        return controlPoints.evaluate(flagKey, type, defaultValue, invocationContext, options);
     }
 
     public boolean getBooleanValue(String flagKey, boolean defaultValue, EvaluationContext ctx) {
-        Decision d = evaluate(flagKey, FlagType.BOOLEAN, JsonValue.of(defaultValue), ctx, null);
-        return d.value().kind() == JsonValue.Kind.BOOLEAN ? d.value().asBoolean() : defaultValue;
+        return controlPoints.getBooleanValue(flagKey, defaultValue, ctx);
     }
 
     public String getStringValue(String flagKey, String defaultValue, EvaluationContext ctx) {
-        Decision d = evaluate(flagKey, FlagType.STRING, JsonValue.of(defaultValue), ctx, null);
-        return d.value().kind() == JsonValue.Kind.STRING ? d.value().asString() : defaultValue;
+        return controlPoints.getStringValue(flagKey, defaultValue, ctx);
+    }
+
+    public int getIntegerValue(String flagKey, int defaultValue, EvaluationContext ctx) {
+        return controlPoints.getIntegerValue(flagKey, defaultValue, ctx);
+    }
+
+    public double getDoubleValue(String flagKey, double defaultValue, EvaluationContext ctx) {
+        return controlPoints.getDoubleValue(flagKey, defaultValue, ctx);
+    }
+
+    public JsonValue getObjectValue(String flagKey, JsonValue defaultValue, EvaluationContext ctx) {
+        return controlPoints.getObjectValue(flagKey, defaultValue, ctx);
     }
 
     public Releases releases() {
@@ -432,6 +488,7 @@ public final class FireweaveClient implements AutoCloseable {
             names.add("capabilities.get");
 
             Map<String, Boolean> staticFeatures = new LinkedHashMap<>();
+            staticFeatures.put("controlPoints", true);
             staticFeatures.put("flags", true);
             staticFeatures.put("releases", cfg.releasesEnabled());
             staticFeatures.put("exposures", cfg.exposuresEnabled());
@@ -440,6 +497,7 @@ public final class FireweaveClient implements AutoCloseable {
             staticFeatures.put("telemetryOptIn", cfg.telemetryAttributeAllowlist() != null);
             staticFeatures.put("inMemoryAdapter",
                     "inmemory".equalsIgnoreCase(runtime.adapter().name()));
+            staticFeatures.put("remoteAdapter", true);
             // true when a PostHog adapter (injected seam) is bound; create(config) remains
             // UnsupportedCapability until upstream publishes a Java server SDK (RB-3).
             staticFeatures.put("posthogAdapter",
@@ -453,5 +511,74 @@ public final class FireweaveClient implements AutoCloseable {
             return new Capabilities(runtime.adapter().name(), runtime.state(),
                     staticFeatures, runtimeFeatures, Collections.unmodifiableList(names));
         }
+    }
+
+    // ------------------------------------------------------------------ control points
+
+    /**
+     * Typed evaluation helpers on the Fireweave-native surface.
+     *
+     * <p>Documented as {@link FireweaveClient#controlPoints()} (ADR-0007).
+     * {@link FireweaveClient#flags()} is an identical alias retained for compatibility.
+     */
+    public final class ControlPoints {
+
+        private ControlPoints() {
+        }
+
+        /** Detailed evaluation; never throws (defaults degrade with reason=ERROR). */
+        public Decision evaluate(String flagKey,
+                                 FlagType type,
+                                 JsonValue defaultValue,
+                                 EvaluationContext invocationContext,
+                                 EvaluationOptions options) {
+            return runtime.evaluate(flagKey, type, defaultValue, clientContext, invocationContext, options);
+        }
+
+        public boolean getBooleanValue(String flagKey, boolean defaultValue, EvaluationContext ctx) {
+            Decision d = evaluate(flagKey, FlagType.BOOLEAN, JsonValue.of(defaultValue), ctx, null);
+            return d.value().kind() == JsonValue.Kind.BOOLEAN ? d.value().asBoolean() : defaultValue;
+        }
+
+        public String getStringValue(String flagKey, String defaultValue, EvaluationContext ctx) {
+            Decision d = evaluate(flagKey, FlagType.STRING, JsonValue.of(defaultValue), ctx, null);
+            return d.value().kind() == JsonValue.Kind.STRING ? d.value().asString() : defaultValue;
+        }
+
+        public int getIntegerValue(String flagKey, int defaultValue, EvaluationContext ctx) {
+            Decision d = evaluate(flagKey, FlagType.INTEGER, JsonValue.of(defaultValue), ctx, null);
+            if (d.value().kind() != JsonValue.Kind.NUMBER || !d.value().isIntegralNumber()) {
+                return defaultValue;
+            }
+            long l = d.value().asNumber().longValue();
+            if (l > Integer.MAX_VALUE || l < Integer.MIN_VALUE) {
+                return defaultValue;
+            }
+            return (int) l;
+        }
+
+        public double getDoubleValue(String flagKey, double defaultValue, EvaluationContext ctx) {
+            Decision d = evaluate(flagKey, FlagType.FLOAT, JsonValue.of(defaultValue), ctx, null);
+            return d.value().kind() == JsonValue.Kind.NUMBER
+                    ? d.value().asNumber().doubleValue() : defaultValue;
+        }
+
+        public JsonValue getObjectValue(String flagKey, JsonValue defaultValue, EvaluationContext ctx) {
+            JsonValue fallback = defaultValue == null ? JsonValue.ofNull() : defaultValue;
+            Decision d = evaluate(flagKey, FlagType.OBJECT, fallback, ctx, null);
+            JsonValue.Kind k = d.value().kind();
+            return (k == JsonValue.Kind.OBJECT || k == JsonValue.Kind.ARRAY) ? d.value() : fallback;
+        }
+    }
+
+    private static void noteDeprecatedFlagsAlias() {
+        if (!"1".equals(System.getenv("FW_DEPRECATION_WARNINGS"))) {
+            return;
+        }
+        if (!FLAGS_DEPRECATION_NOTICED.compareAndSet(false, true)) {
+            return;
+        }
+        LOG.warning("client.flags() has been renamed to client.controlPoints(). "
+                + "The old name remains fully supported — no migration is required.");
     }
 }

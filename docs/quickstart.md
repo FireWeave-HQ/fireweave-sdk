@@ -197,61 +197,60 @@ Run the full example: `cd examples/go && go run .`
 
 ## Java (≥ 11)
 
-**Install (from repo checkout).** Build into your local Maven repository, then depend on the local artifacts:
+**Install (from repo checkout).** Artifacts are **not on Maven Central yet**. Build into your local Maven repository:
 
 ```bash
 git clone https://github.com/FireWeave-HQ/fireweave-sdk && cd fireweave-sdk/sdks/java
-mvn install    # installs ai.fireweave:fireweave-sdk, :fireweave-openfeature, :fireweave-testing, :fireweave-adapter-posthog (0.1.0-SNAPSHOT) locally
+mvn install    # installs ai.fireweave:fireweave-{sdk,openfeature,testing,adapter-posthog} 0.1.0-SNAPSHOT
 ```
 
 ```xml
-<dependency><groupId>ai.fireweave</groupId><artifactId>fireweave-sdk</artifactId><version>0.1.0-SNAPSHOT</version></dependency>
-<dependency><groupId>ai.fireweave</groupId><artifactId>fireweave-openfeature</artifactId><version>0.1.0-SNAPSHOT</version></dependency>
-<dependency><groupId>ai.fireweave</groupId><artifactId>fireweave-testing</artifactId><version>0.1.0-SNAPSHOT</version><scope>test</scope></dependency>
+<dependency>
+  <groupId>ai.fireweave</groupId>
+  <artifactId>fireweave-sdk</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+  <groupId>ai.fireweave</groupId>
+  <artifactId>fireweave-openfeature</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+</dependency>
 ```
 
-**Evaluate and shut down:**
+**Local development (no credentials):**
 
 ```java
-import ai.fireweave.openfeature.FireweaveProvider;
-import ai.fireweave.sdk.FireweaveConfig;
-import ai.fireweave.sdk.FireweaveRuntime;
-import ai.fireweave.testing.FlagDefinition;
-import ai.fireweave.testing.InMemoryAdapter;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.openfeature.sdk.MutableContext;
-import dev.openfeature.sdk.OpenFeatureAPI;
-
-import java.util.Map;
-
-public class Quickstart {
-    public static void main(String[] args) throws Exception {
-        // 1. Adapter + runtime (plain constructors; no DI framework needed).
-        ObjectMapper m = new ObjectMapper();
-        Map<String, FlagDefinition> flags = Map.of("new-checkout",
-            FlagDefinition.fromJson(m.readTree(
-                "{\"type\":\"boolean\",\"enabled\":true,\"variant\":\"on\",\"value\":true}")));
-        FireweaveRuntime runtime = new FireweaveRuntime(
-            FireweaveConfig.builder().build(), new InMemoryAdapter(flags));
-
-        // 2. Register with OpenFeature and wait for READY.
-        OpenFeatureAPI api = OpenFeatureAPI.getInstance();
-        api.setProviderAndWait("app", new FireweaveProvider(runtime));
-
-        // 3. Boolean evaluation with a targeting context.
-        boolean enabled = api.getClient("app")
-            .getBooleanValue("new-checkout", false, new MutableContext("user_42"));
-        System.out.println("new-checkout: " + enabled);
-
-        // 4. Clean shutdown (idempotent).
-        api.shutdown();
-    }
-}
+FireweaveLocalProvider provider = FireweaveLocalProvider.create(
+    Map.of("new-checkout", true));
+OpenFeatureAPI.getInstance().setProviderAndWait("app", provider);
+boolean enabled = OpenFeatureAPI.getInstance().getClient("app")
+    .getBooleanValue("new-checkout", false, new MutableContext("user_42"));
+OpenFeatureAPI.getInstance().shutdown();
 ```
 
-Run the full example: `cd examples/java && mvn -q compile exec:java`.
+**Direct client + remote** (reads `FW_API_URL` / `FW_PROJECT_API_KEY` from the environment in your own code — the SDK does not silently load them):
 
-> **Java + PostHog:** **seam only / not production-ready.** There is no published PostHog Java server SDK; `PostHogAdapter.create(config)` returns `UnsupportedCapability`. Quickstart and examples use `InMemoryAdapter` (above) or an injected `PostHogClientApi` stub — never API-key-only live PostHog construction. See [posthog.md](posthog.md#java).
+```java
+FireweaveRuntime runtime = new FireweaveRuntime(
+    FireweaveConfig.builder()
+        .host(System.getenv("FW_API_URL"))
+        .projectApiKey(System.getenv("FW_PROJECT_API_KEY"))
+        .build(),
+    new FireweaveRemoteAdapter());
+runtime.initialize();
+FireweaveClient client = new FireweaveClient(runtime);
+client.registerTarget("user_42", RegisterTargetOptions.builder()
+    .kind(TargetKind.USER)
+    .property("plan", JsonValue.of("pro"))
+    .build());
+boolean enabled = client.controlPoints().getBooleanValue(
+    "new-checkout", false, EvaluationContext.builder().targetingKey("user_42").build());
+client.close();
+```
+
+Offline demo: `cd examples/java && mvn -q compile exec:java` (builds the SDK modules from this repository; no install or Central required).
+
+> **Java + PostHog:** **seam only / not production-ready.** Prefer `FireweaveRemoteAdapter` or `FireweaveLocalAdapter`. `PostHogAdapter.create(config)` returns `UnsupportedCapability`. See [posthog.md](posthog.md#java).
 
 ## Next steps
 

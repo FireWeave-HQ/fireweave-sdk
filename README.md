@@ -31,6 +31,25 @@ import { FireweaveClient, FireweaveRemoteAdapter, FireweaveRuntime } from 'npm:@
 
 Not yet published — until then, install from a checkout: `cd sdks/node && npm install && npm run build`.
 
+Java (`ai.fireweave:*`, **not on Maven Central yet**):
+
+```bash
+cd sdks/java && mvn install
+```
+
+```xml
+<dependency>
+  <groupId>ai.fireweave</groupId>
+  <artifactId>fireweave-sdk</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+  <groupId>ai.fireweave</groupId>
+  <artifactId>fireweave-openfeature</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+</dependency>
+```
+
 ## Quickstart
 
 ```ts

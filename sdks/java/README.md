@@ -1,118 +1,160 @@
 # Fireweave Java SDK
 
-Java implementation of the Fireweave polyglot SDK (OpenFeature-compatible, server-first,
-PostHog-backed per ADR-0002). Java 11+ source/target, Maven multi-module.
+Java implementation of the Fireweave polyglot SDK. OpenFeature-compatible, server-first,
+Java 11+. Control-point evaluation, target registration, and a local development provider
+sit alongside releases / exposures / signals.
+
+**These artifacts are not on Maven Central yet.** Coordinates below are the intended public
+GAV; install from a repository checkout until a Central publication is confirmed.
+
+## Coordinates (unpublished)
+
+| groupId | artifactId | version |
+| --- | --- | --- |
+| `ai.fireweave` | `fireweave-sdk` | `0.1.0-SNAPSHOT` |
+| `ai.fireweave` | `fireweave-openfeature` | `0.1.0-SNAPSHOT` |
+| `ai.fireweave` | `fireweave-adapter-posthog` | `0.1.0-SNAPSHOT` (seam only) |
+| `ai.fireweave` | `fireweave-testing` | `0.1.0-SNAPSHOT` |
+
+```xml
+<dependency>
+  <groupId>ai.fireweave</groupId>
+  <artifactId>fireweave-sdk</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+  <groupId>ai.fireweave</groupId>
+  <artifactId>fireweave-openfeature</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+</dependency>
+```
+
+Install from this repo:
+
+```bash
+cd sdks/java
+mvn install
+```
+
+Supported Java: **11+** (CI: Temurin 11 and 25). Do not raise the floor without a documented reason.
 
 ## Modules
 
 | Module | Contents |
 | --- | --- |
-| `fireweave-sdk` | Vendor-neutral core: `FireweaveRuntime` (lifecycle state machine), `FireweaveClient` (+ releases / exposures / signals / guardrails / capabilities facades), canonical types (`EvaluationContext`, `Decision`, `JsonValue`, `ErrorKind`/`FireweaveException`), `BackendAdapter` seam, context validation, secret redaction. Zero runtime dependencies. |
-| `fireweave-openfeature` | `FireweaveProvider` implementing `dev.openfeature.sdk.FeatureProvider`: all five resolvers, initialize/shutdown, error-code mapping, `targetingKey` → `distinct_id`. |
-| `fireweave-adapter-posthog` | `PostHogAdapter` (ADR-0002 semantics) over the internal `PostHogClientApi` seam. **Real vendor binding blocked** — see deviations. |
-| `fireweave-testing` | `InMemoryAdapter` (deterministic fixture resolution + in-process fault simulation) and the conformance runner. |
+| `fireweave-sdk` | `FireweaveRuntime`, `FireweaveClient` (`controlPoints()`, `registerTarget`, releases / exposures / signals / guardrails / capabilities), `FireweaveRemoteAdapter`, `FireweaveLocalAdapter`, canonical types. Zero runtime dependencies. |
+| `fireweave-openfeature` | `FireweaveProvider` (all five resolvers) and `FireweaveLocalProvider` (offline OpenFeature). |
+| `fireweave-adapter-posthog` | `PostHogAdapter` over `PostHogClientApi`. **Not a live vendor client** — `create(config)` is `UnsupportedCapability`. |
+| `fireweave-testing` | `InMemoryAdapter` and the conformance runner. |
 
-## Build / test / conformance
+## Direct client (control points)
+
+```java
+FireweaveRuntime runtime = new FireweaveRuntime(
+    FireweaveConfig.builder().build(),
+    new FireweaveLocalAdapter(Map.of("new-checkout", true)));
+runtime.initialize();
+FireweaveClient client = new FireweaveClient(runtime);
+
+boolean enabled = client.controlPoints()
+    .getBooleanValue("new-checkout", false,
+        EvaluationContext.builder().targetingKey("user_42").build());
+
+client.close();
+```
+
+`client.flags()` is the same object as `client.controlPoints()` (ADR-0007). It is `@Deprecated` in Javadoc only and is not scheduled for removal. Set `FW_DEPRECATION_WARNINGS=1` to log one notice per JVM.
+
+## OpenFeature
+
+```java
+FireweaveRuntime runtime = new FireweaveRuntime(
+    FireweaveConfig.builder().build(),
+    new FireweaveLocalAdapter(Map.of("new-checkout", true)));
+OpenFeatureAPI.getInstance()
+    .setProviderAndWait("app", new FireweaveProvider(runtime));
+boolean enabled = OpenFeatureAPI.getInstance().getClient("app")
+    .getBooleanValue("new-checkout", false, new MutableContext("user_42"));
+OpenFeatureAPI.getInstance().shutdown();
+```
+
+The OpenFeature parameter is still `flagKey` — that name is fixed by the OpenFeature specification.
+
+## Local development
+
+No credentials, no network. Unknown keys resolve to the **caller's default** with reason `DEFAULT` on the OpenFeature path (native `runtime.evaluate` still reports `FlagNotFound` as ERROR, matching production backends).
+
+```java
+FireweaveLocalProvider provider = FireweaveLocalProvider.create(
+    Map.of("new-checkout", true));
+OpenFeatureAPI.getInstance().setProviderAndWait(provider);
+```
+
+## Remote configuration
+
+```java
+FireweaveConfig config = FireweaveConfig.builder()
+    .host(System.getenv("FW_API_URL"))
+    .projectApiKey(System.getenv("FW_PROJECT_API_KEY"))
+    .build();
+FireweaveRuntime runtime = new FireweaveRuntime(config, new FireweaveRemoteAdapter());
+runtime.initialize();
+
+client.registerTarget("user_42", RegisterTargetOptions.builder()
+    .kind(TargetKind.USER)
+    .property("plan", JsonValue.of("pro"))
+    .build()); // never throws; check result.ok()
+```
+
+Auth: `Authorization: Bearer <FW_PROJECT_API_KEY>`. Endpoints: `POST /v1/flags/evaluate`, `/v1/capture`, `/v1/targets/register`.
+
+## Lifecycle
+
+`runtime.initialize()` then evaluate; `client.close()` / `runtime.shutdown()` is idempotent and bounded by `shutdownTimeoutMs` (default 10s). Evaluations after shutdown return defaults with `AlreadyClosed` and never throw.
+
+## Troubleshooting
+
+| Symptom | Likely cause |
+| --- | --- |
+| `Configuration` / `PROVIDER_FATAL` on init | Missing `host` + `projectApiKey` on the remote adapter; non-https off-loopback; host not allowlisted |
+| `registerTarget` → `UnsupportedCapability` | In-memory or local adapter (no `/v1/targets/register`). Use `FireweaveRemoteAdapter`. |
+| `FLAG_NOT_FOUND` in production, `DEFAULT` on a laptop | Expected: only `FireweaveLocalProvider` rewrites unknown keys. |
+| Secrets in logs | Messages pass `Redaction` (`phc_`/`phs_`/`phx_`, `Bearer`, `FW_PROJECT_API_KEY`). If you see a raw key, that is a bug. |
+| Demo cannot resolve `ai.fireweave:*` | From `examples/java`, the reactor compiles the SDK modules from this repo. You do not need Maven Central. |
+
+## Build / test / demo
 
 ```bash
 cd sdks/java
-mvn install                      # build + all unit tests + JUnit conformance run
-mvn -pl fireweave-testing exec:java   # standalone conformance runner
-#   writes target/compatibility-report.java.json (relative to CWD; pass args to override:
-#   -Dexec.args="<contracts-dir> <output-file>")
-cd ../../examples/java && mvn -q compile exec:java   # runnable example (offline)
+mvn clean verify                 # unit tests + Javadoc/sources JARs (unsigned)
+mvn -pl fireweave-testing exec:java   # conformance runner
+
+cd ../../examples/java
+mvn -q compile exec:java         # offline demo (builds SDK modules from this repo)
 ```
 
-## Thread-safety guarantees
+Remote demo: `FW_PROJECT_API_KEY=… FW_API_URL=… mvn -q compile exec:java -Dexec.args="--remote"`.
 
-- **`FireweaveRuntime`** — fully thread-safe. Lifecycle transitions (`initialize`, `shutdown`)
-  are serialized on an internal lock; `evaluate` reads the volatile state without locking, so
-  concurrent evaluations never contend. An evaluation racing a shutdown either completes
-  normally or returns an `AlreadyClosed` default decision — it never throws.
-- **`FireweaveClient`** — fully thread-safe. Exposure queue mutations synchronize on the queue;
-  release status uses `ConcurrentHashMap`; extension facades return `ExtensionResult` and never
-  throw on the normal path.
-- **`FireweaveProvider`** — stateless facade over the runtime; safe for concurrent resolution.
-- **Configuration and contexts** (`FireweaveConfig`, `EvaluationContext`, `ContextLimits`,
-  `ReleaseContext`, `Signal`, `Decision`, `JsonValue`) are deeply immutable.
-- **Adapters** must be safe for concurrent `evaluate` after `initialize` returns (documented on
-  `BackendAdapter`); `InMemoryAdapter` and `PostHogAdapter` comply.
-- **No static global clients** — everything is constructed and injected explicitly
-  (plain constructors + builders; no Spring or any DI framework required).
+## Thread-safety
+
+- **`FireweaveRuntime`** — fully thread-safe. Lifecycle transitions are serialized; `evaluate` / `registerTarget` never throw to callers.
+- **`FireweaveClient`** — fully thread-safe. `controlPoints()` is a stateless facade over the runtime.
+- **`FireweaveProvider` / `FireweaveLocalProvider`** — safe for concurrent resolution.
+- Configuration and contexts are deeply immutable.
+- **No static global clients** except local-provider capture buffers (test/dev observability).
 
 ## Error model
 
-The 15 PascalCase kinds live in `ErrorKind` (validated 1:1 against `contracts/errors.json` by
-`ErrorTaxonomyTest`), carried by enum-kinded `FireweaveException`. Defaults are never thrown on
-the normal evaluation path; causes are preserved; all messages pass `Redaction` (phc_/phs_/phx_,
-`Bearer` tokens, `FW_PROJECT_API_KEY` assignments → `[REDACTED]`). `AlreadyClosed` maps to
-OpenFeature `PROVIDER_NOT_READY`.
-
-## Context handling
-
-Merge order (later wins): config global → client → invocation. Ratified bounds enforced before
-any adapter/network call: 128 attributes, 256 B keys, 4 KiB values, depth 6, 64 KiB serialized.
-`fireweave.*` attribute keys are reserved, with exactly two canonical carve-outs (rulings 12–14):
-`fireweave.groups` and `fireweave.groupProperties` are accepted as the primary cross-language
-path and promoted into the context's first-class groups/groupProperties fields before
-validation; every other `fireweave.*` key is `InvalidContext`. The `EvaluationContext.Builder`
-`.group()` / `.groupProperty()` methods are idiomatic sugar over the same canonical
-representation. Additional reserved keys are configurable.
+The 15 PascalCase kinds live in `ErrorKind`. Evaluation never throws; `registerTarget` never throws. `AlreadyClosed` maps to OpenFeature `PROVIDER_NOT_READY`.
 
 ## Security defaults
 
-- **Host allowlist (default-on, canonical cross-language list):** `app.posthog.com`,
-  `us.posthog.com`, `eu.posthog.com`, `us.i.posthog.com`, `eu.i.posthog.com` + loopback
-  (`localhost`, `127.0.0.1`, `::1`). https is required off-loopback (http on loopback only);
-  self-hosted instances must be explicitly allowlisted via `allowedHosts` (or the explicit
-  `"*"` opt-out, which still enforces https). An empty allowlist denies every host.
-- **Bounded shutdown:** `FireweaveRuntime.shutdown()` closes the adapter on a daemon thread and
-  waits at most `shutdownTimeoutMs` (default 10 000 ms); on expiry it records a `Timeout`
-  `lastError` and returns — a wedged vendor client can never hang process exit.
-- **Exposure dedup clear-on-flush:** `PostHogAdapter`'s exposure dedup set is scoped to one
-  flush window (`BackendAdapter.onExposuresFlushed()` clears it), so it cannot grow unbounded.
+- **Host allowlist (default-on):** Fireweave hosts (`app-server.fireweave.ai`, `staging-app-server.fireweave.ai`), PostHog hosts (Java still ships a PostHog seam), plus loopback. https required off-loopback.
+- **Bounded shutdown** and **exposure dedup clear-on-flush** as before.
 
-## Deviations & blockers (for orchestrator arbitration)
+## Deviations & blockers
 
-1. **`dev.openfeature:sdk` pinned 1.21.0 → built against 1.15.1.** 1.15.1 is the newest version
-   on Maven Central (verified 2026-07-27 via search.maven.org). No API gaps encountered for the
-   features used.
-2. **Java PostHog is seam only / not production-ready.** `com.posthog:posthog-server` does not
-   exist on Maven Central (verified 2026-07-27; only Android/`posthog` 3.x and prohibited legacy
-   `com.posthog.java:posthog` 1.2.0). Fireweave does not bind unpublished packages.
-   `PostHogAdapter` is tested against the Fireweave-owned `PostHogClientApi` injection seam;
-   `PostHogAdapter.create(config)` returns `UnsupportedCapability` (API keys alone cannot create
-   a live PostHog-backed client). Prefer `InMemoryAdapter` until upstream publishes a server SDK.
-3. **Fault fixtures run twice** (Phase 5 close-out of the original "stub not runnable"
-   deviation): deterministically in-process via `InMemoryAdapter` (delay compares against the
-   configured timeout — no sleeping) in `ConformanceTest`, AND against the real HTTP stub
-   (`test-server/implementation/server.mjs`, spawned as a child node process) through the
-   `PostHogClientApi` seam's test HTTP client in `HttpFaultConformanceTest` — real sockets,
-   timeouts, status codes, truncated bodies, malformed JSON, connection-refused. 8 of 9 fault
-   fixtures are HTTP-drivable; `fault-stale-cache` remains adapter-simulated only because
-   local-eval definitions staleness (last-good definitions after a failed poll) lives behind
-   the seam, which exposes snapshot `ageMs` but no definitions-poll surface — the vendor client
-   owning that lifecycle is unpublished (deviation 2). Annotated per-row in the report message.
-4. **`ctx-reserved-keys-rejected`** is exercised through the Fireweave detailed API instead of
-   the OF client: the Java OpenFeature SDK stores the targeting key in the attribute map, so an
-   OF context cannot carry a literal `targetingKey` attribute distinct from the targeting key.
-   Annotated in the conformance report message.
-5. **groupId `ai.fireweave`** remains a working assumption pending Maven Central namespace
-   verification (decision brief risk 4). DO NOT PUBLISH.
-
-## Known limitations (documented per fixtures)
-
-- **Long-clamp:** the Java OF integer resolver is 32-bit `Integer`. Integral flag values outside
-  `Integer` range resolve as `TYPE_MISMATCH` + default (never silent truncation). Cross-language
-  integer reliability is documented to 2^53−1; `eval-int-beyond-safe-integer` is
-  skipped-with-documented-limitation for Java (as the fixture declares).
-- **Stale remote cache:** the vendor Java SDK caches per-user remote flag results up to 5
-  minutes and keeps last-good local definitions after failed polls. `PostHogAdapter` surfaces
-  snapshot age: stale results resolve with reason `STALE` + `fireweave.fromCache` metadata and
-  flip `isStale()`, which the runtime reflects as lifecycle `STALE` — stale data is never
-  reported fresh.
-- Detailed metadata enrichment (`fireweave.vendorFlagId`, `fireweave.reasonCode`) is emitted
-  only when the vendor response carries **both** a flag id and a condition index — inferred from
-  the fixture matrix (`eval-detailed-fields` emits them; `eval-multivariate-string` and
-  `eval-payload-attached`, each having only one of the two, do not). Flagging for arbitration:
-  an explicit rule in `contracts/README.md` would remove the inference.
+1. **`dev.openfeature:sdk` 1.15.1** — newest on Central; decision brief pinned 1.21.0.
+2. **Java PostHog is seam only.** Prefer `FireweaveRemoteAdapter` for production.
+3. **`ai.fireweave` Maven Central namespace** is not verified. Publication workflows fail closed without secrets. Do not treat the GAV as published.
+4. **Long-clamp:** OF integer resolver is 32-bit `int`. Fixture `eval-int-beyond-safe-integer` is skipped-with-documented-limitation.

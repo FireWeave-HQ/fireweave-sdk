@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>ai.fireweave.examples</groupId>
+    <artifactId>fireweave-java-example</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>fireweave-java-example-app</artifactId>
+  <name>Fireweave Java example app</name>
+  <description>
+    Command-line walkthrough. Offline by default (local development provider).
+    Pass --remote with FW_API_URL and FW_PROJECT_API_KEY for the remote adapter.
+  </description>
+
+  <properties>
+    <exec.skip>false</exec.skip>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>ai.fireweave</groupId>
+      <artifactId>fireweave-sdk</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>ai.fireweave</groupId>
+      <artifactId>fireweave-openfeature</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>dev.openfeature</groupId>
+      <artifactId>sdk</artifactId>
+      <version>1.15.1</version>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-nop</artifactId>
+      <version>2.0.17</version>
+      <scope>runtime</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.2.0</version>
+        <configuration>
+          <skip>false</skip>
+          <mainClass>ai.fireweave.examples.DemoApp</mainClass>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

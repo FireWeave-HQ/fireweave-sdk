@@ -17,13 +17,19 @@ import java.util.Set;
 public final class FireweaveConfig {
 
     /**
-     * Canonical cross-language SSRF host allowlist (security review H-1/L-6; fixture
-     * sec-endpoint-ssrf-allowlist): the five documented PostHog hosts plus loopback. Custom
+     * Default SSRF host allowlist (security review H-1/L-6; fixture
+     * sec-endpoint-ssrf-allowlist): Fireweave production/staging hosts, the five documented
+     * PostHog hosts (Java still ships a PostHog injection seam), plus loopback. Custom
      * (self-hosted) hosts require explicit {@link Builder#allowedHosts(Set)} configuration;
      * {@link #ALLOW_ANY_HOST} is the explicit opt-out.
+     *
+     * <p>Java retains PostHog hosts because {@code fireweave-adapter-posthog} remains a
+     * documented seam. Node 2.1 dropped those hosts after removing the vendor adapter
+     * (ADR-0006) — that change is not mechanically ported here.
      */
     public static final Set<String> DEFAULT_ALLOWED_HOSTS = Collections.unmodifiableSet(
             new LinkedHashSet<>(Arrays.asList(
+                    "app-server.fireweave.ai", "staging-app-server.fireweave.ai",
                     "app.posthog.com", "us.posthog.com", "eu.posthog.com",
                     "us.i.posthog.com", "eu.i.posthog.com",
                     "localhost", "127.0.0.1", "::1")));
