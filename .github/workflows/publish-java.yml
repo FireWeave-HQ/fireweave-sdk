@@ -96,7 +96,8 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '11'
+          # JDK 21 to run maven-javadoc-plugin 3.11+; bytecode stays 11 via maven.compiler.release.
+          java-version: '21'
           cache: maven
           server-id: central
           server-username: MAVEN_CENTRAL_USERNAME
@@ -104,7 +105,7 @@ jobs:
           gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
           gpg-passphrase: MAVEN_GPG_PASSPHRASE
 
-      - name: Run Java tests (JDK 11)
+      - name: Run Java tests
         working-directory: sdks/java
         run: mvn -B -ntp clean test
 
