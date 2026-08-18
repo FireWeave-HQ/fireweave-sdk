@@ -83,11 +83,13 @@ class FireweaveRuntimeTest {
     @Test
     void defaultAllowlistIsTheCanonicalCrossLanguageList() throws Exception {
         assertEquals(java.util.Set.of(
+                        "app-server.fireweave.ai", "staging-app-server.fireweave.ai",
                         "app.posthog.com", "us.posthog.com", "eu.posthog.com",
                         "us.i.posthog.com", "eu.i.posthog.com",
                         "localhost", "127.0.0.1", "::1"),
                 FireweaveConfig.DEFAULT_ALLOWED_HOSTS);
         for (String h : new String[] {
+                "https://app-server.fireweave.ai", "https://staging-app-server.fireweave.ai",
                 "https://app.posthog.com", "https://us.posthog.com", "https://eu.posthog.com",
                 "https://us.i.posthog.com", "https://eu.i.posthog.com"}) {
             assertHostAccepted(h);

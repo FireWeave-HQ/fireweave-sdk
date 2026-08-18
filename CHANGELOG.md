@@ -125,6 +125,24 @@ README rewritten around the release-engineering surface with OpenFeature as one 
 - **Documentation** — architecture + ADRs 0001–0004, user docs under `docs/`, community files.
 
 
+### Java SDK `ai.fireweave:*` — parity with Node/Python surfaces (Aug 2026)
+
+Additive (modules remain `0.1.0-SNAPSHOT`). PostHog injection seam retained. Not published to Maven Central until the `ai.fireweave` namespace is verified.
+
+#### Added
+
+- **`client.controlPoints()`** — documented evaluation namespace; `client.flags()` is the same object (ADR-0007). Capabilities advertise `controlPoints` and `remoteAdapter` beside retained `flags` / `posthogAdapter`.
+- **`runtime.registerTarget()` / `client.registerTarget()` / `FireweaveRemoteAdapter.registerTarget()`** — `POST /v1/targets/register` with one retry on retryable failures; returns `{ok: false}` rather than throwing.
+- **`FireweaveLocalAdapter` + `FireweaveLocalProvider`** — DEV-branch substrate with `FLAG_NOT_FOUND` → `DEFAULT` rewrite on the OpenFeature path; `getCaptures()` / `resetCaptures()`.
+- Typed helpers `getIntegerValue` / `getDoubleValue` / `getObjectValue`.
+- Remote evaluate now sends `groupProperties` when present.
+- Maven Central publication metadata (sources/javadoc JARs, Central Publisher Portal plugin, tag-triggered `publish-java.yml`). First upload remains blocked on namespace verification and CI secrets.
+
+#### Tests
+
+- Control-point alias identity, local adapter/provider, target registration (success, empty key, retry, auth, lifecycle), remote `groupProperties`.
+
+
 ### Python SDK `fireweave` — parity with Node surfaces (Aug 2026)
 
 Additive (package remains `0.1.0`). PostHog escape hatch retained.

@@ -97,6 +97,32 @@ public final class FireweaveRuntime implements AutoCloseable {
     }
 
     /**
+     * Register a user or device so rules can target its durable properties.
+     *
+     * <p>Call once per login / device provisioning, then send the same targeting
+     * key on evaluate. Per-request attributes still override stored properties
+     * for a single evaluation (spec/remote-protocol.md § Two identity paths).
+     *
+     * <p>Never throws: this runs in sign-in paths. Adapters without the
+     * capability report {@link ErrorKind#UnsupportedCapability}.
+     */
+    public RegisterTargetResult registerTarget(String targetingKey, RegisterTargetOptions options) {
+        FireweaveException gate = lifecycleGate();
+        if (gate != null) {
+            return RegisterTargetResult.failure(FireweaveError.from(gate));
+        }
+        RegisterTargetOptions opts = options == null ? RegisterTargetOptions.empty() : options;
+        try {
+            return adapter.registerTarget(targetingKey == null ? "" : targetingKey, opts);
+        } catch (FireweaveException e) {
+            return RegisterTargetResult.failure(FireweaveError.from(e));
+        } catch (RuntimeException e) {
+            return RegisterTargetResult.failure(
+                    FireweaveError.of(ErrorKind.Internal, ErrorKind.Internal.defaultMessage()));
+        }
+    }
+
+    /**
      * Evaluate a flag. Merge order (later wins): config global context → {@code clientContext} →
      * {@code invocationContext}. Never throws.
      */

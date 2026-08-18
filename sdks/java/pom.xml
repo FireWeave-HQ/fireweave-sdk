@@ -11,10 +11,11 @@
 
   <name>Fireweave Java SDK (parent)</name>
   <description>
-    Fireweave polyglot SDK - Java implementation. OpenFeature-compatible, server-first.
-    GroupId ai.fireweave is a working assumption pending Maven Central namespace verification
-    (decision brief, risk 4). DO NOT PUBLISH.
+    Fireweave polyglot SDK — Java implementation. OpenFeature-compatible, server-first
+    control-point evaluation against fw-server. Java 11+.
   </description>
+  <url>https://github.com/FireWeave-HQ/fireweave-sdk</url>
+  <inceptionYear>2026</inceptionYear>
 
   <licenses>
     <license>
@@ -23,6 +24,32 @@
       <distribution>repo</distribution>
     </license>
   </licenses>
+
+  <developers>
+    <developer>
+      <name>Fireweave AI</name>
+      <email>sdk@fireweave.ai</email>
+      <organization>Fireweave AI, Inc.</organization>
+      <organizationUrl>https://fireweave.ai</organizationUrl>
+    </developer>
+  </developers>
+
+  <organization>
+    <name>Fireweave AI, Inc.</name>
+    <url>https://fireweave.ai</url>
+  </organization>
+
+  <scm>
+    <connection>scm:git:https://github.com/FireWeave-HQ/fireweave-sdk.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/FireWeave-HQ/fireweave-sdk.git</developerConnection>
+    <url>https://github.com/FireWeave-HQ/fireweave-sdk</url>
+    <tag>HEAD</tag>
+  </scm>
+
+  <issueManagement>
+    <system>GitHub</system>
+    <url>https://github.com/FireWeave-HQ/fireweave-sdk/issues</url>
+  </issueManagement>
 
   <modules>
     <module>fireweave-sdk</module>
@@ -33,6 +60,7 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <maven.compiler.release>11</maven.compiler.release>
     <!--
       Decision brief pins dev.openfeature:sdk 1.21.0, but the newest version published to
@@ -42,6 +70,13 @@
     <openfeature.version>1.15.1</openfeature.version>
     <junit.version>5.10.2</junit.version>
     <jackson.version>2.18.9</jackson.version>
+    <!-- Reproducible builds (Maven 3.8.2+). Override from CI with a commit timestamp. -->
+    <project.build.outputTimestamp>2026-08-15T00:00:00Z</project.build.outputTimestamp>
+    <!-- Sign/publish are opt-in: `mvn -Prelease deploy` after credentials are configured. -->
+    <gpg.skip>true</gpg.skip>
+    <central.skipPublishing>true</central.skipPublishing>
+    <central.autoPublish>false</central.autoPublish>
+    <central.waitUntil>validated</central.waitUntil>
   </properties>
 
   <dependencyManagement>
@@ -70,6 +105,11 @@
       <plugins>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.13.0</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
           <version>3.2.5</version>
         </plugin>
@@ -77,8 +117,154 @@
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>exec-maven-plugin</artifactId>
           <version>3.2.0</version>
+          <configuration>
+            <!-- CLI exec:java is applied to every reactor module; libraries skip. -->
+            <skip>true</skip>
+            <mainClass>none</mainClass>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-jar-plugin</artifactId>
+          <version>3.4.2</version>
+          <configuration>
+            <archive>
+              <manifestEntries>
+                <Automatic-Module-Name>${automatic.module.name}</Automatic-Module-Name>
+              </manifestEntries>
+            </archive>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-source-plugin</artifactId>
+          <version>3.3.1</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-javadoc-plugin</artifactId>
+          <version>3.11.2</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-gpg-plugin</artifactId>
+          <version>3.2.7</version>
+        </plugin>
+        <plugin>
+          <groupId>org.sonatype.central</groupId>
+          <artifactId>central-publishing-maven-plugin</artifactId>
+          <version>0.11.0</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-enforcer-plugin</artifactId>
+          <version>3.5.0</version>
         </plugin>
       </plugins>
     </pluginManagement>
+
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>enforce-java</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <requireJavaVersion>
+                  <version>[11,)</version>
+                </requireJavaVersion>
+                <requireMavenVersion>
+                  <version>[3.8.1,)</version>
+                </requireMavenVersion>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>attach-sources</id>
+            <goals>
+              <goal>jar-no-fork</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>attach-javadocs</id>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <doclint>none</doclint>
+          <quiet>true</quiet>
+          <source>11</source>
+          <failOnError>true</failOnError>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-gpg-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>sign-artifacts</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>sign</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <gpgArguments>
+            <arg>--pinentry-mode</arg>
+            <arg>loopback</arg>
+          </gpgArguments>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.sonatype.central</groupId>
+        <artifactId>central-publishing-maven-plugin</artifactId>
+        <extensions>true</extensions>
+        <configuration>
+          <publishingServerId>central</publishingServerId>
+          <autoPublish>${central.autoPublish}</autoPublish>
+          <waitUntil>${central.waitUntil}</waitUntil>
+          <skipPublishing>${central.skipPublishing}</skipPublishing>
+        </configuration>
+      </plugin>
+    </plugins>
   </build>
+
+  <profiles>
+    <!--
+      Production deploy to Maven Central (Central Publisher Portal).
+      Requires ~/.m2/settings.xml server id `central` (or MAVEN_CENTRAL_USERNAME /
+      MAVEN_CENTRAL_PASSWORD) and GPG signing keys. Never commit credentials.
+    -->
+    <profile>
+      <id>release</id>
+      <properties>
+        <gpg.skip>false</gpg.skip>
+        <central.skipPublishing>false</central.skipPublishing>
+      </properties>
+    </profile>
+  </profiles>
 </project>

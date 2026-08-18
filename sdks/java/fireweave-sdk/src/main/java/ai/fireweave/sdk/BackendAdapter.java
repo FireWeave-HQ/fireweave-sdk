@@ -4,8 +4,10 @@ import java.util.Collections;
 import java.util.Map;
 
 /**
- * Vendor seam. Implementations: {@code InMemoryAdapter} (fireweave-testing, deterministic
- * fixtures) and {@code PostHogAdapter} (fireweave-adapter-posthog).
+ * Vendor seam. Implementations: {@link FireweaveRemoteAdapter} (production fw-server path),
+ * {@link FireweaveLocalAdapter} (offline development), {@code InMemoryAdapter}
+ * (fireweave-testing, deterministic fixtures), and {@code PostHogAdapter}
+ * (fireweave-adapter-posthog, injection seam only).
  *
  * <p><b>Thread-safety:</b> implementations MUST be safe for concurrent {@link #evaluate} calls
  * after {@link #initialize} returns. {@link #initialize} and {@link #shutdown} are invoked at most
@@ -16,7 +18,7 @@ import java.util.Map;
  */
 public interface BackendAdapter extends AutoCloseable {
 
-    /** Canonical backend name: "inmemory" | "posthog" | "other". */
+    /** Canonical backend name: "fireweave" | "inmemory" | "posthog" | "other". */
     String name();
 
     /**
@@ -31,6 +33,23 @@ public interface BackendAdapter extends AutoCloseable {
      * never the adapter — converts exceptions into default-valued error decisions.
      */
     Decision evaluate(EvaluationRequest request) throws FireweaveException;
+
+    /**
+     * Register a user or device so rules can target its durable properties
+     * ({@code POST /v1/targets/register}).
+     *
+     * <p>Default: {@link ErrorKind#UnsupportedCapability}. Adapters that do not
+     * speak the Fireweave remote protocol (in-memory, local, PostHog seam) leave
+     * this default so a dev harness does not silently look registered.
+     *
+     * <p>Must not throw: registration sits in login paths. Return
+     * {@link RegisterTargetResult#failure} instead.
+     */
+    default RegisterTargetResult registerTarget(String targetingKey, RegisterTargetOptions options) {
+        return RegisterTargetResult.failure(
+                FireweaveError.of(ErrorKind.UnsupportedCapability,
+                        ErrorKind.UnsupportedCapability.defaultMessage()));
+    }
 
     /** Deliver a flushed exposure event. Default: drop (adapters without capture). */
     default void deliverExposure(Exposure exposure) throws FireweaveException {

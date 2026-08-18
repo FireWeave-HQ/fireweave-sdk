@@ -14,9 +14,13 @@
   <name>Fireweave testing (in-memory adapter + conformance runner)</name>
   <description>
     Deterministic InMemoryAdapter (fixture-driven, fault simulation) and the conformance runner
-    executing contracts/ fixtures through the real OpenFeature client, emitting
-    compatibility-report.java.json. Run: mvn -pl fireweave-testing exec:java
+    executing contracts/ fixtures through the real OpenFeature client.
   </description>
+  <url>https://github.com/FireWeave-HQ/fireweave-sdk</url>
+
+  <properties>
+    <automatic.module.name>ai.fireweave.testing</automatic.module.name>
+  </properties>
 
   <dependencies>
     <dependency>
@@ -58,6 +62,7 @@
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
         <configuration>
+          <skip>false</skip>
           <mainClass>ai.fireweave.testing.conformance.ConformanceRunner</mainClass>
         </configuration>
       </plugin>

@@ -19,7 +19,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * Fireweave remote backend adapter (ADR-0005) — <b>default production path</b>.
  *
- * <p>Speaks {@code POST /v1/flags/evaluate} and {@code POST /v1/capture} to fw-server with
+ * <p>Speaks {@code POST /v1/flags/evaluate}, {@code POST /v1/capture}, and
+ * {@code POST /v1/targets/register} to fw-server with
  * {@code Authorization: Bearer <FW_PROJECT_API_KEY>}. No PostHog SDK or keys in the customer
  * process. Config: {@link FireweaveConfig#host()} = {@code FW_API_URL},
  * {@link FireweaveConfig#projectApiKey()} = {@code FW_PROJECT_API_KEY}.
@@ -28,6 +29,7 @@ public final class FireweaveRemoteAdapter implements BackendAdapter {
 
     private static final String EVALUATE_PATH = "/v1/flags/evaluate";
     private static final String CAPTURE_PATH = "/v1/capture";
+    private static final String REGISTER_TARGET_PATH = "/v1/targets/register";
 
     private final HttpClient httpClient;
     private volatile String apiUrl;
@@ -79,14 +81,16 @@ public final class FireweaveRemoteAdapter implements BackendAdapter {
             throw new FireweaveException(ErrorKind.Configuration, "invalid configuration");
         }
         // Egress pin: configured apiUrl hostname + loopback (Node remote adapter parity).
-        // DEFAULT_ALLOWED_HOSTS is PostHog-centric — treat it as "use apiUrl host pin".
-        // A custom allowedHosts without the apiUrl host (and without '*') is rejected.
+        // DEFAULT_ALLOWED_HOSTS includes Fireweave + PostHog + loopback. Treat that default
+        // set as "use apiUrl host pin" so a custom FW_API_URL not yet on the list still
+        // works when the caller did not override allowedHosts. A custom allowedHosts
+        // without the apiUrl host (and without '*') is rejected.
         java.util.Set<String> allow = config.allowedHosts();
-        boolean usingPostHogDefaults = allow.equals(FireweaveConfig.DEFAULT_ALLOWED_HOSTS);
+        boolean usingDefaultAllowlist = allow.equals(FireweaveConfig.DEFAULT_ALLOWED_HOSTS);
         boolean allowed = allow.contains(FireweaveConfig.ALLOW_ANY_HOST)
                 || allow.contains(host)
                 || loopback
-                || usingPostHogDefaults;
+                || usingDefaultAllowlist;
         if (!allowed) {
             throw new FireweaveException(ErrorKind.Configuration, "invalid configuration");
         }
@@ -135,15 +139,27 @@ public final class FireweaveRemoteAdapter implements BackendAdapter {
             }
             body.put("groups", JsonValue.ofObject(groups));
         }
+        if (!ctx.groupProperties().isEmpty()) {
+            Map<String, JsonValue> groupProperties = new LinkedHashMap<>();
+            for (Map.Entry<String, Map<String, JsonValue>> g : ctx.groupProperties().entrySet()) {
+                groupProperties.put(g.getKey(), JsonValue.ofObject(g.getValue()));
+            }
+            body.put("groupProperties", JsonValue.ofObject(groupProperties));
+        }
 
         JsonValue response = postJson(EVALUATE_PATH, JsonValue.ofObject(body));
         if (response.kind() != JsonValue.Kind.OBJECT) {
             throw new FireweaveException(ErrorKind.MalformedResponse);
         }
         Map<String, JsonValue> root = response.asObject();
+        boolean quotaLimited = false;
+        JsonValue quotaNode = root.get("quotaLimited");
+        if (quotaNode != null && quotaNode.kind() == JsonValue.Kind.BOOLEAN) {
+            quotaLimited = quotaNode.asBoolean();
+        }
         JsonValue decisionsNode = root.get("decisions");
         if (decisionsNode == null || decisionsNode.kind() != JsonValue.Kind.ARRAY) {
-            throw new FireweaveException(ErrorKind.FlagNotFound);
+            throw quotaLimited ? FireweaveException.quotaLimited() : new FireweaveException(ErrorKind.FlagNotFound);
         }
         for (JsonValue item : decisionsNode.asArray()) {
             if (item.kind() != JsonValue.Kind.OBJECT) {
@@ -157,7 +173,7 @@ public final class FireweaveRemoteAdapter implements BackendAdapter {
             }
             JsonValue foundNode = d.get("found");
             if (foundNode != null && foundNode.kind() == JsonValue.Kind.BOOLEAN && !foundNode.asBoolean()) {
-                throw new FireweaveException(ErrorKind.FlagNotFound);
+                throw quotaLimited ? FireweaveException.quotaLimited() : new FireweaveException(ErrorKind.FlagNotFound);
             }
             JsonValue value = d.get("value");
             if (value == null) {
@@ -186,9 +202,68 @@ public final class FireweaveRemoteAdapter implements BackendAdapter {
                     }
                 }
             }
+            if (quotaLimited) {
+                b.metadata("fireweave.quotaLimited", true);
+            }
             return b.build();
         }
-        throw new FireweaveException(ErrorKind.FlagNotFound);
+        throw quotaLimited ? FireweaveException.quotaLimited() : new FireweaveException(ErrorKind.FlagNotFound);
+    }
+
+    /**
+     * Register a user or device so flag rules can target its durable properties.
+     *
+     * <p>Never throws for transport failures: registration sits in login paths, and
+     * an analytics call must not break sign-in. Retried once when the error
+     * taxonomy marks the failure retryable.
+     */
+    @Override
+    public RegisterTargetResult registerTarget(String targetingKey, RegisterTargetOptions options) {
+        if (closed) {
+            return RegisterTargetResult.failure(FireweaveError.of(ErrorKind.AlreadyClosed,
+                    ErrorKind.AlreadyClosed.defaultMessage()));
+        }
+        if (!ready) {
+            return RegisterTargetResult.failure(FireweaveError.of(ErrorKind.NotReady,
+                    ErrorKind.NotReady.defaultMessage()));
+        }
+        if (targetingKey == null || targetingKey.isEmpty()) {
+            return RegisterTargetResult.failure(FireweaveError.from(FireweaveException.targetingKeyMissing()));
+        }
+
+        RegisterTargetOptions opts = options == null ? RegisterTargetOptions.empty() : options;
+        Map<String, JsonValue> body = new LinkedHashMap<>();
+        body.put("targetingKey", JsonValue.of(targetingKey));
+        if (opts.kind() != null) {
+            body.put("kind", JsonValue.of(opts.kind().wireName()));
+        }
+        if (opts.environment() != null) {
+            body.put("environment", JsonValue.of(opts.environment()));
+        }
+        if (!opts.properties().isEmpty()) {
+            body.put("properties", JsonValue.ofObject(opts.properties()));
+        }
+
+        FireweaveError lastError = null;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try {
+                postJson(REGISTER_TARGET_PATH, JsonValue.ofObject(body));
+                return RegisterTargetResult.success();
+            } catch (FireweaveException e) {
+                lastError = FireweaveError.from(e);
+                if (!lastError.retryable()) {
+                    break;
+                }
+            } catch (RuntimeException e) {
+                lastError = FireweaveError.of(ErrorKind.BackendUnavailable,
+                        ErrorKind.BackendUnavailable.defaultMessage());
+                break;
+            }
+        }
+        return RegisterTargetResult.failure(lastError != null
+                ? lastError
+                : FireweaveError.of(ErrorKind.BackendUnavailable,
+                        ErrorKind.BackendUnavailable.defaultMessage()));
     }
 
     @Override

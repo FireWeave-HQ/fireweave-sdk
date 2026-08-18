@@ -8,9 +8,13 @@ PyPI** is enabled for `fireweave` via:
 - tag push `python/v<semver>` → [`.github/workflows/publish-python.yml`](workflows/publish-python.yml)
 - or `release.yml` with `component=python`, `channel=production`, `dry_run=false`
 
-**Production npm** (`latest`) and **all Maven** jobs remain hard-disabled
-(`if: false`) until separate authorization / Central namespace provisioning.
-Configure trusted publishers below **before** the first non-dry-run publish.
+**Production npm** (`latest`) remains hard-disabled (`if: false`) until a second
+written authorization. **Maven Central** is wired through
+[`publish-java.yml`](workflows/publish-java.yml) (tag `java/v*`) and
+`release.yml` (`component=java`) using the Central Publisher Portal plugin.
+The first upload still requires namespace verification for `ai.fireweave` plus
+`MAVEN_CENTRAL_USERNAME` / `MAVEN_CENTRAL_PASSWORD` / `MAVEN_GPG_*` secrets —
+missing secrets fail closed rather than publishing a broken artifact.
 
 ## Overview
 
@@ -68,7 +72,7 @@ signing into the workflow.
 | Node | npmjs.com | `@fireweaveai/sdk` | Working name pending company ratification (ADR-0001). Publish via **OIDC trusted publishing** (no long-lived `NPM_TOKEN`). |
 | Python | pypi.org | `fireweave` | Publish via **`PYPI_API_TOKEN`** GitHub secret (repo or `release` env) with `pypa/gh-action-pypi-publish`. Preferred auto path: push tag `python/v<semver>` → `publish-python.yml`. OIDC Trusted Publisher remains optional. |
 | Go | proxy.golang.org | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go` | No registry credentials — "publishing" is pushing the `sdks/go/v*` tag on the public repo; the proxy picks it up. |
-| Java | Maven Central | groupId `ai.fireweave` | **Pending namespace verification** on the Central portal (DNS TXT proof for `fireweave.ai`). Do not publish until verified. |
+| Java | Maven Central | groupId `ai.fireweave` | **Pending namespace verification** on the Central portal (DNS TXT proof for `fireweave.ai`). Workflows are release-ready and fail closed without secrets. Do not claim a coordinate is published until Central confirms. |
 
 ## Pre-release channels
 
@@ -76,7 +80,7 @@ signing into the workflow.
 | --- | --- | --- |
 | npm | publish with dist-tag `next` (`npm install @fireweaveai/sdk@next`) | `npm dist-tag add @fireweaveai/sdk@<ver> latest` |
 | PyPI | upload to **TestPyPI** (`test.pypi.org`) | push tag `python/vX.Y.Z` (preferred) or re-run `release.yml` with `channel: production` |
-| Maven | deploy to Central **portal staging** (no auto-release); validate, then release or drop in the portal UI | release the staged deployment |
+| Maven | deploy to Central **portal** (`org.sonatype.central:central-publishing-maven-plugin`; `autoPublish=false` on staging). Validate in the portal, then release. | `autoPublish=true` on production / tag `java/v*` |
 | Go | pre-release semver tag (`sdks/go/v0.2.0-rc.1`) — Go treats `-rc.1` as a pre-release; `go get` won't auto-select it | tag the final `sdks/go/vX.Y.Z` |
 
 ## Company-side provisioning required before enabling publishing

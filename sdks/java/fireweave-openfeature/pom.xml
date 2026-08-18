@@ -13,10 +13,15 @@
   <artifactId>fireweave-openfeature</artifactId>
   <name>Fireweave OpenFeature provider</name>
   <description>
-    dev.openfeature FeatureProvider implementation backed by FireweaveRuntime.
-    All resolvers (boolean/string/integer/double/object), initialize/shutdown, error-code
-    mapping, targetingKey → distinct_id, reason passthrough.
+    OpenFeature FeatureProvider backed by FireweaveRuntime, plus FireweaveLocalProvider
+    for offline development. All five resolvers, initialize/shutdown, error-code mapping.
   </description>
+  <url>https://github.com/FireWeave-HQ/fireweave-sdk</url>
+
+  <properties>
+    <automatic.module.name>ai.fireweave.openfeature</automatic.module.name>
+    <exec.skip>true</exec.skip>
+  </properties>
 
   <dependencies>
     <dependency>

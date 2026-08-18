@@ -7,64 +7,48 @@
   <groupId>ai.fireweave.examples</groupId>
   <artifactId>fireweave-java-example</artifactId>
   <version>0.1.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
 
-  <name>Fireweave Java example</name>
+  <name>Fireweave Java example (reactor)</name>
   <description>
-    Minimal runnable example: OpenFeature provider registration backed by Fireweave, boolean
-    evaluation, detailed resolution, targeting context, releases/signals extensions, in-memory
-    testing, clean shutdown. OFFLINE BY DEFAULT — the PostHog wiring uses an injected offline
-    stub client (com.posthog:posthog-server:2.9.0 is not yet on Maven Central; see
-    sdks/java/README.md).
+    Runnable Fireweave Java SDK demo. Builds the unpublished SDK modules from this
+    repository via the Maven reactor (no Maven Central, no prior `mvn install`).
+    Not a published artifact.
 
-    Prerequisite: run `mvn -q install` in sdks/java first (installs the 0.1.0-SNAPSHOT modules
-    to the local repository).
-
-    Run: mvn -q compile exec:java
+    Offline:  mvn -q compile exec:java
+    Remote:   FW_PROJECT_API_KEY=... FW_API_URL=... mvn -q compile exec:java -Dexec.args="--remote"
   </description>
+
+  <modules>
+    <module>../../sdks/java/fireweave-sdk</module>
+    <module>../../sdks/java/fireweave-openfeature</module>
+    <module>demo</module>
+  </modules>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.release>11</maven.compiler.release>
+    <exec.skip>true</exec.skip>
   </properties>
 
-  <dependencies>
-    <dependency>
-      <groupId>ai.fireweave</groupId>
-      <artifactId>fireweave-sdk</artifactId>
-      <version>0.1.0-SNAPSHOT</version>
-    </dependency>
-    <dependency>
-      <groupId>ai.fireweave</groupId>
-      <artifactId>fireweave-openfeature</artifactId>
-      <version>0.1.0-SNAPSHOT</version>
-    </dependency>
-    <dependency>
-      <groupId>ai.fireweave</groupId>
-      <artifactId>fireweave-adapter-posthog</artifactId>
-      <version>0.1.0-SNAPSHOT</version>
-    </dependency>
-    <dependency>
-      <groupId>ai.fireweave</groupId>
-      <artifactId>fireweave-testing</artifactId>
-      <version>0.1.0-SNAPSHOT</version>
-    </dependency>
-    <dependency>
-      <groupId>dev.openfeature</groupId>
-      <artifactId>sdk</artifactId>
-      <version>1.15.1</version>
-    </dependency>
-  </dependencies>
-
   <build>
-    <plugins>
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>exec-maven-plugin</artifactId>
-        <version>3.2.0</version>
-        <configuration>
-          <mainClass>ai.fireweave.examples.ExampleApp</mainClass>
-        </configuration>
-      </plugin>
-    </plugins>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.13.0</version>
+        </plugin>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>exec-maven-plugin</artifactId>
+          <version>3.2.0</version>
+          <configuration>
+            <skip>true</skip>
+            <mainClass>none</mainClass>
+          </configuration>
+        </plugin>
+      </plugins>
+    </pluginManagement>
   </build>
 </project>

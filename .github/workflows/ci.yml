@@ -218,7 +218,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: ['1.25.x', 'stable'] # go.mod minimum + latest stable
+        go: ['1.25.13', 'stable'] # go.mod minimum + latest stable
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
