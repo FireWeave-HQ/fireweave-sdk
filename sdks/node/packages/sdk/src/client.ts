@@ -8,6 +8,7 @@ import { FireweaveError, redactSecrets, type FireweaveErrorKind } from './errors
 import { DEFAULT_SHUTDOWN_TIMEOUT_MS, stableStringify } from './runtime.js';
 import type { EvaluateOptions, ExpectedFlagType, FireweaveRuntime } from './runtime.js';
 import type { ContextInput } from './context.js';
+import type { RegisterTargetOptions, RegisterTargetResult } from './adapter.js';
 import type {
   Capabilities,
   Decision,
@@ -549,6 +550,24 @@ export class FireweaveClient {
     this.exposures = new ExposuresApi(runtime);
     this.guardrails = new GuardrailsApi();
     this.capabilities = new CapabilitiesApi(runtime);
+  }
+
+  /**
+   * Register durable targeting facts for a target (spec/modes.md).
+   *
+   * Resolves `{ ok: false }` rather than throwing: this runs in sign-in paths,
+   * where a targeting concern must not break authentication. A careful caller
+   * logs a false — a silently unregistered target is how targeting rules end
+   * up matching nobody.
+   *
+   * In local mode this records in-process and traces the call; nothing reaches
+   * fw-server. See `FireweaveLocalAdapter.registerTarget`.
+   */
+  registerTarget(
+    targetingKey: string,
+    options: RegisterTargetOptions = {},
+  ): Promise<RegisterTargetResult> {
+    return this.runtime.registerTarget(targetingKey, options);
   }
 
   /**

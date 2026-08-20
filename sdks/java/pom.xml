@@ -53,8 +53,6 @@
 
   <modules>
     <module>fireweave-sdk</module>
-    <module>fireweave-openfeature</module>
-    <module>fireweave-testing</module>
   </modules>
 
   <properties>

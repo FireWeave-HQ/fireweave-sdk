@@ -32,23 +32,31 @@ production is something a human typed.
 | network | none | fw-server |
 | required options | `local.controlPoints` (may be empty) | `apiKey`, `apiUrl` |
 | unknown key | `default`, `reason: DEFAULT` | `default`, `reason: ERROR`, `FlagNotFound` |
-| `registerTarget` | **not implemented** → `UnsupportedCapability` | `POST /v1/targets/register` |
+| `registerTarget` | **recorded in-process + traced** — nothing sent | `POST /v1/targets/register` |
 
 Both modes expose the identical nine methods with identical signatures. A call site MUST NOT
 need to know which mode it is running under.
 
 ## `registerTarget` in local mode
 
-The local adapter MUST NOT implement the optional `registerTarget` port method. The runtime
-reports `UnsupportedCapability` because the method is absent, not because of a mode check —
-there is no mode-specific branch anywhere in the runtime.
+The local adapter MUST record the target in-process and MUST emit one trace line naming the
+mode and stating that nothing was sent. It returns `{ ok: true }`.
 
-It MUST NOT return success. A dev harness that reports a target as registered when nothing
-was recorded teaches the developer that their targeting works, and the first evidence
-otherwise arrives in production.
+**Why record rather than report `UnsupportedCapability`.** The failure being guarded against
+is a developer believing their targeting works because nothing objected, with the first
+evidence otherwise arriving in production. An explicit `[fireweave:local]` line preserves
+that guarantee without the cost: nothing is silent, and local dev can exercise targeting
+rules offline instead of only against fw-server.
 
-`registerTarget` resolves rather than raising: it runs in sign-in paths, where an analytics
-concern must not break authentication.
+The trace names the mode deliberately. A `[fireweave:local]` line appearing in a production
+log is itself the signal that something booted in local mode by mistake.
+
+The recorded set MUST be readable (`getRegisteredTargets`) so tests can assert registration
+without capturing stdout, and the log sink MUST be injectable so a host that owns its logging
+can route it.
+
+`registerTarget` resolves rather than raising in both modes: it runs in sign-in paths, where
+a targeting concern must not break authentication.
 
 ## Initialisation validation
 

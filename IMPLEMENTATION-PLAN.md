@@ -89,10 +89,10 @@ Same nine methods, same two modes, same layering. Per-language gaps found by aud
 
 | Language | Gap |
 | --- | --- |
-| web | four `*Details`; keep ADR-0009 sync reads — prefetch async, evaluation a pure cache read |
+| web | four `*Details`; recording `registerTarget`; keep ADR-0009 sync reads — prefetch async, evaluation a pure cache read |
 | python | `get_integer_value` → `get_number_value` (alias the old name, deprecated); **add the missing object variant**; four `*Details` |
-| java | four `*Details`; fold or keep `fireweave-testing` now that PostHog and OpenFeature are gone |
-| go | **no `ControlPoints` namespace at all** — still `client.Flags()`; add it with `Flags` retained as the ADR-0007 alias; four `*Details` |
+| java | four `*Details`; recording `registerTarget` |
+| go | **no `ControlPoints` namespace at all** — still `client.Flags()`; add it with `Flags` retained as the ADR-0007 alias; four `*Details`; recording `registerTarget` |
 
 Run `conformance/surface/` against each. A language is done when its cell is green.
 
@@ -186,8 +186,10 @@ their staging release *is* a tag.
 
 ## Open
 
-- **`java/fireweave-testing`** — separate artifact, or a test-scoped classifier?
-- **Local-mode target registration** — currently `UnsupportedCapability`, which is deliberate
-  (a dev harness must not look registered when nothing was recorded). Recording targets
-  locally so developers can exercise targeting rules offline is a real feature, not an
-  oversight; it needs its own fixture. Decide before phase 4 writes the runner.
+None. Both prior questions are settled:
+
+- **`java/fireweave-testing`** — removed. The java build is now a single `fireweave-sdk`
+  module; `fireweave-openfeature` and `fireweave-adapter-posthog` went with ADR-0010.
+- **Local-mode target registration** — records in-process and traces the call. Implemented in
+  node (`FireweaveLocalAdapter.registerTarget`); phase 3 propagates it to web, python, java
+  and go, and phase 6 to rust and swift. `spec/modes.md` is normative.

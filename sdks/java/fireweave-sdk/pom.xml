@@ -21,7 +21,7 @@
 
   <properties>
     <automatic.module.name>ai.fireweave.sdk</automatic.module.name>
-    <!-- Library module — CLI exec:java is for examples/java and fireweave-testing. -->
+    <!-- Library module — CLI exec:java is for examples/java. -->
     <exec.skip>true</exec.skip>
   </properties>
 

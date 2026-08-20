@@ -33,8 +33,8 @@
   "client": {
     "methods": [
       { "name": "registerTarget", "returns": "RegisterTargetResult", "args": ["targetingKey", "options?"],
-        "localMode": "unsupported",
-        "$comment": "Local mode must NOT implement the port method. Reporting UnsupportedCapability is required; returning success is a conformance failure." }
+        "localMode": "recorded-and-traced",
+        "$comment": "Local mode records the target in-process and emits one trace line naming the mode; it returns ok:true. Silent success — recording without the trace — is a conformance failure, because the trace is what stops a dev harness looking registered without saying so." }
     ],
     "mustNotExpose": [
       "releases", "exposures", "signals", "capabilities", "guardrails",
