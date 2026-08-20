@@ -24,7 +24,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.json"
   },
   "peerDependencies": {
     "@openfeature/web-sdk": "^1.9.0"
