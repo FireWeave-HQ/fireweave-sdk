@@ -84,26 +84,26 @@ The per-call parameter is `flagKey`, not `controlPointKey` — that name is fixe
 
 | Module | Responsibility |
 | --- | --- |
-| `runtime.ts` | Lifecycle state machine, config validation, context policy, decision construction. Evaluation never throws. |
-| `client.ts` | `FireweaveClient` — `controlPoints`, `releases`, `exposures`, `signals`, `guardrails` (stub), `capabilities`. |
+| `application/runtime.ts` | Lifecycle state machine, config validation, context policy, decision construction. Evaluation never throws. |
+| `application/client.ts` | `FireweaveClient` — `controlPoints`, `releases`, `exposures`, `signals`, `guardrails` (stub), `capabilities`. |
 | `provider.ts` | OpenFeature server provider; the only module importing `@openfeature/server-sdk`. |
-| `adapters/remote.ts` | `FireweaveRemoteAdapter` — the production backend (`/v1/flags/evaluate`, `/v1/capture`, `/v1/targets/register`). |
-| `adapters/inmemory.ts` | Deterministic fixture-driven adapter for tests and conformance. |
-| `adapter.ts` | The `BackendAdapter` boundary. Adapters never see OpenFeature types. |
-| `context.ts` | Merge order (global → client → invocation), deep copy, bounds, reserved keys. |
-| `errors.ts` | The 15-kind error taxonomy and secret redaction. |
-| `hosts.ts` | SSRF allowlist (on by default; https required off-loopback). |
-| `env.ts` | Runtime-agnostic environment read — guarded so Deno without `--allow-env` reports absence, not failure. |
+| `infrastructure/adapters/remote.ts` | `FireweaveRemoteAdapter` — the production backend (`/v1/flags/evaluate`, `/v1/capture`, `/v1/targets/register`). |
+| `infrastructure/adapters/inmemory.ts` | Deterministic fixture-driven adapter for tests and conformance. |
+| `application/ports.ts` | The `BackendAdapter` boundary. Adapters never see OpenFeature types. |
+| `domain/context.ts` | Merge order (global → client → invocation), deep copy, bounds, reserved keys. |
+| `domain/errors.ts` | The 15-kind error taxonomy and secret redaction. |
+| `infrastructure/hosts.ts` | SSRF allowlist (on by default; https required off-loopback). |
 
 ## Configuration
 
-| Option | Env | Description |
-| --- | --- | --- |
-| `apiUrl` | — (required option; spec/modes.md: no env fallback) | fw-server base URL |
-| `apiKey` | — (required option; spec/modes.md: no env fallback) | Fireweave project key (`project-api-key_…`) |
-| `requestTimeoutMs` | — | per-request deadline (default 3000) |
-| `allowedHosts` | — | SSRF allowlist override; defaults to the `apiUrl` host plus loopback |
-| — | `FW_DEPRECATION_WARNINGS=1` | log one notice per process when a deprecated alias is used |
+The SDK reads no environment variables (spec/modes.md, unscoped) — every option below is an explicit constructor argument.
+
+| Option | Description |
+| --- | --- |
+| `apiUrl` | fw-server base URL (required) |
+| `apiKey` | Fireweave project key (`project-api-key_…`) (required) |
+| `requestTimeoutMs` | per-request deadline (default 3000) |
+| `allowedHosts` | SSRF allowlist override; defaults to the `apiUrl` host plus loopback |
 
 ---
 
@@ -173,7 +173,7 @@ Then:
 
 The whole v2 surface is pinned by `test/compat/v2-surface.compat.test.ts` (runtime exports and behavior) and `test/compat/v2-types.compat.ts` (~40 type exports, checked by `tsc --noEmit`), so it cannot regress silently.
 
-To find out whether you use the old name at all before touching anything, set `FW_DEPRECATION_WARNINGS=1` in a non-production environment. It logs one notice per process; the SDK is silent otherwise, because a per-call warning at request volume is how deprecation notices get suppressed wholesale and then ignored.
+The first time your process accesses `client.flags`, it logs one notice to `console.warn` — never more than once per process, because a per-call warning at request volume is how deprecation notices get suppressed wholesale and then ignored. This is unconditional (the SDK reads no environment variables, spec/modes.md); there is no flag to silence it beyond not using `client.flags`.
 
 ## 3. Two type-level narrowings
 

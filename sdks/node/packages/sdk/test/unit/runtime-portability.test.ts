@@ -5,14 +5,17 @@
  * `AbortController`, `URL`, `setTimeout`, and `TextEncoder`, but NOT the Node
  * globals `Buffer` and `process` in native (non-npm-compat) code.
  *
- * A `Buffer.` or bare `process.env` reference reintroduced into src would work
- * fine on Node and Bun and fail only on Deno — a failure mode that CI on Node
- * alone cannot see. This test is a static check on the published build so the
- * regression is caught at the source.
+ * A `Buffer.` reference reintroduced into src would work fine on Node and
+ * Bun and fail only on Deno — a failure mode that CI on Node alone cannot
+ * see. This test is a static check on the published build so the regression
+ * is caught at the source.
  *
- * Environment reads must route through `readEnv()` in
- * src/infrastructure/env.ts, which also survives Deno without
- * `--allow-env`.
+ * `src/infrastructure/env.ts` (the former `readEnv()` runtime-agnostic
+ * environment read) was deleted: spec/modes.md "The SDK reads no
+ * environment variables" is unscoped, so the SDK has no sanctioned reason to
+ * read `process.env` anywhere at all (controller ruling, Task 4 fix round).
+ * The `process.env` check below is therefore unconditional — no per-file
+ * exemption remains.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -48,15 +51,14 @@ test('no source file uses the Node-only Buffer global', () => {
   );
 });
 
-test('environment reads go through readEnv(), never process.env directly', () => {
+test('no source file reads process.env — the SDK reads no environment variables', () => {
   const offenders = sources()
-    .filter(({ path }) => path !== 'infrastructure/env.ts')
     .filter(({ text }) => /\bprocess\s*\.\s*env\b/.test(stripComments(text)))
     .map(({ path }) => path);
   assert.deepEqual(
     offenders,
     [],
-    `use readEnv() from src/env.ts so Deno (and Deno without --allow-env) works: ${offenders.join(', ')}`,
+    `spec/modes.md: the SDK reads no environment variables (unscoped): ${offenders.join(', ')}`,
   );
 });
 
@@ -69,40 +71,4 @@ test('no source file imports a node: builtin', () => {
     [],
     `node: builtins tie the SDK to one runtime: ${offenders.join(', ')}`,
   );
-});
-
-test('readEnv tolerates a runtime that offers neither process nor Deno', async () => {
-  const { readEnv } = (await import('../../src/infrastructure/env.js')) as {
-    readEnv: (name: string) => string | undefined;
-  };
-  const originalProcess = (globalThis as { process?: unknown }).process;
-  try {
-    delete (globalThis as { process?: unknown }).process;
-    assert.equal(readEnv('FW_API_URL'), undefined, 'must return undefined, not throw');
-  } finally {
-    (globalThis as { process?: unknown }).process = originalProcess;
-  }
-});
-
-test('readEnv tolerates a Deno-like env that throws on missing permission', async () => {
-  const { readEnv } = (await import('../../src/infrastructure/env.js')) as {
-    readEnv: (name: string) => string | undefined;
-  };
-  const originalProcess = (globalThis as { process?: unknown }).process;
-  const originalDeno = (globalThis as { Deno?: unknown }).Deno;
-  try {
-    delete (globalThis as { process?: unknown }).process;
-    (globalThis as { Deno?: unknown }).Deno = {
-      env: {
-        get(): string | undefined {
-          throw new Error('Requires env access, run again with the --allow-env flag');
-        },
-      },
-    };
-    assert.equal(readEnv('FW_API_URL'), undefined, 'a denied permission is absence, not failure');
-  } finally {
-    (globalThis as { process?: unknown }).process = originalProcess;
-    if (originalDeno === undefined) delete (globalThis as { Deno?: unknown }).Deno;
-    else (globalThis as { Deno?: unknown }).Deno = originalDeno;
-  }
 });

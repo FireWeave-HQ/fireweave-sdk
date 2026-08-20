@@ -3,7 +3,6 @@
  * (spec/control-points.md): the only two v1 capabilities. Facade methods
  * degrade instead of throwing.
  */
-import { readEnv } from '../infrastructure/env.js';
 import { FireweaveError, type FireweaveErrorKind } from '../domain/errors.js';
 import type { EvaluateOptions, ExpectedFlagType, FireweaveRuntime } from './runtime.js';
 import type { ContextInput } from '../domain/context.js';
@@ -130,15 +129,16 @@ const SUPPORTED_CAPABILITIES: readonly string[] = Object.freeze([]);
 export interface FireweaveClientOptions {}
 
 /**
- * One notice per process, opt-in only. A per-call warning on a server SDK
- * becomes log spam at request volume, which is how deprecation notices get
- * suppressed wholesale and then ignored.
+ * One notice per process. A per-call warning on a server SDK becomes log
+ * spam at request volume, which is how deprecation notices get suppressed
+ * wholesale and then ignored. Unconditional (no env gate): the SDK reads no
+ * environment variables (spec/modes.md "The SDK reads no environment
+ * variables", unscoped — controller ruling, Task 4 fix round).
  */
 let deprecationNoticeEmitted = false;
 
 function noteDeprecatedFlagsAlias(): void {
   if (deprecationNoticeEmitted) return;
-  if (readEnv('FW_DEPRECATION_WARNINGS') !== '1') return;
   deprecationNoticeEmitted = true;
   console.warn(
     '[fireweave] client.flags has been renamed to client.controlPoints. ' +
@@ -155,8 +155,8 @@ export class FireweaveClient {
    *
    * @deprecated Renamed to {@link FireweaveClient.controlPoints} (ADR-0007).
    * Identical and fully supported — `client.flags === client.controlPoints`, so
-   * no migration is required and none is planned for v3. Set
-   * `FW_DEPRECATION_WARNINGS=1` to log one notice per process.
+   * no migration is required and none is planned for v3. Logs one notice per
+   * process the first time this getter is used.
    */
   get flags(): ControlPointsApi {
     noteDeprecatedFlagsAlias();
