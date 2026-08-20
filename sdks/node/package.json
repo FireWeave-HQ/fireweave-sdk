@@ -11,7 +11,8 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "tsc -p packages/sdk/tsconfig.json",
+    "clean": "rm -rf packages/sdk/dist",
+    "build": "npm run clean && tsc -p packages/sdk/tsconfig.json",
     "typecheck": "npm run build && tsc -p packages/sdk/tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
     "test": "npm run test:unit && npm run test:integration && npm run test:compat",
     "test:unit": "npm run build && tsx --test packages/sdk/test/unit/*.test.ts",
