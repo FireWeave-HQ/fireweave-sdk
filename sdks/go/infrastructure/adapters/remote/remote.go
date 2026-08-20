@@ -58,7 +58,12 @@ type Config struct {
 	APIURL string
 	// APIKey is the Fireweave project/runtime key. Required.
 	APIKey string
-	// AllowedHosts overrides the egress allowlist (default: APIURL hostname + loopback).
+	// AllowedHosts overrides the egress allowlist. Default: DefaultAllowedHosts
+	// (the curated Fireweave production/staging hosts plus loopback) — NOT
+	// the configured APIURL's own hostname, which would make the default
+	// permissive by construction and defeat the SSRF guard. A self-hosted
+	// fw-server must list its own host explicitly here, or pass ["*"] to
+	// opt out of host pinning entirely.
 	AllowedHosts []string
 	// RequestTimeout bounds evaluate/registerTarget (default 3s).
 	RequestTimeout time.Duration

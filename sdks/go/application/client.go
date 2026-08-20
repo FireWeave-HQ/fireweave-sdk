@@ -2,8 +2,6 @@ package application
 
 import (
 	"context"
-	"log"
-	"sync/atomic"
 
 	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/domain"
 )
@@ -33,9 +31,8 @@ var supportedCapabilities = map[string]bool{}
 // (spec/control-points.md "Scope of v1"). All methods are safe for
 // concurrent use.
 type Client struct {
-	runtime        *Runtime
-	controlPoints  *ControlPoints
-	deprecationLog atomic.Bool
+	runtime       *Runtime
+	controlPoints *ControlPoints
 }
 
 // NewClient wraps a Runtime with the public client surface.
@@ -56,22 +53,13 @@ func (c *Client) ControlPoints() *ControlPoints { return c.controlPoints }
 //
 // Deprecated: renamed to Client.ControlPoints (ADR-0007). Identical and
 // fully supported — c.Flags() == c.ControlPoints() — so no migration is
-// required and none is planned. Logs one notice per process the first time
-// this is called.
+// required and none is planned. Silent at runtime: the alias is
+// permanent, not scheduled for removal, so there is nothing to warn a
+// caller toward — deprecation is conveyed by this doc comment only (no
+// log, and no env gate to control one, since the SDK reads no
+// environment variables regardless — spec/modes.md).
 func (c *Client) Flags() *ControlPoints {
-	c.noteDeprecatedFlagsAlias()
 	return c.controlPoints
-}
-
-func (c *Client) noteDeprecatedFlagsAlias() {
-	// One notice per process: a per-call warning on a server SDK becomes
-	// log spam at request volume, which is how deprecation notices get
-	// suppressed wholesale and then ignored. Unconditional (no env gate):
-	// the SDK reads no environment variables (spec/modes.md).
-	if c.deprecationLog.CompareAndSwap(false, true) {
-		log.Print("[fireweave] Client.Flags has been renamed to Client.ControlPoints. " +
-			"The old name remains fully supported — no migration is required.")
-	}
 }
 
 // RegisterTarget registers a user or device so rules can target its durable
