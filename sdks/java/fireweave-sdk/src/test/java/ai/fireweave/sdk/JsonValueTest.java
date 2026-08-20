@@ -1,5 +1,6 @@
 package ai.fireweave.sdk;
 
+import ai.fireweave.sdk.domain.JsonValue;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;

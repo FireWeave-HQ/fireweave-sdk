@@ -1,5 +1,6 @@
 package ai.fireweave.sdk;
 
+import ai.fireweave.sdk.application.FireweaveClient;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;

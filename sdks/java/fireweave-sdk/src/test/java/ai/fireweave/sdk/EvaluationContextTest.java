@@ -1,5 +1,7 @@
 package ai.fireweave.sdk;
 
+import ai.fireweave.sdk.domain.EvaluationContext;
+import ai.fireweave.sdk.domain.JsonValue;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

@@ -1,5 +1,15 @@
 package ai.fireweave.sdk;
 
+import ai.fireweave.sdk.application.FireweaveClient;
+import ai.fireweave.sdk.application.FireweaveConfig;
+import ai.fireweave.sdk.application.FireweaveRuntime;
+import ai.fireweave.sdk.application.RegisterTargetOptions;
+import ai.fireweave.sdk.application.RegisterTargetResult;
+import ai.fireweave.sdk.domain.ErrorKind;
+import ai.fireweave.sdk.domain.JsonValue;
+import ai.fireweave.sdk.domain.TargetKind;
+import ai.fireweave.sdk.infrastructure.adapters.FireweaveLocalAdapter;
+import ai.fireweave.sdk.infrastructure.adapters.FireweaveRemoteAdapter;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -206,14 +216,20 @@ final class RegisterTargetTest {
         runtime.shutdown();
     }
 
+    /**
+     * Local mode's registerTarget SUCCEEDS (recorded in-process + traced), never
+     * UnsupportedCapability — spec/modes.md "registerTarget in local mode". Dedicated recording
+     * + trace-line assertions live in FireweaveLocalAdapterTest; this pins the runtime-level
+     * contract (never throws, resolves ok:true) for the mode that was previously wired to
+     * degrade.
+     */
     @Test
-    void unsupportedOnLocalAdapter() throws Exception {
+    void succeedsOnLocalAdapter() throws Exception {
         FireweaveRuntime runtime = new FireweaveRuntime(
                 FireweaveConfig.builder().build(), new FireweaveLocalAdapter());
         runtime.initialize();
         RegisterTargetResult result = runtime.registerTarget("user-1", RegisterTargetOptions.empty());
-        assertFalse(result.ok());
-        assertEquals(ErrorKind.UnsupportedCapability, result.error().kind());
+        assertTrue(result.ok());
         runtime.shutdown();
     }
 

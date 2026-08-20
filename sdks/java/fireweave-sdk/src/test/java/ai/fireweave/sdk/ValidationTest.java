@@ -1,5 +1,11 @@
 package ai.fireweave.sdk;
 
+import ai.fireweave.sdk.domain.ContextLimits;
+import ai.fireweave.sdk.domain.ErrorKind;
+import ai.fireweave.sdk.domain.EvaluationContext;
+import ai.fireweave.sdk.domain.FireweaveException;
+import ai.fireweave.sdk.domain.JsonValue;
+import ai.fireweave.sdk.domain.Validation;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
@@ -11,14 +17,22 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/** Ratified bounds: 128 attrs / 256B key / 4KiB value / depth 6 / 64KiB serialized. */
-class ContextValidatorTest {
+/**
+ * Ratified bounds: 128 attrs / 256B key / 4KiB value / depth 6 / 64KiB serialized.
+ *
+ * <p>Exercises {@link Validation#validate} (bound checks only — ContextValidator's pre-relayer
+ * name) and {@link Validation#promoteCanonicalKeys} directly, WITHOUT going through {@link
+ * Validation#validateContext}'s combined pipeline (cyclic check + promotion + bound checks) —
+ * that combined, non-throwing pipeline is covered separately in FireweaveRuntimeTest and
+ * CyclicContextTest.
+ */
+class ValidationTest {
 
     private static final ContextLimits LIMITS = ContextLimits.canonical();
 
     private static void expectInvalid(EvaluationContext ctx, String messagePart) {
         FireweaveException e = assertThrows(FireweaveException.class,
-                () -> ContextValidator.validate(ctx, false, LIMITS, Collections.emptySet()));
+                () -> Validation.validate(ctx, false, LIMITS, Collections.emptySet()));
         assertEquals(ErrorKind.InvalidContext, e.kind());
         org.junit.jupiter.api.Assertions.assertTrue(e.getMessage().contains(messagePart),
                 e.getMessage());
@@ -27,7 +41,7 @@ class ContextValidatorTest {
     @Test
     void targetingKeyRequired() {
         FireweaveException e = assertThrows(FireweaveException.class, () ->
-                ContextValidator.validate(EvaluationContext.empty(), true, LIMITS, Collections.emptySet()));
+                Validation.validate(EvaluationContext.empty(), true, LIMITS, Collections.emptySet()));
         assertEquals("TARGETING_KEY_MISSING", e.openFeatureErrorCode());
         assertEquals(ErrorKind.InvalidContext, e.kind());
     }
@@ -86,7 +100,7 @@ class ContextValidatorTest {
                 .attribute("optional", JsonValue.ofNull())
                 .build();
         assertDoesNotThrow(() ->
-                ContextValidator.validate(ctx, true, LIMITS, Collections.emptySet()));
+                Validation.validate(ctx, true, LIMITS, Collections.emptySet()));
     }
 
     @Test
@@ -106,7 +120,7 @@ class ContextValidatorTest {
                 .attribute("fireweave.internal", "x").build(), "invalid evaluation context");
 
         FireweaveException e = assertThrows(FireweaveException.class, () ->
-                ContextValidator.validate(
+                Validation.validate(
                         EvaluationContext.builder().targetingKey("k")
                                 .attribute("targetingKey", "dup").build(),
                         false, LIMITS, Set.of("targetingKey", "kind")));
@@ -131,9 +145,9 @@ class ContextValidatorTest {
                 .attribute("fireweave.groupProperties", groupPropsAttr())
                 .build();
         assertDoesNotThrow(() ->
-                ContextValidator.validate(ok, true, LIMITS, Collections.emptySet()));
+                Validation.validate(ok, true, LIMITS, Collections.emptySet()));
 
-        // Unratified third key (Python's fireweave.evaluationContexts) stays rejected.
+        // Unratified third key (python's fireweave.evaluationContexts) stays rejected.
         expectInvalid(EvaluationContext.builder().targetingKey("k")
                         .attribute("fireweave.evaluationContexts", JsonValue.ofArray(
                                 java.util.List.of(JsonValue.of("beta")))).build(),
@@ -147,7 +161,7 @@ class ContextValidatorTest {
                 .attribute("fireweave.groups", groupsAttr())
                 .attribute("fireweave.groupProperties", groupPropsAttr())
                 .build();
-        EvaluationContext promoted = ContextValidator.promoteCanonicalKeys(ctx);
+        EvaluationContext promoted = Validation.promoteCanonicalKeys(ctx);
         assertEquals("org_1", promoted.groups().get("organization"));
         assertEquals(JsonValue.of("enterprise"),
                 promoted.groupProperties().get("organization").get("plan"));
@@ -163,26 +177,59 @@ class ContextValidatorTest {
                 .attribute("fireweave.groups", groupsAttr())
                 .build();
         assertEquals("org_1",
-                ContextValidator.promoteCanonicalKeys(ctx).groups().get("organization"));
+                Validation.promoteCanonicalKeys(ctx).groups().get("organization"));
     }
 
     @Test
     void promoteCanonicalKeysRejectsMalformedShapes() {
         FireweaveException e1 = assertThrows(FireweaveException.class, () ->
-                ContextValidator.promoteCanonicalKeys(EvaluationContext.builder().targetingKey("k")
+                Validation.promoteCanonicalKeys(EvaluationContext.builder().targetingKey("k")
                         .attribute("fireweave.groups", "not-an-object").build()));
         assertEquals(ErrorKind.InvalidContext, e1.kind());
 
         FireweaveException e2 = assertThrows(FireweaveException.class, () ->
-                ContextValidator.promoteCanonicalKeys(EvaluationContext.builder().targetingKey("k")
+                Validation.promoteCanonicalKeys(EvaluationContext.builder().targetingKey("k")
                         .attribute("fireweave.groups", JsonValue.ofObject(
                                 Map.of("organization", JsonValue.of(42)))).build()));
         assertEquals(ErrorKind.InvalidContext, e2.kind());
 
         FireweaveException e3 = assertThrows(FireweaveException.class, () ->
-                ContextValidator.promoteCanonicalKeys(EvaluationContext.builder().targetingKey("k")
+                Validation.promoteCanonicalKeys(EvaluationContext.builder().targetingKey("k")
                         .attribute("fireweave.groupProperties", JsonValue.ofObject(
                                 Map.of("organization", JsonValue.of("flat")))).build()));
         assertEquals(ErrorKind.InvalidContext, e3.kind());
+    }
+
+    // ------------------------------------------------------ rule 1 / rule 2 (Validated<T>)
+
+    @Test
+    void validateControlPointKeyRejectsEmptyTooLongAndControlCharacters() {
+        assertEquals(false, Validation.validateControlPointKey("").isOk());
+        assertEquals(false, Validation.validateControlPointKey(null).isOk());
+        assertEquals(ErrorKind.FlagNotFound, Validation.validateControlPointKey("").error().kind());
+
+        StringBuilder tooLong = new StringBuilder();
+        for (int i = 0; i < 257; i++) {
+            tooLong.append('a');
+        }
+        assertEquals(false, Validation.validateControlPointKey(tooLong.toString()).isOk());
+        assertEquals(false, Validation.validateControlPointKey("bad\u0007key").isOk());
+        assertEquals(true, Validation.validateControlPointKey("good-key").isOk());
+    }
+
+    @Test
+    void validateDefaultValueChecksTypeMatch() {
+        assertEquals(true, Validation.validateDefaultValue(
+                ai.fireweave.sdk.domain.FlagType.BOOLEAN, JsonValue.of(true)).isOk());
+        Validation.Validated<JsonValue> mismatch = Validation.validateDefaultValue(
+                ai.fireweave.sdk.domain.FlagType.BOOLEAN, JsonValue.of("not-a-bool"));
+        assertEquals(false, mismatch.isOk());
+        assertEquals(ErrorKind.TypeMismatch, mismatch.error().kind());
+    }
+
+    @Test
+    void matchesExpectedTypeAcceptsArraysAsObject() {
+        assertEquals(true, Validation.matchesExpectedType(
+                JsonValue.ofArray(java.util.List.of()), ai.fireweave.sdk.domain.FlagType.OBJECT));
     }
 }

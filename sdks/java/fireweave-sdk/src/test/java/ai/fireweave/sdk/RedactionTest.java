@@ -1,5 +1,6 @@
 package ai.fireweave.sdk;
 
+import ai.fireweave.sdk.domain.Redaction;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

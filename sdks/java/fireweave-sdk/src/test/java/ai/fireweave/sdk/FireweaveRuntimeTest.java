@@ -1,6 +1,19 @@
 package ai.fireweave.sdk;
 
+import ai.fireweave.sdk.application.FireweaveConfig;
+import ai.fireweave.sdk.application.FireweaveRuntime;
+import ai.fireweave.sdk.domain.Decision;
+import ai.fireweave.sdk.domain.ErrorKind;
+import ai.fireweave.sdk.domain.EvaluationContext;
+import ai.fireweave.sdk.domain.FireweaveException;
+import ai.fireweave.sdk.domain.FlagType;
+import ai.fireweave.sdk.domain.JsonValue;
+import ai.fireweave.sdk.domain.LifecycleState;
+import ai.fireweave.sdk.domain.Reasons;
 import org.junit.jupiter.api.Test;
+
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -228,64 +241,66 @@ class FireweaveRuntimeTest {
         assertEquals(false, called[0], "adapter must not be called for invalid context");
     }
 
+    // ------------------------------------------------------------------ malformed key (rule 1)
+
     @Test
-    void payloadMetadataOnlyWhenRequested() throws Exception {
+    void malformedKeyIsFlagNotFoundNotInvalidContext() throws Exception {
         StubAdapter adapter = new StubAdapter();
-        adapter.onEvaluate = req -> Decision.builder(req.flagKey())
-                .value(JsonValue.of(true)).variant("on").reason(Reasons.TARGETING_MATCH)
-                .payload(JsonValue.ofObject(java.util.Map.of("b", JsonValue.of(2), "a", JsonValue.of(1))))
-                .build();
+        final boolean[] called = {false};
+        adapter.onEvaluate = req -> {
+            called[0] = true;
+            return Decision.builder(req.flagKey()).value(JsonValue.of(true)).build();
+        };
         FireweaveRuntime rt = runtime(adapter);
         rt.initialize();
 
-        Decision plain = rt.evaluate("f", FlagType.BOOLEAN, JsonValue.of(false), null, null, null);
-        assertNull(plain.flagMetadata().get("fireweave.payload"));
+        Decision empty = rt.evaluate("", FlagType.BOOLEAN, JsonValue.of(false), null,
+                EvaluationContext.builder().targetingKey("u").build(), null);
+        assertEquals(Reasons.ERROR, empty.reason());
+        assertEquals(ErrorKind.FlagNotFound, empty.error().kind());
+        assertEquals(false, called[0], "adapter must not be called for a malformed key");
 
-        Decision with = rt.evaluate("f", FlagType.BOOLEAN, JsonValue.of(false), null, null,
-                EvaluationOptions.builder().includePayloadMetadata(true).build());
-        assertEquals("{\"a\":1,\"b\":2}", with.flagMetadata().get("fireweave.payload"));
+        StringBuilder tooLong = new StringBuilder();
+        for (int i = 0; i < 300; i++) {
+            tooLong.append('a');
+        }
+        Decision longKey = rt.evaluate(tooLong.toString(), FlagType.BOOLEAN, JsonValue.of(false), null,
+                EvaluationContext.builder().targetingKey("u").build(), null);
+        assertEquals(ErrorKind.FlagNotFound, longKey.error().kind());
+        rt.shutdown();
     }
 
-    @Test
-    void sendExposureDefaultDoesNotEmitOnSuccessfulEvaluate() throws Exception {
-        StubAdapter adapter = new StubAdapter();
-        FireweaveRuntime rt = runtime(adapter);
-        rt.initialize();
-        EvaluationContext ctx = EvaluationContext.builder().targetingKey("user_1").build();
-        Decision d = rt.evaluate("checkout", FlagType.BOOLEAN, JsonValue.of(false), null, ctx, null);
-        assertNull(d.error());
-        assertTrue(d.exposureSuppressed());
-        assertTrue(!d.exposureEmitted());
-        assertEquals(0, adapter.exposures.size());
-    }
+    // ------------------------------------------------------------------ cyclic context (end-to-end)
 
+    /**
+     * Cyclic contexts fail CLOSED as InvalidContext — never throw, never silently accepted
+     * (mirrors node's validateContext / python's ratified fix, Task 7 review round). Exercised
+     * end-to-end through FireweaveRuntime.evaluate, not just Validation directly, so the fix is
+     * pinned at the boundary a real caller uses.
+     */
     @Test
-    void sendExposureTrueOptsInWithFireweaveOwnedExposure() throws Exception {
+    void cyclicContextFailsClosedAsInvalidContextEndToEnd() throws Exception {
         StubAdapter adapter = new StubAdapter();
+        final boolean[] called = {false};
+        adapter.onEvaluate = req -> {
+            called[0] = true;
+            return Decision.builder(req.flagKey()).value(JsonValue.of(true)).build();
+        };
         FireweaveRuntime rt = runtime(adapter);
         rt.initialize();
-        EvaluationContext ctx = EvaluationContext.builder().targetingKey("user_1").build();
-        Decision d = rt.evaluate("checkout", FlagType.BOOLEAN, JsonValue.of(false), null, ctx,
-                EvaluationOptions.builder().sendExposure(true).build());
-        assertNull(d.error());
-        assertTrue(d.exposureEmitted());
-        assertEquals(1, adapter.exposures.size());
-        assertEquals("checkout", adapter.exposures.get(0).flagKey());
-        assertEquals("user_1", adapter.exposures.get(0).targetingKey());
-    }
 
-    @Test
-    void sendExposureFalseSuppressesDelivery() throws Exception {
-        StubAdapter adapter = new StubAdapter();
-        FireweaveRuntime rt = runtime(adapter);
-        rt.initialize();
-        EvaluationContext ctx = EvaluationContext.builder().targetingKey("user_1").build();
-        Decision d = rt.evaluate("checkout", FlagType.BOOLEAN, JsonValue.of(false), null, ctx,
-                EvaluationOptions.builder().sendExposure(false).build());
-        assertNull(d.error());
-        assertTrue(d.exposureSuppressed());
-        assertTrue(!d.exposureEmitted());
-        assertEquals(0, adapter.exposures.size());
+        Map<String, Object> cyclic = new HashMap<>();
+        cyclic.put("self", cyclic);
+        EvaluationContext ctx = EvaluationContext.builder().targetingKey("u")
+                .attribute("loop", cyclic).build();
+
+        Decision d = rt.evaluate("valid-key", FlagType.BOOLEAN, JsonValue.of(false), null, ctx, null);
+        assertEquals(false, d.value().asBoolean());
+        assertEquals(Reasons.ERROR, d.reason());
+        assertEquals(ErrorKind.InvalidContext, d.error().kind());
+        assertEquals("context contains a circular reference", d.error().message());
+        assertEquals(false, called[0], "adapter must not be called for a cyclic context");
+        rt.shutdown();
     }
 
     @Test

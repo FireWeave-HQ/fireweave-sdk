@@ -1,5 +1,15 @@
 package ai.fireweave.sdk;
 
+import ai.fireweave.sdk.application.EvaluationOptions;
+import ai.fireweave.sdk.application.EvaluationRequest;
+import ai.fireweave.sdk.application.FireweaveConfig;
+import ai.fireweave.sdk.domain.Decision;
+import ai.fireweave.sdk.domain.EvaluationContext;
+import ai.fireweave.sdk.domain.FireweaveException;
+import ai.fireweave.sdk.domain.FlagType;
+import ai.fireweave.sdk.domain.JsonValue;
+import ai.fireweave.sdk.domain.Reasons;
+import ai.fireweave.sdk.infrastructure.adapters.FireweaveRemoteAdapter;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
