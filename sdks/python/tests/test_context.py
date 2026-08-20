@@ -157,9 +157,16 @@ class TestMergeAndImmutability:
 
 
 class TestCyclicContext:
-    """Python containers can be cyclic too — construction (and therefore
-    every read path) must never crash on one (spec/control-points.md
-    "Return discipline — never throw into a read path")."""
+    """Python containers can be cyclic too. Two distinct claims, not to be
+    confused (a locked-in test previously conflated them, see the fix
+    report): (1) CONSTRUCTION must never crash on one — a naive recursive
+    deep copy would blow the stack, which is exactly the kind of crash a
+    "before any I/O" pipeline must not allow (spec/control-points.md
+    "Return discipline"); (2) a cyclic context is NOT a valid one — it FAILS
+    CLOSED as InvalidContext through `validate_context`, matching node/web
+    (`validateContext` -> `InvalidContextError('context contains a circular
+    reference')`). "Doesn't crash" and "is accepted" are different claims;
+    only the first is true of a cyclic context here."""
 
     def test_self_referential_dict_does_not_crash_construction(self):
         cyclic: dict = {}
@@ -169,22 +176,59 @@ class TestCyclicContext:
         # recursed into forever; sibling data survives untouched.
         assert ctx.attributes["plan"] == "pro"
         assert ctx.attributes["loop"]["self"] is None
+        # And the break is recorded — this is what lets validate_context
+        # fail closed later without re-walking the (already-safe) data.
+        assert ctx._had_cyclic_input is True
 
     def test_self_referential_list_does_not_crash_construction(self):
         cyclic: list = []
         cyclic.append(cyclic)
         ctx = EvaluationContext("u", {"loop": cyclic})
         assert ctx.attributes["loop"][0] is None
+        assert ctx._had_cyclic_input is True
 
     def test_shared_non_cyclic_reference_is_not_treated_as_a_cycle(self):
         shared = {"x": 1}
         ctx = EvaluationContext("u", {"a": shared, "b": shared})
         assert ctx.attributes["a"] == {"x": 1}
         assert ctx.attributes["b"] == {"x": 1}
+        # No false positive: two siblings referencing the same object is
+        # legal sharing, not a cycle.
+        assert ctx._had_cyclic_input is False
+        assert _validate(ctx).ok
 
-    def test_cyclic_context_reaches_validate_context_without_raising(self):
+    def test_cyclic_context_fails_closed_via_validate_context(self):
         cyclic: dict = {}
         cyclic["self"] = cyclic
         ctx = EvaluationContext("u", {"loop": cyclic})
         result = _validate(ctx)
-        assert result.ok  # cycle already broken at construction; nothing left to reject
+        assert not result.ok
+        assert isinstance(result.error, InvalidContextError)
+        assert "circular reference" in result.error.message
+
+    def test_cyclic_context_fails_closed_through_merge_contexts(self):
+        """The actual runtime pipeline (FireweaveRuntime.evaluate) always
+        merges global/client/invocation layers before validating — a cyclic
+        layer's OWN copy already broke its cycle to None by the time
+        merge_contexts sees it, so the flag (not the data) is what survives
+        the merge. This pins that propagation."""
+        cyclic: dict = {}
+        cyclic["self"] = cyclic
+        invocation = EvaluationContext("u", {"loop": cyclic})
+        merged = merge_contexts(EvaluationContext("u", {"tier": "gold"}), None, invocation)
+        assert merged._had_cyclic_input is True
+        result = _validate(merged)
+        assert not result.ok
+        assert isinstance(result.error, InvalidContextError)
+        assert "circular reference" in result.error.message
+
+    def test_cycle_check_runs_before_any_other_context_rule(self):
+        """A cyclic context that ALSO breaches another bound (reserved key)
+        still reports the circular-reference message — cycle detection is
+        the first check, matching node's validateContext ordering."""
+        cyclic: dict = {}
+        cyclic["self"] = cyclic
+        ctx = EvaluationContext("u", {"loop": cyclic, "targetingKey": "dup"})
+        result = _validate(ctx)
+        assert not result.ok
+        assert "circular reference" in result.error.message

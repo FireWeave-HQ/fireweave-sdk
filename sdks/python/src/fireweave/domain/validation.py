@@ -206,9 +206,18 @@ def validate_context(
 
     `context` is already a canonicalized, cycle-safe :class:`EvaluationContext`
     (domain/context.py's `__post_init__` deep-copies defensively — Python
-    containers can be cyclic too — so construction itself never raises;
-    reaching this function with one is therefore already safe).
+    containers can be cyclic too — so construction itself never raises,
+    unlike a naive recursive copy which would blow the stack). That is a
+    claim about not CRASHING, not about validity: a cyclic context still
+    FAILS CLOSED here, as the very first check, matching node/web
+    (`validateContext` returns `InvalidContextError('context contains a
+    circular reference')` rather than silently accepting the
+    cycle-truncated-to-None data). `EvaluationContext`/`merge_contexts`
+    (domain/context.py) record and propagate whether a cycle was broken on
+    the private `_had_cyclic_input` flag this function reads.
     """
+    if getattr(context, "_had_cyclic_input", False):
+        return _fail(InvalidContextError("context contains a circular reference"))
 
     attrs = dict(context.attributes)
 
