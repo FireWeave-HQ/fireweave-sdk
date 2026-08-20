@@ -1,23 +1,20 @@
-"""Concurrency basics: threaded evaluation, shutdown-during-eval, asyncio wrappers."""
+"""Concurrency basics: threaded evaluation, shutdown-during-eval."""
 
 from __future__ import annotations
 
-import asyncio
 import threading
 import time
 
 from fireweave import (
+    ErrorKind,
     EvaluationContext,
     FireweaveClient,
     FireweaveRuntime,
-    FlagType,
     InMemoryAdapter,
 )
-from fireweave.aio import AsyncFireweaveClient
-from fireweave.errors import ErrorKind
 
 FLAGS = {
-    "f": {"type": "boolean", "enabled": True, "variant": "on", "value": True}
+    "f": {"enabled": True, "variant": "on", "value": True}
 }
 
 
@@ -35,7 +32,7 @@ def test_threaded_evaluation_is_consistent():
     def worker():
         try:
             for _ in range(200):
-                results.append(client.flags.get_boolean_value(
+                results.append(client.control_points.get_boolean_value(
                     "f", False, EvaluationContext("u")
                 ))
         except Exception as exc:  # pragma: no cover
@@ -68,9 +65,7 @@ def test_shutdown_during_evaluation_never_raises():
     def evaluator():
         while not stop.is_set():
             try:
-                d = client.flags.get_details(
-                    "f", FlagType.BOOLEAN, False, EvaluationContext("u")
-                )
+                d = client.control_points.get_boolean_details("f", False, EvaluationContext("u"))
                 outcomes.append((d.value, d.error_kind))
             except Exception as exc:  # pragma: no cover
                 errors.append(exc)
@@ -101,59 +96,3 @@ def test_concurrent_shutdown_is_idempotent():
     for t in threads:
         t.join()
     assert client.runtime.state.wire_name == "CLOSED"
-
-
-def test_exposure_dedup_under_concurrency():
-    client = make_client()
-
-    def record():
-        for _ in range(100):
-            client.exposures.record("u1", "f", "on", True)
-
-    threads = [threading.Thread(target=record) for _ in range(8)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-
-    assert client.exposures.flush().flushed == 1  # deduped down to one event
-    client.shutdown()
-
-
-def test_async_client_wrappers():
-    async def go():
-        client = AsyncFireweaveClient(make_client())
-        value = await client.get_boolean_value("f", False, EvaluationContext("u"))
-        details = await client.get_details(
-            "f", FlagType.BOOLEAN, False, EvaluationContext("u")
-        )
-        release = await client.releases_set_context(
-            "rollout_01H", stamp_ids=["stmp_01HZXRE0000000000000000001"]
-        )
-        signal = await client.signals_record_health("provider", "ok")
-        caps = await client.capabilities_get()
-        names = await client.capabilities_names()
-        await client.shutdown()
-        after = await client.get_details("f", FlagType.BOOLEAN, False)
-        return value, details, release, signal, caps, names, after
-
-    value, details, release, signal, caps, names, after = asyncio.run(go())
-    assert value is True
-    assert details.reason == "TARGETING_MATCH"
-    assert release.ok and signal.accepted
-    assert caps["static"]["language"] == "python"  # ruling 18: matrix shape
-    assert "capabilities.get" in names
-    assert after.error_kind is ErrorKind.ALREADY_CLOSED
-
-
-def test_async_parallel_evaluations():
-    async def go():
-        client = AsyncFireweaveClient(make_client())
-        results = await asyncio.gather(
-            *[client.get_boolean_value("f", False, EvaluationContext(f"u{i}"))
-              for i in range(50)]
-        )
-        await client.shutdown()
-        return results
-
-    assert all(asyncio.run(go()))

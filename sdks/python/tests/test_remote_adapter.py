@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from fireweave import FireweaveRemoteAdapter
-from fireweave.context import EvaluationContext
-from fireweave.errors import AuthenticationError, ConfigurationError
+from fireweave import AuthenticationError, ConfigurationError, EvaluationContext, FireweaveRemoteAdapter
 
 
 def test_initialize_requires_url_and_key():
