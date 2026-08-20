@@ -36,9 +36,9 @@ import type {
   RegisterTargetOptions,
   RegisterTargetResult,
   ResolveOptions,
-  TargetKind,
-} from '../adapter.js';
-import type { CanonicalContext } from '../types.js';
+} from '../../application/ports.js';
+import type { TargetKind } from '../../domain/target.js';
+import type { CanonicalContext } from '../../domain/types.js';
 
 export interface FireweaveLocalAdapterOptions {
   /**

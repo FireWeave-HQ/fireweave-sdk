@@ -12,10 +12,9 @@
  *
  * See spec/remote-protocol.md.
  */
-import { readEnv } from '../env.js';
-import { FireweaveError } from '../errors.js';
+import { FireweaveError } from '../../domain/errors.js';
 import { assertHostAllowed, isLoopbackHostname } from '../hosts.js';
-import { validateTargetingKey } from '../validation.js';
+import { validateTargetingKey } from '../../domain/validation.js';
 import type {
   AdapterResolution,
   AdapterRuntimeFeatures,
@@ -23,8 +22,8 @@ import type {
   RegisterTargetOptions,
   RegisterTargetResult,
   ResolveOptions,
-} from '../adapter.js';
-import type { CanonicalContext, Exposure, JsonValue, Signal } from '../types.js';
+} from '../../application/ports.js';
+import type { CanonicalContext, Exposure, JsonValue, Signal } from '../../domain/types.js';
 
 const DEFAULT_ADAPTER_SHUTDOWN_TIMEOUT_MS = 10000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 3000;
@@ -49,12 +48,14 @@ type FetchLike = (
 export interface FireweaveRemoteAdapterOptions {
   /**
    * fw-server base URL (e.g. https://fw.example.com or http://127.0.0.1:3901).
-   * Env alias: FW_API_URL.
+   * Required — never read from the environment (spec/modes.md "The SDK reads
+   * no environment variables. Credentials arrive as explicit options.").
    */
   apiUrl?: string;
   /**
    * Fireweave project/runtime key (project-api-key_…).
-   * Env alias: FW_PROJECT_API_KEY.
+   * Required — never read from the environment (spec/modes.md "The SDK reads
+   * no environment variables. Credentials arrive as explicit options.").
    */
   apiKey?: string;
   /**
@@ -109,12 +110,17 @@ function mapHttpStatus(status: number): FireweaveError {
   return new FireweaveError('BackendUnavailable');
 }
 
-function resolveFromEnv(options: FireweaveRemoteAdapterOptions): {
+/**
+ * `apiUrl`/`apiKey` come from `options` only — never the environment
+ * (spec/modes.md "The SDK reads no environment variables. Credentials
+ * arrive as explicit options.", unscoped).
+ */
+function resolveCredentials(options: FireweaveRemoteAdapterOptions): {
   apiUrl: string;
   apiKey: string;
 } {
-  const apiUrl = (options.apiUrl ?? readEnv('FW_API_URL') ?? '').replace(/\/+$/, '');
-  const apiKey = options.apiKey ?? readEnv('FW_PROJECT_API_KEY') ?? '';
+  const apiUrl = (options.apiUrl ?? '').replace(/\/+$/, '');
+  const apiKey = options.apiKey ?? '';
   return { apiUrl, apiKey };
 }
 
@@ -161,7 +167,7 @@ export class FireweaveRemoteAdapter implements BackendAdapter {
 
   async initialize(_signal?: AbortSignal): Promise<void> {
     if (this.closed) throw new FireweaveError('AlreadyClosed');
-    const { apiUrl, apiKey } = resolveFromEnv(this.options);
+    const { apiUrl, apiKey } = resolveCredentials(this.options);
     if (!apiUrl || !apiKey) {
       throw new FireweaveError('Configuration');
     }

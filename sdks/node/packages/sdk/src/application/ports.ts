@@ -1,8 +1,6 @@
-import type { FireweaveError } from './errors.js';
-import type { CanonicalContext, DecisionReason, Exposure, FlagValueType, JsonValue, Signal } from './types.js';
-
-/** What is being registered — see spec/remote-register-target.schema.json. */
-export type TargetKind = 'user' | 'device';
+import type { FireweaveError } from '../domain/errors.js';
+import type { CanonicalContext, DecisionReason, Exposure, FlagValueType, JsonValue, Signal } from '../domain/types.js';
+import type { TargetKind } from '../domain/target.js';
 
 export interface RegisterTargetOptions {
   /** Defaults to 'user'. */

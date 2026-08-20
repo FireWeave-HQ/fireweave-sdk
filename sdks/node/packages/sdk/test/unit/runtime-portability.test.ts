@@ -10,8 +10,9 @@
  * alone cannot see. This test is a static check on the published build so the
  * regression is caught at the source.
  *
- * Environment reads must route through `readEnv()` in src/env.ts, which also
- * survives Deno without `--allow-env`.
+ * Environment reads must route through `readEnv()` in
+ * src/infrastructure/env.ts, which also survives Deno without
+ * `--allow-env`.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -49,7 +50,7 @@ test('no source file uses the Node-only Buffer global', () => {
 
 test('environment reads go through readEnv(), never process.env directly', () => {
   const offenders = sources()
-    .filter(({ path }) => path !== 'env.ts')
+    .filter(({ path }) => path !== 'infrastructure/env.ts')
     .filter(({ text }) => /\bprocess\s*\.\s*env\b/.test(stripComments(text)))
     .map(({ path }) => path);
   assert.deepEqual(
@@ -71,7 +72,7 @@ test('no source file imports a node: builtin', () => {
 });
 
 test('readEnv tolerates a runtime that offers neither process nor Deno', async () => {
-  const { readEnv } = (await import('../../src/env.js')) as {
+  const { readEnv } = (await import('../../src/infrastructure/env.js')) as {
     readEnv: (name: string) => string | undefined;
   };
   const originalProcess = (globalThis as { process?: unknown }).process;
@@ -84,7 +85,7 @@ test('readEnv tolerates a runtime that offers neither process nor Deno', async (
 });
 
 test('readEnv tolerates a Deno-like env that throws on missing permission', async () => {
-  const { readEnv } = (await import('../../src/env.js')) as {
+  const { readEnv } = (await import('../../src/infrastructure/env.js')) as {
     readEnv: (name: string) => string | undefined;
   };
   const originalProcess = (globalThis as { process?: unknown }).process;

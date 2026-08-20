@@ -17,10 +17,10 @@
  */
 import { FireweaveClient } from './client.js';
 import { FireweaveRuntime } from './runtime.js';
-import { FireweaveLocalAdapter } from './adapters/local.js';
-import { FireweaveRemoteAdapter } from './adapters/remote.js';
-import type { FireweaveRemoteAdapterOptions } from './adapters/remote.js';
-import { validateInitOptions } from './validation.js';
+import { FireweaveLocalAdapter } from '../infrastructure/adapters/local.js';
+import { FireweaveRemoteAdapter } from '../infrastructure/adapters/remote.js';
+import type { FireweaveRemoteAdapterOptions } from '../infrastructure/adapters/remote.js';
+import { validateInitOptions } from '../domain/validation.js';
 
 export interface InitFireweaveRemoteOptions {
   /** Evaluate against fw-server over the network (spec/remote-protocol.md). */

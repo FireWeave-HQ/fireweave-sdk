@@ -10,7 +10,7 @@
  * Scheme policy: https is required for non-loopback hosts; plain http is
  * permitted on loopback only (the repo's test-server stub).
  */
-import { FireweaveError } from './errors.js';
+import { FireweaveError } from '../domain/errors.js';
 
 /**
  * Canonical default host allowlist.

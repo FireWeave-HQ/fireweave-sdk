@@ -10,8 +10,8 @@
  * fw-server forwards to is fw-server's concern — no vendor SDK, key, or host
  * appears in the application process (ADR-0005, ADR-0006).
  */
-export { FireweaveError, ERROR_TAXONOMY, redactSecrets, isFireweaveError } from './errors.js';
-export type { FireweaveErrorKind, OpenFeatureErrorCode, ErrorKindSpec } from './errors.js';
+export { FireweaveError, ERROR_TAXONOMY, redactSecrets, isFireweaveError } from './domain/errors.js';
+export type { FireweaveErrorKind, OpenFeatureErrorCode, ErrorKindSpec } from './domain/errors.js';
 
 export type {
   JsonValue,
@@ -27,7 +27,7 @@ export type {
   Exposure,
   Capabilities,
   FlagValueType,
-} from './types.js';
+} from './domain/types.js';
 
 export {
   DEFAULT_CONTEXT_LIMITS,
@@ -36,8 +36,8 @@ export {
   mergeContexts,
   normalizeContextInput,
   resolvedContextView,
-} from './context.js';
-export type { ContextInput, ContextLimits, ContextPolicy } from './context.js';
+} from './domain/context.js';
+export type { ContextInput, ContextLimits, ContextPolicy } from './domain/context.js';
 
 export {
   canonicalizeContext,
@@ -46,8 +46,8 @@ export {
   validateContext,
   validateTargetingKey,
   validateInitOptions,
-} from './validation.js';
-export type { Validated } from './validation.js';
+} from './domain/validation.js';
+export type { Validated } from './domain/validation.js';
 
 export type {
   BackendAdapter,
@@ -56,31 +56,31 @@ export type {
   RegisterTargetOptions,
   RegisterTargetResult,
   ResolveOptions,
-  TargetKind,
-} from './adapter.js';
+} from './application/ports.js';
+export type { TargetKind } from './domain/target.js';
 
-export { InMemoryAdapter } from './adapters/inmemory.js';
-export type { InMemoryAdapterOptions, InMemoryFlagDefinition, InMemoryFault } from './adapters/inmemory.js';
+export { InMemoryAdapter } from './infrastructure/adapters/inmemory.js';
+export type { InMemoryAdapterOptions, InMemoryFlagDefinition, InMemoryFault } from './infrastructure/adapters/inmemory.js';
 
-export { FireweaveRemoteAdapter } from './adapters/remote.js';
-export type { FireweaveRemoteAdapterOptions } from './adapters/remote.js';
+export { FireweaveRemoteAdapter } from './infrastructure/adapters/remote.js';
+export type { FireweaveRemoteAdapterOptions } from './infrastructure/adapters/remote.js';
 
-export { FireweaveLocalAdapter } from './adapters/local.js';
-export type { FireweaveLocalAdapterOptions } from './adapters/local.js';
-
-
-export { DEFAULT_ALLOWED_HOSTS, assertHostAllowed, isLoopbackHostname } from './hosts.js';
-
-export { FireweaveRuntime, stableStringify, DEFAULT_SHUTDOWN_TIMEOUT_MS } from './runtime.js';
-export type { FireweaveRuntimeConfig, EvaluateOptions, ExpectedFlagType } from './runtime.js';
+export { FireweaveLocalAdapter } from './infrastructure/adapters/local.js';
+export type { FireweaveLocalAdapterOptions } from './infrastructure/adapters/local.js';
 
 
-export { FireweaveClient } from './client.js';
-export type { ControlPointsApi, FireweaveClientOptions } from './client.js';
+export { DEFAULT_ALLOWED_HOSTS, assertHostAllowed, isLoopbackHostname } from './infrastructure/hosts.js';
 
-export { initFireweave } from './init.js';
+export { FireweaveRuntime, stableStringify, DEFAULT_SHUTDOWN_TIMEOUT_MS } from './application/runtime.js';
+export type { FireweaveRuntimeConfig, EvaluateOptions, ExpectedFlagType } from './application/runtime.js';
+
+
+export { FireweaveClient } from './application/client.js';
+export type { ControlPointsApi, FireweaveClientOptions } from './application/client.js';
+
+export { initFireweave } from './application/mode.js';
 export type {
   InitFireweaveOptions,
   InitFireweaveLocalOptions,
   InitFireweaveRemoteOptions,
-} from './init.js';
+} from './application/mode.js';

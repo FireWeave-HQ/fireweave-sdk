@@ -3,12 +3,12 @@
  * (spec/control-points.md): the only two v1 capabilities. Facade methods
  * degrade instead of throwing.
  */
-import { readEnv } from './env.js';
-import { FireweaveError, type FireweaveErrorKind } from './errors.js';
+import { readEnv } from '../infrastructure/env.js';
+import { FireweaveError, type FireweaveErrorKind } from '../domain/errors.js';
 import type { EvaluateOptions, ExpectedFlagType, FireweaveRuntime } from './runtime.js';
-import type { ContextInput } from './context.js';
-import type { RegisterTargetOptions, RegisterTargetResult } from './adapter.js';
-import type { Decision, JsonValue } from './types.js';
+import type { ContextInput } from '../domain/context.js';
+import type { RegisterTargetOptions, RegisterTargetResult } from './ports.js';
+import type { Decision, JsonValue } from '../domain/types.js';
 
 export interface ExtensionResult {
   ok: boolean;

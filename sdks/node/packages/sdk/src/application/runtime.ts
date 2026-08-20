@@ -4,8 +4,8 @@
  * context policy, and decision construction. Defaults never throw: evaluation
  * always returns a Decision.
  */
-import { FireweaveError, isFireweaveError } from './errors.js';
-import { assertHostAllowed } from './hosts.js';
+import { FireweaveError, isFireweaveError } from '../domain/errors.js';
+import { assertHostAllowed } from '../infrastructure/hosts.js';
 import {
   DEFAULT_CONTEXT_LIMITS,
   DEFAULT_RESERVED_ATTRIBUTE_KEYS,
@@ -13,34 +13,34 @@ import {
   type ContextInput,
   type ContextLimits,
   type ContextPolicy,
-} from './context.js';
+} from '../domain/context.js';
 import {
   matchesExpectedType,
   validateContext,
   validateControlPointKey,
   validateDefaultValue,
   type ExpectedFlagType,
-} from './validation.js';
+} from '../domain/validation.js';
 import type {
   AdapterResolution,
   BackendAdapter,
   RegisterTargetOptions,
   RegisterTargetResult,
-} from './adapter.js';
+} from './ports.js';
 import type {
   CanonicalContext,
   Decision,
   DecisionReason,
   JsonValue,
   LifecycleState,
-} from './types.js';
+} from '../domain/types.js';
 
-export type { ExpectedFlagType } from './validation.js';
+export type { ExpectedFlagType } from '../domain/validation.js';
 
 export interface FireweaveRuntimeConfig {
   /**
    * Fireweave project/runtime key (`project-api-key_…`). Adapters may also read
-   * it from their own options or `FW_PROJECT_API_KEY`.
+   * it from their own options.
    */
   projectApiKey?: string;
   /** Backend host (must be http(s) and pass the allowlist). */

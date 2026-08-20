@@ -4,9 +4,9 @@
  * payloads, targeting by targeting key / person attributes / groups.
  * Deliberately NO bucketing / percentage logic.
  */
-import { FireweaveError, type FireweaveErrorKind } from '../errors.js';
-import type { AdapterResolution, AdapterRuntimeFeatures, BackendAdapter, ResolveOptions } from '../adapter.js';
-import type { CanonicalContext, DecisionReason, Exposure, JsonValue, Signal } from '../types.js';
+import { FireweaveError, type FireweaveErrorKind } from '../../domain/errors.js';
+import type { AdapterResolution, AdapterRuntimeFeatures, BackendAdapter, ResolveOptions } from '../../application/ports.js';
+import type { CanonicalContext, DecisionReason, Exposure, JsonValue, Signal } from '../../domain/types.js';
 
 export interface InMemoryFlagDefinition {
   type: 'boolean' | 'string' | 'integer' | 'float' | 'object';

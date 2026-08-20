@@ -22,8 +22,14 @@ import { FireweaveClient, FireweaveRemoteAdapter, FireweaveRuntime } from 'npm:@
 ```ts
 import { FireweaveClient, FireweaveRemoteAdapter, FireweaveRuntime } from '@fireweaveai/sdk';
 
-// Reads FW_API_URL and FW_PROJECT_API_KEY when not passed explicitly.
-const runtime = new FireweaveRuntime(new FireweaveRemoteAdapter());
+// apiUrl/apiKey are required, explicit options — the SDK reads no
+// environment variables (spec/modes.md).
+const runtime = new FireweaveRuntime(
+  new FireweaveRemoteAdapter({
+    apiUrl: process.env.FW_API_URL!,
+    apiKey: process.env.FW_PROJECT_API_KEY!,
+  }),
+);
 const fireweave = new FireweaveClient(runtime);
 await fireweave.initialize();
 
@@ -93,8 +99,8 @@ The per-call parameter is `flagKey`, not `controlPointKey` — that name is fixe
 
 | Option | Env | Description |
 | --- | --- | --- |
-| `apiUrl` | `FW_API_URL` | fw-server base URL |
-| `apiKey` | `FW_PROJECT_API_KEY` | Fireweave project key (`project-api-key_…`) |
+| `apiUrl` | — (required option; spec/modes.md: no env fallback) | fw-server base URL |
+| `apiKey` | — (required option; spec/modes.md: no env fallback) | Fireweave project key (`project-api-key_…`) |
 | `requestTimeoutMs` | — | per-request deadline (default 3000) |
 | `allowedHosts` | — | SSRF allowlist override; defaults to the `apiUrl` host plus loopback |
 | — | `FW_DEPRECATION_WARNINGS=1` | log one notice per process when a deprecated alias is used |
