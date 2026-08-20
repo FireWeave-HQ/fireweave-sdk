@@ -6,34 +6,28 @@
  * shapes at the door. Credentials are passed in explicitly by the embedding app.
  *
  * ```ts
- * import {
- *   FireweaveRemoteWebAdapter,
- *   FireweaveWebRuntime,
- *   FireweaveWebClient,
- * } from '@fireweaveai/web-sdk';
+ * import { initFireweave } from '@fireweaveai/web-sdk';
  *
- * const runtime = new FireweaveWebRuntime(
- *   new FireweaveRemoteWebAdapter({ apiUrl, apiKey }),
- *   { globalContext: { targetingKey: 'anonymous' } }
- * );
- * await runtime.initialize();
- * const fw = new FireweaveWebClient(runtime);
+ * const fw = await initFireweave({
+ *   mode: 'remote',
+ *   apiKey,
+ *   apiUrl,
+ *   context: { targetingKey: 'anonymous' },
+ * });
  *
  * // Reads are SYNCHRONOUS — no await, safe inside render.
  * const on = fw.controlPoints.getBooleanValue('new-checkout', false);
  * ```
+ *
+ * `src/` is layered domain/ · application/ · infrastructure/
+ * (test/unit/architecture-layers.test.ts guards the boundary): `domain/` is
+ * pure data + validation with no outward imports; `application/` wires
+ * domain types into the runtime/client surface, with `mode.ts` as the sole
+ * composition root allowed to reach into `infrastructure/`; `infrastructure/`
+ * holds the concrete adapters and the host allowlist.
  */
-export {
-  FireweaveError,
-  ERROR_TAXONOMY,
-  isFireweaveError,
-} from './errors.js';
-export type {
-  FireweaveErrorKind,
-  FireweaveErrorOptions,
-  OpenFeatureErrorCode,
-  ErrorKindSpec,
-} from './errors.js';
+export { FireweaveError, ERROR_TAXONOMY, isFireweaveError } from './domain/errors.js';
+export type { FireweaveErrorKind, FireweaveErrorOptions, OpenFeatureErrorCode, ErrorKindSpec } from './domain/errors.js';
 
 export type {
   JsonValue,
@@ -48,10 +42,10 @@ export type {
   ReleaseContext,
   ReleaseState,
   Capabilities,
-} from './types.js';
+} from './domain/types.js';
 
-export { DEFAULT_CONTEXT_LIMITS, DEFAULT_RESERVED_ATTRIBUTE_KEYS, mergeContexts } from './context.js';
-export type { ContextInput, ContextLimits, ContextPolicy } from './context.js';
+export { DEFAULT_CONTEXT_LIMITS, DEFAULT_RESERVED_ATTRIBUTE_KEYS, mergeContexts } from './domain/context.js';
+export type { ContextInput, ContextLimits, ContextPolicy } from './domain/context.js';
 
 export {
   canonicalizeContext,
@@ -61,15 +55,12 @@ export {
   validateDefaultValue,
   validateTargetingKey,
   validateInitOptions,
-} from './validation.js';
-export type { Validated } from './validation.js';
+} from './domain/validation.js';
+export type { Validated } from './domain/validation.js';
 
-export {
-  DEFAULT_ALLOWED_HOSTS,
-  assertHostAllowed,
-  assertNotSecretKey,
-  isLoopbackHostname,
-} from './hosts.js';
+export type { TargetKind } from './domain/target.js';
+
+export { DEFAULT_ALLOWED_HOSTS, assertHostAllowed, assertNotSecretKey, isLoopbackHostname } from './infrastructure/hosts.js';
 
 export type {
   WebBackendAdapter,
@@ -79,35 +70,22 @@ export type {
   PrefetchResult,
   RegisterTargetOptions,
   RegisterTargetResult,
-  TargetKind,
-} from './adapter.js';
+} from './application/ports.js';
 
-export { FireweaveRemoteWebAdapter } from './adapters/remote.js';
-export type {
-  FireweaveRemoteWebAdapterOptions,
-  FireweaveFetchLike,
-} from './adapters/remote.js';
+export { FireweaveRemoteWebAdapter } from './infrastructure/adapters/remote.js';
+export type { FireweaveRemoteWebAdapterOptions, FireweaveFetchLike } from './infrastructure/adapters/remote.js';
 
-export { InMemoryWebAdapter } from './adapters/inmemory.js';
-export type {
-  InMemoryWebAdapterOptions,
-  InMemoryFlagDefinition,
-  InMemoryFault,
-} from './adapters/inmemory.js';
+export { InMemoryWebAdapter } from './infrastructure/adapters/inmemory.js';
+export type { InMemoryWebAdapterOptions, InMemoryFlagDefinition, InMemoryFault } from './infrastructure/adapters/inmemory.js';
 
-export { FireweaveLocalWebAdapter } from './adapters/local.js';
-export type { FireweaveLocalWebAdapterOptions } from './adapters/local.js';
+export { FireweaveLocalWebAdapter } from './infrastructure/adapters/local.js';
+export type { FireweaveLocalWebAdapterOptions } from './infrastructure/adapters/local.js';
 
-export { FireweaveWebRuntime, DEFAULT_FLAGS_READY_TIMEOUT_MS } from './runtime.js';
-export type { FireweaveWebRuntimeConfig, ExpectedFlagType } from './runtime.js';
+export { FireweaveWebRuntime, DEFAULT_FLAGS_READY_TIMEOUT_MS } from './application/runtime.js';
+export type { FireweaveWebRuntimeConfig, ExpectedFlagType } from './application/runtime.js';
 
+export { FireweaveWebClient, WebControlPointsApi } from './application/client.js';
+export type { FireweaveWebClientOptions, ExtensionResult } from './application/client.js';
 
-export { FireweaveWebClient, WebControlPointsApi } from './client.js';
-export type { FireweaveWebClientOptions, ExtensionResult } from './client.js';
-
-export { initFireweave } from './mode.js';
-export type {
-  InitFireweaveOptions,
-  InitFireweaveLocalOptions,
-  InitFireweaveRemoteOptions,
-} from './mode.js';
+export { initFireweave } from './application/mode.js';
+export type { InitFireweaveOptions, InitFireweaveLocalOptions, InitFireweaveRemoteOptions } from './application/mode.js';

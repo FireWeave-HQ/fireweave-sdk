@@ -14,8 +14,9 @@
  * Adapters translate canonical requests to the Fireweave remote protocol; they
  * never see OpenFeature types.
  */
-import type { CanonicalContext, DecisionReason, Exposure, FlagValueType, JsonValue, Signal } from './types.js';
-import type { FireweaveError } from './errors.js';
+import type { CanonicalContext, DecisionReason, Exposure, FlagValueType, JsonValue, Signal } from '../domain/types.js';
+import type { FireweaveError } from '../domain/errors.js';
+import type { TargetKind } from '../domain/target.js';
 
 export interface AdapterResolution {
   found: boolean;
@@ -38,8 +39,6 @@ export interface PrefetchOptions {
   readonly flagKeys?: readonly string[];
   readonly signal?: AbortSignal;
 }
-
-export type TargetKind = 'user' | 'device';
 
 export interface RegisterTargetOptions {
   readonly kind?: TargetKind;

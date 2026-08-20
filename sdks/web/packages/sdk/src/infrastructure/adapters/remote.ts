@@ -16,9 +16,9 @@
  *
  * See spec/remote-protocol.md § Browser clients.
  */
-import { FireweaveError } from '../errors.js';
+import { FireweaveError } from '../../domain/errors.js';
 import { assertHostAllowed, assertNotSecretKey } from '../hosts.js';
-import { validateTargetingKey } from '../validation.js';
+import { validateTargetingKey } from '../../domain/validation.js';
 import type {
   AdapterResolution,
   AdapterRuntimeFeatures,
@@ -27,8 +27,8 @@ import type {
   RegisterTargetOptions,
   RegisterTargetResult,
   WebBackendAdapter,
-} from '../adapter.js';
-import type { CanonicalContext, DecisionReason, Exposure, JsonValue, Signal } from '../types.js';
+} from '../../application/ports.js';
+import type { CanonicalContext, DecisionReason, Exposure, JsonValue, Signal } from '../../domain/types.js';
 
 const EVALUATE_PATH = '/v1/flags/evaluate';
 const CAPTURE_PATH = '/v1/capture';

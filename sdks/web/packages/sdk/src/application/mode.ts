@@ -34,12 +34,12 @@
  */
 import { FireweaveWebClient } from './client.js';
 import { FireweaveWebRuntime } from './runtime.js';
-import { FireweaveLocalWebAdapter } from './adapters/local.js';
-import { FireweaveRemoteWebAdapter } from './adapters/remote.js';
-import type { FireweaveFetchLike } from './adapters/remote.js';
-import { FireweaveError } from './errors.js';
-import { assertHostAllowed } from './hosts.js';
-import type { ContextInput } from './context.js';
+import { FireweaveLocalWebAdapter } from '../infrastructure/adapters/local.js';
+import { FireweaveRemoteWebAdapter } from '../infrastructure/adapters/remote.js';
+import type { FireweaveFetchLike } from '../infrastructure/adapters/remote.js';
+import { FireweaveError } from '../domain/errors.js';
+import { assertHostAllowed } from '../infrastructure/hosts.js';
+import type { ContextInput } from '../domain/context.js';
 
 export interface InitFireweaveRemoteOptions {
   /** Evaluate against fw-server over the network (spec/remote-protocol.md). */

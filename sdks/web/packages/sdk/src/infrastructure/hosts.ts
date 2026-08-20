@@ -12,7 +12,7 @@
  * Scheme policy matches the server SDK: https everywhere except loopback,
  * where plain http is allowed for local development against a dev server.
  */
-import { FireweaveError } from './errors.js';
+import { FireweaveError } from '../domain/errors.js';
 
 export const DEFAULT_ALLOWED_HOSTS: readonly string[] = Object.freeze([
   'app-server.fireweave.ai',

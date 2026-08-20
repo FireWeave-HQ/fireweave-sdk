@@ -5,15 +5,15 @@
  * injection exists so the conformance suite can drive the error taxonomy
  * without a network or a stub server.
  */
-import { FireweaveError, type FireweaveErrorKind } from '../errors.js';
+import { FireweaveError, type FireweaveErrorKind } from '../../domain/errors.js';
 import type {
   AdapterResolution,
   AdapterRuntimeFeatures,
   PrefetchOptions,
   PrefetchResult,
   WebBackendAdapter,
-} from '../adapter.js';
-import type { CanonicalContext, Exposure, FlagValueType, JsonValue, Signal } from '../types.js';
+} from '../../application/ports.js';
+import type { CanonicalContext, Exposure, FlagValueType, JsonValue, Signal } from '../../domain/types.js';
 
 export interface InMemoryFlagDefinition {
   readonly type: FlagValueType;

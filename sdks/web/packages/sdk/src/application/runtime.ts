@@ -30,24 +30,24 @@
  * READ instead, for the same reason: a malformed call must degrade to the
  * caller's default without depending on what happens to be in the cache.
  */
-import { FireweaveError, isFireweaveError } from './errors.js';
-import { DEFAULT_CONTEXT_LIMITS, DEFAULT_RESERVED_ATTRIBUTE_KEYS, mergeContexts } from './context.js';
-import type { ContextInput, ContextLimits, ContextPolicy } from './context.js';
+import { FireweaveError, isFireweaveError } from '../domain/errors.js';
+import { DEFAULT_CONTEXT_LIMITS, DEFAULT_RESERVED_ATTRIBUTE_KEYS, mergeContexts } from '../domain/context.js';
+import type { ContextInput, ContextLimits, ContextPolicy } from '../domain/context.js';
 import {
   canonicalizeContext,
   matchesExpectedType,
   validateContext,
   validateControlPointKey,
   validateDefaultValue,
-} from './validation.js';
-import type { ExpectedFlagType } from './validation.js';
+} from '../domain/validation.js';
+import type { ExpectedFlagType } from '../domain/validation.js';
 import type {
   AdapterResolution,
   PrefetchResult,
   RegisterTargetOptions,
   RegisterTargetResult,
   WebBackendAdapter,
-} from './adapter.js';
+} from './ports.js';
 import type {
   CanonicalContext,
   Decision,
@@ -57,9 +57,9 @@ import type {
   LifecycleState,
   ReleaseContext,
   Signal,
-} from './types.js';
+} from '../domain/types.js';
 
-export type { ExpectedFlagType } from './validation.js';
+export type { ExpectedFlagType } from '../domain/validation.js';
 
 /** Ceiling on the initial prefetch so a hung backend cannot block boot. */
 export const DEFAULT_FLAGS_READY_TIMEOUT_MS = 5_000;

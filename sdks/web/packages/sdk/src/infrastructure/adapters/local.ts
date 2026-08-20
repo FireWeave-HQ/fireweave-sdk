@@ -18,8 +18,8 @@ import type {
   PrefetchOptions,
   PrefetchResult,
   WebBackendAdapter,
-} from '../adapter.js';
-import type { CanonicalContext } from '../types.js';
+} from '../../application/ports.js';
+import type { CanonicalContext } from '../../domain/types.js';
 
 export interface FireweaveLocalWebAdapterOptions {
   readonly devFlags?: Record<string, boolean>;

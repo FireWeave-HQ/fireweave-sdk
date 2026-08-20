@@ -98,7 +98,7 @@ test('secret key prefixes appear only where they are REJECTED', () => {
   // `hosts.ts` names them to refuse them. Anywhere else, a key prefix in source
   // suggests the package learned to accept one.
   const offenders = sources()
-    .filter(({ path }) => path !== 'hosts.ts')
+    .filter(({ path }) => path !== 'infrastructure/hosts.ts')
     .filter(({ text }) => /\bph[sxc]_/.test(stripComments(text)))
     .map(({ path }) => path);
   assert.deepEqual(offenders, [], 'Only hosts.ts may mention vendor key prefixes, to reject them.');

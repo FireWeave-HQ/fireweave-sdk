@@ -16,11 +16,11 @@
  * is recorded in docs/compatibility.md as a surface difference rather than a
  * gap.
  */
-import { FireweaveError } from './errors.js';
-import type { ContextInput } from './context.js';
+import { FireweaveError } from '../domain/errors.js';
+import type { ContextInput } from '../domain/context.js';
 import type { FireweaveWebRuntime, ExpectedFlagType } from './runtime.js';
-import type { Decision, JsonValue } from './types.js';
-import type { RegisterTargetOptions, RegisterTargetResult } from './adapter.js';
+import type { Decision, JsonValue } from '../domain/types.js';
+import type { RegisterTargetOptions, RegisterTargetResult } from './ports.js';
 
 export interface ExtensionResult {
   readonly ok: boolean;
