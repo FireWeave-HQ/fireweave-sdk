@@ -1,0 +1,147 @@
+/**
+ * initFireweave — the single SDK entry point (spec/modes.md).
+ *
+ * `mode` is required and never inferred: a missing or mistyped credential
+ * must fail loudly at boot, not silently fall back to local evaluation —
+ * that failure mode looks like a green boot and a feature that never ramps.
+ * This function's only job is to validate the initialisation-time contract
+ * and select the matching adapter; nothing downstream branches on mode again
+ * (spec/modes.md "Behaviour per mode" — both adapters implement the same
+ * WebBackendAdapter port, so FireweaveWebClient / FireweaveWebRuntime stay
+ * mode-blind).
+ *
+ * Initialisation fails loudly (throws); reads on the returned client never do
+ * (spec/control-points.md "initialise is the exception").
+ *
+ * ## A web-specific wrinkle: `FireweaveWebRuntime.initialize()` never throws
+ *
+ * Node's `FireweaveRuntime.initialize()` rejects on adapter failure, so
+ * node's initFireweave can just `await runtime.initialize()` and let a bad
+ * host/credential propagate. Web's runtime is deliberately fail-OPEN at
+ * `initialize()` — a hung or failing prefetch must not block app boot
+ * (ADR-0009 "Fail-open, not fail-silent"), so it swallows adapter failures
+ * into ERROR/STALE state instead of rejecting.
+ *
+ * That non-throwing contract is correct for TRANSIENT failures (the network
+ * happened to be down) but wrong for the four Configuration rows below,
+ * which spec/modes.md requires to fail loudly at boot. This module closes
+ * that gap itself: `initRemote` validates apiKey/apiUrl blankness and the
+ * host allowlist SYNCHRONOUSLY, before ever calling into the runtime, so a
+ * misconfigured `initFireweave` call throws exactly like node's does. A
+ * genuinely transient prefetch failure (host is fine, network hiccups)
+ * still resolves into ERROR/STALE rather than throwing — that fail-open
+ * behaviour is unchanged and is not one of the four rows.
+ */
+import { FireweaveWebClient } from './client.js';
+import { FireweaveWebRuntime } from './runtime.js';
+import { FireweaveLocalWebAdapter } from './adapters/local.js';
+import { FireweaveRemoteWebAdapter } from './adapters/remote.js';
+import type { FireweaveFetchLike } from './adapters/remote.js';
+import { FireweaveError } from './errors.js';
+import { assertHostAllowed } from './hosts.js';
+import type { ContextInput } from './context.js';
+
+export interface InitFireweaveRemoteOptions {
+  /** Evaluate against fw-server over the network (spec/remote-protocol.md). */
+  readonly mode: 'remote';
+  /** Fireweave project key. Public by construction (ADR-0009) — required, never read from the environment. */
+  readonly apiKey: string;
+  /** fw-server base URL. Required — never read from the environment. */
+  readonly apiUrl: string;
+  /**
+   * SSRF/misconfiguration allowlist override (spec/modes.md "apiUrl fails
+   * the host allowlist"). Default: the canonical Fireweave hosts + loopback
+   * (`DEFAULT_ALLOWED_HOSTS`). A self-hosted fw-server must list its own
+   * host explicitly; `['*']` opts out.
+   */
+  readonly allowedHosts?: readonly string[];
+  /** Injected fetch (tests). Production uses the runtime's global `fetch`. */
+  readonly fetch?: FireweaveFetchLike;
+  /** Initial evaluation context (e.g. an anonymous targetingKey) to prefetch under. */
+  readonly context?: ContextInput;
+}
+
+export interface InitFireweaveLocalOptions {
+  /** Evaluate against an in-process seeded map; no network (spec/modes.md). */
+  readonly mode: 'local';
+  readonly local?: {
+    /**
+     * Per-key boolean overrides — the seeded local map. A present key
+     * resolves with reason `STATIC`; an absent key misses so the caller's
+     * own default is used. May be empty or omitted entirely.
+     */
+    readonly controlPoints?: Record<string, boolean>;
+  };
+  /** Initial evaluation context (e.g. an anonymous targetingKey) to prefetch under. */
+  readonly context?: ContextInput;
+}
+
+export type InitFireweaveOptions = InitFireweaveRemoteOptions | InitFireweaveLocalOptions;
+
+/** "missing" and "blank" collapse to one check: not a non-empty string. */
+const isBlank = (value: unknown): boolean => typeof value !== 'string' || value.trim().length === 0;
+
+const configError = (): FireweaveError => new FireweaveError('Configuration');
+
+async function initLocal(options: InitFireweaveLocalOptions): Promise<FireweaveWebClient> {
+  const local = options.local ?? {};
+  const adapter = new FireweaveLocalWebAdapter({ devFlags: local.controlPoints ?? {} });
+  const runtime = new FireweaveWebRuntime(adapter);
+  const client = new FireweaveWebClient(runtime);
+  await client.initialize(options.context);
+  return client;
+}
+
+async function initRemote(options: InitFireweaveRemoteOptions): Promise<FireweaveWebClient> {
+  const { apiKey, apiUrl, allowedHosts, fetch } = options;
+  if (isBlank(apiKey) || isBlank(apiUrl)) {
+    throw configError();
+  }
+  // See the module doc comment: this call — not runtime.initialize() — is
+  // what makes a bad host fail LOUDLY here, because the runtime itself
+  // deliberately never throws.
+  assertHostAllowed(apiUrl, allowedHosts);
+
+  const adapter = new FireweaveRemoteWebAdapter({
+    apiUrl,
+    apiKey,
+    ...(allowedHosts !== undefined ? { allowedHosts } : {}),
+    ...(fetch !== undefined ? { fetch } : {}),
+  });
+  const runtime = new FireweaveWebRuntime(adapter);
+  const client = new FireweaveWebClient(runtime);
+  await client.initialize(options.context);
+  return client;
+}
+
+/**
+ * Build the adapter matching `options.mode` and bring a
+ * {@link FireweaveWebClient} up.
+ *
+ * Throws {@link FireweaveError} (kind `Configuration`) for every row of the
+ * initialisation-validation table (spec/modes.md):
+ *  - `mode` absent or unrecognised
+ *  - `mode: 'remote'` with `apiKey` or `apiUrl` missing/blank
+ *  - `apiUrl` fails the host allowlist
+ *  - `mode: 'local'` with credentials supplied
+ */
+export async function initFireweave(options: InitFireweaveOptions): Promise<FireweaveWebClient> {
+  const mode = (options as { mode?: unknown } | null | undefined)?.mode;
+  if (mode !== 'local' && mode !== 'remote') {
+    throw configError();
+  }
+  if (mode === 'local') {
+    // Runtime-only guard: a config object half-migrated from remote to local
+    // can carry apiKey/apiUrl even though InitFireweaveLocalOptions declares
+    // neither — TypeScript's excess-property check only fires on a fresh
+    // object literal, not on a variable assembled elsewhere and passed in.
+    // Accepting both silently is exactly how such a config passes review and
+    // then behaves as neither (spec/modes.md "Initialisation validation").
+    const stray = options as unknown as { apiKey?: unknown; apiUrl?: unknown };
+    if (!isBlank(stray.apiKey) || !isBlank(stray.apiUrl)) {
+      throw configError();
+    }
+    return initLocal(options as InitFireweaveLocalOptions);
+  }
+  return initRemote(options as InitFireweaveRemoteOptions);
+}
