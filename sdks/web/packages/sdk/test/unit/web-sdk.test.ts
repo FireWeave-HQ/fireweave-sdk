@@ -39,15 +39,15 @@ test('controlPoints reads return values, NOT Promises', async () => {
   const fw = new FireweaveWebClient(await readyRuntime());
 
   const on = fw.controlPoints.getBooleanValue('new-checkout', false, CTX);
-  assert.equal(on instanceof Promise, false);
+  assert.equal((on as unknown) instanceof Promise, false);
   assert.equal(on, true);
 
   for (const r of [
     fw.controlPoints.getStringValue('copy', 'x', CTX),
     fw.controlPoints.getNumberValue('absent', 1, CTX),
     fw.controlPoints.getObjectValue('absent', { a: 1 }, CTX),
-  ]) {
-    assert.equal(r instanceof Promise, false);
+  ] as const) {
+    assert.equal((r as unknown) instanceof Promise, false);
   }
 });
 
@@ -154,8 +154,10 @@ test('the local adapter honours devFlags and misses otherwise', async () => {
   assert.equal(on.reason, 'STATIC');
   assert.equal(on.variant, 'on');
 
-  // An unconfigured key is a real miss here — the harness's DEV provider is
-  // what converts that into a clean default, mirroring the server SDK.
+  // TODO(control-points-v1): spec/modes.md "Behaviour per mode" makes local's
+  // unknown-key row `default`/reason `DEFAULT`, not an error. Fixed in the
+  // runtime-relayer commit that introduces the `missReason` seam; still
+  // FlagNotFound/ERROR at this point in the sequence.
   assert.equal(runtime.evaluateSync('other', 'boolean', false, CTX).errorCode, 'FLAG_NOT_FOUND');
 });
 
@@ -208,70 +210,43 @@ test('the remote adapter reports remote-only evaluation, structurally', () => {
 // ── the client surface ──────────────────────────────────────────────────────
 
 test('control points read synchronously off the client', async () => {
-  const client = new FireweaveWebClient(await readyRuntime(), { autoFlushOnUnload: false });
+  const client = new FireweaveWebClient(await readyRuntime());
   assert.equal(client.controlPoints.getBooleanValue('new-checkout', false, CTX), true);
   assert.equal(client.controlPoints.getStringValue('copy', 'x', CTX), 'treatment');
   assert.equal(client.controlPoints.getBooleanValue('absent', false, CTX), false);
 });
 
-test('capabilities report the web binding honestly', async () => {
-  const client = new FireweaveWebClient(await readyRuntime(), { autoFlushOnUnload: false });
-  const caps = client.capabilities.get();
-
-  assert.equal(caps.static.language, 'web');
-  assert.equal(caps.static.openFeature.serverOnly, false);
-  assert.equal(caps.static.features.controlPoints, true);
-  // Absent, not false: this package never had a vendor adapter, so reporting
-  // one as "off" would imply an integration that could be switched on.
-  assert.equal('posthogAdapter' in caps.static.features, false);
-  assert.equal(caps.runtime.features.localEvaluation, false);
-});
-
-test('exposures dedupe per (flagKey, targetingKey, variant)', async () => {
-  const adapter = flagsAdapter();
-  const client = new FireweaveWebClient(await readyRuntime(adapter), {
-    autoFlushOnUnload: false,
-  });
-  const exposure = { flagKey: 'new-checkout', targetingKey: 'user_42', value: true, variant: 'on' };
-
-  client.exposures.record(exposure);
-  client.exposures.record(exposure);
-  client.exposures.record({ ...exposure, targetingKey: 'user_99' });
-
-  assert.equal(adapter.getExposures().length, 2);
-});
-
-test('release context stamps subsequent signals', async () => {
-  const adapter = flagsAdapter();
-  const client = new FireweaveWebClient(await readyRuntime(adapter), {
-    autoFlushOnUnload: false,
-  });
-  client.releases.setContext({ rolloutId: 'ro_1', changeId: 'ch_1' });
-  client.signals.recordHealth({ name: 'checkout.ok', status: 'healthy' });
-
-  const [signal] = adapter.getSignals();
-  assert.equal(signal?.rolloutId, 'ro_1');
-  assert.equal(signal?.changeId, 'ch_1');
-});
-
-test('extensions degrade before initialize rather than throwing', () => {
-  const runtime = new FireweaveWebRuntime(flagsAdapter());
-  const client = new FireweaveWebClient(runtime, { autoFlushOnUnload: false });
-
-  const result = client.signals.recordHealth({ name: 'too.early' });
-  assert.equal(result.ok, false);
-  assert.equal(result.degraded, true);
-  assert.equal(result.error?.kind, 'NotReady');
-});
-
 test('an unknown capability degrades, never throws', async () => {
-  const client = new FireweaveWebClient(await readyRuntime(), { autoFlushOnUnload: false });
+  const client = new FireweaveWebClient(await readyRuntime());
   const result = client.invokeCapability('nonexistent.capability');
   assert.equal(result.ok, false);
   assert.equal(result.error?.kind, 'UnsupportedCapability');
 });
 
-test('guardrails remain an honest stub', async () => {
-  const client = new FireweaveWebClient(await readyRuntime(), { autoFlushOnUnload: false });
-  assert.equal(client.guardrails.evaluate('anything').error?.kind, 'UnsupportedCapability');
+test('invokeCapability degrades cut-namespace capability names, not { ok: true } (v1 scope)', async () => {
+  // v1 scope is exactly control points + target registration
+  // (spec/control-points.md): releases, exposures, signals, capabilities
+  // discovery and guardrails MUST NOT be exposed, including through the
+  // dynamic dispatcher — a cut capability name resolves exactly like any
+  // other unknown string, never a fabricated success.
+  const client = new FireweaveWebClient(await readyRuntime());
+  for (const capability of [
+    'releases.setContext',
+    'releases.start',
+    'releases.complete',
+    'releases.fail',
+    'exposures.record',
+    'exposures.flush',
+    'signals.recordHealth',
+    'signals.recordError',
+    'signals.recordMetric',
+    'signals.recordOutcome',
+    'capabilities.get',
+    'guardrails.evaluate',
+  ]) {
+    const result = client.invokeCapability(capability);
+    assert.equal(result.ok, false, `${capability} must not resolve ok:true`);
+    assert.equal(result.error?.kind, 'UnsupportedCapability', `${capability} must degrade UnsupportedCapability`);
+    assert.equal(result.degraded, true, `${capability} must be marked degraded`);
+  }
 });

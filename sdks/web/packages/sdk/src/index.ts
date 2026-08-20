@@ -96,12 +96,5 @@ export { FireweaveWebRuntime, DEFAULT_FLAGS_READY_TIMEOUT_MS } from './runtime.j
 export type { FireweaveWebRuntimeConfig, ExpectedFlagType } from './runtime.js';
 
 
-export {
-  FireweaveWebClient,
-  WebControlPointsApi,
-  WebExposuresApi,
-  WebSignalsApi,
-  WebReleasesApi,
-  DEFAULT_SIGNAL_ATTRIBUTE_ALLOWLIST,
-} from './client.js';
-export type { FireweaveWebClientOptions, ExtensionResult, ReleaseResult } from './client.js';
+export { FireweaveWebClient, WebControlPointsApi } from './client.js';
+export type { FireweaveWebClientOptions, ExtensionResult } from './client.js';
