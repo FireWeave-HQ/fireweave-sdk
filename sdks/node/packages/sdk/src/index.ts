@@ -2,8 +2,8 @@
  * @fireweaveai/sdk — Fireweave release-engineering SDK for server runtimes
  * (Node, Bun, Deno). Public API per docs/architecture.md §6.
  *
- * Control points, target registration, release lifecycle, exposures, and
- * health/outcome signals.
+ * Exactly two v1 capabilities (spec/control-points.md): control points and
+ * target registration.
  *
  * Production default: {@link FireweaveRemoteAdapter} (Fireweave project key →
  * fw-server). {@link InMemoryAdapter} for offline work and tests. The backend
@@ -66,13 +66,5 @@ export { FireweaveRuntime, stableStringify, DEFAULT_SHUTDOWN_TIMEOUT_MS } from '
 export type { FireweaveRuntimeConfig, EvaluateOptions, ExpectedFlagType } from './runtime.js';
 
 
-export { FireweaveClient, DEFAULT_SIGNAL_ATTRIBUTE_ALLOWLIST } from './client.js';
-export type {
-  ControlPointsApi,
-  FireweaveClientOptions,
-  ExtensionResult,
-  ReleaseResult,
-  ExposureResult,
-  SignalResult,
-  TelemetryPolicy,
-} from './client.js';
+export { FireweaveClient } from './client.js';
+export type { ControlPointsApi, FireweaveClientOptions } from './client.js';
