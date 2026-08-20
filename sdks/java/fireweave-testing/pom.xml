@@ -48,12 +48,6 @@
     </dependency>
     <!-- Test-only: fault-suite conformance over the real HTTP test-server stub through the
          PostHogClientApi seam (HttpFaultConformanceTest). Never a compile-scope dependency. -->
-    <dependency>
-      <groupId>ai.fireweave</groupId>
-      <artifactId>fireweave-adapter-posthog</artifactId>
-      <version>${project.version}</version>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
 
   <build>

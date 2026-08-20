@@ -6,21 +6,21 @@
  * shapes at the door. Credentials are passed in explicitly by the embedding app.
  *
  * ```ts
- * import { OpenFeature } from '@openfeature/web-sdk';
  * import {
  *   FireweaveRemoteWebAdapter,
- *   FireweaveWebProvider,
  *   FireweaveWebRuntime,
+ *   FireweaveWebClient,
  * } from '@fireweaveai/web-sdk';
  *
  * const runtime = new FireweaveWebRuntime(
  *   new FireweaveRemoteWebAdapter({ apiUrl, apiKey }),
  *   { globalContext: { targetingKey: 'anonymous' } }
  * );
- * await OpenFeature.setProviderAndWait(new FireweaveWebProvider(runtime));
+ * await runtime.initialize();
+ * const fw = new FireweaveWebClient(runtime);
  *
  * // Reads are SYNCHRONOUS — no await, safe inside render.
- * const on = OpenFeature.getClient().getBooleanValue('new-checkout', false);
+ * const on = fw.controlPoints.getBooleanValue('new-checkout', false);
  * ```
  */
 export {
@@ -95,8 +95,6 @@ export type { FireweaveLocalWebAdapterOptions } from './adapters/local.js';
 export { FireweaveWebRuntime, DEFAULT_FLAGS_READY_TIMEOUT_MS } from './runtime.js';
 export type { FireweaveWebRuntimeConfig, ExpectedFlagType } from './runtime.js';
 
-export { FireweaveWebProvider } from './provider.js';
-export type { FireweaveWebProviderOptions } from './provider.js';
 
 export {
   FireweaveWebClient,

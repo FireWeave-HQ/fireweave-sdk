@@ -3,8 +3,7 @@
  * (Node, Bun, Deno). Public API per docs/architecture.md §6.
  *
  * Control points, target registration, release lifecycle, exposures, and
- * health/outcome signals, plus an OpenFeature provider for standards-compatible
- * evaluation.
+ * health/outcome signals.
  *
  * Production default: {@link FireweaveRemoteAdapter} (Fireweave project key →
  * fw-server). {@link InMemoryAdapter} for offline work and tests. The backend
@@ -60,20 +59,12 @@ export type { FireweaveRemoteAdapterOptions } from './adapters/remote.js';
 export { FireweaveLocalAdapter } from './adapters/local.js';
 export type { FireweaveLocalAdapterOptions } from './adapters/local.js';
 
-export {
-  makeFireweaveLocalProvider,
-  getFwLocalCaptures,
-  resetFwLocalCaptures,
-} from './local-provider.js';
-export type { FireweaveLocalProviderOptions, FwLocalCapture } from './local-provider.js';
 
 export { DEFAULT_ALLOWED_HOSTS, assertHostAllowed, isLoopbackHostname } from './hosts.js';
 
 export { FireweaveRuntime, stableStringify, DEFAULT_SHUTDOWN_TIMEOUT_MS } from './runtime.js';
 export type { FireweaveRuntimeConfig, EvaluateOptions, ExpectedFlagType } from './runtime.js';
 
-export { FireweaveProvider } from './provider.js';
-export type { FireweaveProviderOptions } from './provider.js';
 
 export { FireweaveClient, DEFAULT_SIGNAL_ATTRIBUTE_ALLOWLIST } from './client.js';
 export type {

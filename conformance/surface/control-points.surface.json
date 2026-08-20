@@ -1,0 +1,49 @@
+{
+  "$comment": "Surface parity, not behaviour. Asserts every SDK EXPOSES the v1 control-point surface. Behavioural fixtures live in contracts/. Rationale: nothing structurally forces seven independent implementations to agree, and a missing method is invisible — go shipped client.Flags() with no ControlPoints namespace, and python shipped get_integer_value with no object variant, both unnoticed for months. A parity fixture turns that from a silent divergence into a failing cell.",
+  "id": "surface/control-points",
+  "spec": "spec/control-points.md",
+  "namespace": {
+    "documented": "controlPoints",
+    "casing": {
+      "node": "controlPoints",
+      "web": "controlPoints",
+      "java": "controlPoints",
+      "swift": "controlPoints",
+      "python": "control_points",
+      "rust": "control_points",
+      "go": "ControlPoints"
+    },
+    "deprecatedAlias": "flags",
+    "aliasMustShareIdentity": true
+  },
+  "methods": [
+    { "name": "getBooleanValue",   "returns": "boolean",  "args": ["key", "default", "context?"] },
+    { "name": "getStringValue",    "returns": "string",   "args": ["key", "default", "context?"] },
+    { "name": "getNumberValue",    "returns": "number",   "args": ["key", "default", "context?"],
+      "$comment": "number, NOT integer. python currently exposes get_integer_value — that is the drift this row catches." },
+    { "name": "getObjectValue",    "returns": "json",     "args": ["key", "default", "context?"],
+      "$comment": "REQUIRED. python has no object variant today." },
+    { "name": "getBooleanDetails", "returns": "Decision", "args": ["key", "default", "context?"] },
+    { "name": "getStringDetails",  "returns": "Decision", "args": ["key", "default", "context?"] },
+    { "name": "getNumberDetails",  "returns": "Decision", "args": ["key", "default", "context?"] },
+    { "name": "getObjectDetails",  "returns": "Decision", "args": ["key", "default", "context?"],
+      "$comment": "All four *Details are absent from every SDK today." },
+    { "name": "evaluate",          "returns": "Decision", "args": ["key", "type", "default", "context?", "options?"] }
+  ],
+  "client": {
+    "methods": [
+      { "name": "registerTarget", "returns": "RegisterTargetResult", "args": ["targetingKey", "options?"],
+        "localMode": "unsupported",
+        "$comment": "Local mode must NOT implement the port method. Reporting UnsupportedCapability is required; returning success is a conformance failure." }
+    ],
+    "mustNotExpose": [
+      "releases", "exposures", "signals", "capabilities", "guardrails",
+      "FireweaveProvider", "FireweaveWebProvider"
+    ],
+    "$comment": "mustNotExpose is the v1 scope boundary AND the OpenFeature removal, asserted rather than trusted."
+  },
+  "compatibility": {
+    "node": "pending", "web": "pending", "python": "pending", "java": "pending",
+    "go": "pending", "rust": "pending", "swift": "pending"
+  }
+}

@@ -5,7 +5,6 @@ import {
   FireweaveLocalWebAdapter,
   FireweaveRemoteWebAdapter,
   FireweaveWebClient,
-  FireweaveWebProvider,
   FireweaveWebRuntime,
   InMemoryWebAdapter,
   assertNotSecretKey,
@@ -30,19 +29,23 @@ async function readyRuntime(adapter: WebBackendAdapter = flagsAdapter()) {
 
 // ── the sync invariant ──────────────────────────────────────────────────────
 
-test('resolve*Evaluation returns ResolutionDetails, NOT a Promise', async () => {
-  const provider = new FireweaveWebProvider(await readyRuntime());
+test('controlPoints reads return values, NOT Promises', async () => {
+  // The load-bearing web contract (ADR-0009): call sites read control points
+  // without `await`, inside render paths where awaiting is impossible. This
+  // used to be asserted through FireweaveWebProvider; the provider was retired
+  // in ADR-0010, but the invariant it guarded is a property of the RUNTIME —
+  // prefetch is async, evaluation is a pure synchronous cache read — so the
+  // assertion moves to the control-point surface rather than being deleted.
+  const fw = new FireweaveWebClient(await readyRuntime());
 
-  // This is the load-bearing web contract: call sites read control points
-  // without `await`, inside render paths where awaiting is impossible.
-  const details = provider.resolveBooleanEvaluation('new-checkout', false, CTX);
-  assert.equal(details instanceof Promise, false);
-  assert.equal(details.value, true);
+  const on = fw.controlPoints.getBooleanValue('new-checkout', false, CTX);
+  assert.equal(on instanceof Promise, false);
+  assert.equal(on, true);
 
   for (const r of [
-    provider.resolveStringEvaluation('copy', 'x', CTX),
-    provider.resolveNumberEvaluation('absent', 1, CTX),
-    provider.resolveObjectEvaluation('absent', { a: 1 }, CTX),
+    fw.controlPoints.getStringValue('copy', 'x', CTX),
+    fw.controlPoints.getNumberValue('absent', 1, CTX),
+    fw.controlPoints.getObjectValue('absent', { a: 1 }, CTX),
   ]) {
     assert.equal(r instanceof Promise, false);
   }

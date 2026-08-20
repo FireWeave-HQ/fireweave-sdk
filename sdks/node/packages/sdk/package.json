@@ -1,7 +1,7 @@
 {
   "name": "@fireweaveai/sdk",
   "version": "2.1.0",
-  "description": "Fireweave release-engineering SDK for server runtimes: control points, target registration, release lifecycle, exposures, and health/outcome signals — with an OpenFeature provider. Runs on Node, Bun, and Deno.",
+  "description": "Fireweave release-engineering SDK for server runtimes: control points, target registration, release lifecycle, exposures, and health/outcome signals \u2014 with an OpenFeature provider. Runs on Node, Bun, and Deno.",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -30,6 +30,11 @@
   },
   "peerDependencies": {
     "@openfeature/server-sdk": "^1.22.0"
+  },
+  "peerDependenciesMeta": {
+    "@openfeature/server-sdk": {
+      "optional": true
+    }
   },
   "keywords": [
     "fireweave",

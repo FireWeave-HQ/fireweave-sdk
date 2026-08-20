@@ -393,6 +393,31 @@ export class ControlPointsApi {
     const decision = await this.evaluate(flagKey, 'object', defaultValue, context);
     return decision.value;
   }
+
+  /**
+   * Detailed reads — the whole {@link Decision} rather than just its value.
+   *
+   * Same arguments as the `*Value` pair above, so a caller upgrades from one to
+   * the other without restructuring the call. Required by
+   * `spec/control-points.md`; before ADR-0010 the only route to `reason`,
+   * `variant` or `error` was the OpenFeature provider's `resolve*Evaluation`,
+   * so detailed evaluation was unreachable without installing OpenFeature.
+   */
+  getBooleanDetails(flagKey: string, defaultValue: boolean, context?: ContextInput): Promise<Decision> {
+    return this.evaluate(flagKey, 'boolean', defaultValue, context);
+  }
+
+  getStringDetails(flagKey: string, defaultValue: string, context?: ContextInput): Promise<Decision> {
+    return this.evaluate(flagKey, 'string', defaultValue, context);
+  }
+
+  getNumberDetails(flagKey: string, defaultValue: number, context?: ContextInput): Promise<Decision> {
+    return this.evaluate(flagKey, 'number', defaultValue, context);
+  }
+
+  getObjectDetails(flagKey: string, defaultValue: JsonValue, context?: ContextInput): Promise<Decision> {
+    return this.evaluate(flagKey, 'object', defaultValue, context);
+  }
 }
 
 /** Phase-one guardrails stub: every method degrades with UnsupportedCapability. */

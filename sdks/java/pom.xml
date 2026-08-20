@@ -54,7 +54,6 @@
   <modules>
     <module>fireweave-sdk</module>
     <module>fireweave-openfeature</module>
-    <module>fireweave-adapter-posthog</module>
     <module>fireweave-testing</module>
   </modules>
 
