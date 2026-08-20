@@ -43,7 +43,7 @@
     "$comment": "mustNotExpose is the v1 scope boundary AND the OpenFeature removal, asserted rather than trusted."
   },
   "compatibility": {
-    "node": "green", "web": "green", "python": "pending", "java": "pending",
+    "node": "green", "web": "green", "python": "green", "java": "pending",
     "go": "pending", "rust": "pending", "swift": "pending"
   }
 }
