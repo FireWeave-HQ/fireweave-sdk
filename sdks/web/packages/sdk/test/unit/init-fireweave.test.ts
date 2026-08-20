@@ -237,11 +237,11 @@ describe('initFireweave — does nothing else conditional on mode', () => {
   });
 
   it('registerTarget resolves rather than raising in both modes (spec/modes.md)', async () => {
-    // Local mode's registerTarget is wired to record-and-trace (rather than
-    // report UnsupportedCapability) in a later commit in this sequence —
-    // this test only pins the "resolves, never throws" half for now; the
+    // Local mode's registerTarget records-and-traces rather than reporting
+    // UnsupportedCapability (FireweaveLocalWebAdapter.registerTarget) — the
     // dedicated local-register-target.test.ts pins the recording/tracing
-    // behaviour once it lands.
+    // behaviour in full; this only asserts it is reachable through the
+    // initFireweave entry point.
     const local = await initFireweave({ mode: 'local', local: { controlPoints: {} } });
     const remote = await initFireweave({
       mode: 'remote',
@@ -250,8 +250,9 @@ describe('initFireweave — does nothing else conditional on mode', () => {
       fetch: mockFetch(() => ({ status: 200, body: { ok: true } })),
     });
 
-    await assert.doesNotReject(() => local.registerTarget('user-1'));
+    const localResult = await local.registerTarget('user-1');
     const remoteResult = await remote.registerTarget('user-1');
+    assert.equal(localResult.ok, true);
     assert.equal(remoteResult.ok, true);
 
     await local.shutdown();

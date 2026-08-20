@@ -71,6 +71,12 @@ export interface InitFireweaveLocalOptions {
      * own default is used. May be empty or omitted entirely.
      */
     readonly controlPoints?: Record<string, boolean>;
+    /**
+     * Sink for the `[fireweave:local]` registerTarget trace line
+     * (spec/modes.md "registerTarget in local mode"). Defaults to
+     * `console.info`.
+     */
+    readonly log?: (message: string) => void;
   };
   /** Initial evaluation context (e.g. an anonymous targetingKey) to prefetch under. */
   readonly context?: ContextInput;
@@ -85,7 +91,10 @@ const configError = (): FireweaveError => new FireweaveError('Configuration');
 
 async function initLocal(options: InitFireweaveLocalOptions): Promise<FireweaveWebClient> {
   const local = options.local ?? {};
-  const adapter = new FireweaveLocalWebAdapter({ devFlags: local.controlPoints ?? {} });
+  const adapter = new FireweaveLocalWebAdapter({
+    devFlags: local.controlPoints ?? {},
+    ...(local.log !== undefined ? { log: local.log } : {}),
+  });
   const runtime = new FireweaveWebRuntime(adapter);
   const client = new FireweaveWebClient(runtime);
   await client.initialize(options.context);

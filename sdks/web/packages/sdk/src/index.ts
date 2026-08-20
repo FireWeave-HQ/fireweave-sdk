@@ -79,7 +79,7 @@ export { InMemoryWebAdapter } from './infrastructure/adapters/inmemory.js';
 export type { InMemoryWebAdapterOptions, InMemoryFlagDefinition, InMemoryFault } from './infrastructure/adapters/inmemory.js';
 
 export { FireweaveLocalWebAdapter } from './infrastructure/adapters/local.js';
-export type { FireweaveLocalWebAdapterOptions } from './infrastructure/adapters/local.js';
+export type { FireweaveLocalWebAdapterOptions, LocalRegisteredTarget } from './infrastructure/adapters/local.js';
 
 export { FireweaveWebRuntime, DEFAULT_FLAGS_READY_TIMEOUT_MS } from './application/runtime.js';
 export type { FireweaveWebRuntimeConfig, ExpectedFlagType } from './application/runtime.js';
