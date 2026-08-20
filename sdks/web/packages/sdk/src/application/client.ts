@@ -137,21 +137,6 @@ const SUPPORTED_CAPABILITIES: readonly string[] = Object.freeze([]);
 
 export interface FireweaveWebClientOptions {}
 
-/**
- * One notice per process. Unconditional (no env gate): the SDK reads no
- * environment variables (ADR-0009 security rule 3).
- */
-let deprecationNoticeEmitted = false;
-
-function noteDeprecatedFlagsAlias(): void {
-  if (deprecationNoticeEmitted) return;
-  deprecationNoticeEmitted = true;
-  console.warn(
-    '[fireweave] client.flags has been renamed to client.controlPoints. ' +
-      'The old name remains fully supported — no migration is required.'
-  );
-}
-
 export class FireweaveWebClient {
   readonly runtime: FireweaveWebRuntime;
   readonly controlPoints: WebControlPointsApi;
@@ -161,11 +146,14 @@ export class FireweaveWebClient {
    *
    * @deprecated Renamed to {@link FireweaveWebClient.controlPoints}
    * (ADR-0007). Identical and fully supported —
-   * `client.flags === client.controlPoints` — so no migration is required.
-   * Logs one notice per process the first time this getter is used.
+   * `client.flags === client.controlPoints` — so no migration is required and
+   * none is planned. Silent at runtime: the alias is permanent, not scheduled
+   * for removal, so there is nothing to warn a caller toward — deprecation is
+   * conveyed by this doc comment only (no log, and no env gate to control
+   * one, since the SDK reads no environment variables regardless — ADR-0009
+   * security rule 3).
    */
   get flags(): WebControlPointsApi {
-    noteDeprecatedFlagsAlias();
     return this.controlPoints;
   }
 

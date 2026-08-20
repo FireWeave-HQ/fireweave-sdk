@@ -128,24 +128,6 @@ const SUPPORTED_CAPABILITIES: readonly string[] = Object.freeze([]);
 
 export interface FireweaveClientOptions {}
 
-/**
- * One notice per process. A per-call warning on a server SDK becomes log
- * spam at request volume, which is how deprecation notices get suppressed
- * wholesale and then ignored. Unconditional (no env gate): the SDK reads no
- * environment variables (spec/modes.md "The SDK reads no environment
- * variables", unscoped — controller ruling, Task 4 fix round).
- */
-let deprecationNoticeEmitted = false;
-
-function noteDeprecatedFlagsAlias(): void {
-  if (deprecationNoticeEmitted) return;
-  deprecationNoticeEmitted = true;
-  console.warn(
-    '[fireweave] client.flags has been renamed to client.controlPoints. ' +
-      'The old name remains fully supported — no migration is required.',
-  );
-}
-
 export class FireweaveClient {
   readonly runtime: FireweaveRuntime;
   readonly controlPoints: ControlPointsApi;
@@ -155,11 +137,13 @@ export class FireweaveClient {
    *
    * @deprecated Renamed to {@link FireweaveClient.controlPoints} (ADR-0007).
    * Identical and fully supported — `client.flags === client.controlPoints`, so
-   * no migration is required and none is planned for v3. Logs one notice per
-   * process the first time this getter is used.
+   * no migration is required and none is planned. Silent at runtime: the alias
+   * is permanent, not scheduled for removal, so there is nothing to warn a
+   * caller toward — deprecation is conveyed by this doc comment only (no log,
+   * and no env gate to control one, since the SDK reads no environment
+   * variables regardless — spec/modes.md).
    */
   get flags(): ControlPointsApi {
-    noteDeprecatedFlagsAlias();
     return this.controlPoints;
   }
 

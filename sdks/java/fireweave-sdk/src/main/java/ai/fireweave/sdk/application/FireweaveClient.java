@@ -12,12 +12,11 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * User-facing Fireweave client: control-point evaluation plus target registration — the only two
  * v1 capabilities (spec/control-points.md "Scope of v1"). Plain constructor — DI-friendly, no
- * framework, no statics except the once-per-process deprecation notice.
+ * framework, no statics.
  *
  * <h2>Evaluation</h2>
  * The documented namespace is {@link #controlPoints()} (ADR-0007). {@link #flags()} is the
@@ -28,10 +27,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * never throws.
  */
 public final class FireweaveClient implements AutoCloseable {
-
-    private static final java.util.logging.Logger LOG =
-            java.util.logging.Logger.getLogger(FireweaveClient.class.getName());
-    private static final AtomicBoolean FLAGS_DEPRECATION_NOTICED = new AtomicBoolean();
 
     /**
      * Names {@link #invokeCapability} will dispatch instead of degrading with
@@ -76,13 +71,15 @@ public final class FireweaveClient implements AutoCloseable {
      * Control-point evaluation under its former name.
      *
      * <p>Identical to {@link #controlPoints()} — {@code client.flags() == client.controlPoints()}.
-     * Not scheduled for removal. Logs one notice per process the first time this is called.
+     * Permanent, not scheduled for removal. Silent at runtime: there is nothing to warn a caller
+     * toward, so deprecation is conveyed by this Javadoc and {@code @Deprecated} only (no log, and
+     * no env gate to control one, since the SDK reads no environment variables regardless —
+     * spec/modes.md).
      *
      * @deprecated use {@link #controlPoints()}
      */
     @Deprecated
     public ControlPoints flags() {
-        noteDeprecatedFlagsAlias();
         return controlPoints;
     }
 
@@ -208,19 +205,5 @@ public final class FireweaveClient implements AutoCloseable {
             JsonValue fallback = defaultValue == null ? JsonValue.ofNull() : defaultValue;
             return evaluate(flagKey, FlagType.OBJECT, fallback, ctx, null);
         }
-    }
-
-    /**
-     * One notice per process. A per-call warning on a server SDK becomes log spam at request
-     * volume, which is how deprecation notices get suppressed wholesale and then ignored.
-     * Unconditional (no env gate): the SDK reads no environment variables (spec/modes.md "The
-     * SDK reads no environment variables", unscoped).
-     */
-    private static void noteDeprecatedFlagsAlias() {
-        if (!FLAGS_DEPRECATION_NOTICED.compareAndSet(false, true)) {
-            return;
-        }
-        LOG.warning("client.flags() has been renamed to client.controlPoints(). "
-                + "The old name remains fully supported — no migration is required.");
     }
 }

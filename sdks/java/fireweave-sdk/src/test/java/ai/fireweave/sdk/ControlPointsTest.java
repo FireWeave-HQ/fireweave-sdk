@@ -11,14 +11,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Field;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Handler;
-import java.util.logging.Level;
-import java.util.logging.LogRecord;
-import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -95,47 +89,5 @@ final class ControlPointsTest {
         // A genuine ERROR path: "new-checkout" is a devFlags boolean, so reading it as a string
         // is a TypeMismatch — proving the ERROR reason is still reachable through *Details.
         assertEquals("ERROR", client.controlPoints().getStringDetails("new-checkout", "x", ctx).reason());
-    }
-
-    @Test
-    void flagsAliasWarnsOncePerProcessUnconditionally() throws Exception {
-        // Unconditional (no env gate): the SDK reads no environment variables
-        // (spec/modes.md "The SDK reads no environment variables", unscoped).
-        resetFlagsDeprecationNotice();
-        TestHandler handler = new TestHandler();
-        Logger log = Logger.getLogger(FireweaveClient.class.getName());
-        log.addHandler(handler);
-        try {
-            client.flags();
-            client.flags();
-            assertEquals(1, handler.warnings, "warns exactly once across two calls");
-        } finally {
-            log.removeHandler(handler);
-        }
-    }
-
-    private static void resetFlagsDeprecationNotice() throws Exception {
-        Field f = FireweaveClient.class.getDeclaredField("FLAGS_DEPRECATION_NOTICED");
-        f.setAccessible(true);
-        ((AtomicBoolean) f.get(null)).set(false);
-    }
-
-    private static final class TestHandler extends Handler {
-        int warnings;
-
-        @Override
-        public void publish(LogRecord record) {
-            if (record.getLevel() == Level.WARNING) {
-                warnings++;
-            }
-        }
-
-        @Override
-        public void flush() {
-        }
-
-        @Override
-        public void close() {
-        }
     }
 }
