@@ -20,7 +20,33 @@ test('invokeCapability degrades for unknown capability names', async () => {
   assert.equal(res.ok, false);
   assert.equal(res.errorKind, 'UnsupportedCapability');
   assert.equal(res.degraded, true);
-  assert.equal(client.invokeCapability('signals.recordHealth').ok, true);
+});
+
+test('invokeCapability degrades cut-namespace capability names, not { ok: true } (ADR-0010)', async () => {
+  const { client } = await makeClient();
+  // v1 scope is exactly control points + target registration
+  // (spec/control-points.md): releases, exposures, signals, capabilities
+  // discovery and guardrails MUST NOT be exposed, including through the
+  // dynamic dispatcher — a cut capability name resolves exactly like any
+  // other unknown string, never a fabricated success.
+  for (const capability of [
+    'releases.setContext',
+    'releases.start',
+    'releases.complete',
+    'releases.fail',
+    'exposures.record',
+    'exposures.flush',
+    'signals.recordHealth',
+    'signals.recordError',
+    'signals.recordMetric',
+    'signals.recordOutcome',
+    'capabilities.get',
+  ]) {
+    const res = client.invokeCapability(capability);
+    assert.equal(res.ok, false, `${capability} must not resolve ok:true`);
+    assert.equal(res.errorKind, 'UnsupportedCapability', `${capability} must degrade UnsupportedCapability`);
+    assert.equal(res.degraded, true, `${capability} must be marked degraded`);
+  }
 });
 
 test('flags.evaluate exposes detailed Decision evaluation on the client surface', async () => {

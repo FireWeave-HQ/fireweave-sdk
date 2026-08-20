@@ -118,19 +118,14 @@ export class ControlPointsApi {
   }
 }
 
-const SUPPORTED_CAPABILITIES: readonly string[] = Object.freeze([
-  'releases.setContext',
-  'releases.start',
-  'releases.complete',
-  'releases.fail',
-  'exposures.record',
-  'exposures.flush',
-  'signals.recordHealth',
-  'signals.recordError',
-  'signals.recordMetric',
-  'signals.recordOutcome',
-  'capabilities.get',
-]);
+/**
+ * Names invokeCapability will dispatch instead of degrading with
+ * UnsupportedCapability. Empty in v1: releases, exposures, signals,
+ * capabilities discovery, and guardrails are all out of scope
+ * (spec/control-points.md) and MUST NOT be exposed, so a cut namespace's
+ * capability string resolves exactly like any other unknown string.
+ */
+const SUPPORTED_CAPABILITIES: readonly string[] = Object.freeze([]);
 
 export interface FireweaveClientOptions {}
 
@@ -192,9 +187,11 @@ export class FireweaveClient {
   }
 
   /**
-   * Dynamic capability dispatch. Unknown capabilities degrade with
-   * UnsupportedCapability — never throws (fixture ext-unsupported-capability-degrade).
-   * Known capabilities are lifecycle-gated like the namespaced APIs (ruling 17).
+   * Dynamic capability dispatch. Unknown capabilities — currently all of
+   * them, v1's SUPPORTED_CAPABILITIES is empty — degrade with
+   * UnsupportedCapability, never throw (fixture
+   * ext-unsupported-capability-degrade). Any future capability listed in
+   * SUPPORTED_CAPABILITIES is lifecycle-gated the same way (ruling 17).
    */
   invokeCapability(capability: string, _args?: Record<string, JsonValue>): ExtensionResult {
     if (!SUPPORTED_CAPABILITIES.includes(capability)) {
