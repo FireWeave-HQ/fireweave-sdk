@@ -1,7 +1,7 @@
 {
   "name": "@fireweaveai/web-sdk",
   "version": "2.1.0",
-  "description": "Fireweave release-engineering SDK for browsers: control points, target registration, exposures, and health/outcome signals \u2014 with an OpenFeature web provider. Remote-only; holds no secrets.",
+  "description": "Fireweave SDK for browsers: control points and target registration, in remote (fw-server) or local (in-process, no network) mode. Holds no secrets.",
   "license": "MIT",
   "type": "module",
   "repository": {

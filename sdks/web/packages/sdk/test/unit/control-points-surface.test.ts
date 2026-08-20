@@ -18,6 +18,9 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   FireweaveLocalWebAdapter,
   FireweaveWebClient,
@@ -27,17 +30,22 @@ import {
 import type { WebBackendAdapter } from '@fireweaveai/web-sdk';
 import * as sdk from '@fireweaveai/web-sdk';
 
-const REQUIRED = [
-  'getBooleanValue',
-  'getStringValue',
-  'getNumberValue',
-  'getObjectValue',
-  'getBooleanDetails',
-  'getStringDetails',
-  'getNumberDetails',
-  'getObjectDetails',
-  'evaluate',
-] as const;
+const here = dirname(fileURLToPath(import.meta.url));
+const SURFACE_DESCRIPTOR_PATH = join(
+  here, '..', '..', '..', '..', '..', '..', 'conformance', 'surface', 'control-points.surface.json'
+);
+
+interface SurfaceMethod {
+  readonly name: string;
+  readonly args: readonly string[];
+}
+interface SurfaceDescriptor {
+  readonly methods: readonly SurfaceMethod[];
+}
+
+const descriptor: SurfaceDescriptor = JSON.parse(readFileSync(SURFACE_DESCRIPTOR_PATH, 'utf8'));
+
+const REQUIRED = descriptor.methods.map((m) => m.name);
 
 function client(adapter: WebBackendAdapter = new InMemoryWebAdapter({ flags: {} })) {
   return new FireweaveWebClient(new FireweaveWebRuntime(adapter));
@@ -54,6 +62,34 @@ test('controlPoints exposes all nine methods', async () => {
   const cp = fw.controlPoints as unknown as Record<string, unknown>;
   const missing = REQUIRED.filter((m) => typeof cp[m] !== 'function');
   assert.deepEqual(missing, [], `missing control-point methods: ${missing.join(', ')}`);
+});
+
+test('every method matches the descriptor\'s arity exactly (conformance/surface/control-points.surface.json)', async () => {
+  // A method existing is not the same claim as a method matching the shape
+  // the descriptor pins — `evaluate` carries the general form's fifth
+  // `options?` parameter (inert on web, kept for cross-language parity —
+  // see EvaluateOptions's doc comment), the eight delegates carry exactly
+  // three. Reading `args` from the descriptor (rather than hard-coding
+  // counts here) makes this test track the descriptor instead of silently
+  // drifting from it.
+  const fw = await readyClient();
+  const cp = fw.controlPoints as unknown as Record<string, (...args: unknown[]) => unknown>;
+  assert.ok(descriptor.methods.length > 0, 'expected methods in the surface descriptor');
+
+  const offenders: string[] = [];
+  for (const method of descriptor.methods) {
+    const fn = cp[method.name];
+    if (typeof fn !== 'function') {
+      offenders.push(`${method.name}: missing`);
+      continue;
+    }
+    if (fn.length !== method.args.length) {
+      offenders.push(
+        `${method.name}: expected arity ${method.args.length} (${method.args.join(', ')}), got ${fn.length}`
+      );
+    }
+  }
+  assert.deepEqual(offenders, [], `arity mismatches: ${offenders.join('; ')}`);
 });
 
 test('the deprecated flags alias shares identity with controlPoints', async () => {

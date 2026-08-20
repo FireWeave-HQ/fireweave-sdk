@@ -25,20 +25,24 @@
  * That non-throwing contract is correct for TRANSIENT failures (the network
  * happened to be down) but wrong for the four Configuration rows below,
  * which spec/modes.md requires to fail loudly at boot. This module closes
- * that gap itself: `initRemote` validates apiKey/apiUrl blankness and the
- * host allowlist SYNCHRONOUSLY, before ever calling into the runtime, so a
- * misconfigured `initFireweave` call throws exactly like node's does. A
- * genuinely transient prefetch failure (host is fine, network hiccups)
- * still resolves into ERROR/STALE rather than throwing — that fail-open
- * behaviour is unchanged and is not one of the four rows.
+ * that gap itself in two parts: `validateInitOptions` (domain/validation.ts)
+ * covers rows 1/2/4 (mode absent/unrecognised, remote apiKey/apiUrl blank,
+ * local combined with credentials) exactly like node's `initFireweave` does;
+ * `initRemote` covers row 3 (the host allowlist) with a direct, SYNCHRONOUS
+ * `assertHostAllowed` call, before ever calling into the runtime — that call
+ * is what makes a bad host fail LOUDLY here, because the runtime itself
+ * deliberately never throws. A genuinely transient prefetch failure (host is
+ * fine, network hiccups) still resolves into ERROR/STALE rather than
+ * throwing — that fail-open behaviour is unchanged and is not one of the
+ * four rows.
  */
 import { FireweaveWebClient } from './client.js';
 import { FireweaveWebRuntime } from './runtime.js';
 import { FireweaveLocalWebAdapter } from '../infrastructure/adapters/local.js';
 import { FireweaveRemoteWebAdapter } from '../infrastructure/adapters/remote.js';
 import type { FireweaveFetchLike } from '../infrastructure/adapters/remote.js';
-import { FireweaveError } from '../domain/errors.js';
 import { assertHostAllowed } from '../infrastructure/hosts.js';
+import { validateInitOptions } from '../domain/validation.js';
 import type { ContextInput } from '../domain/context.js';
 
 export interface InitFireweaveRemoteOptions {
@@ -84,11 +88,6 @@ export interface InitFireweaveLocalOptions {
 
 export type InitFireweaveOptions = InitFireweaveRemoteOptions | InitFireweaveLocalOptions;
 
-/** "missing" and "blank" collapse to one check: not a non-empty string. */
-const isBlank = (value: unknown): boolean => typeof value !== 'string' || value.trim().length === 0;
-
-const configError = (): FireweaveError => new FireweaveError('Configuration');
-
 async function initLocal(options: InitFireweaveLocalOptions): Promise<FireweaveWebClient> {
   const local = options.local ?? {};
   const adapter = new FireweaveLocalWebAdapter({
@@ -103,12 +102,11 @@ async function initLocal(options: InitFireweaveLocalOptions): Promise<FireweaveW
 
 async function initRemote(options: InitFireweaveRemoteOptions): Promise<FireweaveWebClient> {
   const { apiKey, apiUrl, allowedHosts, fetch } = options;
-  if (isBlank(apiKey) || isBlank(apiUrl)) {
-    throw configError();
-  }
-  // See the module doc comment: this call — not runtime.initialize() — is
-  // what makes a bad host fail LOUDLY here, because the runtime itself
-  // deliberately never throws.
+  // `validateInitOptions` (called by `initFireweave`, below) has already
+  // ruled out blank apiKey/apiUrl by the time this runs — only the host
+  // allowlist row remains to check here. See the module doc comment: this
+  // call — not runtime.initialize() — is what makes a bad host fail LOUDLY
+  // here, because the runtime itself deliberately never throws.
   assertHostAllowed(apiUrl, allowedHosts);
 
   const adapter = new FireweaveRemoteWebAdapter({
@@ -133,24 +131,16 @@ async function initRemote(options: InitFireweaveRemoteOptions): Promise<Fireweav
  *  - `mode: 'remote'` with `apiKey` or `apiUrl` missing/blank
  *  - `apiUrl` fails the host allowlist
  *  - `mode: 'local'` with credentials supplied
+ *
+ * The first, second and fourth rows are `validateInitOptions`'s job
+ * (domain/validation.ts, shared discipline with node's `initFireweave`); the
+ * third is validated downstream, inside `initRemote`, for the reason the
+ * module doc comment explains — `FireweaveWebRuntime.initialize()` itself
+ * never throws.
  */
 export async function initFireweave(options: InitFireweaveOptions): Promise<FireweaveWebClient> {
-  const mode = (options as { mode?: unknown } | null | undefined)?.mode;
-  if (mode !== 'local' && mode !== 'remote') {
-    throw configError();
-  }
-  if (mode === 'local') {
-    // Runtime-only guard: a config object half-migrated from remote to local
-    // can carry apiKey/apiUrl even though InitFireweaveLocalOptions declares
-    // neither — TypeScript's excess-property check only fires on a fresh
-    // object literal, not on a variable assembled elsewhere and passed in.
-    // Accepting both silently is exactly how such a config passes review and
-    // then behaves as neither (spec/modes.md "Initialisation validation").
-    const stray = options as unknown as { apiKey?: unknown; apiUrl?: unknown };
-    if (!isBlank(stray.apiKey) || !isBlank(stray.apiUrl)) {
-      throw configError();
-    }
-    return initLocal(options as InitFireweaveLocalOptions);
-  }
-  return initRemote(options as InitFireweaveRemoteOptions);
+  const validated = validateInitOptions(options);
+  if (!validated.ok) throw validated.error;
+  const validOptions = validated.value;
+  return validOptions.mode === 'local' ? initLocal(validOptions) : initRemote(validOptions);
 }

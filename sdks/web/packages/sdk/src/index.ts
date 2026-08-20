@@ -85,7 +85,7 @@ export { FireweaveWebRuntime, DEFAULT_FLAGS_READY_TIMEOUT_MS } from './applicati
 export type { FireweaveWebRuntimeConfig, ExpectedFlagType } from './application/runtime.js';
 
 export { FireweaveWebClient, WebControlPointsApi } from './application/client.js';
-export type { FireweaveWebClientOptions, ExtensionResult } from './application/client.js';
+export type { FireweaveWebClientOptions, ExtensionResult, EvaluateOptions } from './application/client.js';
 
 export { initFireweave } from './application/mode.js';
 export type { InitFireweaveOptions, InitFireweaveLocalOptions, InitFireweaveRemoteOptions } from './application/mode.js';

@@ -47,6 +47,24 @@ function lifecycleGate(runtime: FireweaveWebRuntime): FireweaveError | undefined
 }
 
 /**
+ * Reserved for cross-language surface parity
+ * (conformance/surface/control-points.surface.json pins `evaluate(key, type,
+ * default, context?, options?)` across every language). Currently INERT on
+ * web — accepted and typed, nothing reads it.
+ *
+ * Node's `EvaluateOptions` carries `signal` (abort an in-flight network
+ * call), `includePayload` (attach raw flag payload metadata), and
+ * `sendExposure` (opt into exposure emission for this one call). None of
+ * those map cleanly onto web's contract: `evaluate` here is a SYNCHRONOUS
+ * read of an already-prefetched cache (ADR-0009), so there is no in-flight
+ * I/O to abort at read time, and exposure emission is a constructor-level
+ * opt-in (`FireweaveWebRuntimeConfig.sendExposure`) rather than a per-call
+ * one. The parameter exists so this method's ARITY matches the descriptor
+ * every language is pinned to, not because it does anything yet.
+ */
+export interface EvaluateOptions {}
+
+/**
  * Control-point evaluation on the public client surface — decision-returning,
  * without reaching into the runtime. Never throws; errors surface as ERROR
  * decisions, exactly like the OpenFeature path.
@@ -62,7 +80,8 @@ export class WebControlPointsApi {
     flagKey: string,
     expectedType: ExpectedFlagType,
     defaultValue: JsonValue,
-    context?: ContextInput
+    context?: ContextInput,
+    _options?: EvaluateOptions
   ): Decision {
     return this.runtime.evaluateSync(flagKey, expectedType, defaultValue, context);
   }
