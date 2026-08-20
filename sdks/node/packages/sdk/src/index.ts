@@ -35,10 +35,19 @@ export {
   ALLOWED_FIREWEAVE_CONTEXT_KEYS,
   mergeContexts,
   normalizeContextInput,
-  canonicalizeContext,
   resolvedContextView,
 } from './context.js';
 export type { ContextInput, ContextLimits, ContextPolicy } from './context.js';
+
+export {
+  canonicalizeContext,
+  validateControlPointKey,
+  validateDefaultValue,
+  validateContext,
+  validateTargetingKey,
+  validateInitOptions,
+} from './validation.js';
+export type { Validated } from './validation.js';
 
 export type {
   BackendAdapter,

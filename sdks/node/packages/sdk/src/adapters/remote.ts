@@ -15,6 +15,7 @@
 import { readEnv } from '../env.js';
 import { FireweaveError } from '../errors.js';
 import { assertHostAllowed, isLoopbackHostname } from '../hosts.js';
+import { validateTargetingKey } from '../validation.js';
 import type {
   AdapterResolution,
   AdapterRuntimeFeatures,
@@ -193,13 +194,9 @@ export class FireweaveRemoteAdapter implements BackendAdapter {
   ): Promise<AdapterResolution> {
     if (this.closed) throw new FireweaveError('AlreadyClosed');
     if (!this.ready) throw new FireweaveError('NotReady');
-    const targetingKey = context.targetingKey ?? '';
-    if (targetingKey === '') {
-      throw new FireweaveError('InvalidContext', {
-        message: 'targeting key missing',
-        openFeatureErrorCode: 'TARGETING_KEY_MISSING',
-      });
-    }
+    const targetingKeyResult = validateTargetingKey(context.targetingKey, true);
+    if (!targetingKeyResult.ok) throw targetingKeyResult.error;
+    const targetingKey = targetingKeyResult.value ?? '';
 
     const attributes: Record<string, JsonValue> = {};
     for (const [k, v] of Object.entries(context.attributes)) {
@@ -252,15 +249,8 @@ export class FireweaveRemoteAdapter implements BackendAdapter {
   ): Promise<RegisterTargetResult> {
     if (this.closed) return { ok: false, error: new FireweaveError('AlreadyClosed') };
     if (!this.ready) return { ok: false, error: new FireweaveError('NotReady') };
-    if (targetingKey === '') {
-      return {
-        ok: false,
-        error: new FireweaveError('InvalidContext', {
-          message: 'targeting key missing',
-          openFeatureErrorCode: 'TARGETING_KEY_MISSING',
-        }),
-      };
-    }
+    const targetingKeyResult = validateTargetingKey(targetingKey, true);
+    if (!targetingKeyResult.ok) return { ok: false, error: targetingKeyResult.error };
 
     const body: Record<string, unknown> = { targetingKey };
     if (options.kind !== undefined) body['kind'] = options.kind;

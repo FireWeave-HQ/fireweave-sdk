@@ -9,12 +9,18 @@ import { assertHostAllowed } from './hosts.js';
 import {
   DEFAULT_CONTEXT_LIMITS,
   DEFAULT_RESERVED_ATTRIBUTE_KEYS,
-  canonicalizeContext,
   mergeContexts,
   type ContextInput,
   type ContextLimits,
   type ContextPolicy,
 } from './context.js';
+import {
+  matchesExpectedType,
+  validateContext,
+  validateControlPointKey,
+  validateDefaultValue,
+  type ExpectedFlagType,
+} from './validation.js';
 import type {
   AdapterResolution,
   BackendAdapter,
@@ -29,7 +35,7 @@ import type {
   LifecycleState,
 } from './types.js';
 
-export type ExpectedFlagType = 'boolean' | 'string' | 'number' | 'object';
+export type { ExpectedFlagType } from './validation.js';
 
 export interface FireweaveRuntimeConfig {
   /**
@@ -93,19 +99,6 @@ export function stableStringify(value: JsonValue): string {
   if (Array.isArray(value)) return `[${value.map((v) => stableStringify(v)).join(',')}]`;
   const keys = Object.keys(value).sort();
   return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k] as JsonValue)}`).join(',')}}`;
-}
-
-function matchesExpectedType(value: JsonValue, expected: ExpectedFlagType): boolean {
-  switch (expected) {
-    case 'boolean':
-      return typeof value === 'boolean';
-    case 'string':
-      return typeof value === 'string';
-    case 'number':
-      return typeof value === 'number';
-    case 'object':
-      return value !== null && typeof value === 'object';
-  }
 }
 
 export class FireweaveRuntime {
@@ -234,11 +227,18 @@ export class FireweaveRuntime {
   /** Canonicalize + validate the merged context (throws FireweaveError). */
   resolveContext(invocationContext: ContextInput | undefined): CanonicalContext {
     const merged = mergeContexts(this.globalContext, this.clientContext, invocationContext);
-    return canonicalizeContext(merged, this.contextPolicy);
+    const result = validateContext(merged, this.contextPolicy);
+    if (!result.ok) throw result.error;
+    return result.value;
   }
 
   /**
    * Evaluate a flag to a canonical Decision. Never throws.
+   *
+   * Validates in the fixed order spec/control-points.md "Validation, before
+   * any I/O" names, stopping at the first failure: (1) key, (2) default vs
+   * type, (3) context, (4) lifecycle. Only once all four pass does this
+   * reach the adapter (the one I/O call in this method).
    */
   async evaluate(
     flagKey: string,
@@ -247,17 +247,26 @@ export class FireweaveRuntime {
     invocationContext?: ContextInput,
     options: EvaluateOptions = {},
   ): Promise<Decision> {
+    const keyResult = validateControlPointKey(flagKey);
+    if (!keyResult.ok) {
+      return this.errorDecision(flagKey, defaultValue, keyResult.error);
+    }
+
+    const defaultResult = validateDefaultValue(expectedType, defaultValue);
+    if (!defaultResult.ok) {
+      return this.errorDecision(flagKey, defaultValue, defaultResult.error);
+    }
+
+    const merged = mergeContexts(this.globalContext, this.clientContext, invocationContext);
+    const contextResult = validateContext(merged, this.contextPolicy);
+    if (!contextResult.ok) {
+      return this.errorDecision(flagKey, defaultValue, contextResult.error);
+    }
+    const context = contextResult.value;
+
     const lifecycleError = this.lifecycleError();
     if (lifecycleError !== undefined) {
       return this.errorDecision(flagKey, defaultValue, lifecycleError);
-    }
-
-    let context: CanonicalContext;
-    try {
-      context = this.resolveContext(invocationContext);
-    } catch (err) {
-      const fw = isFireweaveError(err) ? err : new FireweaveError('InvalidContext', { cause: err });
-      return this.errorDecision(flagKey, defaultValue, fw);
     }
 
     let resolution: AdapterResolution;

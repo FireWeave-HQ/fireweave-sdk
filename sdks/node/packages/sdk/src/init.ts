@@ -10,14 +10,17 @@
  * BackendAdapter port, so FireweaveClient / FireweaveRuntime stay mode-blind).
  *
  * Initialisation fails loudly (throws); reads on the returned client never do
- * (spec/control-points.md "initialise is the exception").
+ * (spec/control-points.md "initialise is the exception"). The validation
+ * itself lives in `validateInitOptions` (validation.ts), which returns
+ * `Validated<T>` like every other validator — this function is what converts
+ * a failed `Validated` into the throw spec/modes.md requires.
  */
 import { FireweaveClient } from './client.js';
-import { FireweaveError } from './errors.js';
 import { FireweaveRuntime } from './runtime.js';
 import { FireweaveLocalAdapter } from './adapters/local.js';
 import { FireweaveRemoteAdapter } from './adapters/remote.js';
 import type { FireweaveRemoteAdapterOptions } from './adapters/remote.js';
+import { validateInitOptions } from './validation.js';
 
 export interface InitFireweaveRemoteOptions {
   /** Evaluate against fw-server over the network (spec/remote-protocol.md). */
@@ -57,23 +60,7 @@ export interface InitFireweaveLocalOptions {
 
 export type InitFireweaveOptions = InitFireweaveRemoteOptions | InitFireweaveLocalOptions;
 
-/** "missing" and "blank" collapse to one check: not a non-empty string. */
-const isBlank = (value: unknown): boolean => typeof value !== 'string' || value.trim().length === 0;
-
-const configError = (message: string): FireweaveError => new FireweaveError('Configuration', { message });
-
 async function initLocal(options: InitFireweaveLocalOptions): Promise<FireweaveClient> {
-  // Runtime-only guard: a config object half-migrated from remote to local
-  // can carry apiKey/apiUrl even though InitFireweaveLocalOptions declares
-  // neither — TypeScript's excess-property check only fires on a fresh
-  // object literal, not on a variable assembled elsewhere and passed in.
-  // Accepting both silently is exactly how such a config passes review and
-  // then behaves as neither (spec/modes.md "Initialisation validation").
-  const stray = options as unknown as { apiKey?: unknown; apiUrl?: unknown };
-  if (!isBlank(stray.apiKey) || !isBlank(stray.apiUrl)) {
-    throw configError('mode "local" must not be combined with apiKey/apiUrl — the caller means one or the other');
-  }
-
   const local = options.local ?? {};
   const adapter = new FireweaveLocalAdapter({
     devFlags: local.controlPoints ?? {},
@@ -86,9 +73,6 @@ async function initLocal(options: InitFireweaveLocalOptions): Promise<FireweaveC
 
 async function initRemote(options: InitFireweaveRemoteOptions): Promise<FireweaveClient> {
   const { apiKey, apiUrl, allowedHosts, fetch } = options;
-  if (isBlank(apiKey) || isBlank(apiUrl)) {
-    throw configError('mode "remote" requires apiKey and apiUrl');
-  }
 
   const adapter = new FireweaveRemoteAdapter({
     apiKey,
@@ -116,14 +100,14 @@ async function initRemote(options: InitFireweaveRemoteOptions): Promise<Fireweav
  *  - `mode: 'remote'` with `apiKey` or `apiUrl` missing/blank
  *  - `apiUrl` fails the host allowlist
  *  - `mode: 'local'` with credentials supplied
+ *
+ * The first, second and fourth rows are `validateInitOptions`'s job; the
+ * third is validated downstream, when `runtime.initialize()` brings the
+ * adapter up (`FireweaveRuntime`'s own config validation, `hosts.ts`).
  */
 export async function initFireweave(options: InitFireweaveOptions): Promise<FireweaveClient> {
-  const mode = (options as { mode?: unknown } | null | undefined)?.mode;
-  if (mode !== 'local' && mode !== 'remote') {
-    throw configError('mode is required and must be "local" or "remote"');
-  }
-  if (mode === 'local') {
-    return initLocal(options as InitFireweaveLocalOptions);
-  }
-  return initRemote(options as InitFireweaveRemoteOptions);
+  const validated = validateInitOptions(options);
+  if (!validated.ok) throw validated.error;
+  const validOptions = validated.value;
+  return validOptions.mode === 'local' ? initLocal(validOptions) : initRemote(validOptions);
 }
