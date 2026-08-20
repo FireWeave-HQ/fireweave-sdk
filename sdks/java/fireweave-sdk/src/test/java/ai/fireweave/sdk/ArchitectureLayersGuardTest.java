@@ -82,6 +82,25 @@ class ArchitectureLayersGuardTest {
         return targets;
     }
 
+    /**
+     * {@code [\w.]+} in {@link #IMPORT_PATTERN} does not match {@code *} — a wildcard import
+     * ({@code import ai.fireweave.sdk.infrastructure.*;}) is therefore invisible to {@link
+     * #importTargets}, so it would sneak a layering violation past {@link
+     * #domainImportsNothingFromApplicationOrInfrastructure} / {@link
+     * #applicationOutsideTheCompositionRootDoesNotImportInfrastructure} without either test ever
+     * seeing it. Rather than teaching {@code IMPORT_PATTERN} to also resolve a wildcard's target
+     * package (more regex surface for the same class of blind spot to hide in again), {@link
+     * #noWildcardImportsInDomainOrApplication} forbids wildcard imports in {@code domain/} and
+     * {@code application/} outright — simpler, and it closes the hole regardless of which
+     * package a future wildcard import would have named.
+     */
+    private static final Pattern WILDCARD_IMPORT_PATTERN =
+            Pattern.compile("^\\s*import\\s+(?:static\\s+)?[\\w.]+\\.\\*\\s*;", Pattern.MULTILINE);
+
+    private static boolean hasWildcardImport(String source) {
+        return WILDCARD_IMPORT_PATTERN.matcher(source).find();
+    }
+
     @Test
     void domainImportsNothingFromApplicationOrInfrastructure() throws Exception {
         List<Path> files = javaFiles(domainDir());
@@ -137,6 +156,31 @@ class ArchitectureLayersGuardTest {
         assertTrue(importsInfrastructure,
                 APPLICATION_COMPOSITION_ROOT + " is exempted as the composition root but imports no "
                         + "infrastructure/ class — the exemption is stale");
+    }
+
+    /**
+     * Wildcard imports are invisible to {@link #IMPORT_PATTERN} (see {@link
+     * #WILDCARD_IMPORT_PATTERN}'s doc comment) — a {@code import ai.fireweave.sdk.infrastructure.*;}
+     * in {@code domain/}, or in {@code application/} outside {@link
+     * #APPLICATION_COMPOSITION_ROOT}, would silently pass both boundary tests above. Forbidding
+     * wildcard imports outright in both directories (including the composition root itself, which
+     * has no reason to obscure exactly which two adapter classes it selects) closes that hole
+     * regardless of which package a future wildcard import would target.
+     */
+    @Test
+    void noWildcardImportsInDomainOrApplication() throws Exception {
+        List<String> offenders = new ArrayList<>();
+        for (Path dir : List.of(domainDir(), applicationDir())) {
+            for (Path file : javaFiles(dir)) {
+                String text = new String(Files.readAllBytes(file));
+                if (hasWildcardImport(text)) {
+                    offenders.add(dir.relativize(file).toString());
+                }
+            }
+        }
+        assertEquals(List.of(), offenders,
+                "wildcard imports are forbidden in domain/ and application/ — they defeat this guard's "
+                        + "precise import-target matching: " + offenders);
     }
 
     @Test
