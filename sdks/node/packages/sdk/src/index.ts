@@ -68,3 +68,10 @@ export type { FireweaveRuntimeConfig, EvaluateOptions, ExpectedFlagType } from '
 
 export { FireweaveClient } from './client.js';
 export type { ControlPointsApi, FireweaveClientOptions } from './client.js';
+
+export { initFireweave } from './init.js';
+export type {
+  InitFireweaveOptions,
+  InitFireweaveLocalOptions,
+  InitFireweaveRemoteOptions,
+} from './init.js';
