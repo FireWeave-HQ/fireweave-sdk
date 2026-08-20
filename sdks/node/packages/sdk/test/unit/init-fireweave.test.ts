@@ -3,12 +3,18 @@
  *
  * Covers every row of the initialisation-validation table, both modes'
  * adapter selection, and the "does nothing else conditional on mode"
- * property: once a client exists, its read / registerTarget behaviour is
- * identical across modes — only the underlying adapter differs. The
- * registerTarget wiring itself (recording + `[fireweave:local]` trace) is
- * NOT re-implemented here — it is commit 43bb492's
- * `FireweaveLocalAdapter.registerTarget`; these tests only assert it is
- * reachable through the new entry point.
+ * property: `initFireweave` and `FireweaveClient`/`ControlPointsApi`
+ * themselves never branch on mode past adapter selection — any behavioural
+ * difference between modes lives entirely in the adapter seam (spec/modes.md
+ * "Behaviour per mode"), never in a mode check downstream of it. That table
+ * has one deliberately DIVERGENT row — an unknown control point resolves
+ * `default`/`DEFAULT` in local mode but `default`/`ERROR`/`FlagNotFound` in
+ * remote — asserted per-mode below, not as a shared shape. `registerTarget`
+ * genuinely IS shape-identical across modes (resolves `{ ok: true }`, never
+ * throws), which is also asserted below. The registerTarget wiring itself
+ * (recording + `[fireweave:local]` trace) is NOT re-implemented here — it is
+ * commit 43bb492's `FireweaveLocalAdapter.registerTarget`; these tests only
+ * assert it is reachable through the new entry point.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -190,7 +196,7 @@ describe('initFireweave — adapter selection', () => {
 });
 
 describe('initFireweave — does nothing else conditional on mode', () => {
-  it('reads never throw in either mode: an unknown control point degrades to an ERROR decision', async () => {
+  it('reads never throw in either mode, but the unknown-key row is deliberately DIVERGENT per spec/modes.md', async () => {
     const local = await initFireweave({ mode: 'local', local: { controlPoints: {} } });
     const remote = await initFireweave({
       mode: 'remote',
@@ -199,14 +205,25 @@ describe('initFireweave — does nothing else conditional on mode', () => {
       fetch: mockFetch(() => ({ status: 200, body: { decisions: [] } })),
     });
 
-    for (const client of [local, remote]) {
-      const decision = await client.controlPoints.getBooleanDetails('does-not-exist', false, {
-        targetingKey: 'user-1',
-      });
-      assert.equal(decision.value, false);
-      assert.equal(decision.reason, 'ERROR');
-      assert.equal(decision.errorKind, 'FlagNotFound');
-    }
+    // Neither call throws — that much IS identical across modes. The
+    // resulting Decision shape is not: local's unknown-key row is
+    // `default`/`reason: DEFAULT` (no error at all), remote's is
+    // `default`/`reason: ERROR`/`FlagNotFound` (spec/modes.md "Behaviour per
+    // mode" table).
+    const localDecision = await local.controlPoints.getBooleanDetails('does-not-exist', false, {
+      targetingKey: 'user-1',
+    });
+    assert.equal(localDecision.value, false);
+    assert.equal(localDecision.reason, 'DEFAULT');
+    assert.equal(localDecision.errorKind, undefined);
+    assert.equal(localDecision.errorCode, undefined);
+
+    const remoteDecision = await remote.controlPoints.getBooleanDetails('does-not-exist', false, {
+      targetingKey: 'user-1',
+    });
+    assert.equal(remoteDecision.value, false);
+    assert.equal(remoteDecision.reason, 'ERROR');
+    assert.equal(remoteDecision.errorKind, 'FlagNotFound');
 
     await local.shutdown();
     await remote.shutdown();

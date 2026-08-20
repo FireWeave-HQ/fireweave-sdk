@@ -14,8 +14,11 @@
  * - a key present in `devFlags` resolves to its mapped value with reason
  *   `STATIC` — the only supported way to turn a control point ON (or force it
  *   OFF) on a laptop;
- * - every other key MISSES (`{ found: false }`), which the runtime turns into
- *   the caller's own default.
+ * - every other key MISSES (`{ found: false, reason: 'DEFAULT' }`), which the
+ *   runtime turns into the caller's own default with reason `DEFAULT` — not
+ *   an error (spec/modes.md "Behaviour per mode": local's unknown-key row is
+ *   deliberately `default`/`DEFAULT`, unlike remote's `default`/`ERROR`/
+ *   `FlagNotFound`).
  *
  * Call-site defaults stay `false` under RAMP-1. Never write
  * `fw.flag(key, true)` to dogfood locally — that same `true` is the production
@@ -92,6 +95,11 @@ export class FireweaveLocalAdapter implements BackendAdapter {
    * string or number therefore yields TYPE_MISMATCH rather than silently
    * handing back the default: `devFlags` is `Record<string, boolean>`, so such
    * a read is a genuine call-site mistake and is better surfaced than hidden.
+   *
+   * A miss carries `reason: 'DEFAULT'` on the `{ found: false }` resolution —
+   * the signal `FireweaveRuntime.evaluate` (runtime.ts) reads to return the
+   * caller's default with reason `DEFAULT` instead of falling through to its
+   * generic FlagNotFound/ERROR mapping (spec/modes.md).
    */
   async resolve(
     flagKey: string,
@@ -99,7 +107,7 @@ export class FireweaveLocalAdapter implements BackendAdapter {
     _options?: ResolveOptions,
   ): Promise<AdapterResolution> {
     const override = this.devFlags[flagKey];
-    if (override === undefined) return { found: false };
+    if (override === undefined) return { found: false, reason: 'DEFAULT' };
     return {
       found: true,
       enabled: true,

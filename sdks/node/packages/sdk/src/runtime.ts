@@ -273,6 +273,15 @@ export class FireweaveRuntime {
     }
 
     if (!resolution.found) {
+      // spec/modes.md "Behaviour per mode": local's unknown-key row is
+      // `default` / `reason: DEFAULT` — deliberately not an error, unlike
+      // remote's `default` / `ERROR` / `FlagNotFound`. An adapter signals the
+      // former by carrying `reason: 'DEFAULT'` on its miss (FireweaveLocalAdapter);
+      // any adapter that leaves `reason` unset (InMemoryAdapter,
+      // FireweaveRemoteAdapter) keeps the FlagNotFound/ERROR path below.
+      if (resolution.reason === 'DEFAULT') {
+        return { flagKey, value: defaultValue, reason: 'DEFAULT', metadata: {} };
+      }
       const meta: Record<string, string | number | boolean> = {};
       if (resolution.quotaLimited === true) meta['fireweave.quotaLimited'] = true;
       return this.errorDecision(flagKey, defaultValue, new FireweaveError('FlagNotFound', { metadata: meta }));

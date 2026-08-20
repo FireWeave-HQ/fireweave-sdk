@@ -35,7 +35,13 @@ export interface AdapterResolution {
   variant?: string;
   /** Declared flag type when known (in-memory fixtures); adapters may omit. */
   flagType?: FlagValueType | 'integer' | 'float';
-  /** Adapter-suggested reason override (e.g. SPLIT, STALE). */
+  /**
+   * Adapter-suggested reason override (e.g. SPLIT, STALE) on a `found: true`
+   * resolution. On a `found: false` miss, `reason: 'DEFAULT'` instead signals
+   * the runtime to return the caller's default with reason `DEFAULT` — not an
+   * error — per local mode's unknown-key row (spec/modes.md; see
+   * FireweaveLocalAdapter.resolve).
+   */
   reason?: DecisionReason;
   /** Vendor reason code (e.g. "condition_match"). */
   reasonCode?: string;
