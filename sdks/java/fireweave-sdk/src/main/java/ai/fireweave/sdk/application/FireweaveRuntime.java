@@ -1,4 +1,16 @@
-package ai.fireweave.sdk;
+package ai.fireweave.sdk.application;
+
+import ai.fireweave.sdk.domain.Decision;
+import ai.fireweave.sdk.domain.ErrorKind;
+import ai.fireweave.sdk.domain.EvaluationContext;
+import ai.fireweave.sdk.domain.FireweaveError;
+import ai.fireweave.sdk.domain.FireweaveException;
+import ai.fireweave.sdk.domain.FlagType;
+import ai.fireweave.sdk.domain.JsonValue;
+import ai.fireweave.sdk.domain.LifecycleState;
+import ai.fireweave.sdk.domain.Reasons;
+import ai.fireweave.sdk.domain.Validation;
+import ai.fireweave.sdk.domain.Validation.Validated;
 
 import java.util.Map;
 
@@ -17,8 +29,12 @@ import java.util.Map;
  *       (see {@link BackendAdapter}).</li>
  * </ul>
  *
- * <p>Normal evaluation NEVER throws: every failure degrades to the caller default with
- * {@code reason=ERROR} and {@code fireweave.errorKind} flag metadata.
+ * <p>Normal evaluation NEVER throws (spec/control-points.md "Return discipline"): every failure
+ * degrades to the caller default with {@code reason=ERROR} and {@code fireweave.errorKind} flag
+ * metadata. Validation runs in the fixed order spec/control-points.md "Validation, before any
+ * I/O" names — key, default-vs-type, context, lifecycle — via {@link Validation}'s pure,
+ * {@code Validated}-returning functions, stopping at the first failure; only once all four pass
+ * does this reach the adapter (the one I/O call in {@link #evaluate}).
  */
 public final class FireweaveRuntime implements AutoCloseable {
 
@@ -58,7 +74,7 @@ public final class FireweaveRuntime implements AutoCloseable {
     /**
      * Validate config and initialize the adapter. Transitions UNINITIALIZED→INITIALIZING→READY.
      * On {@code Configuration} failure transitions to FATAL; other failures to ERROR. Throws the
-     * causal {@link FireweaveException} so provider integrations can surface OF error codes.
+     * causal {@link FireweaveException} — initialisation fails loudly (spec/modes.md).
      */
     public void initialize() throws FireweaveException {
         synchronized (stateLock) {
@@ -132,92 +148,41 @@ public final class FireweaveRuntime implements AutoCloseable {
                              EvaluationContext clientContext,
                              EvaluationContext invocationContext,
                              EvaluationOptions options) {
-        EvaluationOptions opts = options == null ? config.defaultEvaluationOptions() : options;
+        Validated<String> keyResult = Validation.validateControlPointKey(flagKey);
+        if (!keyResult.isOk()) {
+            return errorDecision(flagKey, defaultValue, keyResult.error());
+        }
 
-        FireweaveException gate = lifecycleGate();
-        if (gate != null) {
-            return errorDecision(flagKey, defaultValue, gate);
+        Validated<JsonValue> defaultResult = Validation.validateDefaultValue(type, defaultValue);
+        if (!defaultResult.isOk()) {
+            return errorDecision(flagKey, defaultValue, defaultResult.error());
         }
 
         EvaluationContext merged = config.globalContext()
                 .merge(clientContext == null ? EvaluationContext.empty() : clientContext)
                 .merge(invocationContext == null ? EvaluationContext.empty() : invocationContext);
 
-        try {
-            // Canonical fireweave.groups / fireweave.groupProperties keys (rulings 12-14) are
-            // promoted into the first-class groups fields before validation; all other
-            // fireweave.* keys are rejected by the validator.
-            merged = ContextValidator.promoteCanonicalKeys(merged);
-            ContextValidator.validate(merged, config.requireTargetingKey(), config.limits(),
-                    config.reservedAttributeKeys());
-        } catch (FireweaveException e) {
-            return errorDecision(flagKey, defaultValue, e);
+        Validated<EvaluationContext> contextResult = Validation.validateContext(
+                merged, config.requireTargetingKey(), config.limits(), config.reservedAttributeKeys());
+        if (!contextResult.isOk()) {
+            return errorDecision(flagKey, defaultValue, contextResult.error());
+        }
+        EvaluationContext canonical = contextResult.value();
+
+        FireweaveException gate = lifecycleGate();
+        if (gate != null) {
+            return errorDecision(flagKey, defaultValue, gate);
         }
 
-        EvaluationRequest request = new EvaluationRequest(flagKey, type, defaultValue, merged, opts);
-        Decision decision;
+        EvaluationRequest request = new EvaluationRequest(flagKey, type, defaultValue, canonical, options);
         try {
-            decision = adapter.evaluate(request);
+            return adapter.evaluate(request);
         } catch (FireweaveException e) {
             return errorDecision(flagKey, defaultValue, e);
         } catch (RuntimeException e) {
             return errorDecision(flagKey, defaultValue,
                     new FireweaveException(ErrorKind.Internal, ErrorKind.Internal.defaultMessage(), e));
         }
-        return enrich(maybeEmitExposure(decision, merged, opts), opts);
-    }
-
-    /**
-     * Honor {@link EvaluationOptions#sendExposure()}: default {@code false} (ruling 20 —
-     * side-effect-free evaluate). When {@code true}, on successful decisions with a targeting
-     * key, deliver one Fireweave-owned exposure through the adapter. Never throws.
-     */
-    private Decision maybeEmitExposure(Decision d, EvaluationContext ctx, EvaluationOptions opts) {
-        if (d.error() != null) {
-            return d;
-        }
-        if (!opts.sendExposure()) {
-            return copyDecision(d).exposureSuppressed(true).build();
-        }
-        String targetingKey = ctx.targetingKey();
-        if (targetingKey == null || targetingKey.isEmpty()) {
-            return d;
-        }
-        try {
-            adapter.deliverExposure(new Exposure(
-                    targetingKey, d.flagKey(), d.variant(), d.value(), null));
-            return copyDecision(d).exposureEmitted(true).build();
-        } catch (RuntimeException ignored) {
-            // Evaluation never throws; a failed exposure sink must not fail the decision
-            // (FireweaveException is a RuntimeException subclass).
-            return d;
-        }
-    }
-
-    /** Attach fireweave.payload metadata when requested; leave everything else untouched. */
-    private Decision enrich(Decision d, EvaluationOptions opts) {
-        if (!opts.includePayloadMetadata() || d.payload() == null
-                || d.flagMetadata().containsKey("fireweave.payload")) {
-            return d;
-        }
-        Decision.Builder b = copyDecision(d);
-        b.metadata("fireweave.payload", d.payload().toCanonicalJson());
-        return b.build();
-    }
-
-    private static Decision.Builder copyDecision(Decision d) {
-        Decision.Builder b = Decision.builder(d.flagKey())
-                .value(d.value())
-                .variant(d.variant())
-                .reason(d.reason())
-                .error(d.error())
-                .payload(d.payload())
-                .exposureEmitted(d.exposureEmitted())
-                .exposureSuppressed(d.exposureSuppressed());
-        for (Map.Entry<String, Object> e : d.flagMetadata().entrySet()) {
-            b.metadata(e.getKey(), e.getValue());
-        }
-        return b;
     }
 
     /** Non-null exception when the current lifecycle state cannot serve evaluations. */

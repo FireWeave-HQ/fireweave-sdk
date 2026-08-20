@@ -1,9 +1,9 @@
-package ai.fireweave.sdk;
+package ai.fireweave.sdk.domain;
 
 import java.util.Objects;
 
 /**
- * Immutable error occurrence carried on a {@link Decision} or {@link ExtensionResult}
+ * Immutable error occurrence carried on a {@link Decision} or on an extension-call result
  * (mirrors {@code spec/errors.schema.json#/$defs/errorInstance}).
  * Message is secret-sanitized at construction; no stack traces are carried.
  */

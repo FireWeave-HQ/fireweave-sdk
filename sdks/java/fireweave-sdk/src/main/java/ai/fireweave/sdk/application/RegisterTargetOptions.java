@@ -1,4 +1,7 @@
-package ai.fireweave.sdk;
+package ai.fireweave.sdk.application;
+
+import ai.fireweave.sdk.domain.JsonValue;
+import ai.fireweave.sdk.domain.TargetKind;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;

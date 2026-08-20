@@ -1,4 +1,8 @@
-package ai.fireweave.sdk;
+package ai.fireweave.sdk.application;
+
+import ai.fireweave.sdk.domain.EvaluationContext;
+import ai.fireweave.sdk.domain.FlagType;
+import ai.fireweave.sdk.domain.JsonValue;
 
 import java.util.Objects;
 

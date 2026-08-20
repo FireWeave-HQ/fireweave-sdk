@@ -1,4 +1,6 @@
-package ai.fireweave.sdk;
+package ai.fireweave.sdk.application;
+
+import ai.fireweave.sdk.domain.FireweaveError;
 
 import java.util.Objects;
 

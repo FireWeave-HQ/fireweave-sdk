@@ -1,4 +1,4 @@
-package ai.fireweave.sdk;
+package ai.fireweave.sdk.domain;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -9,10 +9,10 @@ import java.util.Objects;
  * Kind-carrying Fireweave exception. Messages are always secret-sanitized at construction;
  * the original cause is preserved for diagnostics (never serialized into decisions).
  *
- * <p>Thrown internally by adapters and validators. The OpenFeature evaluation path never
- * surfaces this to callers: {@link FireweaveRuntime#evaluate} converts it into a default-valued
- * error {@link Decision} (defaults do not throw, OpenFeature spec 1.4.10). Extension APIs
- * convert it into {@link ExtensionResult} errors.
+ * <p>Thrown internally by adapters and validators. A control-point read never surfaces this to
+ * callers: {@code FireweaveRuntime.evaluate} converts it into a default-valued error
+ * {@link Decision} (defaults do not throw, spec/control-points.md "Return discipline").
+ * Extension APIs convert it into a structured, non-throwing result.
  */
 public class FireweaveException extends RuntimeException {
 

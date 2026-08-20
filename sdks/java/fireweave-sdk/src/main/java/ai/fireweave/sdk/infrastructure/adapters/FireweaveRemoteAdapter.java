@@ -1,4 +1,17 @@
-package ai.fireweave.sdk;
+package ai.fireweave.sdk.infrastructure.adapters;
+
+import ai.fireweave.sdk.application.BackendAdapter;
+import ai.fireweave.sdk.application.EvaluationRequest;
+import ai.fireweave.sdk.application.FireweaveConfig;
+import ai.fireweave.sdk.application.RegisterTargetOptions;
+import ai.fireweave.sdk.application.RegisterTargetResult;
+import ai.fireweave.sdk.domain.Decision;
+import ai.fireweave.sdk.domain.ErrorKind;
+import ai.fireweave.sdk.domain.EvaluationContext;
+import ai.fireweave.sdk.domain.FireweaveError;
+import ai.fireweave.sdk.domain.FireweaveException;
+import ai.fireweave.sdk.domain.JsonValue;
+import ai.fireweave.sdk.domain.Reasons;
 
 import java.io.IOException;
 import java.net.URI;
@@ -8,27 +21,23 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Fireweave remote backend adapter (ADR-0005) — <b>default production path</b>.
  *
- * <p>Speaks {@code POST /v1/flags/evaluate}, {@code POST /v1/capture}, and
- * {@code POST /v1/targets/register} to fw-server with
- * {@code Authorization: Bearer <FW_PROJECT_API_KEY>}. No PostHog SDK or keys in the customer
+ * <p>Speaks {@code POST /v1/flags/evaluate} and {@code POST /v1/targets/register} to fw-server
+ * with {@code Authorization: Bearer <FW_PROJECT_API_KEY>}. No vendor SDK or keys in the customer
  * process. Config: {@link FireweaveConfig#host()} = {@code FW_API_URL},
  * {@link FireweaveConfig#projectApiKey()} = {@code FW_PROJECT_API_KEY}.
  */
 public final class FireweaveRemoteAdapter implements BackendAdapter {
 
     private static final String EVALUATE_PATH = "/v1/flags/evaluate";
-    private static final String CAPTURE_PATH = "/v1/capture";
     private static final String REGISTER_TARGET_PATH = "/v1/targets/register";
 
     private final HttpClient httpClient;
@@ -37,7 +46,6 @@ public final class FireweaveRemoteAdapter implements BackendAdapter {
     private volatile int requestTimeoutMs = FireweaveConfig.DEFAULT_REQUEST_TIMEOUT_MS;
     private volatile boolean ready;
     private volatile boolean closed;
-    private final List<Map<String, JsonValue>> pending = new CopyOnWriteArrayList<>();
 
     public FireweaveRemoteAdapter() {
         this(HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build());
@@ -189,10 +197,6 @@ public final class FireweaveRemoteAdapter implements BackendAdapter {
             if (variant != null && variant.kind() == JsonValue.Kind.STRING) {
                 b.variant(variant.asString());
             }
-            JsonValue payload = d.get("payload");
-            if (payload != null) {
-                b.payload(payload);
-            }
             JsonValue meta = d.get("flagMetadata");
             if (meta != null && meta.kind() == JsonValue.Kind.OBJECT) {
                 for (Map.Entry<String, JsonValue> m : meta.asObject().entrySet()) {
@@ -207,15 +211,19 @@ public final class FireweaveRemoteAdapter implements BackendAdapter {
             }
             return b.build();
         }
+        // Key absent from the decisions array entirely is the same "unknown to the backend"
+        // outcome as an explicit found:false item (spec/control-points.md return-discipline
+        // table) — deliberately NOT the local adapter's matched=false/DEFAULT seam, which does
+        // not apply here.
         throw quotaLimited ? FireweaveException.quotaLimited() : new FireweaveException(ErrorKind.FlagNotFound);
     }
 
     /**
      * Register a user or device so flag rules can target its durable properties.
      *
-     * <p>Never throws for transport failures: registration sits in login paths, and
-     * an analytics call must not break sign-in. Retried once when the error
-     * taxonomy marks the failure retryable.
+     * <p>Never throws for transport failures: registration sits in login paths, and an
+     * analytics call must not break sign-in. Retried once when the error taxonomy marks the
+     * failure retryable.
      */
     @Override
     public RegisterTargetResult registerTarget(String targetingKey, RegisterTargetOptions options) {
@@ -267,78 +275,12 @@ public final class FireweaveRemoteAdapter implements BackendAdapter {
     }
 
     @Override
-    public void deliverExposure(Exposure exposure) {
-        if (closed || !ready || exposure == null) {
-            return;
-        }
-        Map<String, JsonValue> event = new LinkedHashMap<>();
-        event.put("type", JsonValue.of("exposure"));
-        event.put("targetingKey", JsonValue.of(exposure.targetingKey()));
-        event.put("flagKey", JsonValue.of(exposure.flagKey()));
-        event.put("value", exposure.value());
-        if (exposure.variant() != null) {
-            event.put("variant", JsonValue.of(exposure.variant()));
-        }
-        pending.add(event);
-    }
-
-    @Override
-    public void deliverSignal(Signal signal) {
-        if (closed || !ready || signal == null) {
-            return;
-        }
-        Map<String, JsonValue> event = new LinkedHashMap<>();
-        event.put("type", JsonValue.of("signal"));
-        String targeting = signal.targetingKey() != null ? signal.targetingKey() : "fireweave-sdk";
-        event.put("targetingKey", JsonValue.of(targeting));
-        event.put("name", JsonValue.of(signal.name()));
-        pending.add(event);
-    }
-
-    @Override
-    public void onExposuresFlushed() {
-        flushCapture();
-    }
-
-    @Override
-    public Map<String, Boolean> runtimeFeatures() {
-        Map<String, Boolean> m = new LinkedHashMap<>();
-        m.put("remoteEvaluation", true);
-        m.put("localEvaluation", false);
-        m.put("localOnly", false);
-        m.put("exposureEmission", true);
-        m.put("sideEffectFreeReads", true);
-        m.put("groupAnalytics", true);
-        return Collections.unmodifiableMap(m);
-    }
-
-    @Override
     public void shutdown() {
         if (closed) {
             return;
         }
         closed = true;
-        flushCapture();
         ready = false;
-    }
-
-    private void flushCapture() {
-        if (!ready || pending.isEmpty()) {
-            return;
-        }
-        List<Map<String, JsonValue>> batch = new ArrayList<>(pending);
-        pending.clear();
-        List<JsonValue> events = new ArrayList<>();
-        for (Map<String, JsonValue> e : batch) {
-            events.add(JsonValue.ofObject(e));
-        }
-        Map<String, JsonValue> body = new LinkedHashMap<>();
-        body.put("events", JsonValue.ofArray(events));
-        try {
-            postJson(CAPTURE_PATH, JsonValue.ofObject(body));
-        } catch (FireweaveException ignored) {
-            pending.addAll(0, batch);
-        }
     }
 
     private JsonValue postJson(String path, JsonValue body) throws FireweaveException {

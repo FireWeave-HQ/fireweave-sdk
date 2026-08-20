@@ -1,11 +1,13 @@
-package ai.fireweave.sdk;
+package ai.fireweave.sdk.application;
+
+import ai.fireweave.sdk.domain.FireweaveError;
 
 import java.util.Objects;
 
 /**
- * Result of a FireweaveClient extension call. Extension facades never throw on the normal path;
- * failures degrade to a result carrying a {@link FireweaveError} (fixture
- * {@code ext-unsupported-capability-degrade}).
+ * Result of a {@link FireweaveClient} extension call ({@link FireweaveClient#invokeCapability}).
+ * Extension calls never throw on the normal path; failures degrade to a result carrying a
+ * {@link FireweaveError} (fixture {@code ext-unsupported-capability-degrade}).
  */
 public final class ExtensionResult<T> {
 

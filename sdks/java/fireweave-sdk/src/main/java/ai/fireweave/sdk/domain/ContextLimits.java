@@ -1,4 +1,4 @@
-package ai.fireweave.sdk;
+package ai.fireweave.sdk.domain;
 
 /**
  * Ratified context bounds (orchestrator arbitration, Phase 2 exit; see

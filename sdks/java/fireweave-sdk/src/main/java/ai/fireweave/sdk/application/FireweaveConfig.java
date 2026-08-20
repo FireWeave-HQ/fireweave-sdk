@@ -1,4 +1,10 @@
-package ai.fireweave.sdk;
+package ai.fireweave.sdk.application;
+
+import ai.fireweave.sdk.domain.ContextLimits;
+import ai.fireweave.sdk.domain.ErrorKind;
+import ai.fireweave.sdk.domain.EvaluationContext;
+import ai.fireweave.sdk.domain.FireweaveException;
+import ai.fireweave.sdk.domain.Redaction;
 
 import java.net.URI;
 import java.util.Arrays;
@@ -9,9 +15,9 @@ import java.util.Set;
 
 /**
  * Immutable runtime configuration. Built once, validated by
- * {@link FireweaveRuntime#initialize()}; never mutated afterwards.
+ * {@code FireweaveRuntime#initialize()}; never mutated afterwards.
  *
- * <p>Secrets ({@code projectApiKey}, {@code personalApiKey}) are never included in
+ * <p>Secrets ({@code projectApiKey}) are never included in
  * {@link #toString()} or error messages.
  */
 public final class FireweaveConfig {
@@ -24,8 +30,8 @@ public final class FireweaveConfig {
      * {@link #ALLOW_ANY_HOST} is the explicit opt-out.
      *
      * <p>Java retains PostHog hosts because {@code fireweave-adapter-posthog} remains a
-     * documented seam. Node 2.1 dropped those hosts after removing the vendor adapter
-     * (ADR-0006) — that change is not mechanically ported here.
+     * documented seam. This host-list decision predates and is out of scope for the v1
+     * control-points relayer (Task 8) — not mechanically re-derived here.
      */
     public static final Set<String> DEFAULT_ALLOWED_HOSTS = Collections.unmodifiableSet(
             new LinkedHashSet<>(Arrays.asList(
@@ -45,43 +51,25 @@ public final class FireweaveConfig {
     public static final int DEFAULT_SHUTDOWN_TIMEOUT_MS = 10000;
 
     private final String projectApiKey;
-    private final String personalApiKey;
     private final String host;
     private final Set<String> allowedHosts;
     private final boolean requireTargetingKey;
     private final ContextLimits limits;
     private final Set<String> reservedAttributeKeys;
     private final EvaluationContext globalContext;
-    private final boolean localEvaluation;
-    private final boolean onlyEvaluateLocally;
     private final int requestTimeoutMs;
     private final int shutdownTimeoutMs;
-    private final EvaluationOptions defaultEvaluationOptions;
-    private final Set<String> telemetryAttributeAllowlist;
-    private final boolean releasesEnabled;
-    private final boolean exposuresEnabled;
-    private final boolean signalsEnabled;
 
     private FireweaveConfig(Builder b) {
         this.projectApiKey = b.projectApiKey;
-        this.personalApiKey = b.personalApiKey;
         this.host = b.host;
         this.allowedHosts = Collections.unmodifiableSet(new LinkedHashSet<>(b.allowedHosts));
         this.requireTargetingKey = b.requireTargetingKey;
         this.limits = b.limits;
         this.reservedAttributeKeys = Collections.unmodifiableSet(new LinkedHashSet<>(b.reservedAttributeKeys));
         this.globalContext = b.globalContext;
-        this.localEvaluation = b.localEvaluation;
-        this.onlyEvaluateLocally = b.onlyEvaluateLocally;
         this.requestTimeoutMs = b.requestTimeoutMs;
         this.shutdownTimeoutMs = b.shutdownTimeoutMs;
-        this.defaultEvaluationOptions = b.defaultEvaluationOptions;
-        this.telemetryAttributeAllowlist = b.telemetryAttributeAllowlist == null
-                ? null
-                : Collections.unmodifiableSet(new LinkedHashSet<>(b.telemetryAttributeAllowlist));
-        this.releasesEnabled = b.releasesEnabled;
-        this.exposuresEnabled = b.exposuresEnabled;
-        this.signalsEnabled = b.signalsEnabled;
     }
 
     public static Builder builder() {
@@ -147,10 +135,6 @@ public final class FireweaveConfig {
         return projectApiKey;
     }
 
-    public String personalApiKey() {
-        return personalApiKey;
-    }
-
     public String host() {
         return host;
     }
@@ -175,14 +159,6 @@ public final class FireweaveConfig {
         return globalContext;
     }
 
-    public boolean localEvaluation() {
-        return localEvaluation;
-    }
-
-    public boolean onlyEvaluateLocally() {
-        return onlyEvaluateLocally;
-    }
-
     public int requestTimeoutMs() {
         return requestTimeoutMs;
     }
@@ -191,59 +167,25 @@ public final class FireweaveConfig {
         return shutdownTimeoutMs;
     }
 
-    public EvaluationOptions defaultEvaluationOptions() {
-        return defaultEvaluationOptions;
-    }
-
-    /** Null means "allow all attributes"; non-null filters signal attributes to the allowlist. */
-    public Set<String> telemetryAttributeAllowlist() {
-        return telemetryAttributeAllowlist;
-    }
-
-    public boolean releasesEnabled() {
-        return releasesEnabled;
-    }
-
-    public boolean exposuresEnabled() {
-        return exposuresEnabled;
-    }
-
-    public boolean signalsEnabled() {
-        return signalsEnabled;
-    }
-
     @Override
     public String toString() {
         return "FireweaveConfig{projectApiKey=" + (projectApiKey == null ? "null" : Redaction.REDACTED)
-                + ", host=" + host + ", localEvaluation=" + localEvaluation + "}";
+                + ", host=" + host + "}";
     }
 
     public static final class Builder {
         private String projectApiKey;
-        private String personalApiKey;
         private String host;
         private Set<String> allowedHosts = DEFAULT_ALLOWED_HOSTS;
         private boolean requireTargetingKey;
         private ContextLimits limits = ContextLimits.canonical();
         private Set<String> reservedAttributeKeys = Collections.emptySet();
         private EvaluationContext globalContext = EvaluationContext.empty();
-        private boolean localEvaluation;
-        private boolean onlyEvaluateLocally;
         private int requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS;
         private int shutdownTimeoutMs = DEFAULT_SHUTDOWN_TIMEOUT_MS;
-        private EvaluationOptions defaultEvaluationOptions = EvaluationOptions.defaults();
-        private Set<String> telemetryAttributeAllowlist;
-        private boolean releasesEnabled = true;
-        private boolean exposuresEnabled = true;
-        private boolean signalsEnabled = true;
 
         public Builder projectApiKey(String v) {
             this.projectApiKey = v;
-            return this;
-        }
-
-        public Builder personalApiKey(String v) {
-            this.personalApiKey = v;
             return this;
         }
 
@@ -277,16 +219,6 @@ public final class FireweaveConfig {
             return this;
         }
 
-        public Builder localEvaluation(boolean v) {
-            this.localEvaluation = v;
-            return this;
-        }
-
-        public Builder onlyEvaluateLocally(boolean v) {
-            this.onlyEvaluateLocally = v;
-            return this;
-        }
-
         public Builder requestTimeoutMs(int v) {
             this.requestTimeoutMs = v;
             return this;
@@ -294,31 +226,6 @@ public final class FireweaveConfig {
 
         public Builder shutdownTimeoutMs(int v) {
             this.shutdownTimeoutMs = v;
-            return this;
-        }
-
-        public Builder defaultEvaluationOptions(EvaluationOptions v) {
-            this.defaultEvaluationOptions = v == null ? EvaluationOptions.defaults() : v;
-            return this;
-        }
-
-        public Builder telemetryAttributeAllowlist(Set<String> v) {
-            this.telemetryAttributeAllowlist = v;
-            return this;
-        }
-
-        public Builder releasesEnabled(boolean v) {
-            this.releasesEnabled = v;
-            return this;
-        }
-
-        public Builder exposuresEnabled(boolean v) {
-            this.exposuresEnabled = v;
-            return this;
-        }
-
-        public Builder signalsEnabled(boolean v) {
-            this.signalsEnabled = v;
             return this;
         }
 

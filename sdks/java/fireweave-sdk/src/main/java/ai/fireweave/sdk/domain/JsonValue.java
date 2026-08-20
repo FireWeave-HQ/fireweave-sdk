@@ -1,4 +1,4 @@
-package ai.fireweave.sdk;
+package ai.fireweave.sdk.domain;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;

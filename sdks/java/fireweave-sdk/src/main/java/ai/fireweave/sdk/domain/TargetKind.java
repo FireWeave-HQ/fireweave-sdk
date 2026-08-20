@@ -1,4 +1,4 @@
-package ai.fireweave.sdk;
+package ai.fireweave.sdk.domain;
 
 /**
  * Target kind on {@code POST /v1/targets/register}

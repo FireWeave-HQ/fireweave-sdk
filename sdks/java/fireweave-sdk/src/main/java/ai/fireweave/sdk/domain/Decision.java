@@ -1,4 +1,4 @@
-package ai.fireweave.sdk;
+package ai.fireweave.sdk.domain;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -7,13 +7,17 @@ import java.util.Objects;
 
 /**
  * Immutable canonical flag decision (mirrors {@code spec/decision.schema.json}), produced by a
- * {@link BackendAdapter} / {@link FireweaveRuntime} and mapped to OpenFeature
- * {@code ProviderEvaluation} at the provider boundary. No vendor types appear here.
+ * {@code BackendAdapter} / {@code FireweaveRuntime}. No vendor types appear here.
  *
  * <p>On error paths {@link #value()} is always the caller-supplied default, {@link #reason()} is
  * {@code ERROR}, and {@code flagMetadata} carries {@code fireweave.errorKind}.
  *
- * <p>flagMetadata values are OpenFeature scalars only: Boolean, String, or Number.
+ * <p>flagMetadata values are scalar only: Boolean, String, or Number.
+ *
+ * <p>v1 scope (spec/control-points.md "Side effects"): a read is side-effect free, so this type
+ * carries no {@code payload} or {@code exposure} fields — those are schema-level extension
+ * points that v1 does not surface (dropped from the pre-v1 Java shape alongside the cut
+ * releases/exposures/signals namespaces).
  */
 public final class Decision {
 
@@ -23,9 +27,6 @@ public final class Decision {
     private final String reason;
     private final FireweaveError error;
     private final Map<String, Object> flagMetadata;
-    private final JsonValue payload;
-    private final boolean exposureEmitted;
-    private final boolean exposureSuppressed;
 
     private Decision(Builder b) {
         this.flagKey = Objects.requireNonNull(b.flagKey, "flagKey");
@@ -34,9 +35,6 @@ public final class Decision {
         this.reason = Objects.requireNonNull(b.reason, "reason");
         this.error = b.error;
         this.flagMetadata = Collections.unmodifiableMap(new LinkedHashMap<>(b.flagMetadata));
-        this.payload = b.payload;
-        this.exposureEmitted = b.exposureEmitted;
-        this.exposureSuppressed = b.exposureSuppressed;
     }
 
     public static Builder builder(String flagKey) {
@@ -69,19 +67,6 @@ public final class Decision {
         return flagMetadata;
     }
 
-    /** Variant payload, or null. */
-    public JsonValue payload() {
-        return payload;
-    }
-
-    public boolean exposureEmitted() {
-        return exposureEmitted;
-    }
-
-    public boolean exposureSuppressed() {
-        return exposureSuppressed;
-    }
-
     public static final class Builder {
         private final String flagKey;
         private JsonValue value;
@@ -89,9 +74,6 @@ public final class Decision {
         private String reason = Reasons.UNKNOWN;
         private FireweaveError error;
         private final Map<String, Object> flagMetadata = new LinkedHashMap<>();
-        private JsonValue payload;
-        private boolean exposureEmitted;
-        private boolean exposureSuppressed;
 
         private Builder(String flagKey) {
             this.flagKey = flagKey;
@@ -117,7 +99,7 @@ public final class Decision {
             return this;
         }
 
-        /** Value must be a Boolean, String or Number (OpenFeature scalar contract). */
+        /** Value must be a Boolean, String or Number (scalar-only metadata contract). */
         public Builder metadata(String key, Object value) {
             if (value != null) {
                 if (!(value instanceof Boolean || value instanceof String || value instanceof Number)) {
@@ -126,21 +108,6 @@ public final class Decision {
                 }
                 flagMetadata.put(key, value);
             }
-            return this;
-        }
-
-        public Builder payload(JsonValue payload) {
-            this.payload = payload;
-            return this;
-        }
-
-        public Builder exposureEmitted(boolean emitted) {
-            this.exposureEmitted = emitted;
-            return this;
-        }
-
-        public Builder exposureSuppressed(boolean suppressed) {
-            this.exposureSuppressed = suppressed;
             return this;
         }
 

@@ -1,4 +1,4 @@
-package ai.fireweave.sdk;
+package ai.fireweave.sdk.domain;
 
 /** Standard OpenFeature reason strings used in Fireweave decisions (open string set). */
 public final class Reasons {

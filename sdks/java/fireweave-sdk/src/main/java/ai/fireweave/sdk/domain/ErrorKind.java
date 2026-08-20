@@ -1,4 +1,4 @@
-package ai.fireweave.sdk;
+package ai.fireweave.sdk.domain;
 
 /**
  * Canonical Fireweave error taxonomy (15 kinds, PascalCase), mirroring
@@ -8,7 +8,7 @@ package ai.fireweave.sdk;
  * cross-language {@code kind} string (e.g. {@code "AlreadyClosed"}).
  *
  * <p>The OpenFeature error code is carried here as a plain string so the core module has no
- * OpenFeature dependency; {@code fireweave-openfeature} maps it to
+ * OpenFeature dependency; a future provider module maps it to
  * {@code dev.openfeature.sdk.ErrorCode} at the provider boundary.
  */
 public enum ErrorKind {
