@@ -1,31 +1,31 @@
-"""Fireweave remote backend adapter (ADR-0005) — default production path.
+"""Fireweave remote backend adapter — default production path.
 
-HTTP client for fw-server ``POST /v1/flags/evaluate``, ``POST /v1/capture``,
-and ``POST /v1/targets/register``. Auth: ``Authorization: Bearer
-<FW_PROJECT_API_KEY>``. No PostHog dependency.
+HTTP client for fw-server ``POST /v1/flags/evaluate`` and
+``POST /v1/targets/register``. Auth: ``Authorization: Bearer <api_key>``.
+Speaks only the vendor-neutral Fireweave remote protocol — no vendor SDK,
+key, or host ever enters the application process; which backend fw-server
+forwards to is fw-server's concern (spec/remote-protocol.md).
 """
 
 from __future__ import annotations
 
 import json
-import os
 import threading
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
-from ..config import FireweaveConfig
-from ..context import EvaluationContext
-from ..errors import (
+from ...domain.context import EvaluationContext
+from ...domain.errors import (
     AlreadyClosedError,
     AuthenticationError,
     AuthorizationError,
     BackendUnavailableError,
     ConfigurationError,
     FireweaveError,
-    InvalidContextError,
+    FlagNotFoundError,
     MalformedResponseError,
     NetworkError,
     NotReadyError,
@@ -33,13 +33,30 @@ from ..errors import (
     TargetingKeyMissingError,
     TimeoutError_,
 )
-from .base import FlagResolution, RegisterTargetOptions, RegisterTargetResult
+from ...application.ports import FlagResolution, RegisterTargetOptions, RegisterTargetResult
+from ..hosts import assert_host_allowed
 
 __all__ = ["FireweaveRemoteAdapter"]
 
 _EVALUATE_PATH = "/v1/flags/evaluate"
-_CAPTURE_PATH = "/v1/capture"
 _REGISTER_TARGET_PATH = "/v1/targets/register"
+
+
+def _default_allowed_hosts_for(api_url: str) -> Optional[tuple]:
+    """Adapter-level default when the caller supplies no `allowed_hosts`:
+    the URL's own hostname plus loopback — NOT the canonical
+    `infrastructure/hosts.DEFAULT_ALLOWED_HOSTS` list. `application/mode.py`
+    (the sanctioned entry point) already enforces the stricter canonical
+    default before this adapter is ever constructed; this fallback only
+    matters for direct adapter construction that bypasses `init_fireweave`.
+    """
+    try:
+        hostname = urlparse(api_url).hostname
+    except ValueError:
+        hostname = None
+    if not hostname:
+        return None
+    return (hostname, "localhost", "127.0.0.1", "::1")
 
 
 @dataclass
@@ -48,45 +65,27 @@ class FireweaveRemoteAdapter:
 
     api_url: Optional[str] = None
     api_key: Optional[str] = None
-    allowed_hosts: Optional[tuple[str, ...]] = None
+    allowed_hosts: Optional[tuple] = None
     request_timeout_ms: int = 3000
-    shutdown_timeout_ms: int = 10000
     # Test injection: callable(url, data, headers, timeout) -> (status, body_dict)
     transport: Any = None
 
     backend_name: str = "fireweave"
     _ready: bool = field(default=False, init=False, repr=False)
     _closed: bool = field(default=False, init=False, repr=False)
-    _pending: List[Dict[str, Any]] = field(default_factory=list, init=False, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
-    def initialize(self, config: Optional[FireweaveConfig] = None) -> None:
+    def initialize(self) -> None:
         if self._closed:
             raise AlreadyClosedError()
-        api_url = (self.api_url or os.environ.get("FW_API_URL") or "").rstrip("/")
-        api_key = self.api_key or os.environ.get("FW_PROJECT_API_KEY") or ""
-        if config is not None:
-            if not api_url and config.host:
-                api_url = config.host.rstrip("/")
-            if not api_key and config.project_api_key:
-                api_key = config.project_api_key
-            if config.feature_flags_request_timeout_ms:
-                self.request_timeout_ms = config.feature_flags_request_timeout_ms
+        api_url = (self.api_url or "").rstrip("/")
+        api_key = self.api_key or ""
         if not api_url or not api_key:
             raise ConfigurationError("invalid configuration", init_fatal=True)
-        parsed = urlparse(api_url)
-        hostname = (parsed.hostname or "").lower()
-        if parsed.scheme not in ("http", "https") or not hostname:
-            raise ConfigurationError("invalid configuration", init_fatal=True)
-        if parsed.scheme == "http" and hostname not in ("localhost", "127.0.0.1", "::1"):
-            raise ConfigurationError("invalid configuration", init_fatal=True)
         allow = self.allowed_hosts
-        if allow is None and config is not None and config.allowed_hosts is not None:
-            allow = config.allowed_hosts
         if allow is None:
-            allow = (hostname, "localhost", "127.0.0.1", "::1")
-        if "*" not in allow and hostname not in {h.lower() for h in allow}:
-            raise ConfigurationError("invalid configuration", init_fatal=True)
+            allow = _default_allowed_hosts_for(api_url)
+        assert_host_allowed(api_url, allow)
         self.api_url = api_url
         self.api_key = api_key
         self._ready = True
@@ -98,7 +97,7 @@ class FireweaveRemoteAdapter:
             raise NotReadyError()
         targeting = context.targeting_key or ""
         if not targeting:
-            raise InvalidContextError("targeting key missing")
+            raise TargetingKeyMissingError()
 
         attributes: Dict[str, Any] = {}
         groups = None
@@ -107,9 +106,7 @@ class FireweaveRemoteAdapter:
             if k in ("groups", "fireweave.groups") and isinstance(v, dict):
                 groups = v
                 continue
-            if k in ("groupProperties", "fireweave.groupProperties") and isinstance(
-                v, dict
-            ):
+            if k in ("groupProperties", "fireweave.groupProperties") and isinstance(v, dict):
                 group_properties = v
                 continue
             if k.startswith("$") or k.startswith("fireweave."):
@@ -127,13 +124,15 @@ class FireweaveRemoteAdapter:
         data = self._request(_EVALUATE_PATH, body)
         decisions = data.get("decisions") or []
         item = next((d for d in decisions if d.get("flagKey") == flag_key), None)
+        quota_limited = bool(data.get("quotaLimited"))
         if item is None or item.get("found") is False:
-            return FlagResolution(
-                value=None,
-                matched=False,
-                enabled=False,
-                quota_limited=bool(data.get("quotaLimited")),
-            )
+            # key unknown to the backend -> ERROR/FlagNotFound
+            # (spec/control-points.md return-discipline table) — deliberately
+            # NOT `matched=False` (that path means the local-mode "no
+            # decision, use the caller's default" seam, which does not apply
+            # to remote's "unknown key" row).
+            raise FlagNotFoundError(quota_limited=quota_limited)
+
         meta = item.get("flagMetadata") or {}
         return FlagResolution(
             value=item.get("value"),
@@ -145,7 +144,6 @@ class FireweaveRemoteAdapter:
             reason_code=meta.get("fireweave.reasonCode"),
             payload=item.get("payload"),
             fireweave_reason=item.get("reason"),
-            quota_limited=bool(data.get("quotaLimited") or meta.get("fireweave.quotaLimited")),
         )
 
     def register_target(
@@ -155,18 +153,18 @@ class FireweaveRemoteAdapter:
     ) -> RegisterTargetResult:
         """Register a user or device for durable property targeting.
 
-        Never raises for transport failures: registration sits in login paths,
-        and an analytics call must not break sign-in. Retried once when the
-        error taxonomy marks the failure retryable.
+        Never raises for transport failures: registration sits in login
+        paths, and an analytics call must not break sign-in. Retried ONCE
+        when the error taxonomy marks the failure retryable; a rejected
+        payload or bad key is not retried, since it would be rejected
+        identically.
         """
         if self._closed:
             return RegisterTargetResult(ok=False, error=AlreadyClosedError())
         if not self._ready:
             return RegisterTargetResult(ok=False, error=NotReadyError())
         if targeting_key == "":
-            return RegisterTargetResult(
-                ok=False, error=TargetingKeyMissingError("targeting key missing")
-            )
+            return RegisterTargetResult(ok=False, error=TargetingKeyMissingError())
 
         opts = options or RegisterTargetOptions()
         body: Dict[str, Any] = {"targetingKey": targeting_key}
@@ -191,75 +189,15 @@ class FireweaveRemoteAdapter:
                 break
         return RegisterTargetResult(ok=False, error=last_error)
 
-    def send_exposures(self, events: list) -> None:
-        if self._closed or not self._ready:
-            return
-        with self._lock:
-            for ev in events:
-                if isinstance(ev, dict):
-                    self._pending.append(
-                        {
-                            "type": "exposure",
-                            "targetingKey": ev.get("targetingKey") or ev.get("targeting_key") or "",
-                            "flagKey": ev.get("flagKey") or ev.get("flag_key"),
-                            "value": ev.get("value"),
-                            "variant": ev.get("variant"),
-                        }
-                    )
-
-    def deliver_signal(self, signal: Dict[str, Any]) -> None:
-        if self._closed or not self._ready:
-            return
-        with self._lock:
-            self._pending.append(
-                {
-                    "type": "signal",
-                    "targetingKey": signal.get("targetingKey")
-                    or signal.get("targeting_key")
-                    or "fireweave-sdk",
-                    "name": signal.get("name"),
-                    "flagKey": signal.get("flagKey") or signal.get("flag_key"),
-                    "variant": signal.get("variant"),
-                    "properties": {
-                        "kind": signal.get("kind"),
-                        "status": signal.get("status"),
-                    },
-                }
-            )
-
-    def flush(self) -> None:
-        if self._closed or not self._ready:
-            return
-        with self._lock:
-            batch = list(self._pending)
-            self._pending.clear()
-        if not batch:
-            return
-        try:
-            self._request(_CAPTURE_PATH, {"events": batch})
-        except Exception:
-            with self._lock:
-                self._pending[:0] = batch
-
     def shutdown(self, timeout_ms: int) -> None:
+        del timeout_ms
         if self._closed:
             return
         self._closed = True
-        try:
-            self.flush()
-        except Exception:
-            pass
         self._ready = False
 
-    def runtime_features(self) -> Dict[str, bool]:
-        return {
-            "remoteEvaluation": True,
-            "localEvaluation": False,
-            "localOnly": False,
-            "exposureEmission": True,
-            "sideEffectFreeReads": True,
-            "groupAnalytics": True,
-        }
+    def is_closed(self) -> bool:
+        return self._closed
 
     def _request(self, path: str, body: Dict[str, Any]) -> Dict[str, Any]:
         url = f"{self.api_url}{path}"
@@ -301,8 +239,6 @@ class FireweaveRemoteAdapter:
             raise AuthorizationError()
         if status == 429:
             raise RateLimitedError()
-        if status >= 500:
-            raise BackendUnavailableError()
         if status >= 400:
             raise BackendUnavailableError()
         if not isinstance(parsed, dict):

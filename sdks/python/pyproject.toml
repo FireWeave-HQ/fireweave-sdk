@@ -5,13 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "fireweave"
 version = "0.1.0"
-description = "Fireweave polyglot SDK for Python — OpenFeature-compatible, server-first flag evaluation and release-safety extensions (spec v0.1.0)."
+description = "Fireweave polyglot SDK for Python — server-first control-point evaluation and target registration (spec v0.1.0)."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Fireweave AI, Inc." }]
-keywords = ["feature-flags", "openfeature", "posthog", "rollout", "release"]
+keywords = ["feature-flags", "rollout", "release", "control-points"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -23,9 +23,9 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Typing :: Typed",
 ]
-# Core has NO runtime dependencies: the OpenFeature provider and the PostHog
-# adapter are optional integrations behind extras. `import fireweave` plus the
-# InMemory adapter work with the standard library only.
+# Zero runtime dependencies (spec/control-points.md "Scope of v1"): the SDK
+# is exactly two capabilities — control-point evaluation and target
+# registration — over the standard library only.
 dependencies = []
 
 [project.urls]
@@ -37,16 +37,10 @@ Changelog = "https://github.com/FireWeave-HQ/fireweave-sdk/blob/master/CHANGELOG
 "Source" = "https://github.com/FireWeave-HQ/fireweave-sdk/tree/master/sdks/python"
 
 [project.optional-dependencies]
-# ADR-0002 pin: PostHog snapshot API (`evaluate_flags`) — exact pin to absorb
-# the in-flight /flags migration.
-posthog = ["posthog==7.31.0"]
-# Pre-1.0 OpenFeature SDK: pin below 0.11 (decision brief §3 / ADR-0003).
-openfeature = ["openfeature-sdk>=0.10.0,<0.11"]
-dev = [
-    "posthog==7.31.0",
-    "openfeature-sdk>=0.10.0,<0.11",
-    "pytest>=8",
-]
+# v1 has no vendor or OpenFeature-provider extras (spec/control-points.md
+# "Scope of v1": "MUST NOT expose an OpenFeature provider"). `dev` is the
+# only surviving extra, test-tooling only.
+dev = ["pytest>=8"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

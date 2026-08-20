@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from .errors import ErrorKind
 from .types import FlagMetadata
@@ -12,7 +12,7 @@ __all__ = ["Decision", "Reason"]
 
 
 class Reason:
-    """Canonical reason strings (spec/decision.schema.json + local STATIC)."""
+    """Canonical reason strings (spec/decision.schema.json)."""
 
     TARGETING_MATCH = "TARGETING_MATCH"
     SPLIT = "SPLIT"
@@ -26,7 +26,9 @@ class Reason:
 
 @dataclass(frozen=True)
 class Decision:
-    """Result of a flag evaluation. Evaluation APIs return this, never raise."""
+    """Result of a flag evaluation. Evaluation APIs return this, never raise
+    (spec/control-points.md "Return discipline — never throw into a read
+    path")."""
 
     value: Any
     variant: Optional[str] = None
@@ -35,7 +37,6 @@ class Decision:
     error_message: Optional[str] = None
     error_kind: Optional[ErrorKind] = None
     flag_metadata: FlagMetadata = field(default_factory=dict)
-    resolved_context: Optional[Dict[str, Any]] = None
 
     @property
     def is_error(self) -> bool:

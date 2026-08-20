@@ -1,23 +1,21 @@
-"""Deterministic in-memory adapter (fixture-shaped flag definitions).
+"""Deterministic in-memory adapter for tests and conformance fixtures.
 
-Resolution is purely definition-driven — no hashing, no percentage bucketing.
-A flag definition is a dict in the shape used by ``contracts/`` fixtures:
+Resolution is purely definition-driven — no hashing, no percentage
+bucketing. A flag definition is a dict:
 
 .. code-block:: python
 
     {
-        "type": "boolean",            # boolean|string|integer|float|object
         "enabled": True,
         "variant": "on",
         "value": True,
         "payload": {...},              # optional
         "reason": {"code": "condition_match", "condition_index": 0, ...},
         "metadata": {"version": 1, "id": 42},
-        "fireweaveReason": "SPLIT",   # optional canonical reason override
+        "fireweaveReason": "SPLIT",    # optional canonical reason override
         "fromCache": False,            # optional stale-cache marker
-        "matchTargetingKey": "...",   # optional deterministic conditions
+        "matchTargetingKey": "...",    # optional deterministic conditions
         "matchAttribute": {...},
-        "matchPerson": {...},
         "matchGroups": {...},
     }
 """
@@ -27,9 +25,9 @@ from __future__ import annotations
 import threading
 from typing import Any, Dict, Mapping, Optional
 
-from ..context import EvaluationContext
-from ..errors import FlagNotFoundError
-from .base import FlagResolution
+from ...domain.context import EvaluationContext
+from ...domain.errors import FlagNotFoundError
+from ...application.ports import FlagResolution
 
 __all__ = ["InMemoryAdapter"]
 
@@ -56,6 +54,9 @@ class InMemoryAdapter:
         with self._lock:
             definition = self._flags.get(flag_key)
         if definition is None:
+            # key genuinely unknown to this backend -> ERROR/FlagNotFound
+            # (spec/control-points.md return-discipline table), distinct
+            # from "conditions did not select this caller" below.
             raise FlagNotFoundError()
 
         matched = self._conditions_match(definition, context)
@@ -76,9 +77,7 @@ class InMemoryAdapter:
         )
 
     @staticmethod
-    def _conditions_match(
-        definition: Mapping[str, Any], context: EvaluationContext
-    ) -> bool:
+    def _conditions_match(definition: Mapping[str, Any], context: EvaluationContext) -> bool:
         """All present match* conditions must hold (deterministic equality)."""
         expected_key = definition.get("matchTargetingKey")
         if expected_key is not None and context.targeting_key != expected_key:
@@ -86,12 +85,11 @@ class InMemoryAdapter:
 
         attrs = dict(context.attributes)
 
-        for cond_field in ("matchAttribute", "matchPerson"):
-            conditions = definition.get(cond_field)
-            if conditions:
-                for key, expected in conditions.items():
-                    if attrs.get(key) != expected:
-                        return False
+        conditions = definition.get("matchAttribute")
+        if conditions:
+            for key, expected in conditions.items():
+                if attrs.get(key) != expected:
+                    return False
 
         match_groups = definition.get("matchGroups")
         if match_groups:
@@ -102,14 +100,9 @@ class InMemoryAdapter:
         return True
 
     def shutdown(self, timeout_ms: int) -> None:
+        del timeout_ms
         with self._lock:
             self._closed = True
 
-    def runtime_features(self) -> Dict[str, bool]:
-        """Adapter runtime features merged into ``capabilities.get()``."""
-        return {
-            "remoteEvaluation": False,
-            "localEvaluation": True,
-            "exposureEmission": False,
-            "sideEffectFreeReads": True,
-        }
+    def is_closed(self) -> bool:
+        return self._closed

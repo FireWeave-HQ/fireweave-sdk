@@ -1,13 +1,19 @@
-"""Fireweave canonical error taxonomy (contracts/errors.json, 15 kinds).
+"""Fireweave canonical error taxonomy (spec/errors.schema.json, 15 kinds).
 
 Rules implemented here:
 
 - **Defaults do not throw**: the runtime converts these errors into default-valued
-  decisions; OpenFeature resolvers never raise for abnormal evaluation.
+  decisions; control-point reads never raise for abnormal evaluation
+  (spec/control-points.md "Return discipline").
 - **No secrets in messages**: every message that crosses a public boundary goes
   through :func:`redact_secrets`; error kinds carry canonical safe default
   messages and never echo credentials.
 - Causes are preserved idiomatically via ``raise ... from`` (``__cause__``).
+
+The ``openfeature_error_code`` vocabulary is the wire vocabulary fixed by
+spec/errors.schema.json (mirrors OpenFeature's ErrorCode strings) — carrying it
+is not "exposing an OpenFeature provider" (spec/control-points.md "Scope of
+v1" forbids the latter, not the shared error-code spelling).
 """
 
 from __future__ import annotations
@@ -45,7 +51,7 @@ FLAG_METADATA_ERROR_KIND_KEY = "fireweave.errorKind"
 
 
 class ErrorKind(str, enum.Enum):
-    """Canonical PascalCase error kinds (contracts/errors.json)."""
+    """Canonical PascalCase error kinds (spec/errors.schema.json)."""
 
     NOT_READY = "NotReady"
     FLAG_NOT_FOUND = "FlagNotFound"
@@ -82,8 +88,8 @@ _DEFAULT_MESSAGES = {
     ErrorKind.INTERNAL: "internal error",
 }
 
-# OpenFeature error-code strings (ADR-0001 §12). ``Configuration`` maps to
-# PROVIDER_FATAL on the init-fatal path and GENERAL at runtime;
+# OpenFeature error-code strings (spec/errors.schema.json). ``Configuration``
+# maps to PROVIDER_FATAL on the init-fatal path and GENERAL at runtime;
 # ``InvalidContext`` maps to TARGETING_KEY_MISSING when the targeting key is
 # required and missing.
 _OF_ERROR_CODES = {
@@ -99,7 +105,7 @@ _OF_ERROR_CODES = {
     ErrorKind.BACKEND_UNAVAILABLE: "GENERAL",
     ErrorKind.MALFORMED_RESPONSE: "PARSE_ERROR",
     ErrorKind.UNSUPPORTED_CAPABILITY: "GENERAL",
-    ErrorKind.CONFIGURATION: "GENERAL",  # runtime path; init-fatal → PROVIDER_FATAL
+    ErrorKind.CONFIGURATION: "GENERAL",  # runtime path; init-fatal -> PROVIDER_FATAL
     ErrorKind.ALREADY_CLOSED: "PROVIDER_NOT_READY",
     ErrorKind.INTERNAL: "GENERAL",
 }
@@ -112,9 +118,9 @@ _RETRYABLE = {
     ErrorKind.BACKEND_UNAVAILABLE,
 }
 
-# Secret redaction: prefix-token patterns per contracts/errors.json rules.
+# Secret redaction: prefix-token patterns (project/secret keys, bearer tokens).
 _SECRET_PATTERNS = re.compile(
-    r"(phc_[A-Za-z0-9_\-]*|phs_[A-Za-z0-9_\-]*|phx_[A-Za-z0-9_\-]*"
+    r"(ph[csx]_[A-Za-z0-9_\-]*"
     r"|Bearer\s+\S+|FW_PROJECT_API_KEY\s*[=:]\s*\S+)"
 )
 
