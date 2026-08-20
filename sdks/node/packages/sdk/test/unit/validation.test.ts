@@ -159,6 +159,51 @@ test('validateContext: enforces requireTargetingKey via validateTargetingKey (TA
 });
 
 // ---------------------------------------------------------------------------
+// Hostile input: circular references must fail closed, never throw
+// (validateContext must be genuinely total — spec/control-points.md
+// "Return discipline — never throw into a read path")
+// ---------------------------------------------------------------------------
+
+test('validateContext: a self-referencing object attribute fails closed as InvalidContext, never throws', () => {
+  const cyclic: Record<string, unknown> = {};
+  cyclic['self'] = cyclic;
+  assert.doesNotThrow(() => {
+    const result = validateContext({ targetingKey: 'user-1', attributes: { loop: cyclic } }, POLICY);
+    assert.equal(result.ok, false);
+    assert.ok(!result.ok && result.error.kind === 'InvalidContext');
+  });
+});
+
+test('validateContext: a self-referencing array attribute fails closed as InvalidContext, never throws', () => {
+  const cyclic: unknown[] = [];
+  cyclic.push(cyclic);
+  assert.doesNotThrow(() => {
+    const result = validateContext({ attributes: { loop: cyclic } }, POLICY);
+    assert.equal(result.ok, false);
+    assert.ok(!result.ok && result.error.kind === 'InvalidContext');
+  });
+});
+
+test('validateContext: a cycle nested several levels deep still fails closed, never throws', () => {
+  const inner: Record<string, unknown> = { name: 'inner' };
+  const outer: Record<string, unknown> = { inner };
+  inner['backToOuter'] = outer;
+  assert.doesNotThrow(() => {
+    const result = validateContext({ attributes: { chain: outer } }, POLICY);
+    assert.equal(result.ok, false);
+    assert.ok(!result.ok && result.error.kind === 'InvalidContext');
+  });
+});
+
+test('validateContext: a shared (but acyclic) sub-object across two attributes is NOT a false-positive cycle', () => {
+  const shared = { plan: 'pro' };
+  const result = validateContext({ attributes: { a: shared, b: shared } }, POLICY);
+  assert.equal(result.ok, true);
+  assert.ok(result.ok && result.value.attributes.a);
+  assert.ok(result.ok && result.value.attributes.b);
+});
+
+// ---------------------------------------------------------------------------
 // validateInitOptions (spec/modes.md "Initialisation validation")
 // ---------------------------------------------------------------------------
 

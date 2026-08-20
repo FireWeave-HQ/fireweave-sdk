@@ -278,3 +278,88 @@ test('H-4: evaluate does not emit by default; sendExposure:true opts in with ded
   await runtime.evaluate('fw-a', 'boolean', false, { targetingKey: 'user-1' }, { sendExposure: true });
   assert.equal(adapter.getExposures().length, 1);
 });
+
+// ---------------------------------------------------------------------------
+// Pre-I/O validation order: the fixed key -> default-vs-type -> context ->
+// lifecycle sequence (spec/control-points.md "Validation, before any I/O")
+// must short-circuit BEFORE the adapter is ever called. A counting adapter
+// proves the short-circuit, not just the resulting Decision shape.
+// ---------------------------------------------------------------------------
+
+function countingAdapter(): { adapter: BackendAdapter; resolveCalls: () => number } {
+  let resolveCalls = 0;
+  const adapter: BackendAdapter = {
+    name: 'other',
+    initialize: async () => {},
+    resolve: async (): Promise<AdapterResolution> => {
+      resolveCalls += 1;
+      return { found: true, enabled: true, value: true };
+    },
+    shutdown: async () => {},
+    features: () => ({}),
+  };
+  return { adapter, resolveCalls: () => resolveCalls };
+}
+
+test('a malformed key short-circuits before I/O: adapter.resolve is never called', async () => {
+  const { adapter, resolveCalls } = countingAdapter();
+  const runtime = new FireweaveRuntime(adapter);
+  await runtime.initialize();
+
+  const decision = await runtime.evaluate('', 'boolean', false, { targetingKey: 'user-1' });
+
+  assert.equal(resolveCalls(), 0, 'adapter.resolve must not be called for a malformed key');
+  assert.equal(decision.reason, 'ERROR');
+  assert.equal(decision.errorKind, 'FlagNotFound');
+  assert.equal(decision.value, false);
+});
+
+test('a type-mismatched default short-circuits before I/O: adapter.resolve is never called', async () => {
+  const { adapter, resolveCalls } = countingAdapter();
+  const runtime = new FireweaveRuntime(adapter);
+  await runtime.initialize();
+
+  const decision = await runtime.evaluate('fw-a', 'boolean', 'not-a-boolean', { targetingKey: 'user-1' });
+
+  assert.equal(resolveCalls(), 0, 'adapter.resolve must not be called for a type-mismatched default');
+  assert.equal(decision.reason, 'ERROR');
+  assert.equal(decision.errorKind, 'TypeMismatch');
+  assert.equal(decision.value, 'not-a-boolean');
+});
+
+test('a well-formed key and matching default DO reach the adapter (control: the gate is not always-closed)', async () => {
+  const { adapter, resolveCalls } = countingAdapter();
+  const runtime = new FireweaveRuntime(adapter);
+  await runtime.initialize();
+
+  const decision = await runtime.evaluate('fw-a', 'boolean', false, { targetingKey: 'user-1' });
+
+  assert.equal(resolveCalls(), 1);
+  assert.equal(decision.value, true);
+});
+
+// ---------------------------------------------------------------------------
+// Hostile input, end to end: a circular reference in the evaluation context
+// must never throw / never produce an unhandled rejection out of evaluate()
+// — it must degrade to an InvalidContext Decision, per spec/control-points.md
+// "Return discipline — never throw into a read path".
+// ---------------------------------------------------------------------------
+
+test('a circular reference in context never throws through evaluate() — degrades to an InvalidContext decision', async () => {
+  const { adapter, resolveCalls } = countingAdapter();
+  const runtime = new FireweaveRuntime(adapter);
+  await runtime.initialize();
+
+  const cyclic: Record<string, unknown> = {};
+  cyclic['self'] = cyclic;
+
+  const decision = await runtime.evaluate('fw-a', 'boolean', false, {
+    targetingKey: 'user-1',
+    attributes: { loop: cyclic },
+  });
+
+  assert.equal(resolveCalls(), 0, 'a cyclic context must be rejected before the adapter is reached');
+  assert.equal(decision.reason, 'ERROR');
+  assert.equal(decision.errorKind, 'InvalidContext');
+  assert.equal(decision.value, false);
+});

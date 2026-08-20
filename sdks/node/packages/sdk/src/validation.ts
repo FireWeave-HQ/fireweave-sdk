@@ -59,6 +59,15 @@ const MAX_CONTROL_POINT_KEY_LENGTH = 256;
  * table's closest row is "key unknown to the backend" → FlagNotFound): a key
  * that can never identify a flag is treated the same as one the backend
  * doesn't recognise, so this maps to FlagNotFound too.
+ *
+ * Controller-ruled interim mapping (Task 3 review): the 15-kind taxonomy in
+ * errors.schema.json is frozen at exactly 15 entries, `InvalidContext` is
+ * textually scoped to the evaluation *context* (not the key), and the
+ * schema already maps another non-literal case — quota-limited responses —
+ * onto `FlagNotFound` rather than adding a kind for it. `FlagNotFound` is
+ * therefore the least-wrong existing kind, not a literal fit. Other-language
+ * implementations copying node as the reference SHOULD use the same mapping
+ * rather than each independently guessing a different one.
  */
 export function validateControlPointKey(key: string): Validated<string> {
   if (typeof key !== 'string' || key.length === 0) {
@@ -154,32 +163,76 @@ export function validateTargetingKey(
 const utf8Encoder = new TextEncoder();
 const byteLength = (s: string): number => utf8Encoder.encode(s).length;
 
-function deepCopyJson(value: unknown): JsonValue {
+/**
+ * Sentinel returned (never thrown) when `deepCopyJson` walks back into an
+ * object already on the current recursion path — an actual reference cycle,
+ * not merely the same object shared by two sibling branches (which is legal
+ * and handled by backtracking `seen.delete(...)` below). Untyped caller
+ * input is `unknown`, so a circular attribute value is reachable from a
+ * caller today; without this, recursion never terminates and crashes the
+ * whole process with `RangeError: Maximum call stack size exceeded` —
+ * exactly the kind of throw a "before any I/O" validator must not allow
+ * (spec/control-points.md "Return discipline — never throw into a read
+ * path"). Module-local: never returned across this file's public surface,
+ * only used to fail `validateContext` closed as `InvalidContext`.
+ */
+const CYCLIC: unique symbol = Symbol('fireweave.cyclicJson');
+
+function deepCopyJson(value: unknown, seen: WeakSet<object> = new WeakSet()): JsonValue | typeof CYCLIC {
   // Structured clone of JSON-compatible data; drops functions/undefined like JSON round-trip.
   if (value === null || typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number') {
     return value;
   }
   if (Array.isArray(value)) {
-    return value.map((v) => deepCopyJson(v));
+    if (seen.has(value)) return CYCLIC;
+    seen.add(value);
+    const out: JsonValue[] = [];
+    for (const v of value) {
+      const copied = deepCopyJson(v, seen);
+      if (copied === CYCLIC) return CYCLIC;
+      out.push(copied);
+    }
+    seen.delete(value);
+    return out;
   }
   if (typeof value === 'object') {
+    if (seen.has(value)) return CYCLIC;
+    seen.add(value);
     const out: { [key: string]: JsonValue } = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (v !== undefined) out[k] = deepCopyJson(v);
+      if (v !== undefined) {
+        const copied = deepCopyJson(v, seen);
+        if (copied === CYCLIC) return CYCLIC;
+        out[k] = copied;
+      }
     }
+    seen.delete(value);
     return out;
   }
   return null;
 }
 
-function nestingDepth(value: JsonValue): number {
+/**
+ * Cycle-safe defensively: `nestingDepth` only ever runs on `deepCopyJson`'s
+ * own output today, which is guaranteed acyclic by construction (it builds
+ * fresh containers, never back-references). Guarded anyway per the same
+ * "must be genuinely total" reasoning as `deepCopyJson`, so a future caller
+ * (e.g. a Task 4 reuse) can't reintroduce the same crash by feeding this
+ * function un-copied input. A detected cycle returns `Infinity`, which
+ * always exceeds `limits.maxNestingDepth` and fails closed through the
+ * existing bound check in {@link validateContext} — no new failure path.
+ */
+function nestingDepth(value: JsonValue, seen: WeakSet<object> = new WeakSet()): number {
   if (value === null || typeof value !== 'object') return 0;
+  if (seen.has(value)) return Infinity;
+  seen.add(value);
   let max = 0;
   const children = Array.isArray(value) ? value : Object.values(value);
   for (const child of children) {
-    const d = nestingDepth(child);
+    const d = nestingDepth(child, seen);
     if (d > max) max = d;
   }
+  seen.delete(value);
   return max + 1;
 }
 
@@ -201,7 +254,11 @@ export function validateContext(
   policy: ContextPolicy,
 ): Validated<CanonicalContext> {
   const { limits } = policy;
-  const attributes = deepCopyJson(merged.attributes) as Record<string, JsonValue>;
+  const copied = deepCopyJson(merged.attributes);
+  if (copied === CYCLIC) {
+    return fail(invalidContext('context contains a circular reference'));
+  }
+  const attributes = copied as Record<string, JsonValue>;
 
   const keys = Object.keys(attributes);
   if (keys.length > limits.maxAttributeCount) {
