@@ -202,7 +202,7 @@ describe('initFireweave — adapter selection', () => {
 });
 
 describe('initFireweave — does nothing else conditional on mode', () => {
-  it('reads never throw in either mode', async () => {
+  it('reads never throw in either mode, but the unknown-key row is deliberately DIVERGENT per spec/modes.md', async () => {
     const local = await initFireweave({
       mode: 'local',
       local: { controlPoints: {} },
@@ -216,8 +216,16 @@ describe('initFireweave — does nothing else conditional on mode', () => {
       fetch: mockFetch(() => ({ status: 200, body: { decisions: [] } })),
     });
 
+    // Neither call throws — that much IS identical across modes. The
+    // resulting Decision shape is not: local's unknown-key row is
+    // `default`/reason: DEFAULT (no error at all), remote's is
+    // `default`/reason: ERROR/FlagNotFound (spec/modes.md "Behaviour per
+    // mode" table).
     const localDecision = local.controlPoints.getBooleanDetails('does-not-exist', false);
     assert.equal(localDecision.value, false);
+    assert.equal(localDecision.reason, 'DEFAULT');
+    assert.equal(localDecision.errorKind, undefined);
+    assert.equal(localDecision.errorCode, undefined);
 
     const remoteDecision = remote.controlPoints.getBooleanDetails('does-not-exist', false);
     assert.equal(remoteDecision.value, false);

@@ -146,7 +146,7 @@ test('setContext re-prefetches and reports which control points moved', async ()
 
 // ── the dev substrate ───────────────────────────────────────────────────────
 
-test('the local adapter honours devFlags and misses otherwise', async () => {
+test('the local adapter honours devFlags and misses default otherwise (spec/modes.md)', async () => {
   const runtime = await readyRuntime(new FireweaveLocalWebAdapter({ devFlags: { dogfood: true } }));
 
   const on = runtime.evaluateSync('dogfood', 'boolean', false, CTX);
@@ -154,11 +154,15 @@ test('the local adapter honours devFlags and misses otherwise', async () => {
   assert.equal(on.reason, 'STATIC');
   assert.equal(on.variant, 'on');
 
-  // TODO(control-points-v1): spec/modes.md "Behaviour per mode" makes local's
-  // unknown-key row `default`/reason `DEFAULT`, not an error. Fixed in the
-  // runtime-relayer commit that introduces the `missReason` seam; still
-  // FlagNotFound/ERROR at this point in the sequence.
-  assert.equal(runtime.evaluateSync('other', 'boolean', false, CTX).errorCode, 'FLAG_NOT_FOUND');
+  // spec/modes.md "Behaviour per mode": local's unknown-key row is
+  // `default`/reason `DEFAULT` — deliberately not an error, unlike remote's
+  // `default`/`ERROR`/`FlagNotFound`. The local adapter signals this via its
+  // `missReason: 'DEFAULT'` — a strict `===` seam the runtime checks.
+  const miss = runtime.evaluateSync('other', 'boolean', false, CTX);
+  assert.equal(miss.value, false);
+  assert.equal(miss.reason, 'DEFAULT');
+  assert.equal(miss.errorCode, undefined);
+  assert.equal(miss.errorKind, undefined);
 });
 
 // ── security posture (ADR-0009) ─────────────────────────────────────────────

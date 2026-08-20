@@ -18,6 +18,7 @@
  */
 import { FireweaveError } from '../errors.js';
 import { assertHostAllowed, assertNotSecretKey } from '../hosts.js';
+import { validateTargetingKey } from '../validation.js';
 import type {
   AdapterResolution,
   AdapterRuntimeFeatures,
@@ -136,12 +137,9 @@ export class FireweaveRemoteWebAdapter implements WebBackendAdapter {
     if (this.closed) throw new FireweaveError('AlreadyClosed');
     if (!this.ready) throw new FireweaveError('NotReady');
 
-    const targetingKey = context.targetingKey ?? '';
-    if (targetingKey === '') {
-      throw new FireweaveError('InvalidContext', {
-        openFeatureErrorCode: 'TARGETING_KEY_MISSING',
-      });
-    }
+    const targetingKeyResult = validateTargetingKey(context.targetingKey, true);
+    if (!targetingKeyResult.ok) throw targetingKeyResult.error;
+    const targetingKey = targetingKeyResult.value ?? '';
 
     // `$`-prefixed and `fireweave.`-prefixed attributes are backend directives,
     // not person properties, and groups travel in their own fields.
@@ -179,14 +177,8 @@ export class FireweaveRemoteWebAdapter implements WebBackendAdapter {
   ): Promise<RegisterTargetResult> {
     if (this.closed) return { ok: false, error: new FireweaveError('AlreadyClosed') };
     if (!this.ready) return { ok: false, error: new FireweaveError('NotReady') };
-    if (targetingKey.trim() === '') {
-      return {
-        ok: false,
-        error: new FireweaveError('InvalidContext', {
-          openFeatureErrorCode: 'TARGETING_KEY_MISSING',
-        }),
-      };
-    }
+    const targetingKeyResult = validateTargetingKey(targetingKey.trim() === '' ? undefined : targetingKey, true);
+    if (!targetingKeyResult.ok) return { ok: false, error: targetingKeyResult.error };
 
     const body: Record<string, unknown> = { targetingKey };
     if (options.kind !== undefined) body['kind'] = options.kind;

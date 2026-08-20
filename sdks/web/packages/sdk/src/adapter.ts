@@ -71,6 +71,21 @@ export interface AdapterRuntimeFeatures {
 
 export interface WebBackendAdapter {
   readonly name: 'fireweave' | 'inmemory' | 'other';
+  /**
+   * Miss-reason override for a control point ABSENT from the prefetch result
+   * (spec/modes.md "Behaviour per mode": local mode's unknown-key row is
+   * `default`/reason `DEFAULT`, not an error — unlike remote's
+   * `default`/`ERROR`/`FlagNotFound`).
+   *
+   * Node's per-call `resolve()` lets a miss carry its own `reason: 'DEFAULT'`
+   * on the resolution object itself. Web's adapter returns EVERY decision for
+   * a context in one batch (`prefetch`), so there is no per-key resolution
+   * object for a key that was never in the batch at all — the seam instead
+   * lives on the adapter. `FireweaveLocalWebAdapter` sets this to `'DEFAULT'`;
+   * every other adapter leaves it undefined and keeps the FlagNotFound/ERROR
+   * path (`FireweaveWebRuntime.evaluateSync` checks it with strict `===`).
+   */
+  readonly missReason?: 'DEFAULT';
   /** Bring the backend to a usable state. Reject with FireweaveError on failure. */
   initialize(signal?: AbortSignal): Promise<void>;
   /** Fetch every decision for a context. Throws FireweaveError on transport faults. */

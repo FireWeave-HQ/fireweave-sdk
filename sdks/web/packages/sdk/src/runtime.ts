@@ -19,10 +19,28 @@
  * between "nobody got the feature because the ramp is at 0%" and "nobody got
  * the feature because the SDK never reached the server", and no operator can
  * tell those apart after the fact.
+ *
+ * ## Validation order (spec/control-points.md "Validation, before any I/O")
+ *
+ * `evaluateSync` validates in the fixed order the spec names — key,
+ * default-vs-type, context, lifecycle — stopping at the first failure, and
+ * only THEN consults the prefetched cache. "Before any I/O" reads literally
+ * for node (the adapter call is the I/O); web has already done its I/O
+ * earlier (the prefetch), so here the same four-step order gates the cache
+ * READ instead, for the same reason: a malformed call must degrade to the
+ * caller's default without depending on what happens to be in the cache.
  */
 import { FireweaveError, isFireweaveError } from './errors.js';
-import { canonicalizeContext, DEFAULT_CONTEXT_LIMITS, mergeContexts } from './context.js';
-import type { ContextInput, ContextLimits } from './context.js';
+import { DEFAULT_CONTEXT_LIMITS, DEFAULT_RESERVED_ATTRIBUTE_KEYS, mergeContexts } from './context.js';
+import type { ContextInput, ContextLimits, ContextPolicy } from './context.js';
+import {
+  canonicalizeContext,
+  matchesExpectedType,
+  validateContext,
+  validateControlPointKey,
+  validateDefaultValue,
+} from './validation.js';
+import type { ExpectedFlagType } from './validation.js';
 import type {
   AdapterResolution,
   PrefetchResult,
@@ -41,7 +59,7 @@ import type {
   Signal,
 } from './types.js';
 
-export type ExpectedFlagType = 'boolean' | 'string' | 'number' | 'object';
+export type { ExpectedFlagType } from './validation.js';
 
 /** Ceiling on the initial prefetch so a hung backend cannot block boot. */
 export const DEFAULT_FLAGS_READY_TIMEOUT_MS = 5_000;
@@ -50,24 +68,13 @@ export interface FireweaveWebRuntimeConfig {
   /** Context applied to every evaluation unless overridden per call. */
   readonly globalContext?: ContextInput;
   readonly limits?: Partial<ContextLimits>;
+  /** Additional reserved attribute keys, beyond DEFAULT_RESERVED_ATTRIBUTE_KEYS. */
+  readonly reservedAttributeKeys?: readonly string[];
   readonly flagsReadyTimeoutMs?: number;
   /** Restrict prefetch to a known set of control points. */
   readonly flagKeys?: readonly string[];
   /** Emit a Fireweave exposure on each successful evaluation. Default false. */
   readonly sendExposure?: boolean;
-}
-
-function matchesExpectedType(value: JsonValue | undefined, expected: ExpectedFlagType): boolean {
-  switch (expected) {
-    case 'boolean':
-      return typeof value === 'boolean';
-    case 'string':
-      return typeof value === 'string';
-    case 'number':
-      return typeof value === 'number';
-    case 'object':
-      return typeof value === 'object' && value !== null;
-  }
 }
 
 export class FireweaveWebRuntime {
@@ -77,7 +84,7 @@ export class FireweaveWebRuntime {
   private state: LifecycleState = 'UNINITIALIZED';
   private cache: PrefetchResult = new Map();
   private globalContext: ContextInput;
-  private readonly limits: ContextLimits;
+  private readonly contextPolicy: ContextPolicy;
   private releaseContext: ReleaseContext = {};
   private readonly listeners = new Set<(state: LifecycleState) => void>();
 
@@ -85,7 +92,14 @@ export class FireweaveWebRuntime {
     this.adapter = adapter;
     this.config = config;
     this.globalContext = { ...(config.globalContext ?? {}) };
-    this.limits = { ...DEFAULT_CONTEXT_LIMITS, ...(config.limits ?? {}) };
+    this.contextPolicy = {
+      limits: { ...DEFAULT_CONTEXT_LIMITS, ...(config.limits ?? {}) },
+      reservedAttributeKeys: [...DEFAULT_RESERVED_ATTRIBUTE_KEYS, ...(config.reservedAttributeKeys ?? [])],
+      // Not required at the generic context-validation layer — web's
+      // targetingKey requirement is enforced at the remote adapter's
+      // prefetch/registerTarget boundary, not on every read.
+      requireTargetingKey: false,
+    };
   }
 
   getState(): LifecycleState {
@@ -114,7 +128,7 @@ export class FireweaveWebRuntime {
   async initialize(context?: ContextInput): Promise<void> {
     if (this.state === 'SHUTDOWN') return;
     this.setState('INITIALIZING');
-    if (context !== undefined) this.globalContext = mergeContexts(this.globalContext, context);
+    if (context !== undefined) this.globalContext = { ...this.globalContext, ...context };
 
     try {
       await this.adapter.initialize();
@@ -145,7 +159,7 @@ export class FireweaveWebRuntime {
 
     let canonical: CanonicalContext;
     try {
-      canonical = canonicalizeContext(this.globalContext, this.limits);
+      canonical = canonicalizeContext(mergeContexts(this.globalContext), this.contextPolicy);
     } catch {
       this.setState('ERROR');
       return;
@@ -188,7 +202,12 @@ export class FireweaveWebRuntime {
 
   /**
    * Synchronous evaluation against the prefetched cache. Never throws —
-   * failures surface as ERROR decisions, exactly like the OpenFeature contract.
+   * failures surface as ERROR decisions, exactly like the OpenFeature
+   * contract.
+   *
+   * Validates in the fixed order spec/control-points.md "Validation, before
+   * any I/O" names — key, default-vs-type, context, lifecycle — stopping at
+   * the first failure. Only once all four pass does this consult the cache.
    */
   evaluateSync(
     flagKey: string,
@@ -196,21 +215,45 @@ export class FireweaveWebRuntime {
     defaultValue: JsonValue,
     invocationContext?: ContextInput
   ): Decision {
-    if (this.state === 'SHUTDOWN') {
-      return this.errorDecision(flagKey, defaultValue, new FireweaveError('AlreadyClosed'));
+    const keyResult = validateControlPointKey(flagKey);
+    if (!keyResult.ok) {
+      return this.errorDecision(flagKey, defaultValue, keyResult.error);
     }
-    if (this.state === 'UNINITIALIZED' || this.state === 'INITIALIZING') {
-      return this.errorDecision(flagKey, defaultValue, new FireweaveError('NotReady'));
+
+    const defaultResult = validateDefaultValue(expectedType, defaultValue);
+    if (!defaultResult.ok) {
+      return this.errorDecision(flagKey, defaultValue, defaultResult.error);
     }
-    if (this.state === 'ERROR') {
-      return this.errorDecision(flagKey, defaultValue, new FireweaveError('BackendUnavailable'));
+
+    // The validated context here is not what SELECTS the cached decision —
+    // that was fixed by the last prefetch (ADR-0009: evaluation is a pure
+    // cache read). It still has to be validated: a caller must not be able to
+    // bypass context limits/reserved-key checks just by moving an oversized or
+    // malformed structure into the per-call argument instead of the
+    // constructor's globalContext.
+    const merged = mergeContexts(this.globalContext, invocationContext);
+    const contextResult = validateContext(merged, this.contextPolicy);
+    if (!contextResult.ok) {
+      return this.errorDecision(flagKey, defaultValue, contextResult.error);
+    }
+
+    const lifecycleError = this.lifecycleError();
+    if (lifecycleError !== undefined) {
+      return this.errorDecision(flagKey, defaultValue, lifecycleError);
     }
 
     const resolution = this.cache.get(flagKey);
     if (resolution === undefined || resolution.found === false) {
+      // spec/modes.md "Behaviour per mode": local's unknown-key row is
+      // `default`/reason `DEFAULT` — deliberately not an error. The local
+      // adapter signals this via `missReason: 'DEFAULT'` (adapter.ts); every
+      // other adapter leaves it undefined and keeps the path below.
+      if (this.adapter.missReason === 'DEFAULT') {
+        return { flagKey, value: defaultValue, reason: 'DEFAULT', metadata: {} };
+      }
       // A cache miss while STALE is not a missing control point — it is an
-      // unanswered question. Reporting FLAG_NOT_FOUND there would send a caller
-      // hunting for a flag that may well exist.
+      // unanswered question. Reporting FLAG_NOT_FOUND there would send a
+      // caller hunting for a flag that may well exist.
       if (this.state === 'STALE') {
         return {
           flagKey,
@@ -250,9 +293,7 @@ export class FireweaveWebRuntime {
     return 'TARGETING_MATCH';
   }
 
-  private metadataFor(
-    resolution: AdapterResolution
-  ): Record<string, string | number | boolean> | undefined {
+  private metadataFor(resolution: AdapterResolution): Record<string, string | number | boolean> | undefined {
     const metadata: Record<string, string | number | boolean> = {};
     if (resolution.version !== undefined) metadata['fireweave.flagVersion'] = resolution.version;
     if (resolution.reasonCode !== undefined) metadata['fireweave.reasonCode'] = resolution.reasonCode;
@@ -313,6 +354,11 @@ export class FireweaveWebRuntime {
   async shutdown(): Promise<void> {
     if (this.state === 'SHUTDOWN') return;
     try {
+      await this.adapter.flush?.();
+    } catch {
+      // best-effort flush; never throw from shutdown
+    }
+    try {
       await this.adapter.shutdown();
     } catch {
       // never throw from shutdown
@@ -332,11 +378,23 @@ export class FireweaveWebRuntime {
     return changed;
   }
 
-  private errorDecision(
-    flagKey: string,
-    defaultValue: JsonValue,
-    err: FireweaveError
-  ): Decision {
+  private lifecycleError(): FireweaveError | undefined {
+    switch (this.state) {
+      case 'UNINITIALIZED':
+      case 'INITIALIZING':
+        return new FireweaveError('NotReady');
+      case 'ERROR':
+        return new FireweaveError('BackendUnavailable');
+      case 'SHUTDOWN':
+        return new FireweaveError('AlreadyClosed');
+      default:
+        // READY, STALE: no lifecycle error — a STALE miss is handled
+        // specially in the cache-lookup branch above.
+        return undefined;
+    }
+  }
+
+  private errorDecision(flagKey: string, defaultValue: JsonValue, err: FireweaveError): Decision {
     return {
       flagKey,
       value: defaultValue,

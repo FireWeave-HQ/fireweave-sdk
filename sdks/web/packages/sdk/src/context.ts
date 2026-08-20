@@ -1,17 +1,17 @@
 /**
- * Evaluation-context normalization.
+ * Evaluation-context merge & normalization — pure, no validation.
  *
- * A browser context is smaller than a server one — there is one user per page,
- * not one per request — but the same two rules apply, and for the same reasons:
- * reserved keys cannot be spoofed by the caller, and oversized attributes are
- * rejected rather than silently truncated by the backend.
+ * Bound/reserved-key ENFORCEMENT (the Validated<T>-returning checks) lives in
+ * validation.ts (`validateContext`) — spec/control-points.md "Validation,
+ * before any I/O" rule 3. This module has no throwing/failing surface of its
+ * own, mirroring the split sdks/node/packages/sdk/src/domain/{context,validation}.ts
+ * makes.
  *
- * UTF-8 byte length is measured with `TextEncoder`, never `Buffer` — the same
- * choice ADR-0008 made in the server SDK, here because `Buffer` does not exist
- * in a browser at all.
+ * A browser context is smaller than a server one — there is one user per
+ * page, not one per request — but the same shape applies: `targetingKey` plus
+ * a flat bag of attributes, later layers winning key by key (the OpenFeature
+ * merge order).
  */
-import { FireweaveError } from './errors.js';
-import type { CanonicalContext, JsonValue } from './types.js';
 
 export interface ContextLimits {
   readonly maxAttributeCount: number;
@@ -40,84 +40,50 @@ export const DEFAULT_RESERVED_ATTRIBUTE_KEYS: readonly string[] = Object.freeze(
   'fireweave.tenant',
 ]);
 
+export interface ContextPolicy {
+  readonly limits: ContextLimits;
+  readonly reservedAttributeKeys: readonly string[];
+  readonly requireTargetingKey: boolean;
+}
+
 export type ContextInput = Record<string, unknown> & { targetingKey?: string };
 
-const encoder = new TextEncoder();
-
-function byteLength(value: string): number {
-  return encoder.encode(value).length;
-}
-
-function depthOf(value: unknown, depth = 0): number {
-  if (value === null || typeof value !== 'object') return depth;
-  let deepest = depth;
-  for (const child of Object.values(value as Record<string, unknown>)) {
-    deepest = Math.max(deepest, depthOf(child, depth + 1));
-  }
-  return deepest;
-}
-
-/** Later contexts win, key by key. Mirrors the OpenFeature merge order. */
-export function mergeContexts(...contexts: ReadonlyArray<ContextInput | undefined>): ContextInput {
-  const merged: ContextInput = {};
-  for (const ctx of contexts) {
-    if (ctx === undefined) continue;
-    Object.assign(merged, ctx);
-  }
-  return merged;
-}
-
-/**
- * Validate and canonicalize. Throws `FireweaveError('InvalidContext')` on any
- * limit breach or reserved-key use; never mutates the input.
- */
-export function canonicalizeContext(
-  input: ContextInput | undefined,
-  limits: ContextLimits = DEFAULT_CONTEXT_LIMITS,
-  reservedKeys: readonly string[] = DEFAULT_RESERVED_ATTRIBUTE_KEYS
-): CanonicalContext {
-  const source = input ?? {};
-  const attributes: Record<string, JsonValue> = {};
-  let groups: Record<string, string> | undefined;
-  let groupProperties: Record<string, Record<string, JsonValue>> | undefined;
+/** One raw layer → {targetingKey?, attributes}. No validation, no copying beyond Object.entries. */
+export function normalizeContextInput(input: ContextInput | undefined): {
+  targetingKey?: string;
+  attributes: Record<string, unknown>;
+} {
+  if (input === undefined || input === null) return { attributes: {} };
+  const attributes: Record<string, unknown> = {};
   let targetingKey: string | undefined;
-
-  for (const [key, value] of Object.entries(source)) {
+  for (const [key, value] of Object.entries(input)) {
     if (key === 'targetingKey') {
       if (typeof value === 'string' && value.length > 0) targetingKey = value;
       continue;
     }
-    if (reservedKeys.includes(key)) {
-      throw new FireweaveError('InvalidContext');
-    }
-    if (key === 'groups' || key === 'fireweave.groups') {
-      groups = value as Record<string, string>;
-      continue;
-    }
-    if (key === 'groupProperties' || key === 'fireweave.groupProperties') {
-      groupProperties = value as Record<string, Record<string, JsonValue>>;
-      continue;
-    }
-    if (value === undefined) continue;
-    if (byteLength(key) > limits.maxKeyBytes) throw new FireweaveError('InvalidContext');
-    const serialized = JSON.stringify(value) ?? 'null';
-    if (byteLength(serialized) > limits.maxValueBytes) throw new FireweaveError('InvalidContext');
-    if (depthOf(value) > limits.maxNestingDepth) throw new FireweaveError('InvalidContext');
-    attributes[key] = value as JsonValue;
+    if (value !== undefined) attributes[key] = value;
   }
+  return targetingKey !== undefined ? { targetingKey, attributes } : { attributes };
+}
 
-  if (Object.keys(attributes).length > limits.maxAttributeCount) {
-    throw new FireweaveError('InvalidContext');
+/**
+ * Merge context layers with later layers winning at the attribute-key level.
+ * Layers are raw inputs; output is a plain {targetingKey?, attributes} bag —
+ * validation (limits, reserved keys, cycle-safety) happens downstream in
+ * validation.ts's `validateContext`.
+ */
+export function mergeContexts(...layers: ReadonlyArray<ContextInput | undefined>): {
+  targetingKey?: string;
+  attributes: Record<string, unknown>;
+} {
+  let targetingKey: string | undefined;
+  const attributes: Record<string, unknown> = {};
+  for (const layer of layers) {
+    const { targetingKey: tk, attributes: attrs } = normalizeContextInput(layer);
+    if (tk !== undefined) targetingKey = tk;
+    for (const [k, v] of Object.entries(attrs)) {
+      attributes[k] = v;
+    }
   }
-  if (byteLength(JSON.stringify(attributes)) > limits.maxSerializedBytes) {
-    throw new FireweaveError('InvalidContext');
-  }
-
-  const canonical: CanonicalContext = { attributes };
-  return {
-    ...canonical,
-    ...(targetingKey !== undefined ? { targetingKey } : {}),
-    ...(groups !== undefined ? { groups } : {}),
-    ...(groupProperties !== undefined ? { groupProperties } : {}),
-  };
+  return targetingKey !== undefined ? { targetingKey, attributes } : { attributes };
 }

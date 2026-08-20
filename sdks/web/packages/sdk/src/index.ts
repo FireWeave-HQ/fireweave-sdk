@@ -50,13 +50,19 @@ export type {
   Capabilities,
 } from './types.js';
 
+export { DEFAULT_CONTEXT_LIMITS, DEFAULT_RESERVED_ATTRIBUTE_KEYS, mergeContexts } from './context.js';
+export type { ContextInput, ContextLimits, ContextPolicy } from './context.js';
+
 export {
-  DEFAULT_CONTEXT_LIMITS,
-  DEFAULT_RESERVED_ATTRIBUTE_KEYS,
   canonicalizeContext,
-  mergeContexts,
-} from './context.js';
-export type { ContextInput, ContextLimits } from './context.js';
+  matchesExpectedType,
+  validateContext,
+  validateControlPointKey,
+  validateDefaultValue,
+  validateTargetingKey,
+  validateInitOptions,
+} from './validation.js';
+export type { Validated } from './validation.js';
 
 export {
   DEFAULT_ALLOWED_HOSTS,

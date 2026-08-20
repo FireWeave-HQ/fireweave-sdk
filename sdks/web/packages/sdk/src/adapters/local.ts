@@ -28,6 +28,12 @@ export interface FireweaveLocalWebAdapterOptions {
 export class FireweaveLocalWebAdapter implements WebBackendAdapter {
   /** Not `inmemory` — that name belongs to the fixture adapter. */
   readonly name = 'other' as const;
+  /**
+   * spec/modes.md "Behaviour per mode": local's unknown-key row is
+   * `default`/reason `DEFAULT`, not an error. This is the strict `===` seam
+   * `FireweaveWebRuntime.evaluateSync` checks on a cache miss.
+   */
+  readonly missReason = 'DEFAULT' as const;
 
   private readonly devFlags: Record<string, boolean>;
   private closed = false;
