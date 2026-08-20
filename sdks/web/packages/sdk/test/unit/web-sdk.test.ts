@@ -130,6 +130,28 @@ test('evaluation never throws, even after shutdown', async () => {
   assert.equal(d.errorKind, 'AlreadyClosed');
 });
 
+test('a circular reference in the per-call context degrades to InvalidContext, never throws (end-to-end)', async () => {
+  // validation.test.ts proves validateContext itself is cycle-safe in
+  // isolation; this proves the same guarantee holds through the full public
+  // read path (FireweaveWebClient.controlPoints.*Details), not just the
+  // validator called directly.
+  const runtime = await readyRuntime();
+  const client = new FireweaveWebClient(runtime);
+
+  const cyclic: Record<string, unknown> = {};
+  cyclic['self'] = cyclic;
+
+  assert.doesNotThrow(() => {
+    const d = client.controlPoints.getBooleanDetails('new-checkout', false, {
+      targetingKey: 'user_42',
+      loop: cyclic,
+    });
+    assert.equal(d.value, false);
+    assert.equal(d.reason, 'ERROR');
+    assert.equal(d.errorKind, 'InvalidContext');
+  });
+});
+
 test('setContext re-prefetches and reports which control points moved', async () => {
   const adapter = new InMemoryWebAdapter({
     flags: {
