@@ -6,28 +6,29 @@
  *   deno run --allow-read --allow-env scripts/smoke-runtimes.mjs
  *
  * Imports use deep RELATIVE paths on purpose, so the script contains no bare
- * specifiers and needs no npm resolution on any runtime. That covers every
- * module except `provider.js`, the one module that imports
- * `@openfeature/server-sdk` — a bare npm specifier, exercised by the Node and
- * Bun test suites instead.
+ * specifiers and needs no npm resolution on any runtime. Paths point at the
+ * layered dist tree (domain/, application/, infrastructure/) that Task 4's
+ * layering pass introduced — a flat `dist/runtime.js` etc. no longer exists.
+ * There is no OpenFeature-importing module to exclude here: the OpenFeature
+ * provider was retired by ADR-0010 (the v1 cut), so every remaining export
+ * this script imports is npm-resolution-free by construction.
  *
  * Asserts the things that actually differ between runtimes: UTF-8 byte counting
- * (TextEncoder, not Buffer), environment reads (readEnv, not process.env),
- * fetch/AbortController availability, and timers.
+ * (TextEncoder, not Buffer), fetch/AbortController availability, and timers.
+ * (The old `readEnv` check is gone along with it: spec/modes.md bans env
+ * reads outright, so the SDK no longer exposes an env-reading helper at all.)
  */
-import { FireweaveRuntime } from '../packages/sdk/dist/runtime.js';
-import { FireweaveClient } from '../packages/sdk/dist/client.js';
-import { InMemoryAdapter } from '../packages/sdk/dist/adapters/inmemory.js';
-import { FireweaveRemoteAdapter } from '../packages/sdk/dist/adapters/remote.js';
-// The dev substrate's ADAPTER only. `local-provider.js` is deliberately NOT
-// imported here: it pulls in `@openfeature/server-sdk`, a bare npm specifier,
-// which would cost this script its "resolves with no npm resolution on any
-// runtime" property — the same reason `provider.js` is absent.
-import { FireweaveLocalAdapter } from '../packages/sdk/dist/adapters/local.js';
-import { canonicalizeContext, DEFAULT_CONTEXT_LIMITS } from '../packages/sdk/dist/context.js';
-import { DEFAULT_ALLOWED_HOSTS } from '../packages/sdk/dist/hosts.js';
-import { isFireweaveError } from '../packages/sdk/dist/errors.js';
-import { readEnv } from '../packages/sdk/dist/env.js';
+import { FireweaveRuntime } from '../packages/sdk/dist/application/runtime.js';
+import { FireweaveClient } from '../packages/sdk/dist/application/client.js';
+import { InMemoryAdapter } from '../packages/sdk/dist/infrastructure/adapters/inmemory.js';
+import { FireweaveRemoteAdapter } from '../packages/sdk/dist/infrastructure/adapters/remote.js';
+// The dev substrate's ADAPTER only — pure computation, no I/O, no env, so it
+// must behave identically on every runtime (ADR-0008).
+import { FireweaveLocalAdapter } from '../packages/sdk/dist/infrastructure/adapters/local.js';
+import { DEFAULT_CONTEXT_LIMITS } from '../packages/sdk/dist/domain/context.js';
+import { canonicalizeContext } from '../packages/sdk/dist/domain/validation.js';
+import { DEFAULT_ALLOWED_HOSTS } from '../packages/sdk/dist/infrastructure/hosts.js';
+import { isFireweaveError } from '../packages/sdk/dist/domain/errors.js';
 
 const failures = [];
 const check = (name, condition, detail = '') => {
@@ -80,15 +81,6 @@ const smallContext = canonicalizeContext(
 check('context canonicalization preserves attributes', smallContext.attributes.plan === 'pro');
 check('multi-byte attribute values survive', smallContext.attributes.emoji === '🔥');
 
-// --- environment reads (readEnv, guarded on every runtime) -----------------
-let envReadThrew = false;
-try {
-  readEnv('FW_DEFINITELY_NOT_SET_12345');
-} catch {
-  envReadThrew = true;
-}
-check('readEnv never throws, even without env permission', !envReadThrew);
-
 // --- control-point evaluation through the in-memory adapter ----------------
 const runtime = new FireweaveRuntime(
   new InMemoryAdapter({
@@ -107,19 +99,22 @@ const decision = await client.controlPoints.evaluate('new-checkout', 'boolean', 
 check('control point evaluates to true', decision.value === true, `got ${decision.value}`);
 check('decision carries TARGETING_MATCH', decision.reason === 'TARGETING_MATCH', decision.reason);
 
-// --- the v2 alias still works on every runtime -----------------------------
+// --- the deprecated alias still works on every runtime ----------------------
 check('client.flags aliases client.controlPoints', client.flags === client.controlPoints);
 const viaAlias = await client.flags.getBooleanValue('new-checkout', false, {
   targetingKey: 'user_42',
 });
 check('evaluation through the deprecated alias works', viaAlias === true);
 
-// --- extensions ------------------------------------------------------------
-check('health signal accepted', client.signals.recordHealth({ name: 'smoke', status: 'ok' }).ok);
-const caps = client.capabilities.get();
-check('capabilities report the inmemory backend', caps.runtime.backend === 'inmemory');
-check('capabilities report controlPoints', caps.static.features.controlPoints === true);
-check('capabilities retain flags', caps.static.features.flags === true);
+// --- invokeCapability (v1's only extension-style surface) -------------------
+// SUPPORTED_CAPABILITIES is frozen empty in v1 (releases/exposures/signals/
+// capabilities discovery are all cut, ADR-0010): every capability string
+// degrades UnsupportedCapability, never throws.
+const capResult = client.invokeCapability('releases.teleport', {});
+check(
+  'invokeCapability degrades UnsupportedCapability (v1 has no supported capabilities)',
+  capResult.ok === false && capResult.errorKind === 'UnsupportedCapability' && capResult.degraded === true,
+);
 
 // --- remote adapter config validation (no network) -------------------------
 check('default allowlist names no vendor', !DEFAULT_ALLOWED_HOSTS.some((h) => /posthog/i.test(h)));

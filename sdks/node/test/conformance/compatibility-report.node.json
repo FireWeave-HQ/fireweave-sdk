@@ -416,104 +416,104 @@
       "fixtureId": "ext-capabilities-get",
       "suite": "extensions",
       "language": "node",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the capabilities namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-exposures-dedup",
       "suite": "extensions",
       "language": "node",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the exposures namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-exposures-flush",
       "suite": "extensions",
       "language": "node",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the exposures namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-exposures-record",
       "suite": "extensions",
       "language": "node",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the exposures namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-lifecycle-gating",
       "suite": "extensions",
       "language": "node",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the signals namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-releases-complete",
       "suite": "extensions",
       "language": "node",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the releases namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-releases-fail",
       "suite": "extensions",
       "language": "node",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the releases namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-releases-set-context",
       "suite": "extensions",
       "language": "node",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the releases namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-releases-start",
       "suite": "extensions",
       "language": "node",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the releases namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-signals-error",
       "suite": "extensions",
       "language": "node",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the signals namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-signals-health",
       "suite": "extensions",
       "language": "node",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the signals namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-signals-metric",
       "suite": "extensions",
       "language": "node",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the signals namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-signals-outcome",
       "suite": "extensions",
       "language": "node",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the signals namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
@@ -526,8 +526,9 @@
     }
   ],
   "summary": {
-    "pass": 63,
+    "pass": 50,
     "fail": 0,
-    "skipped-with-documented-limitation": 2
+    "skipped-with-documented-limitation": 2,
+    "skipped-v1-out-of-scope": 13
   }
 }
