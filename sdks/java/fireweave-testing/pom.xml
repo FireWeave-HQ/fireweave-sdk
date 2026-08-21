@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>ai.fireweave</groupId>
+    <artifactId>fireweave-java-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>fireweave-testing</artifactId>
+  <name>Fireweave testing (in-memory adapter + conformance runner)</name>
+  <description>
+    Deterministic InMemoryAdapter (fixture-driven, fault simulation) and the conformance
+    runner executing contracts/ fixtures through the real v1 control-points surface
+    (FireweaveClient.controlPoints — no OpenFeature bridge, retired by ADR-0010).
+  </description>
+  <url>https://github.com/FireWeave-HQ/fireweave-sdk</url>
+
+  <properties>
+    <automatic.module.name>ai.fireweave.testing</automatic.module.name>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>ai.fireweave</groupId>
+      <artifactId>fireweave-sdk</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <configuration>
+          <skip>false</skip>
+          <mainClass>ai.fireweave.testing.conformance.ConformanceRunner</mainClass>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>
