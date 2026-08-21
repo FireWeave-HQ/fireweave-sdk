@@ -44,6 +44,6 @@
   },
   "compatibility": {
     "node": "green", "web": "green", "python": "green", "java": "green",
-    "go": "green", "rust": "pending", "swift": "pending"
+    "go": "green", "rust": "green", "swift": "pending"
   }
 }
