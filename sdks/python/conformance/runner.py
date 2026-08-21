@@ -1,18 +1,38 @@
 """Fireweave Python conformance runner (contracts/harness.md).
 
-Loads the fixture suites under ``contracts/``, executes each against the SDK,
-normalizes results per the normative comparator, and emits a results JSON.
+Loads the fixture suites under ``contracts/``, invokes each against the v1
+control-points surface (``FireweaveClient.control_points`` — there is no
+OpenFeature bridge to reach for any more; ADR-0010 retired it), normalizes
+results per the normative comparator, and emits a results JSON matching
+contracts/README.md's compatibility-report schema (the same shape node's
+runner writes: ``fixtureId``/``suite``/``language``/``status``/``limitation``/
+``message`` rows, not the ad hoc ``id``/``actual``/``diffs`` shape this file
+used pre-v1).
 
 Suite -> execution backend:
 
-- context / evaluation / lifecycle / extensions / security: InMemoryAdapter.
-- faults: PostHogAdapter with real HTTP against the local test-server stub
-  (``test-server/implementation/server.mjs``, spawned on demand) for the
-  fault modes the harness prescribes (``delay``/``401``/``429``/``500``/
-  invalid JSON/quota-limited) — reported ``via=http-stub``. Network/offline
-  faults use a real refused loopback TCP connection
-  (``via=http-refused-connection``). If ``node`` is unavailable the runner
-  falls back to an injected fake transport (``via=injected-fake-transport``).
+- evaluation / context / lifecycle / security / (the one runnable extensions
+  fixture): InMemoryAdapter, driving FireweaveRuntime + FireweaveClient
+  directly — the raw construction path, same as
+  tests/test_control_points_surface.py's own harness. Two lifecycle/security
+  fixtures whose ``given.config`` names a ``host`` (life-init-fail-
+  configuration, life-init-success, sec-endpoint-ssrf-allowlist) are routed
+  through FireweaveRemoteAdapter instead: python's FireweaveRuntime carries no
+  host/allowed-hosts concept of its own (unlike node's FireweaveRuntimeConfig)
+  — only the remote adapter's own ``initialize()`` validates a host, so
+  exercising the host-allowlist rule needs that adapter.
+- faults: FireweaveRemoteAdapter with real HTTP against the local test-server
+  stub (``test-server/implementation/server.mjs``, spawned once as a
+  subprocess and reused, speaking the Fireweave-native
+  ``POST /v1/flags/evaluate`` route — not the legacy PostHog ``/flags?v=2``
+  protocol this file used pre-v1). ``fault-stale-cache`` runs on the
+  in-memory adapter instead (cache staleness is provisioned directly per
+  ``given.flags[*].fromCache`` + ``providerState: STALE``).
+- extensions: 13 of 14 fixtures target namespaces cut from v1 (releases,
+  exposures, signals, capabilities — see V1_OUT_OF_SCOPE_EXTENSION_FIXTURES
+  below) and are reported ``skipped-v1-out-of-scope`` without executing.
+  Only ``ext-unsupported-capability-degrade`` exercises real v1 surface
+  (``FireweaveClient.invoke_capability``) and runs for real.
 
 Multi-case fixtures (``cases`` array, contracts/README.md) run every case
 against a fresh harness; the fixture passes only when all cases pass.
@@ -21,97 +41,132 @@ against a fresh harness; the fixture passes only when all cases pass.
 from __future__ import annotations
 
 import atexit
-import copy
 import json
 import socket
 import subprocess
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 from fireweave import (
-    CapabilityRegistry,
     ContextLimits,
     EvaluationContext,
-    EvaluationOptions,
     FireweaveClient,
-    FireweaveConfig,
+    FireweaveRemoteAdapter,
     FireweaveRuntime,
+    FlagType,
     InMemoryAdapter,
     LifecycleState,
+    merge_contexts,
+    validate_context,
 )
-from fireweave.errors import FireweaveError
-from fireweave.types import FlagType
+from fireweave.domain.errors import (
+    AuthenticationError,
+    AuthorizationError,
+    BackendUnavailableError,
+    FireweaveError,
+    InternalError,
+    MalformedResponseError,
+    NetworkError,
+    RateLimitedError,
+    TimeoutError_,
+)
 
 LANGUAGE = "python"
 
-# Normative EXCLUDE_SET (contracts/harness.md).
+SUITES = ("evaluation", "context", "lifecycle", "faults", "security", "extensions")
+
+# Normative EXCLUDE_SET (contracts/harness.md) — kept for documentation parity
+# with node/go/java; this runner's comparator only checks declared `expect`
+# keys (see `compare()`), so nondeterministic fields never enter fixtures in
+# the first place rather than needing active stripping.
 EXCLUDE_SET = {
     "timestamp", "evaluatedAt", "ts", "createdAt", "updatedAt", "stack",
     "stackTrace", "requestId", "uuid", "traceId", "spanId", "messageId",
     "latencyMs", "durationMs", "pid", "hostname",
 }
 
-# Expect-side directives that are assertions, not payload fields.
 _DIRECTIVE_KEYS = {"errorMessageMustNotContain", "recordedMessageMustNotContain"}
 
-_FLAG_TYPES = {
-    "boolean": FlagType.BOOLEAN,
-    "string": FlagType.STRING,
-    "integer": FlagType.INTEGER,
-    "float": FlagType.FLOAT,
-    "object": FlagType.OBJECT,
+# ---------------------------------------------------------------------------
+# v1-scope classification (contracts/harness.md "Extension fixtures — v1
+# scope rule", ruling 2). contracts/extensions/*.json are frozen and were
+# authored against the pre-v1 surface (releases/exposures/signals/
+# capabilities discovery) — cut entirely by ADR-0010. Each of the 14 fixtures
+# was read before classifying (see sdks/node/test/conformance/run.ts for the
+# identical, fully-annotated table — python's classification is the same set
+# for the same reason: the SDK surface these fixtures exercise is identical
+# across languages).
+V1_OUT_OF_SCOPE_EXTENSION_FIXTURES = {
+    "ext-capabilities-get",
+    "ext-exposures-dedup",
+    "ext-exposures-flush",
+    "ext-exposures-record",
+    "ext-lifecycle-gating",
+    "ext-releases-complete",
+    "ext-releases-fail",
+    "ext-releases-set-context",
+    "ext-releases-start",
+    "ext-signals-error",
+    "ext-signals-health",
+    "ext-signals-metric",
+    "ext-signals-outcome",
 }
 
-_EXT_CAPS = {
-    "releases": ["releases.setContext", "releases.start", "releases.complete", "releases.fail"],
-    "exposures": ["exposures.record", "exposures.flush"],
-    "signals": [
-        "signals.recordHealth", "signals.recordError",
-        "signals.recordMetric", "signals.recordOutcome",
-    ],
-    "capabilities": ["capabilities.get"],
-}
+
+def v1_out_of_scope_namespace(fixture_id: str) -> str:
+    if fixture_id == "ext-capabilities-get":
+        return "capabilities"
+    if fixture_id.startswith("ext-exposures-"):
+        return "exposures"
+    if fixture_id == "ext-lifecycle-gating":
+        return "signals"
+    if fixture_id.startswith("ext-releases-"):
+        return "releases"
+    if fixture_id.startswith("ext-signals-"):
+        return "signals"
+    return "unknown"
 
 
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # fixture -> SDK object construction
-# --------------------------------------------------------------------------
 
-def config_from_fixture(cfg: Dict[str, Any]) -> FireweaveConfig:
-    limits_d = cfg.get("limits", {})
-    limits = ContextLimits(
+def _to_expected_type(flag_type: str) -> FlagType:
+    if flag_type in ("integer", "float"):
+        return FlagType.NUMBER
+    return FlagType(flag_type)
+
+
+def _context_from(ctx: Optional[Dict[str, Any]]) -> Optional[EvaluationContext]:
+    if ctx is None:
+        return None
+    return EvaluationContext(targeting_key=ctx.get("targetingKey"), attributes=ctx.get("attributes") or {})
+
+
+def _limits_from(config: Dict[str, Any]) -> ContextLimits:
+    limits_d = config.get("limits") or {}
+    return ContextLimits(
         max_attribute_count=limits_d.get("maxAttributeCount", 128),
         max_key_bytes=limits_d.get("maxKeyBytes", 256),
         max_value_bytes=limits_d.get("maxValueBytes", 4096),
         max_nesting_depth=limits_d.get("maxNestingDepth", 6),
         max_serialized_bytes=limits_d.get("maxSerializedContextBytes", 65536),
     )
-    return FireweaveConfig(
-        project_api_key=cfg.get("projectApiKey"),
-        host=cfg.get("host"),
-        limits=limits,
-        local_evaluation=cfg.get("localEvaluation", False),
-        only_evaluate_locally=cfg.get("onlyEvaluateLocally", False),
-        require_targeting_key=cfg.get("requireTargetingKey", False),
-        allow_anonymous=cfg.get("allowAnonymous", True),
-        allowed_hosts=tuple(cfg["allowedHosts"]) if "allowedHosts" in cfg else None,
-        reserved_attribute_keys=tuple(
-            cfg.get("reservedAttributeKeys", ("targetingKey", "kind"))
-        ),
-        feature_flags_request_timeout_ms=cfg.get("featureFlagsRequestTimeoutMs", 3000),
-    )
 
 
-def context_from_fixture(ctx: Optional[Dict[str, Any]]) -> Optional[EvaluationContext]:
-    if ctx is None:
-        return None
-    return EvaluationContext(
-        targeting_key=ctx.get("targetingKey"),
-        attributes=ctx.get("attributes", {}),
-    )
+def _decision_to_actual(decision: Any) -> Dict[str, Any]:
+    return {
+        "value": decision.value,
+        "variant": decision.variant,
+        "reason": decision.reason,
+        "errorCode": decision.error_code,
+        "errorMessage": decision.error_message,
+        "flagMetadata": dict(decision.flag_metadata or {}),
+    }
 
 
 class _CountingAdapter:
@@ -131,11 +186,277 @@ class _CountingAdapter:
     def shutdown(self, timeout_ms: int) -> None:
         self._inner.shutdown(timeout_ms)
 
-    def __getattr__(self, name: str) -> Any:
-        # Forward optional adapter surface (backend_name, runtime_features,
-        # telemetry sinks) so wrapping does not hide capabilities.
-        return getattr(self._inner, name)
+    def register_target(self, *args: Any, **kwargs: Any) -> Any:
+        return self._inner.register_target(*args, **kwargs)
 
+
+def _fault_to_error(fault: Dict[str, Any]) -> FireweaveError:
+    """Map a fixture fault declaration to the FireweaveError it must raise
+    (security-suite fixtures declare protocol faults but run on the
+    in-memory adapter — model them as a thrown error of the equivalent
+    kind, mirroring node's run.ts)."""
+    mode = fault.get("mode")
+    if mode == "httpStatus":
+        status = fault.get("status", 500)
+        if status == 401:
+            return AuthenticationError()
+        if status == 403:
+            return AuthorizationError()
+        if status == 429:
+            return RateLimitedError()
+        return BackendUnavailableError()
+    if mode in ("networkError", "offline"):
+        return NetworkError()
+    if mode == "timeout":
+        return TimeoutError_()
+    if mode in ("invalidJson", "malformedJson", "truncated"):
+        return MalformedResponseError()
+    return InternalError()
+
+
+class _FaultyAdapter:
+    """Wraps an adapter so every resolve() raises a fixed FireweaveError
+    (contracts/security fixtures that declare a protocol fault but run on
+    the in-memory adapter)."""
+
+    def __init__(self, inner: Any, error: FireweaveError) -> None:
+        self._inner = inner
+        self._error = error
+
+    def initialize(self) -> None:
+        self._inner.initialize()
+
+    def resolve(self, flag_key: str, context: EvaluationContext) -> Any:
+        raise self._error
+
+    def shutdown(self, timeout_ms: int) -> None:
+        self._inner.shutdown(timeout_ms)
+
+
+def _provision_state(runtime: FireweaveRuntime, state: Optional[str]) -> None:
+    if state == "READY":
+        runtime.initialize()
+    elif state == "STALE":
+        runtime.initialize()
+        runtime.force_state(LifecycleState.STALE)
+    elif state == "CLOSED":
+        try:
+            runtime.initialize()
+        except FireweaveError:
+            pass
+        runtime.shutdown()
+    # NOT_READY / None: leave UNINITIALIZED — python's lifecycle_error()
+    # treats UNINITIALIZED and (a hypothetical) INITIALIZING identically
+    # (both -> NotReadyError), so there is no in-flight-init gate to model
+    # here the way node's run.ts needs one for its async runtime.
+
+
+def _resolved_context_view(
+    limits: ContextLimits,
+    reserved_keys: Tuple[str, ...],
+    require_targeting_key: bool,
+    global_ctx: Optional[EvaluationContext],
+    client_ctx: Optional[EvaluationContext],
+    invocation_ctx: Optional[EvaluationContext],
+) -> Dict[str, Any]:
+    """Runner-level equivalent of node's `resolvedContextView(runtime.
+    resolveContext(...))`: python's Decision carries no resolved-context
+    field, and FireweaveRuntime exposes no public canonicalize-and-return
+    method, so this recomputes it from the same public domain functions
+    (`merge_contexts`, `validate_context`) the runtime itself calls."""
+    merged = merge_contexts(global_ctx, client_ctx, invocation_ctx)
+    result = validate_context(
+        merged, limits=limits, reserved_keys=reserved_keys, require_targeting_key=require_targeting_key
+    )
+    if not result.ok:
+        return {}
+    canonical = result.value
+    out: Dict[str, Any] = {}
+    if canonical.targeting_key is not None:
+        out["targetingKey"] = canonical.targeting_key
+    attrs = {k: v for k, v in canonical.attributes.items() if not k.startswith("$")}
+    if attrs:
+        out["attributes"] = attrs
+    return out
+
+
+# ---------------------------------------------------------------------------
+# per-suite executors
+
+def _run_evaluate(fixture: Dict[str, Any]) -> Dict[str, Any]:
+    given = fixture.get("given", {})
+    when = fixture.get("when", {})
+
+    # Multi-domain lifecycle fixture support: independent runtime/client per
+    # domain (no OpenFeature domain multiplexing to reach for post-ADR-0010).
+    if "domains" in given:
+        requested = when.get("domain")
+        output: Dict[str, Any] = {}
+        for name, domain_given in given["domains"].items():
+            runtime = FireweaveRuntime(InMemoryAdapter(domain_given.get("flags") or {}))
+            _provision_state(runtime, domain_given.get("providerState"))
+            if name == requested:
+                client = FireweaveClient(runtime)
+                decision = client.control_points.evaluate(
+                    when["flagKey"],
+                    _to_expected_type(when["flagType"]),
+                    when.get("defaultValue"),
+                    _context_from(when.get("invocationContext")),
+                )
+                output = _decision_to_actual(decision)
+        return output
+
+    config = given.get("config") or {}
+    limits = _limits_from(config)
+    reserved = tuple(config.get("reservedAttributeKeys", ()))
+    require_targeting_key = bool(config.get("requireTargetingKey", False))
+
+    base_adapter: Any = InMemoryAdapter(given.get("flags") or {})
+    fault = given.get("fault")
+    if fault is not None and fault.get("applyTo", "flags") == "flags":
+        base_adapter = _FaultyAdapter(base_adapter, _fault_to_error(fault))
+    adapter = _CountingAdapter(base_adapter)
+
+    global_ctx = _context_from(given.get("globalContext"))
+    runtime = FireweaveRuntime(
+        adapter,
+        limits=limits,
+        reserved_attribute_keys=reserved,
+        require_targeting_key=require_targeting_key,
+        global_context=global_ctx,
+    )
+    client = FireweaveClient(runtime)
+    client_ctx = _context_from(given.get("clientContext"))
+    if client_ctx is not None:
+        client.set_context(client_ctx)
+
+    _provision_state(runtime, given.get("providerState"))
+
+    invocation_ctx = _context_from(when.get("invocationContext"))
+    decision = client.control_points.evaluate(
+        when["flagKey"], _to_expected_type(when["flagType"]), when.get("defaultValue"), invocation_ctx
+    )
+    actual = _decision_to_actual(decision)
+
+    expect = fixture.get("expect", {})
+    if "contextSnapshotAfter" in expect:
+        raw = when.get("invocationContext") or {}
+        snapshot: Dict[str, Any] = {}
+        if isinstance(raw.get("targetingKey"), str):
+            snapshot["targetingKey"] = raw["targetingKey"]
+        attrs = dict(raw.get("attributes") or {})
+        if attrs:
+            snapshot["attributes"] = attrs
+        actual["contextSnapshotAfter"] = snapshot
+    if "resolvedContext" in expect:
+        actual["resolvedContext"] = _resolved_context_view(
+            limits, reserved, require_targeting_key, global_ctx, client_ctx, invocation_ctx
+        )
+    if "networkCalls" in expect:
+        actual["networkCalls"] = adapter.resolve_calls
+    return actual
+
+
+def _run_replace_provider(fixture: Dict[str, Any]) -> Dict[str, Any]:
+    given = fixture.get("given", {})
+    when = fixture.get("when", {})
+
+    runtime_a = FireweaveRuntime(InMemoryAdapter(given.get("flags") or {}))
+    runtime_a.initialize()
+    runtime_a.shutdown()  # old provider retired before the replacement takes over
+
+    replacement = given.get("replacement") or {}
+    runtime_b = FireweaveRuntime(InMemoryAdapter(replacement.get("flags") or {}))
+    runtime_b.initialize()
+    client_b = FireweaveClient(runtime_b)
+
+    then = when["thenEvaluate"]
+    decision = client_b.control_points.evaluate(
+        then["flagKey"], _to_expected_type(then["flagType"]), then.get("defaultValue"),
+        _context_from(then.get("invocationContext")),
+    )
+    actual = _decision_to_actual(decision)
+    actual["providerState"] = runtime_b.state.wire_name
+    return actual
+
+
+def _run_initialize(fixture: Dict[str, Any]) -> Dict[str, Any]:
+    given = fixture.get("given", {})
+    config = given.get("config") or {}
+    host = config.get("host")
+    if host is not None:
+        # Host-allowlist-testing fixtures route through FireweaveRemoteAdapter
+        # (see module docstring): its own initialize() validates config.host;
+        # python's FireweaveRuntime does not.
+        adapter: Any = FireweaveRemoteAdapter(
+            api_url=host,
+            api_key=config.get("projectApiKey") or "",
+            allowed_hosts=tuple(config["allowedHosts"]) if "allowedHosts" in config else None,
+        )
+    else:
+        adapter = InMemoryAdapter(given.get("flags") or {})
+    runtime = FireweaveRuntime(adapter)
+    error_code = None
+    error_message = None
+    error_kind = None
+    try:
+        runtime.initialize()
+    except FireweaveError as exc:
+        error_code = exc.openfeature_error_code
+        error_message = exc.message
+        error_kind = exc.kind.value
+    return {
+        "providerState": runtime.state.wire_name,
+        "errorCode": error_code,
+        "errorMessage": error_message,
+        "errorKind": error_kind,
+    }
+
+
+def _run_shutdown(fixture: Dict[str, Any]) -> Dict[str, Any]:
+    given = fixture.get("given", {})
+    runtime = FireweaveRuntime(InMemoryAdapter(given.get("flags") or {}))
+    _provision_state(runtime, given.get("providerState"))
+    error_code = None
+    error_message = None
+    try:
+        runtime.shutdown()
+    except Exception as exc:  # shutdown must not raise; guard anyway
+        error_code = "GENERAL"
+        error_message = str(exc)
+    return {"providerState": runtime.state.wire_name, "errorCode": error_code, "errorMessage": error_message}
+
+
+def _run_extension(fixture: Dict[str, Any]) -> Dict[str, Any]:
+    """Only ext-unsupported-capability-degrade reaches here (see
+    V1_OUT_OF_SCOPE_EXTENSION_FIXTURES). Exercises
+    FireweaveClient.invoke_capability, present and un-cut in v1."""
+    given = fixture.get("given", {})
+    when = fixture.get("when", {})
+    runtime = FireweaveRuntime(InMemoryAdapter(given.get("flags") or {}))
+    _provision_state(runtime, given.get("providerState", "READY"))
+    client = FireweaveClient(runtime)
+
+    if when.get("operation") != "invokeCapability":
+        raise AssertionError(
+            f"unsupported v1 extension operation {when.get('operation')!r} "
+            "(should have been classified skipped-v1-out-of-scope)"
+        )
+    result = client.invoke_capability(when["capability"], **(when.get("args") or {}))
+    actual: Dict[str, Any] = {
+        "ok": result.ok,
+        "errorCode": None if result.ok else result.error_code,
+        "errorMessage": None if result.ok else result.error_message,
+        "errorKind": None if result.ok else (result.error_kind.value if result.error_kind else None),
+    }
+    if not result.ok and result.degraded:
+        actual["degraded"] = True
+    return actual
+
+
+# ---------------------------------------------------------------------------
+# faults suite: real HTTP against a spawned test-server (Fireweave-native
+# /v1/flags/evaluate route)
 
 class _StubServer:
     """One shared local test-server stub process (loopback, random port)."""
@@ -149,7 +470,6 @@ class _StubServer:
 
     @classmethod
     def instance(cls) -> Optional["_StubServer"]:
-        """Start (once) and return the stub, or None when node is missing."""
         if cls._failed:
             return None
         if cls._singleton is None:
@@ -162,8 +482,6 @@ class _StubServer:
 
     @classmethod
     def _start(cls) -> "_StubServer":
-        import requests
-
         server_mjs = REPO_ROOT / "test-server" / "implementation" / "server.mjs"
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
@@ -179,8 +497,9 @@ class _StubServer:
             if process.poll() is not None:
                 raise RuntimeError("test-server exited during startup")
             try:
-                if requests.get(f"{url}/health", timeout=0.25).ok:
-                    break
+                with urllib.request.urlopen(f"{url}/health", timeout=0.25) as resp:
+                    if resp.status == 200:
+                        break
             except Exception:
                 pass
             if time.time() > deadline:
@@ -192,12 +511,18 @@ class _StubServer:
         return stub
 
     def _admin(self, path: str, payload: Dict[str, Any]) -> None:
-        import requests
-
-        requests.post(f"{self.url}{path}", json=payload, timeout=2).raise_for_status()
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.url}{path}", data=data, headers={"Content-Type": "application/json"}, method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            resp.read()
 
     def reset(self) -> None:
         self._admin("/_test/reset", {})
+
+    def set_flags(self, body: Dict[str, Any]) -> None:
+        self._admin("/_test/flags", body)
 
     def set_fault(self, payload: Dict[str, Any]) -> None:
         self._admin("/_test/fault", payload)
@@ -213,695 +538,145 @@ class _StubServer:
                 pass
 
 
-def _stub_fault_payload(fault: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Map a fixture fault to the stub admin /_test/fault payload."""
+def _run_fault(fixture: Dict[str, Any]) -> Dict[str, Any]:
+    given = fixture.get("given", {})
+    when = fixture.get("when", {})
+    fault = given.get("fault") or {"mode": "none"}
+
+    # Stale-cache runs on the in-memory adapter (cache state provisioned directly).
+    if fixture.get("id") == "fault-stale-cache":
+        return _run_evaluate(fixture)
+
+    stub = _StubServer.instance()
+    if stub is None:
+        raise RuntimeError("test-server (node) is unavailable; cannot exercise the faults suite")
+    stub.reset()
+
+    flags_body: Dict[str, Any] = {
+        "flags": {},
+        "errorsWhileComputingFlags": False,
+        "requestId": "00000000-0000-4000-8000-00000000f1x7",
+        "quotaLimited": None,
+    }
+    flag_id = 1
+    for key, definition in (given.get("flags") or {}).items():
+        variant = definition.get("variant")
+        flags_body["flags"][key] = {
+            "key": key,
+            "enabled": definition.get("enabled"),
+            "variant": variant if (variant is not None and definition.get("type") != "boolean") else None,
+            "reason": definition.get("reason") or {"code": "condition_match", "condition_index": None, "description": "matched"},
+            "metadata": {
+                "id": (definition.get("metadata") or {}).get("id", flag_id),
+                "version": (definition.get("metadata") or {}).get("version"),
+                "payload": None,
+            },
+        }
+        flag_id += 1
+    stub.set_flags(flags_body)
+
     mode = fault.get("mode")
     if mode == "httpStatus":
-        return {"mode": str(fault["status"])}
-    if mode == "invalidJson":
-        payload: Dict[str, Any] = {"mode": "invalid_json"}
-        if fault.get("body") is not None:
-            payload["body"] = fault["body"]
-        return payload
-    if mode == "delay":
-        return {"mode": "delay", "delayMs": int(fault.get("delayMs", 1000))}
-    if mode == "quotaLimited":
-        return {"mode": "quota_limited"}
-    return None  # networkError / offline: no HTTP response exists to stub
+        stub.set_fault({"mode": str(fault.get("status", 500)), "applyTo": "evaluate"})
+    elif mode == "invalidJson":
+        stub.set_fault({"mode": "invalid_json", "body": fault.get("body", "{not-json"), "applyTo": "evaluate"})
+    elif mode == "quotaLimited":
+        stub.set_fault({"mode": "quota_limited", "applyTo": "evaluate"})
+    elif mode == "delay":
+        stub.set_fault({"mode": "delay", "delayMs": fault.get("delayMs", 1000), "applyTo": "evaluate"})
 
-
-def _refused_base_url() -> str:
-    """Loopback URL on an ephemeral port with no listener (real ECONNREFUSED)."""
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
-    return f"http://127.0.0.1:{port}"
-
-
-class HttpStubTransport:
-    """Real-HTTP snapshot transport speaking the /flags?v=2 protocol."""
-
-    def __init__(self, base_url: str, config: FireweaveConfig) -> None:
-        self._base = base_url
-        self._config = config
-        self.calls = 0
-
-    def fetch(self, distinct_id, groups, person_properties, group_properties):
-        import requests
-
-        from fireweave.adapters.posthog import (
-            SnapshotData,
-            VendorFlagRecord,
-            _parse_payload,
-        )
-
-        self.calls += 1
-        timeout = self._config.feature_flags_request_timeout_ms / 1000.0
-        response = requests.post(
-            f"{self._base}/flags?v=2",
-            json={
-                "token": self._config.project_api_key or "phc_conformance",
-                "distinct_id": distinct_id,
-                "groups": groups or {},
-                "person_properties": person_properties or {},
-                "group_properties": group_properties or {},
-            },
-            timeout=timeout,
-        )
-        if response.status_code >= 400:
-            raise requests.exceptions.HTTPError(response=response)
-        data = response.json()  # raises a json.JSONDecodeError subclass
-        flags: Dict[str, Any] = {}
-        for key, rec in (data.get("flags") or {}).items():
-            metadata = rec.get("metadata") or {}
-            reason = rec.get("reason") or {}
-            flags[key] = VendorFlagRecord(
-                key=key,
-                enabled=bool(rec.get("enabled")),
-                variant=rec.get("variant"),
-                payload=_parse_payload(metadata.get("payload")),
-                flag_id=metadata.get("id"),
-                version=metadata.get("version"),
-                reason=reason.get("code"),
-            )
-        return SnapshotData(
-            flags=flags, quota_limited=bool(data.get("quotaLimited"))
-        )
-
-
-class FaultTransport:
-    """Injected snapshot transport that reproduces test-server fault modes
-    by raising real ``requests`` exceptions (or returning fault bodies).
-
-    Fallback only: used when the HTTP stub cannot start (no ``node``)."""
-
-    def __init__(self, fault: Dict[str, Any], config: FireweaveConfig) -> None:
-        self._fault = fault
-        self._config = config
-        self.calls = 0
-
-    def fetch(self, distinct_id, groups, person_properties, group_properties):
-        import requests
-
-        from fireweave.adapters.posthog import SnapshotData
-
-        self.calls += 1
-        mode = self._fault.get("mode")
-        if mode == "httpStatus":
-            response = requests.models.Response()
-            response.status_code = int(self._fault["status"])
-            raise requests.exceptions.HTTPError(response=response)
-        if mode == "networkError" or mode == "offline":
-            raise requests.exceptions.ConnectionError(self._fault.get("error", "offline"))
-        if mode == "delay":
-            delay_ms = int(self._fault.get("delayMs", 0))
-            timeout_ms = self._config.feature_flags_request_timeout_ms
-            if delay_ms > timeout_ms:
-                # Injected transport honors the client timeout without
-                # actually sleeping the full fault delay.
-                time.sleep(timeout_ms / 1000.0)
-                raise requests.exceptions.Timeout()
-            time.sleep(delay_ms / 1000.0)
-            return SnapshotData()
-        if mode == "invalidJson":
-            json.loads(self._fault.get("body", "{not-json"))  # raises JSONDecodeError
-            return SnapshotData()
-        if mode == "quotaLimited":
-            return SnapshotData(flags={}, quota_limited=True)
-        raise AssertionError(f"unknown fault mode: {mode}")
-
-
-class _Harness:
-    """One provider domain: adapter + runtime + client built from `given`."""
-
-    def __init__(self, given: Dict[str, Any], suite: str) -> None:
-        self.given = given
-        self.suite = suite
-        self.config = config_from_fixture(given.get("config", {}))
-        self.via = "in-memory"
-        self.adapter = self._build_adapter()
-        self.runtime = FireweaveRuntime(
-            self.adapter,
-            self.config,
-            global_context=context_from_fixture(given.get("globalContext")),
-        )
-        registry = self._build_registry()
-        self.client = FireweaveClient(self.runtime, capabilities=registry)
-        if given.get("clientContext") is not None:
-            self.client.set_context(context_from_fixture(given["clientContext"]))
-        # Provider state first: extension seeding goes through the public,
-        # lifecycle-gated API (ruling 17), so READY must be applied before.
-        self._apply_provider_state(given.get("providerState"))
-        self._seed_extensions()
-
-    def _build_adapter(self) -> Any:
-        fault = self.given.get("fault")
-        use_fault_transport = fault is not None and not self._is_stale_cache_fault(fault)
-        if use_fault_transport:
-            from fireweave.adapters.posthog import PostHogAdapter
-
-            self.transport = self._build_fault_transport(fault)
-            return _CountingAdapter(PostHogAdapter(transport=self.transport))
-        # Fault against a live provider serving from cache -> in-memory.
-        return _CountingAdapter(InMemoryAdapter(self.given.get("flags", {})))
-
-    def _build_fault_transport(self, fault: Dict[str, Any]) -> Any:
-        """Prefer real HTTP semantics (harness.md): stub for HTTP faults,
-        refused loopback connection for network/offline faults."""
-        if fault.get("mode") in ("networkError", "offline"):
-            self.via = "http-refused-connection"
-            return HttpStubTransport(_refused_base_url(), self.config)
-        payload = _stub_fault_payload(fault)
-        stub = _StubServer.instance() if payload is not None else None
-        if stub is not None:
-            stub.reset()
-            stub.set_fault(payload)
-            self.via = "http-stub"
-            return HttpStubTransport(stub.url, self.config)
-        self.via = "injected-fake-transport"
-        return FaultTransport(fault, self.config)
-
-    def _is_stale_cache_fault(self, fault: Dict[str, Any]) -> bool:
-        # Definitions-poll faults with cached flags are modeled by the
-        # in-memory adapter (fromCache flag definitions) + STALE state.
-        return fault.get("applyTo") == "definitions"
-
-    def _build_registry(self) -> Optional[CapabilityRegistry]:
-        extensions = self.given.get("extensions")
-        if extensions is None:
-            return None
-        enabled: List[str] = []
-        for ext, names in _EXT_CAPS.items():
-            if extensions.get(ext):
-                enabled.extend(names)
-        return CapabilityRegistry(enabled)
-
-    def _seed_extensions(self) -> None:
-        for event in self.given.get("exposureQueue", []):
-            self.client.exposures.seed([event])
-        release_ctx = self.given.get("releaseContext")
-        if release_ctx:
-            self.client.releases.set_context(
-                release_ctx["rolloutId"],
-                release_ctx.get("changeId"),
-                release_ctx.get("stampIds", ()),
-            )
-            status = self.given.get("releaseStatus")
-            if status:
-                self.client.releases.seed_status(release_ctx["rolloutId"], status)
-
-    def _apply_provider_state(self, state: Optional[str]) -> None:
-        if state == "READY":
-            self.runtime.initialize()
-        elif state == "STALE":
-            self.runtime.initialize()
-            self.runtime.force_state(LifecycleState.STALE)
-        elif state == "CLOSED":
-            self.runtime.initialize()
-            self.runtime.shutdown()
-        # NOT_READY / None: leave uninitialized.
-
-    @property
-    def network_calls(self) -> int:
-        transport = getattr(self, "transport", None)
-        if transport is not None:
-            return transport.calls
-        return self.adapter.resolve_calls
-
-
-# --------------------------------------------------------------------------
-# operations
-# --------------------------------------------------------------------------
-
-def _evaluate(harness: _Harness, when: Dict[str, Any], expect: Dict[str, Any]) -> Dict[str, Any]:
-    raw_context = when.get("invocationContext")
-    snapshot_before = copy.deepcopy(raw_context)
-    inv_ctx = context_from_fixture(raw_context)
-    options = EvaluationOptions(
-        include_payload=bool((when.get("options") or {}).get("includePayload"))
-    )
-    decision = harness.runtime.evaluate(
-        when["flagKey"],
-        _FLAG_TYPES[when["flagType"]],
-        when.get("defaultValue"),
-        inv_ctx,
-        options,
-    )
-    actual: Dict[str, Any] = {
-        "value": decision.value,
-        "variant": decision.variant,
-        "reason": decision.reason,
-        "errorCode": decision.error_code,
-        "errorMessage": decision.error_message,
-    }
-    if decision.flag_metadata:
-        actual["flagMetadata"] = dict(decision.flag_metadata)
-    # Runner-captured observations, attached only when the fixture asserts them.
-    if "resolvedContext" in expect:
-        actual["resolvedContext"] = decision.resolved_context
-    if "contextSnapshotAfter" in expect:
-        assert raw_context == snapshot_before, "caller context was mutated"
-        actual["contextSnapshotAfter"] = copy.deepcopy(raw_context)
-    if "networkCalls" in expect:
-        actual["networkCalls"] = harness.network_calls
-    if "contextUnchangedAfterEvaluation" in (when.get("assertions") or []):
-        assert raw_context == snapshot_before, "caller context was mutated"
-    return actual
-
-
-def _initialize(harness: _Harness, expect: Dict[str, Any]) -> Dict[str, Any]:
-    backend_required = "config" in harness.given
-    try:
-        harness.runtime.initialize(backend_required=backend_required)
-        return {
-            "providerState": harness.runtime.state.wire_name,
-            "errorCode": None,
-            "errorMessage": None,
-        }
-    except FireweaveError as exc:
-        return {
-            "providerState": harness.runtime.state.wire_name,
-            "errorCode": exc.openfeature_error_code,
-            "errorMessage": exc.message,
-            "errorKind": exc.kind.value,
-        }
-
-
-def _shutdown(harness: _Harness) -> Dict[str, Any]:
-    harness.client.shutdown()
-    return {
-        "providerState": harness.runtime.state.wire_name,
-        "errorCode": None,
-        "errorMessage": None,
-    }
-
-
-def _replace_provider(harness: _Harness, when: Dict[str, Any], expect: Dict[str, Any]) -> Dict[str, Any]:
-    harness.client.shutdown()
-    replacement = harness.given.get("replacement", {})
-    new_harness = _Harness({"providerState": "READY", "flags": replacement.get("flags", {})}, harness.suite)
-    then = when["thenEvaluate"]
-    actual = _evaluate(new_harness, then, expect)
-    actual["providerState"] = new_harness.runtime.state.wire_name
-    return actual
-
-
-def _release_op(harness: _Harness, op: str, when: Dict[str, Any], expect: Dict[str, Any]) -> Dict[str, Any]:
-    release = when.get("release", {})
-    releases = harness.client.releases
-    if op == "setContext":
-        result = releases.set_context(
-            release["rolloutId"], release.get("changeId"), release.get("stampIds", ())
-        )
-    elif op == "start":
-        result = releases.start(release.get("rolloutId"))
-    elif op == "complete":
-        result = releases.complete(release.get("rolloutId"))
+    if mode in ("networkError", "offline"):
+        # A dead loopback port: a real ECONNREFUSED, no admin server involved.
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            dead_port = probe.getsockname()[1]
+        api_url = f"http://127.0.0.1:{dead_port}"
     else:
-        result = releases.fail(release.get("rolloutId"), release.get("reason"))
-    actual: Dict[str, Any] = {"ok": result.ok, "errorCode": result.error_code}
-    _attach_failure_fields(actual, result)
-    if "status" in expect:
-        actual["status"] = result.status
-    if "reason" in expect:
-        actual["reason"] = result.reason
-    if "releaseContext" in expect and result.release_context is not None:
-        actual["releaseContext"] = result.release_context.to_dict()
-    return actual
+        api_url = stub.url
 
-
-def _attach_failure_fields(actual: Dict[str, Any], result: Any) -> None:
-    """Structured degradation fields (ruling 17) on failed extension results."""
-    if result.ok:
-        return
-    actual["errorMessage"] = result.error_message
-    actual["errorKind"] = result.error_kind.value if result.error_kind else None
-    actual["degraded"] = result.degraded
-
-
-def _record_exposure(harness: _Harness, when: Dict[str, Any], expect: Dict[str, Any]) -> Dict[str, Any]:
-    exposure = when["exposure"]
-    result = harness.client.exposures.record(
-        exposure["targetingKey"],
-        exposure["flagKey"],
-        exposure.get("variant"),
-        exposure.get("value"),
-        exposure.get("rolloutId"),
+    config = given.get("config") or {}
+    timeout_ms = config.get("featureFlagsRequestTimeoutMs", 3000)
+    # The fixture's key is passed through verbatim rather than replaced with a
+    # Fireweave-shaped one: sec-secrets-not-in-errors asserts that no `phc_`
+    # substring reaches an error message, and substituting the key would make
+    # that assertion pass trivially instead of exercising redaction.
+    api_key = config.get("projectApiKey", "phc_TESTKEY0000000000000000000001")
+    adapter = FireweaveRemoteAdapter(api_url=api_url, api_key=api_key, request_timeout_ms=timeout_ms)
+    runtime = FireweaveRuntime(adapter)
+    runtime.initialize()
+    client = FireweaveClient(runtime)
+    decision = client.control_points.evaluate(
+        when["flagKey"], _to_expected_type(when["flagType"]), when.get("defaultValue"),
+        _context_from(when.get("invocationContext")),
     )
-    actual: Dict[str, Any] = {
-        "ok": result.ok, "queued": result.queued, "errorCode": result.error_code,
-    }
-    _attach_failure_fields(actual, result)
-    if result.deduped:
-        actual["deduped"] = True
-    return actual
+    runtime.shutdown()
+    return _decision_to_actual(decision)
 
 
-def _flush_exposures(harness: _Harness) -> Dict[str, Any]:
-    result = harness.client.exposures.flush()
-    actual: Dict[str, Any] = {
-        "ok": result.ok,
-        "flushed": result.flushed,
-        "queued": result.queued,
-        "errorCode": result.error_code,
-    }
-    _attach_failure_fields(actual, result)
-    return actual
-
-
-def _emit_signal(harness: _Harness, when: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    signal = when["signal"]
-    signals = harness.client.signals
-    kind = signal["kind"]
-    if kind == "health":
-        result = signals.record_health(
-            signal["name"], signal.get("status", "ok"),
-            signal.get("rolloutId"), signal.get("stampId"),
-        )
-    elif kind == "error":
-        result = signals.record_error(
-            signal["name"], signal.get("errorKind"),
-            signal.get("message"), signal.get("rolloutId"),
-        )
-    elif kind == "metric":
-        result = signals.record_metric(
-            signal["name"], signal.get("value"), signal.get("unit"),
-            signal.get("rolloutId"), signal.get("stampId"),
-        )
-    else:
-        result = signals.record_outcome(
-            signal["name"], signal.get("status", ""),
-            signal.get("rolloutId"), signal.get("changeId"),
-        )
-    actual: Dict[str, Any] = {
-        "ok": result.ok, "accepted": result.accepted, "errorCode": result.error_code,
-    }
-    _attach_failure_fields(actual, result)
-    return actual, result.recorded
-
-
-def _get_capabilities(harness: _Harness) -> Dict[str, Any]:
-    return {"capabilities": harness.client.capabilities.get(), "errorCode": None}
-
-
-def _invoke_capability(harness: _Harness, when: Dict[str, Any]) -> Dict[str, Any]:
-    result = harness.client.capabilities.invoke(when["capability"], **(when.get("args") or {}))
-    actual: Dict[str, Any] = {"ok": result.ok, "errorCode": result.error_code}
-    if not result.ok:
-        actual["errorMessage"] = result.error_message
-        actual["errorKind"] = result.error_kind.value if result.error_kind else None
-        actual["degraded"] = result.degraded
-    return actual
-
-
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # comparator (contracts/harness.md, normative)
-# --------------------------------------------------------------------------
 
-def _normalize(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {k: _normalize(v) for k, v in value.items() if k not in EXCLUDE_SET}
-    if isinstance(value, list):
-        return [_normalize(v) for v in value]
-    return value
+_META_EXPECT_KEYS = _DIRECTIVE_KEYS
 
 
-def _values_equal(actual: Any, expected: Any) -> bool:
-    if isinstance(expected, dict) and isinstance(actual, dict):
-        if set(actual.keys()) - set(expected.keys()):
-            return False  # extra non-excluded keys -> fail (metadata drift)
-        return all(
-            k in actual and _values_equal(actual[k], v) for k, v in expected.items()
-        )
-    if isinstance(expected, list) and isinstance(actual, list):
-        return len(expected) == len(actual) and all(
-            _values_equal(a, e) for a, e in zip(actual, expected)
-        )
-    if isinstance(expected, bool) or isinstance(actual, bool):
-        return actual is expected if isinstance(expected, bool) else False
-    if isinstance(expected, (int, float)) and isinstance(actual, (int, float)):
-        return actual == expected
-    return actual == expected
+def _deep_equal(a: Any, b: Any) -> bool:
+    if isinstance(a, bool) or isinstance(b, bool):
+        return a is b
+    if isinstance(a, dict) and isinstance(b, dict):
+        return set(a) == set(b) and all(_deep_equal(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_deep_equal(x, y) for x, y in zip(a, b))
+    return a == b
 
 
-def _values_subset(actual: Any, expected: Any) -> bool:
-    """Like ``_values_equal`` but extra keys in actual dicts are permitted.
-
-    Used only for ``getCapabilities`` (harness.md ruling-18 exception):
-    undeclared matrix keys are language/build-dependent.
-    """
-    if isinstance(expected, dict) and isinstance(actual, dict):
-        return all(
-            k in actual and _values_subset(actual[k], v) for k, v in expected.items()
-        )
-    if isinstance(expected, list) and isinstance(actual, list):
-        return len(expected) == len(actual) and all(
-            _values_subset(a, e) for a, e in zip(actual, expected)
-        )
-    return _values_equal(actual, expected)
-
-
-def compare(
-    actual: Dict[str, Any],
-    expect: Dict[str, Any],
-    subset_keys: frozenset = frozenset(),
-) -> List[str]:
-    """Return a list of human-readable diffs (empty == pass)."""
-    diffs: List[str] = []
-    actual = _normalize(actual)
+def compare(expect: Dict[str, Any], actual: Dict[str, Any]) -> List[str]:
+    """Compare `expect` vs `actual` per the normative comparator
+    (contracts/README.md): every declared expect key must match; missing key
+    -> fail. (Mirrors node's run.ts `diff()` — neither runner fails on
+    EXTRA actual keys beyond what a fixture declares; that stricter rule
+    predates this task and is unchanged here.)"""
+    failures: List[str] = []
     for key, expected in expect.items():
-        if key in _DIRECTIVE_KEYS:
+        if key in _META_EXPECT_KEYS:
             continue
-        if key not in actual:
-            diffs.append(f"missing key {key!r} (expected {expected!r})")
+        actual_value = actual.get(key)
+        if expected is None:
+            if actual_value is not None:
+                failures.append(f"{key}: expected null, got {actual_value!r}")
             continue
-        matcher = _values_subset if key in subset_keys else _values_equal
-        if not matcher(actual[key], expected):
-            diffs.append(f"{key}: expected {expected!r}, got {actual[key]!r}")
-    forbidden = expect.get("errorMessageMustNotContain", [])
-    if forbidden:
-        blob = json.dumps(actual, default=str)
-        for needle in forbidden:
-            if needle in blob:
-                diffs.append(f"forbidden substring {needle!r} present in actual")
-    return diffs
+        if not _deep_equal(actual_value, expected):
+            failures.append(f"{key}: expected {expected!r}, got {actual_value!r}")
+    must_not_contain = expect.get("errorMessageMustNotContain")
+    if isinstance(must_not_contain, list):
+        message = actual.get("errorMessage") or ""
+        for needle in must_not_contain:
+            if isinstance(needle, str) and needle in message:
+                failures.append(f"errorMessage must not contain {needle!r}")
+    return failures
 
 
-# --------------------------------------------------------------------------
-# capabilities matrix validation (spec/capabilities.schema.json, ruling 18)
-# --------------------------------------------------------------------------
-
-_CAP_LANGUAGES = {"node", "python", "go", "java"}
-_CAP_BACKENDS = {"posthog", "inmemory", "none", "other"}
-_CAP_LIFECYCLES = {
-    "UNINITIALIZED", "INITIALIZING", "READY", "STALE", "ERROR", "FATAL", "SHUTDOWN",
-}
-
-
-def validate_capabilities_matrix(matrix: Any) -> List[str]:
-    """Hand-rolled validation of the full matrix against the spec schema
-    (jsonschema is not a runner dependency). Returns problems (empty == ok)."""
-    p: List[str] = []
-    if not isinstance(matrix, dict):
-        return ["capabilities: must be the structured {static, runtime} matrix"]
-    if set(matrix) != {"static", "runtime"}:
-        p.append(f"capabilities: keys must be exactly static+runtime, got {sorted(matrix)}")
-        return p
-
-    static = matrix["static"]
-    if not isinstance(static, dict):
-        p.append("static: not an object")
-    else:
-        extra = set(static) - {"language", "sdkVersion", "specVersion", "openFeature", "features"}
-        if extra:
-            p.append(f"static: undeclared keys {sorted(extra)}")
-        if static.get("language") not in _CAP_LANGUAGES:
-            p.append(f"static.language: invalid {static.get('language')!r}")
-        if "specVersion" in static and static["specVersion"] != "0.1.0":
-            p.append("static.specVersion: must be const '0.1.0'")
-        of = static.get("openFeature")
-        if not isinstance(of, dict):
-            p.append("static.openFeature: required object missing")
-        else:
-            if of.get("specFloor") != "0.8.0":
-                p.append("static.openFeature.specFloor: must be const '0.8.0'")
-            if of.get("providerName") != "fireweave":
-                p.append("static.openFeature.providerName: must be const 'fireweave'")
-            if "serverOnly" in of and of["serverOnly"] is not True:
-                p.append("static.openFeature.serverOnly: must be const true")
-        feats = static.get("features")
-        if not isinstance(feats, dict):
-            p.append("static.features: required object missing")
-        else:
-            if any(not isinstance(v, bool) for v in feats.values()):
-                p.append("static.features: all values must be booleans")
-            if feats.get("flags") is not True:
-                p.append("static.features.flags: must be const true")
-            if feats.get("inMemoryAdapter") is not True:
-                p.append("static.features.inMemoryAdapter: must be const true")
-
-    runtime = matrix["runtime"]
-    if not isinstance(runtime, dict):
-        p.append("runtime: not an object")
-    else:
-        extra = set(runtime) - {"backend", "lifecycle", "features", "limits"}
-        if extra:
-            p.append(f"runtime: undeclared keys {sorted(extra)}")
-        if runtime.get("backend") not in _CAP_BACKENDS:
-            p.append(f"runtime.backend: invalid {runtime.get('backend')!r}")
-        if runtime.get("lifecycle") not in _CAP_LIFECYCLES:
-            p.append(f"runtime.lifecycle: invalid {runtime.get('lifecycle')!r}")
-        feats = runtime.get("features", {})
-        if not isinstance(feats, dict) or any(
-            not isinstance(v, bool) for v in feats.values()
-        ):
-            p.append("runtime.features: all values must be booleans")
-        limits = runtime.get("limits", {})
-        if not isinstance(limits, dict):
-            p.append("runtime.limits: not an object")
-        else:
-            if set(limits) - {"intSafeMaxAbs", "shutdownTimeoutMsDefault"}:
-                p.append("runtime.limits: undeclared keys present")
-            if "intSafeMaxAbs" in limits and limits["intSafeMaxAbs"] != 9007199254740991:
-                p.append("runtime.limits.intSafeMaxAbs: wrong const")
-            if (
-                "shutdownTimeoutMsDefault" in limits
-                and limits["shutdownTimeoutMsDefault"] != 10000
-            ):
-                p.append("runtime.limits.shutdownTimeoutMsDefault: wrong const")
-    return p
-
-
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # fixture execution
-# --------------------------------------------------------------------------
 
-def _run_case(
-    given: Dict[str, Any],
-    when: Dict[str, Any],
-    expect: Dict[str, Any],
-    suite: str,
-) -> Tuple[Dict[str, Any], List[str], str]:
-    """Execute one (given, when, expect) triple on a fresh harness.
-
-    Returns (actual, diffs, via)."""
-    if "domains" in given:
-        harness = _Harness(given["domains"][when.get("domain")], suite)
-    else:
-        harness = _Harness(given, suite)
-
+def _dispatch(fixture: Dict[str, Any]) -> Dict[str, Any]:
+    when = fixture.get("when", {})
     operation = when.get("operation")
-    recorded: Dict[str, Any] = {}
+    if fixture.get("suite") == "faults":
+        return _run_fault(fixture)
     if operation == "evaluate":
-        actual = _evaluate(harness, when, expect)
-    elif operation == "initialize":
-        actual = _initialize(harness, expect)
-    elif operation == "shutdown":
-        actual = _shutdown(harness)
-    elif operation == "replaceProvider":
-        actual = _replace_provider(harness, when, expect)
-    elif operation in ("setContext", "start", "complete", "fail"):
-        actual = _release_op(harness, operation, when, expect)
-    elif operation == "recordExposure":
-        actual = _record_exposure(harness, when, expect)
-    elif operation == "flushExposures":
-        actual = _flush_exposures(harness)
-    elif operation == "emitSignal":
-        actual, recorded = _emit_signal(harness, when)
-    elif operation == "getCapabilities":
-        actual = _get_capabilities(harness)
-    elif operation == "invokeCapability":
-        actual = _invoke_capability(harness, when)
-    else:
-        return {}, [f"unsupported operation: {operation!r}"], harness.via
-
-    if operation == "getCapabilities":
-        # Ruling-18 comparator exception: full-schema validation + subset
-        # comparison for the matrix (undeclared keys are build-dependent).
-        diffs = validate_capabilities_matrix(actual.get("capabilities"))
-        diffs += compare(actual, expect, subset_keys=frozenset({"capabilities"}))
-    else:
-        diffs = compare(actual, expect)
-    for needle in expect.get("recordedMessageMustNotContain", []):
-        if needle in json.dumps(recorded, default=str):
-            diffs.append(f"forbidden substring {needle!r} in recorded signal")
-    return actual, diffs, harness.via
-
-
-def run_fixture(fixture: Dict[str, Any]) -> Dict[str, Any]:
-    fixture_id = fixture.get("id", "<unknown>")
-    suite = fixture.get("suite", "<unknown>")
-    compatibility = (fixture.get("compatibility") or {}).get(LANGUAGE, "pass")
-    result: Dict[str, Any] = {"id": fixture_id, "suite": suite}
-
-    if compatibility != "pass":
-        result["status"] = "skipped-with-documented-limitation"
-        result["limitation"] = (fixture.get("limitations") or {}).get(LANGUAGE)
-        return result
-
-    base_given = fixture.get("given", {})
-
-    # Multi-case fixtures (contracts/README.md): every case runs on a fresh
-    # harness with cases[].given shallow-merged over the fixture given; the
-    # fixture passes only when all cases pass.
-    if "cases" in fixture:
-        diffs: List[str] = []
-        actuals: Dict[str, Any] = {}
-        vias: List[str] = []
-        for case in fixture["cases"]:
-            name = case.get("name", "<unnamed>")
-            merged_given = {**base_given, **(case.get("given") or {})}
-            try:
-                actual, case_diffs, via = _run_case(
-                    merged_given, case.get("when", {}), case.get("expect", {}), suite
-                )
-            except Exception as exc:
-                actual, via = None, "in-memory"
-                case_diffs = [f"runner exception: {type(exc).__name__}: {exc}"]
-            actuals[name] = actual
-            vias.append(via)
-            diffs.extend(f"case {name}: {d}" for d in case_diffs)
-        result["status"] = "pass" if not diffs else "fail"
-        result["actual"] = actuals
-        if diffs:
-            result["diffs"] = diffs
-        non_default = sorted({v for v in vias if v != "in-memory"})
-        if non_default:
-            result["via"] = ",".join(non_default)
-        return result
-
-    try:
-        actual, diffs, via = _run_case(
-            base_given, fixture.get("when", {}), fixture.get("expect", {}), suite
-        )
-        result["status"] = "pass" if not diffs else "fail"
-        result["actual"] = actual
-        if diffs:
-            result["diffs"] = diffs
-        if via != "in-memory":
-            result["via"] = via
-        return result
-    except Exception as exc:  # runner crash counts as a failure, not an abort
-        result["status"] = "fail"
-        result["diffs"] = [f"runner exception: {type(exc).__name__}: {exc}"]
-        return result
-
-
-# Server-language suites. ``contracts/web/`` is a separate surface (ADR-0009)
-# exercised only by ``@fireweaveai/web-sdk`` — same exclusion Node's runner uses.
-_SERVER_SUITES = (
-    "evaluation",
-    "context",
-    "lifecycle",
-    "faults",
-    "security",
-    "extensions",
-)
+        return _run_evaluate(fixture)
+    if operation == "initialize":
+        return _run_initialize(fixture)
+    if operation == "shutdown":
+        return _run_shutdown(fixture)
+    if operation == "replaceProvider":
+        return _run_replace_provider(fixture)
+    return _run_extension(fixture)
 
 
 def load_fixtures(contracts_dir: Path) -> List[Dict[str, Any]]:
     fixtures = []
-    for suite in _SERVER_SUITES:
+    for suite in SUITES:
         suite_dir = contracts_dir / suite
         if not suite_dir.is_dir():
             continue
@@ -911,16 +686,95 @@ def load_fixtures(contracts_dir: Path) -> List[Dict[str, Any]]:
     return fixtures
 
 
-def run_all(contracts_dir: Path) -> Dict[str, Any]:
-    results = [run_fixture(fx) for fx in load_fixtures(contracts_dir)]
-    summary = {
+def run_fixture(fixture: Dict[str, Any]) -> Dict[str, Any]:
+    """Run one fixture; returns a report row matching contracts/README.md's
+    compatibility-report schema (fixtureId/suite/language/status/limitation/
+    message)."""
+    fixture_id = fixture.get("id", "<unknown>")
+    suite = fixture.get("suite", "<unknown>")
+
+    # v1-scope rule (contracts/harness.md): extensions fixtures targeting a
+    # cut namespace are reported skipped-v1-out-of-scope, never executed,
+    # regardless of the fixture's own declared compatibility (frozen "pass",
+    # authored pre-cut).
+    if suite == "extensions" and fixture_id in V1_OUT_OF_SCOPE_EXTENSION_FIXTURES:
+        return {
+            "fixtureId": fixture_id,
+            "suite": suite,
+            "language": LANGUAGE,
+            "status": "skipped-v1-out-of-scope",
+            "limitation": f"targets the {v1_out_of_scope_namespace(fixture_id)} namespace, cut from the v1 control-points surface (ADR-0010)",
+            "message": None,
+        }
+
+    declared = (fixture.get("compatibility") or {}).get(LANGUAGE)
+    if declared == "skipped-with-documented-limitation":
+        return {
+            "fixtureId": fixture_id,
+            "suite": suite,
+            "language": LANGUAGE,
+            "status": "skipped-with-documented-limitation",
+            "limitation": (fixture.get("limitations") or {}).get(LANGUAGE, "documented limitation"),
+            "message": None,
+        }
+
+    base_given = fixture.get("given", {})
+    runs: List[Dict[str, Any]]
+    if "cases" in fixture:
+        runs = [
+            {
+                "label": case.get("name"),
+                "fixture": {
+                    **fixture,
+                    "given": {**base_given, **(case.get("given") or {})},
+                    "when": case.get("when", {}),
+                    "expect": case.get("expect", {}),
+                },
+            }
+            for case in fixture["cases"]
+        ]
+    else:
+        runs = [{"label": None, "fixture": fixture}]
+
+    status = "pass"
+    messages: List[str] = []
+    for run in runs:
+        prefix = f"[{run['label']}] " if run["label"] is not None else ""
+        try:
+            actual = _dispatch(run["fixture"])
+            failures = compare(run["fixture"].get("expect", {}), actual)
+            if failures:
+                status = "fail"
+                messages.append(f"{prefix}{'; '.join(failures)}")
+        except Exception as exc:  # runner crash counts as a failure, not an abort
+            status = "fail"
+            messages.append(f"{prefix}harness error: {type(exc).__name__}: {exc}")
+
+    return {
+        "fixtureId": fixture_id,
+        "suite": suite,
         "language": LANGUAGE,
-        "total": len(results),
-        "passed": sum(1 for r in results if r["status"] == "pass"),
-        "failed": sum(1 for r in results if r["status"] == "fail"),
-        "skipped": sum(
-            1 for r in results if r["status"] == "skipped-with-documented-limitation"
-        ),
-        "results": results,
+        "status": status,
+        "limitation": None,
+        "message": " | ".join(messages) if messages else None,
     }
-    return summary
+
+
+def run_all(contracts_dir: Path) -> Dict[str, Any]:
+    rows = [run_fixture(fx) for fx in load_fixtures(contracts_dir)]
+    summary = {
+        "pass": sum(1 for r in rows if r["status"] == "pass"),
+        "fail": sum(1 for r in rows if r["status"] == "fail"),
+        "skipped-with-documented-limitation": sum(
+            1 for r in rows if r["status"] == "skipped-with-documented-limitation"
+        ),
+        "skipped-v1-out-of-scope": sum(1 for r in rows if r["status"] == "skipped-v1-out-of-scope"),
+    }
+    return {
+        "schemaVersion": 1,
+        "generatedAt": "EXCLUDED",
+        "sdkCommit": "workspace",
+        "contractsCommit": "workspace",
+        "results": rows,
+        "summary": summary,
+    }

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""CLI entry point: run the 65 contracts fixtures, emit normalized results JSON.
+"""CLI entry point: run the 65 contracts fixtures, emit the compatibility
+report (contracts/README.md schema — fixtureId/suite/language/status/
+limitation/message rows, same shape node/go/java write).
 
 Usage::
 
@@ -29,28 +31,29 @@ def main() -> int:
     )
     parser.add_argument(
         "--out", type=Path,
-        default=Path(__file__).resolve().parent / "results.python.json",
-        help="Where to write the normalized results JSON",
+        default=Path(__file__).resolve().parent / "compatibility-report.python.json",
+        help="Where to write the compatibility report JSON",
     )
     args = parser.parse_args()
 
-    summary = run_all(args.contracts)
-    args.out.write_text(json.dumps(summary, indent=2, default=str) + "\n")
+    report = run_all(args.contracts)
+    args.out.write_text(json.dumps(report, indent=2, default=str) + "\n")
 
+    summary = report["summary"]
     print(
-        f"conformance[{summary['language']}]: "
-        f"{summary['passed']} passed, {summary['failed']} failed, "
-        f"{summary['skipped']} skipped-with-documented-limitation "
-        f"(of {summary['total']})"
+        f"conformance[python]: {summary['pass']} passed, {summary['fail']} failed, "
+        f"{summary['skipped-with-documented-limitation']} skipped-with-documented-limitation, "
+        f"{summary['skipped-v1-out-of-scope']} skipped-v1-out-of-scope "
+        f"(report: {args.out})"
     )
-    for res in summary["results"]:
-        if res["status"] == "fail":
-            print(f"  FAIL {res['suite']}/{res['id']}")
-            for diff in res.get("diffs", []):
-                print(f"       - {diff}")
-        elif res["status"] != "pass":
-            print(f"  SKIP {res['suite']}/{res['id']}: {res.get('limitation')}")
-    return 1 if summary["failed"] else 0
+    for row in report["results"]:
+        if row["status"] == "fail":
+            print(f"  FAIL {row['suite']}/{row['fixtureId']}")
+            if row["message"]:
+                print(f"       - {row['message']}")
+        elif row["status"] not in ("pass",):
+            print(f"  SKIP {row['suite']}/{row['fixtureId']}: {row['limitation']}")
+    return 1 if summary["fail"] else 0
 
 
 if __name__ == "__main__":
