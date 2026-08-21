@@ -148,9 +148,10 @@ public final class InMemoryAdapter implements BackendAdapter {
             b.metadata("fireweave.fromCache", true);
         }
         if (request.options().includePayload() && def.payload != null) {
-            // toCanonicalJson: sorted object keys, no whitespace — matches node's
-            // stableStringify byte-for-byte (contracts/evaluation/eval-payload-attached.json).
-            b.metadata("fireweave.payload", def.payload.toCanonicalJson());
+            // toPayloadString: a raw JSON-string payload passes through verbatim; every other
+            // kind is sorted-key, no-whitespace canonical JSON — matches node's stableStringify
+            // byte-for-byte (contracts/evaluation/eval-payload-attached.json).
+            b.metadata("fireweave.payload", def.payload.toPayloadString());
         }
         return b.build();
     }

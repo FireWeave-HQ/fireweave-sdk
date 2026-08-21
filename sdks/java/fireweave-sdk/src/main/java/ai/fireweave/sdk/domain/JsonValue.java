@@ -152,6 +152,20 @@ public final class JsonValue {
         return toCanonicalJson().getBytes(StandardCharsets.UTF_8).length;
     }
 
+    /**
+     * Renders this value as {@code fireweave.payload} metadata. A {@code STRING}-kind value —
+     * spec/remote-evaluate.schema.json types payload as unconstrained {@code jsonValue}; node's
+     * ports.ts documents it explicitly ("object or pre-serialized JSON string") — passes through
+     * VERBATIM rather than being re-serialized (which would double-encode it, e.g.
+     * {@code "\"{...}\""} instead of {@code "{...}"}), mirroring node's ({@code runtime.ts}) and
+     * python's ({@code runtime.py}) identical ternary. Every other kind uses
+     * {@link #toCanonicalJson()}. Both {@code InMemoryAdapter} and {@code FireweaveRemoteAdapter}
+     * share this one implementation rather than duplicating the ternary.
+     */
+    public String toPayloadString() {
+        return kind == Kind.STRING ? asString() : toCanonicalJson();
+    }
+
     private void writeCanonical(StringBuilder sb) {
         switch (kind) {
             case NULL:

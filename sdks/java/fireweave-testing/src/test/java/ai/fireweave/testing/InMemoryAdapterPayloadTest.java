@@ -83,4 +83,22 @@ class InMemoryAdapterPayloadTest {
     void withIncludePayloadFalseSharesIdentityWithDefaults() {
         assertTrue(EvaluationOptions.withIncludePayload(false) == EvaluationOptions.defaults());
     }
+
+    /**
+     * task-10b review-round finding: a payload that already arrives as a raw JSON string
+     * (spec/remote-evaluate.schema.json's payload field is unconstrained {@code jsonValue};
+     * node's ports.ts documents this shape explicitly: "object or pre-serialized JSON string")
+     * must be exposed VERBATIM. {@code def.payload.toCanonicalJson()} would double-encode a
+     * string-kind value (wrapping it in an extra pair of quotes with escaped internals) —
+     * {@link JsonValue#toPayloadString()} is the shared fix, mirroring node's and python's
+     * identical ternary.
+     */
+    @Test
+    void stringPayloadPassesThroughVerbatim() throws Exception {
+        String raw = "{\"already\":\"serialized\",\"b\":1}";
+        InMemoryAdapter adapter = new InMemoryAdapter(Map.of("f", booleanFlag(JsonValue.of(raw))));
+
+        Decision d = evaluate(adapter, EvaluationOptions.withIncludePayload(true));
+        assertEquals(raw, d.flagMetadata().get("fireweave.payload"));
+    }
 }

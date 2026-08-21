@@ -214,7 +214,10 @@ public final class FireweaveRemoteAdapter implements BackendAdapter {
             // the caller's EvaluationOptions requests it.
             JsonValue payload = d.get("payload");
             if (request.options().includePayload() && payload != null && payload.kind() != JsonValue.Kind.NULL) {
-                b.metadata("fireweave.payload", payload.toCanonicalJson());
+                // toPayloadString: a raw JSON-string wire payload passes through verbatim rather
+                // than being re-serialized (double-encoding it) — mirrors node's/python's remote
+                // adapters, which already special-case this shape.
+                b.metadata("fireweave.payload", payload.toPayloadString());
             }
             return b.build();
         }
