@@ -19,10 +19,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/adapters/inmemory"
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/adapters/posthog"
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/fireweave"
-	fwprovider "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/openfeature"
+	"github.com/FireWeave-HQ/fireweave-sdk/go/adapters/inmemory"
+	"github.com/FireWeave-HQ/fireweave-sdk/go/adapters/posthog"
+	"github.com/FireWeave-HQ/fireweave-sdk/go/fireweave"
+	fwprovider "github.com/FireWeave-HQ/fireweave-sdk/go/openfeature"
 	of "github.com/open-feature/go-sdk/openfeature"
 )
 
