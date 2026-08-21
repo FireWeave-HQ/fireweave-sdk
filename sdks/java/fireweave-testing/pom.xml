@@ -21,6 +21,11 @@
 
   <properties>
     <automatic.module.name>ai.fireweave.testing</automatic.module.name>
+    <!-- Conformance harness only — never publish this artifact (it drags
+         jackson-databind into ai.fireweave:* coordinates for no consumer
+         benefit). The `release` profile's central.skipPublishing=false is
+         parent-wide; this overrides deploy for this module specifically. -->
+    <maven.deploy.skip>true</maven.deploy.skip>
   </properties>
 
   <dependencies>

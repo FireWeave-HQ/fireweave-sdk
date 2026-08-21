@@ -11,8 +11,8 @@
 
   <name>Fireweave Java SDK (parent)</name>
   <description>
-    Fireweave polyglot SDK — Java implementation. OpenFeature-compatible, server-first
-    control-point evaluation against fw-server. Java 11+.
+    Fireweave polyglot SDK — Java implementation. Server-first control-point evaluation and
+    target registration against fw-server (spec/control-points.md "Scope of v1"). Java 11+.
   </description>
   <url>https://github.com/FireWeave-HQ/fireweave-sdk</url>
   <inceptionYear>2026</inceptionYear>
@@ -60,12 +60,6 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <maven.compiler.release>11</maven.compiler.release>
-    <!--
-      Decision brief pins dev.openfeature:sdk 1.21.0, but the newest version published to
-      Maven Central (verified 2026-07-27 via search.maven.org) is 1.15.1. Deviation reported
-      for orchestrator arbitration; see sdks/java/README.md.
-    -->
-    <openfeature.version>1.15.1</openfeature.version>
     <junit.version>5.10.2</junit.version>
     <jackson.version>2.18.9</jackson.version>
     <!-- Reproducible builds (Maven 3.8.2+). Override from CI with a commit timestamp. -->
@@ -79,11 +73,6 @@
 
   <dependencyManagement>
     <dependencies>
-      <dependency>
-        <groupId>dev.openfeature</groupId>
-        <artifactId>sdk</artifactId>
-        <version>${openfeature.version}</version>
-      </dependency>
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>
         <artifactId>jackson-databind</artifactId>
