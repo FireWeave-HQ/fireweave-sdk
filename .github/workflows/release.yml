@@ -314,9 +314,12 @@ jobs:
 
   # =========================================================================
   # PUBLISHING
-  # - Staging (authorized): npm (server + web) + TestPyPI + rust
-  #   `cargo publish --dry-run` + Go proxy warm when dry_run=false and
-  #   channel=staging. Requires trusted publishers / secrets (RELEASE.md).
+  # - Staging, when dry_run=false and channel=staging (two DIFFERENT dates —
+  #   see the file header for the full split, not restated here):
+  #     - authorized 2026-07-27: npm server, TestPyPI, Go proxy warm.
+  #     - scope extended 2026-08-21 (this implementation task, NOT a fresh
+  #       human authorization): npm web, rust `cargo publish --dry-run`.
+  #   Requires trusted publishers / secrets (RELEASE.md).
   # - Production npm: HARD-DISABLED (if: false) until a second written
   #   authorization (both server and web).
   # - Production PyPI / Maven / crates.io: gated on channel=production,
