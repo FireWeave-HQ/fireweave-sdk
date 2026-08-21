@@ -135,6 +135,33 @@ func TestRemoteResolveAttachesPayloadOnlyWhenRequested(t *testing.T) {
 	}
 }
 
+// TestRemoteResolvePassesThroughRawStringPayloadVerbatim is the remote-adapter
+// regression test for the task-10b review-round finding: a wire payload that
+// arrives as a raw JSON string (spec/remote-evaluate.schema.json's payload
+// field is unconstrained jsonValue) must pass through verbatim rather than
+// being re-serialized/double-encoded, mirroring node's and python's remote
+// adapters.
+func TestRemoteResolvePassesThroughRawStringPayloadVerbatim(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"decisions":[{"flagKey":"fw-payload","value":true,"reason":"TARGETING_MATCH","found":true,"payload":"{\"already\":\"serialized\"}"}]}`)
+	}))
+	defer srv.Close()
+
+	a := remote.New(remote.Config{APIURL: srv.URL, APIKey: "project-api-key_test"})
+	if err := a.Initialize(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	d := a.Resolve(context.Background(), domain.ResolveRequest{
+		FlagKey: "fw-payload", DefaultValue: false,
+		Context: domain.NewEvaluationContext("u", nil), IncludePayload: true,
+	})
+	want := `{"already":"serialized"}`
+	if got, _ := d.Metadata["fireweave.payload"].(string); got != want {
+		t.Fatalf("payload metadata = %q, want verbatim %q (must not be re-serialized/double-encoded)", got, want)
+	}
+}
+
 func TestRemoteRegisterTargetPostsToRegisterPath(t *testing.T) {
 	var gotPath string
 	var gotBody map[string]any

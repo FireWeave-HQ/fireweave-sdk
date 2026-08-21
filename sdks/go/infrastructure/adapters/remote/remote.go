@@ -236,8 +236,8 @@ func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain
 		meta[domain.MetaQuotaLimited] = true
 	}
 	if req.IncludePayload && item.Payload != nil {
-		if b, err := json.Marshal(item.Payload); err == nil {
-			meta[domain.MetaPayload] = string(b)
+		if s, ok := payloadString(item.Payload); ok {
+			meta[domain.MetaPayload] = s
 		}
 	}
 	reason := domain.Reason(item.Reason)
@@ -280,6 +280,27 @@ func numberValue(v any) any {
 		return f
 	}
 	return v
+}
+
+// payloadString renders a wire payload as the fireweave.payload metadata
+// string. A payload that arrives as a raw JSON string (spec/remote-evaluate.
+// schema.json's payload field is unconstrained jsonValue; node's ports.ts
+// documents it explicitly: "object or pre-serialized JSON string" — and
+// json.Decoder.UseNumber above only affects numbers, so a string wire value
+// decodes to a plain Go string here) is passed through VERBATIM, mirroring
+// node (runtime.ts) and python (runtime.py)'s identical ternary — re-
+// serializing it would double-encode ("\"{...}\"" instead of "{...}").
+// Every other JSON shape is serialized via encoding/json.Marshal, matching
+// infrastructure/adapters/inmemory's payloadString.
+func payloadString(payload any) (string, bool) {
+	if s, ok := payload.(string); ok {
+		return s, true
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return "", false
+	}
+	return string(b), true
 }
 
 // RegisterTarget implements domain.TargetRegistrar: POST

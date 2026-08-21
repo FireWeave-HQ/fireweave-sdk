@@ -167,6 +167,30 @@ func TestIncludePayloadAttachesSortedKeyJSON(t *testing.T) {
 	}
 }
 
+// TestIncludePayloadPassesThroughRawStringVerbatim is the regression test
+// for the task-10b review-round finding: a payload that already arrives as
+// a raw JSON string (spec/remote-evaluate.schema.json's payload field is
+// unconstrained jsonValue; node's ports.ts documents this shape explicitly:
+// "object or pre-serialized JSON string") must be exposed VERBATIM, not
+// re-serialized — convertValue's original json.Marshal-always approach
+// would double-encode it ("\"already {\\\"json\\\": true}\"" instead of the
+// original string), a divergence from node (runtime.ts) and python
+// (runtime.py), which both special-case this with the same ternary.
+func TestIncludePayloadPassesThroughRawStringVerbatim(t *testing.T) {
+	ec := domain.NewEvaluationContext("u", nil)
+	const raw = `{"already": "serialized", "b": 1}`
+	a := New(WithFlags(map[string]Flag{
+		"fw-string-payload": {Type: domain.FlagTypeBoolean, Enabled: true, Variant: "on", Value: true, Payload: raw},
+	}))
+
+	d := a.Resolve(context.Background(), domain.ResolveRequest{
+		FlagKey: "fw-string-payload", Type: domain.FlagTypeBoolean, DefaultValue: false, Context: ec, IncludePayload: true,
+	})
+	if got, _ := d.Metadata[domain.MetaPayload].(string); got != raw {
+		t.Fatalf("payload metadata = %q, want verbatim %q (must not be re-serialized/double-encoded)", got, raw)
+	}
+}
+
 // inmemory implements no RegisterTarget — degrades UnsupportedCapability
 // via Runtime's optional-interface discovery (asserted at the Runtime
 // layer; here we just confirm the adapter itself does not satisfy

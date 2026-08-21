@@ -148,13 +148,8 @@ func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain
 		if meta == nil {
 			meta = map[string]any{}
 		}
-		// encoding/json.Marshal already sorts map[string]any keys at every
-		// nesting level (stdlib guarantee) and emits compact (no-space)
-		// output, matching node's stableStringify byte-for-byte
-		// (contracts/evaluation/eval-payload-attached.json's expected
-		// "{\"maxRetries\":2,\"rolloutId\":\"...\"}").
-		if b, err := json.Marshal(flag.Payload); err == nil {
-			meta[domain.MetaPayload] = string(b)
+		if s, ok := payloadString(flag.Payload); ok {
+			meta[domain.MetaPayload] = s
 		}
 	}
 	if !flag.Enabled {
@@ -253,6 +248,32 @@ func convertValue(flag Flag) any {
 		}
 	}
 	return flag.Value
+}
+
+// payloadString renders a flag payload as the fireweave.payload metadata
+// string. A payload that already arrives as a raw JSON string (spec/
+// remote-evaluate.schema.json's payload field is unconstrained jsonValue;
+// node's ports.ts documents it explicitly: "object or pre-serialized JSON
+// string") is passed through VERBATIM — re-serializing it would double-
+// encode ("\"{...}\"" instead of "{...}"), a divergence from node
+// (runtime.ts: `typeof resolution.payload === 'string' ? resolution.payload
+// : stableStringify(...)`) and python (runtime.py: the same ternary) that
+// only in-memory/remote fixtures carrying a string-shaped payload would
+// surface. Every other JSON shape (object, array, number, bool, null) is
+// serialized via encoding/json.Marshal, which already sorts map[string]any
+// keys at every nesting level (stdlib guarantee) and emits compact
+// (no-space) output, matching node's stableStringify byte-for-byte
+// (contracts/evaluation/eval-payload-attached.json's expected
+// "{\"maxRetries\":2,\"rolloutId\":\"...\"}").
+func payloadString(payload any) (string, bool) {
+	if s, ok := payload.(string); ok {
+		return s, true
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return "", false
+	}
+	return string(b), true
 }
 
 func buildMetadata(flag Flag) map[string]any {
