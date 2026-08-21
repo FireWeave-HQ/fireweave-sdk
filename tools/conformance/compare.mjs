@@ -43,9 +43,12 @@
  * an EXPECTED, ruled divergence from the frozen "pass" declaration, not an
  * undeclared one, so rule 2 does not fire for this specific combination.
  *
- * Accepts both report dialects the SDKs emit:
- *   - harness.md schema: { schemaVersion, results: [{fixtureId, ...}], summary }
- *     (node, go, java, python — all four now share this shape post-Task-10)
+ * All four languages emit the one contracts/README.md compatibility-report
+ * schema: { schemaVersion, results: [{fixtureId, suite, language, status,
+ * limitation, message}], summary }. (Prior to Task 10, python wrote a
+ * different ad hoc shape — { language, total, passed, failed, skipped,
+ * results: [{id, ...}] } — that dialect no longer exists anywhere and this
+ * comparator no longer accommodates it.)
  *
  * Usage:
  *   node tools/conformance/compare.mjs \
@@ -185,12 +188,12 @@ function loadReport(lang, path) {
     return { rows, problems };
   }
   for (const r of list) {
-    const fixtureId = r.fixtureId ?? r.id;
+    const fixtureId = r.fixtureId;
     if (!fixtureId) {
-      problems.push(`${lang}: report row without fixtureId/id`);
+      problems.push(`${lang}: report row without fixtureId`);
       continue;
     }
-    const rowLang = r.language ?? raw.language ?? lang;
+    const rowLang = r.language ?? lang;
     if (rowLang !== lang) {
       problems.push(`${lang}: row ${fixtureId} declares language "${rowLang}"`);
     }

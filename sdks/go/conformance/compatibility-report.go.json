@@ -64,7 +64,7 @@
       "language": "go",
       "status": "fail",
       "limitation": null,
-      "message": "\"value\": want 0, got 2; \"variant\": want null, got \"two\"; \"reason\": want \"ERROR\", got \"TARGETING_MATCH\"; \"errorCode\": want \"TYPE_MISMATCH\", got null; \"errorMessage\": want \"flag type mismatch\", got null; missing key \"flagMetadata.fireweave.errorKind\" (want \"TypeMismatch\"); unexpected extra key \"flagMetadata.fireweave.flagVersion\" = 1"
+      "message": "\"reason\": want \"ERROR\", got \"TARGETING_MATCH\"; \"errorCode\": want \"TYPE_MISMATCH\", got null; \"errorMessage\": want \"flag type mismatch\", got null; missing key \"flagMetadata.fireweave.errorKind\" (want \"TypeMismatch\"); unexpected extra key \"flagMetadata.fireweave.flagVersion\" = 1; \"value\": want 0, got 2; \"variant\": want null, got \"two\""
     },
     {
       "fixtureId": "eval-object-success",

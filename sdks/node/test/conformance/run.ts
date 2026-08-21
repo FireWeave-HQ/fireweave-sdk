@@ -31,8 +31,9 @@
  *    test/unit/init-fireweave.test.ts, part of `npm run verify` via
  *    `npm run test`.
  *  - extensions → 13 of 14 fixtures target namespaces cut from the v1 surface
- *    (releases/exposures/signals/capabilities — see the classification table
- *    below and contracts/harness.md "v1-scope rule"); those are reported
+ *    (releases/exposures/signals/capabilities), classified data-driven from
+ *    `when.operation` (see CUT_OPERATION_NAMESPACE below and
+ *    contracts/harness.md "v1-scope rule"); those are reported
  *    `skipped-v1-out-of-scope`, never executed. Only
  *    ext-unsupported-capability-degrade exercises real v1 surface
  *    (`FireweaveClient.invokeCapability`) and runs for real.
@@ -108,70 +109,54 @@ type ActualOutput = Record<string, unknown>;
 
 // ---------------------------------------------------------------------------
 // v1-scope classification (contracts/harness.md "Extension fixtures — v1
-// scope rule", ruling 2). contracts/extensions/*.json are frozen (byte-for-
-// byte, per the plan's header) and were authored against the pre-v1 surface
-// (releases/exposures/signals/capabilities discovery) — cut entirely by
-// ADR-0010. Each of the 14 fixtures was read before classifying:
+// scope rule", ruling 2), DATA-DRIVEN from `when.operation` — not a
+// hand-maintained fixture-ID list. contracts/README.md's "Operations" table
+// names exactly which operation belongs to which namespace; every one of
+// those namespaces (releases/exposures/signals/capabilities) is cut in v1
+// (ADR-0010) except `invokeCapability`, which stays on the client precisely
+// to dispatch (and degrade) capability calls. A fixture is
+// `skipped-v1-out-of-scope` when EVERY operation it dispatches — the single
+// top-level `when.operation`, or, for a multi-case fixture, every
+// `cases[].when.operation` — maps to a cut namespace below.
 //
-//  - 13 fixtures dispatch `when.operation` (every `cases[].when.operation`
-//    for ext-lifecycle-gating) onto a cut namespace and are reported
-//    `skipped-v1-out-of-scope`, never executed:
-//      ext-capabilities-get            -> getCapabilities   (capabilities)
-//      ext-exposures-dedup             -> recordExposure    (exposures)
-//      ext-exposures-flush             -> flushExposures    (exposures)
-//      ext-exposures-record            -> recordExposure    (exposures)
-//      ext-lifecycle-gating            -> emitSignal x3     (signals)
-//      ext-releases-complete           -> complete          (releases)
-//      ext-releases-fail               -> fail              (releases)
-//      ext-releases-set-context        -> setContext        (releases)
-//      ext-releases-start              -> start             (releases)
-//      ext-signals-error               -> emitSignal        (signals)
-//      ext-signals-health              -> emitSignal        (signals)
-//      ext-signals-metric              -> emitSignal        (signals)
-//      ext-signals-outcome             -> emitSignal        (signals)
-//
-//    ext-lifecycle-gating reads, on its surface, like the invokeCapability
-//    lifecycle-gate exception this rule carves out (its description cites
-//    "ruling 17", the same rule client.ts's `lifecycleGate` docstring names)
-//    — but its three cases all dispatch `emitSignal`, and its middle case
-//    ("ready-delivered-to-sink") expects `ok:true`/`accepted:true`, an
-//    outcome `invokeCapability` can never produce: v1's
-//    `SUPPORTED_CAPABILITIES` is frozen empty (client.ts), so
-//    `invokeCapability` degrades UnsupportedCapability in EVERY lifecycle
-//    state, including READY. Reproducing this fixture for real would require
-//    the cut `signals` namespace, so it is classified with its siblings, not
-//    as the exception.
-//
-//  - 1 fixture genuinely exercises v1 surface and runs for real:
-//      ext-unsupported-capability-degrade -> invokeCapability (present on
-//        FireweaveClient in v1 — NOT on the mustNotExpose list; its expected
-//        {ok:false, errorKind:UnsupportedCapability, degraded:true} is
-//        exactly what invokeCapability produces for any capability string,
-//        because SUPPORTED_CAPABILITIES is empty).
-const V1_OUT_OF_SCOPE_EXTENSION_FIXTURES = new Set([
-  'ext-capabilities-get',
-  'ext-exposures-dedup',
-  'ext-exposures-flush',
-  'ext-exposures-record',
-  'ext-lifecycle-gating',
-  'ext-releases-complete',
-  'ext-releases-fail',
-  'ext-releases-set-context',
-  'ext-releases-start',
-  'ext-signals-error',
-  'ext-signals-health',
-  'ext-signals-metric',
-  'ext-signals-outcome',
-]);
-
-const v1OutOfScopeNamespace = (fixtureId: string): string => {
-  if (fixtureId === 'ext-capabilities-get') return 'capabilities';
-  if (fixtureId.startsWith('ext-exposures-')) return 'exposures';
-  if (fixtureId === 'ext-lifecycle-gating') return 'signals';
-  if (fixtureId.startsWith('ext-releases-')) return 'releases';
-  if (fixtureId.startsWith('ext-signals-')) return 'signals';
-  return 'unknown';
+// This derives the exact same 13-out/1-real split the old hand-maintained
+// ID list encoded (verified by re-running the full suite after this change:
+// counts unchanged — see task-10-report.md's fix-report addendum), including
+// the one fixture worth reading individually rather than trusting the name:
+// ext-lifecycle-gating's description ("lifecycle-gated... ruling 17") reads
+// like the invokeCapability lifecycle-gate exception this rule carves out,
+// but all three of its cases dispatch `emitSignal` (signals, cut), including
+// a "ready-delivered-to-sink" case expecting `ok:true` — an outcome
+// invokeCapability can never produce, since v1's SUPPORTED_CAPABILITIES is
+// frozen empty and the unsupported-capability check runs before the
+// lifecycle gate in every state. The operation-based rule classifies it
+// correctly without needing that reasoning spelled out in a lookup table.
+const CUT_OPERATION_NAMESPACE: Record<string, string> = {
+  setContext: 'releases',
+  start: 'releases',
+  complete: 'releases',
+  fail: 'releases',
+  recordExposure: 'exposures',
+  flushExposures: 'exposures',
+  emitSignal: 'signals',
+  getCapabilities: 'capabilities',
+  // invokeCapability is deliberately absent: it is v1 surface, not cut.
 };
+
+/**
+ * Returns the cut namespace name when every operation this fixture
+ * dispatches targets one, or undefined when the fixture genuinely exercises
+ * v1 surface (today: only ext-unsupported-capability-degrade).
+ */
+function v1OutOfScopeNamespace(fixture: Fixture): string | undefined {
+  const operations =
+    fixture.cases !== undefined ? fixture.cases.map((c) => c.when.operation) : [fixture.when.operation];
+  const namespaces = operations.map((op) => CUT_OPERATION_NAMESPACE[op]);
+  if (namespaces.every((ns): ns is string => ns !== undefined)) {
+    return namespaces[0];
+  }
+  return undefined;
+}
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -609,7 +594,7 @@ async function runLifecycleOpFixture(fixture: Fixture): Promise<ActualOutput> {
 /**
  * Only `ext-unsupported-capability-degrade` reaches this function (the one
  * extensions fixture classified as v1-runnable — see
- * V1_OUT_OF_SCOPE_EXTENSION_FIXTURES above). It exercises
+ * CUT_OPERATION_NAMESPACE/v1OutOfScopeNamespace above). It exercises
  * `FireweaveClient.invokeCapability`, present and un-cut in v1.
  */
 async function runExtensionFixture(fixture: Fixture): Promise<ActualOutput> {
@@ -748,21 +733,29 @@ async function main(): Promise<void> {
   const fixtures = loadFixtures();
   const rows: ReportRow[] = [];
 
+  let v1OutOfScopeCount = 0;
+  let v1RunnableCount = 0;
+
   for (const fixture of fixtures) {
     // v1-scope rule (contracts/harness.md): extensions fixtures that target a
     // cut namespace are reported skipped-v1-out-of-scope and never executed,
     // regardless of the fixture's own declared compatibility (frozen "pass",
-    // authored pre-cut). See V1_OUT_OF_SCOPE_EXTENSION_FIXTURES above.
-    if (fixture.suite === 'extensions' && V1_OUT_OF_SCOPE_EXTENSION_FIXTURES.has(fixture.id)) {
-      rows.push({
-        fixtureId: fixture.id,
-        suite: fixture.suite,
-        language: 'node',
-        status: 'skipped-v1-out-of-scope',
-        limitation: `targets the ${v1OutOfScopeNamespace(fixture.id)} namespace, cut from the v1 control-points surface (ADR-0010)`,
-        message: null,
-      });
-      continue;
+    // authored pre-cut). See CUT_OPERATION_NAMESPACE above.
+    if (fixture.suite === 'extensions') {
+      const namespace = v1OutOfScopeNamespace(fixture);
+      if (namespace !== undefined) {
+        v1OutOfScopeCount += 1;
+        rows.push({
+          fixtureId: fixture.id,
+          suite: fixture.suite,
+          language: 'node',
+          status: 'skipped-v1-out-of-scope',
+          limitation: `targets the ${namespace} namespace, cut from the v1 control-points surface (ADR-0010)`,
+          message: null,
+        });
+        continue;
+      }
+      v1RunnableCount += 1;
     }
 
     const declared = fixture.compatibility['node'];
@@ -810,6 +803,18 @@ async function main(): Promise<void> {
     }
     const message = messages.length > 0 ? messages.join(' | ') : null;
     rows.push({ fixtureId: fixture.id, suite: fixture.suite, language: 'node', status, limitation: null, message });
+  }
+
+  // Sanity assertion (review finding 2): the data-driven v1-scope
+  // classification above must derive the exact same 13-out/1-real split the
+  // hand-maintained fixture-ID list used to encode. If contracts/extensions/
+  // ever gains or loses a fixture, or a fixture's operation set changes,
+  // this fails loudly instead of silently drifting.
+  if (v1OutOfScopeCount !== 13 || v1RunnableCount !== 1) {
+    throw new Error(
+      `v1-scope classification drifted: expected 13 skipped-v1-out-of-scope + 1 runnable ` +
+        `extensions fixture, got ${v1OutOfScopeCount} + ${v1RunnableCount}`,
+    );
   }
 
   const summary = {

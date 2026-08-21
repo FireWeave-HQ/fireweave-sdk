@@ -81,33 +81,65 @@ public final class ConformanceRunner {
             "evaluation", "context", "lifecycle", "faults", "security", "extensions");
 
     /**
-     * v1-scope classification (contracts/harness.md "Extension fixtures — v1 scope rule",
-     * ruling 2). Identical to node/go/python's classification — see
-     * sdks/node/test/conformance/run.ts for the fully-annotated per-fixture table.
+     * Cut-in-v1 operations, mapped to the namespace they belong to (contracts/README.md
+     * "Operations" table; contracts/harness.md "Extension fixtures — v1-scope rule", ruling 2).
+     * Every namespace here (releases/exposures/signals/capabilities) is cut from the v1 surface
+     * (ADR-0010); {@code invokeCapability} is deliberately absent — it is v1 surface, not cut.
+     *
+     * <p>A fixture is {@code skipped-v1-out-of-scope} when EVERY operation it dispatches — the
+     * single top-level {@code when.operation}, or, for a multi-case fixture, every
+     * {@code cases[].when.operation} — maps to an entry here. This derives the exact same
+     * 13-out/1-real split a hand-maintained fixture-ID list used to encode (verified by
+     * re-running the full suite: counts unchanged — see task-10-report.md's fix-report
+     * addendum), including the one fixture worth reading individually rather than trusting the
+     * name: {@code ext-lifecycle-gating}'s description ("lifecycle-gated... ruling 17") reads
+     * like the {@code invokeCapability} lifecycle-gate exception this rule carves out, but all
+     * three of its cases dispatch {@code emitSignal} (signals, cut), including a
+     * "ready-delivered-to-sink" case expecting {@code ok:true} — an outcome
+     * {@code invokeCapability} can never produce, since v1's supported-capabilities set is
+     * frozen empty and the unsupported-capability check runs before the lifecycle gate in every
+     * state. The operation-based rule classifies it correctly without needing that reasoning
+     * spelled out in a lookup table.
      */
-    private static final Set<String> V1_OUT_OF_SCOPE_EXTENSIONS = new LinkedHashSet<>(Arrays.asList(
-            "ext-capabilities-get", "ext-exposures-dedup", "ext-exposures-flush", "ext-exposures-record",
-            "ext-lifecycle-gating", "ext-releases-complete", "ext-releases-fail", "ext-releases-set-context",
-            "ext-releases-start", "ext-signals-error", "ext-signals-health", "ext-signals-metric",
-            "ext-signals-outcome"));
+    private static final Map<String, String> CUT_OPERATION_NAMESPACE = new LinkedHashMap<>();
 
-    private static String v1OutOfScopeNamespace(String id) {
-        if ("ext-capabilities-get".equals(id)) {
-            return "capabilities";
+    static {
+        CUT_OPERATION_NAMESPACE.put("setContext", "releases");
+        CUT_OPERATION_NAMESPACE.put("start", "releases");
+        CUT_OPERATION_NAMESPACE.put("complete", "releases");
+        CUT_OPERATION_NAMESPACE.put("fail", "releases");
+        CUT_OPERATION_NAMESPACE.put("recordExposure", "exposures");
+        CUT_OPERATION_NAMESPACE.put("flushExposures", "exposures");
+        CUT_OPERATION_NAMESPACE.put("emitSignal", "signals");
+        CUT_OPERATION_NAMESPACE.put("getCapabilities", "capabilities");
+    }
+
+    /**
+     * Returns the cut namespace name when every operation this fixture dispatches targets one,
+     * or {@code null} when the fixture genuinely exercises v1 surface (today: only
+     * ext-unsupported-capability-degrade).
+     */
+    private static String v1OutOfScopeNamespace(JsonNode fixture) {
+        List<String> operations = new ArrayList<>();
+        JsonNode cases = fixture.get("cases");
+        if (cases != null && cases.isArray()) {
+            for (JsonNode c : cases) {
+                operations.add(c.path("when").path("operation").asText());
+            }
+        } else {
+            operations.add(fixture.path("when").path("operation").asText());
         }
-        if (id.startsWith("ext-exposures-")) {
-            return "exposures";
+        String namespace = null;
+        for (String op : operations) {
+            String ns = CUT_OPERATION_NAMESPACE.get(op);
+            if (ns == null) {
+                return null;
+            }
+            if (namespace == null) {
+                namespace = ns;
+            }
         }
-        if ("ext-lifecycle-gating".equals(id)) {
-            return "signals";
-        }
-        if (id.startsWith("ext-releases-")) {
-            return "releases";
-        }
-        if (id.startsWith("ext-signals-")) {
-            return "signals";
-        }
-        return "unknown";
+        return namespace;
     }
 
     private ConformanceRunner() {
@@ -714,7 +746,10 @@ public final class ConformanceRunner {
         return actual;
     }
 
-    /** Only ext-unsupported-capability-degrade reaches here (see V1_OUT_OF_SCOPE_EXTENSIONS). */
+    /**
+     * Only ext-unsupported-capability-degrade reaches here (see
+     * CUT_OPERATION_NAMESPACE/v1OutOfScopeNamespace above).
+     */
     static ObjectNode executeInvokeCapability(JsonNode fixture) {
         JsonNode given = fixture.path("given");
         JsonNode when = fixture.path("when");
@@ -1013,12 +1048,15 @@ public final class ConformanceRunner {
         // v1-scope rule (contracts/harness.md): extensions fixtures targeting a cut namespace
         // are reported skipped-v1-out-of-scope, never executed, regardless of the fixture's
         // own declared compatibility (frozen "pass", authored pre-cut).
-        if ("extensions".equals(suite) && V1_OUT_OF_SCOPE_EXTENSIONS.contains(id)) {
-            row.put("status", "skipped-v1-out-of-scope");
-            row.put("limitation", "targets the " + v1OutOfScopeNamespace(id)
-                    + " namespace, cut from the v1 control-points surface (ADR-0010)");
-            row.set("message", MAPPER.nullNode());
-            return row;
+        if ("extensions".equals(suite)) {
+            String namespace = v1OutOfScopeNamespace(fixture);
+            if (namespace != null) {
+                row.put("status", "skipped-v1-out-of-scope");
+                row.put("limitation", "targets the " + namespace
+                        + " namespace, cut from the v1 control-points surface (ADR-0010)");
+                row.set("message", MAPPER.nullNode());
+                return row;
+            }
         }
 
         JsonNode compat = fixture.get("compatibility");
@@ -1081,6 +1119,8 @@ public final class ConformanceRunner {
         int fail = 0;
         int skipDoc = 0;
         int skipV1 = 0;
+        int extensionsOutOfScope = 0;
+        int extensionsRunnable = 0;
         for (JsonNode f : fixtures) {
             ObjectNode row = runFixture(f);
             results.add(row);
@@ -1101,7 +1141,26 @@ public final class ConformanceRunner {
                 default:
                     break;
             }
+            if ("extensions".equals(f.get("suite").asText())) {
+                if ("skipped-v1-out-of-scope".equals(status)) {
+                    extensionsOutOfScope++;
+                } else {
+                    extensionsRunnable++;
+                }
+            }
         }
+
+        // Sanity assertion (review finding 2): the data-driven v1-scope classification above
+        // must derive the exact same 13-out/1-real split a hand-maintained fixture-ID list used
+        // to encode. If contracts/extensions/ ever gains or loses a fixture, or a fixture's
+        // operation set changes, this fails loudly instead of silently drifting.
+        if (extensionsOutOfScope != 13 || extensionsRunnable != 1) {
+            throw new IllegalStateException(String.format(
+                    "v1-scope classification drifted: expected 13 skipped-v1-out-of-scope + 1 "
+                            + "runnable extensions fixture, got %d + %d",
+                    extensionsOutOfScope, extensionsRunnable));
+        }
+
         ObjectNode report = MAPPER.createObjectNode();
         report.put("schemaVersion", 1);
         report.put("generatedAt", "EXCLUDED");

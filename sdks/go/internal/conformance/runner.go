@@ -41,48 +41,66 @@ type Report struct {
 
 const language = "go"
 
-// v1OutOfScopeExtensionFixtures classifies the 14 contracts/extensions/*.json
-// fixtures (contracts/harness.md "Extension fixtures — v1 scope rule",
-// ruling 2). They are frozen and were authored against the pre-v1 surface
-// (releases/exposures/signals/capabilities discovery) — cut entirely by
-// ADR-0010. 13 dispatch onto a cut namespace and are reported
-// skipped-v1-out-of-scope without executing; only
-// ext-unsupported-capability-degrade exercises real v1 surface
-// (Client.InvokeCapability, present and un-cut) and runs for real. See
-// sdks/node/test/conformance/run.ts for the fully-annotated per-fixture
-// table — the classification is identical across languages because the SDK
-// surface these fixtures exercise is the same everywhere.
-var v1OutOfScopeExtensionFixtures = map[string]bool{
-	"ext-capabilities-get":     true,
-	"ext-exposures-dedup":      true,
-	"ext-exposures-flush":      true,
-	"ext-exposures-record":     true,
-	"ext-lifecycle-gating":     true,
-	"ext-releases-complete":    true,
-	"ext-releases-fail":        true,
-	"ext-releases-set-context": true,
-	"ext-releases-start":       true,
-	"ext-signals-error":        true,
-	"ext-signals-health":       true,
-	"ext-signals-metric":       true,
-	"ext-signals-outcome":      true,
+// cutOperationNamespace classifies extensions fixtures (contracts/harness.md
+// "Extension fixtures — v1 scope rule", ruling 2) DATA-DRIVEN from
+// When.Operation — not a hand-maintained fixture-ID list.
+// contracts/README.md's "Operations" table names exactly which operation
+// belongs to which namespace; every one of those namespaces (releases/
+// exposures/signals/capabilities) is cut in v1 (ADR-0010) except
+// InvokeCapability, which stays on the client precisely to dispatch (and
+// degrade) capability calls. A fixture is skipped-v1-out-of-scope when EVERY
+// operation it dispatches — the single top-level When.Operation, or, for a
+// multi-case fixture, every Cases[].When.Operation — maps to a cut namespace
+// below.
+//
+// This derives the exact same 13-out/1-real split a hand-maintained ID list
+// used to encode (verified by re-running the full suite: counts unchanged —
+// see task-10-report.md's fix-report addendum), including the one fixture
+// worth reading individually rather than trusting the name:
+// ext-lifecycle-gating's description ("lifecycle-gated... ruling 17") reads
+// like the InvokeCapability lifecycle-gate exception this rule carves out,
+// but all three of its cases dispatch "emitSignal" (signals, cut), including
+// a "ready-delivered-to-sink" case expecting ok:true — an outcome
+// InvokeCapability can never produce, since v1's supportedCapabilities is
+// frozen empty and the unsupported-capability check runs before the
+// lifecycle gate in every state. The operation-based rule classifies it
+// correctly without needing that reasoning spelled out in a lookup table.
+var cutOperationNamespace = map[string]string{
+	"setContext":      "releases",
+	"start":           "releases",
+	"complete":        "releases",
+	"fail":            "releases",
+	"recordExposure":  "exposures",
+	"flushExposures":  "exposures",
+	"emitSignal":      "signals",
+	"getCapabilities": "capabilities",
+	// invokeCapability is deliberately absent: it is v1 surface, not cut.
 }
 
-func v1OutOfScopeNamespace(id string) string {
-	switch {
-	case id == "ext-capabilities-get":
-		return "capabilities"
-	case strings.HasPrefix(id, "ext-exposures-"):
-		return "exposures"
-	case id == "ext-lifecycle-gating":
-		return "signals"
-	case strings.HasPrefix(id, "ext-releases-"):
-		return "releases"
-	case strings.HasPrefix(id, "ext-signals-"):
-		return "signals"
-	default:
-		return "unknown"
+// v1OutOfScopeNamespace returns the cut namespace name (and true) when
+// every operation f dispatches targets one, or ("", false) when the fixture
+// genuinely exercises v1 surface (today: only
+// ext-unsupported-capability-degrade).
+func v1OutOfScopeNamespace(f Fixture) (string, bool) {
+	var operations []string
+	if len(f.Cases) > 0 {
+		for _, c := range f.Cases {
+			operations = append(operations, c.When.Operation)
+		}
+	} else {
+		operations = []string{f.When.Operation}
 	}
+	namespace := ""
+	for i, op := range operations {
+		ns, ok := cutOperationNamespace[op]
+		if !ok {
+			return "", false
+		}
+		if i == 0 {
+			namespace = ns
+		}
+	}
+	return namespace, true
 }
 
 // Run executes every fixture and returns the aggregated report.
@@ -100,11 +118,32 @@ func Run(contractsDir string) (*Report, error) {
 			"skipped-v1-out-of-scope":            0,
 		},
 	}
+	outOfScopeCount := 0
+	runnableCount := 0
 	for _, f := range fixtures {
 		res := runOne(f)
 		report.Summary[res.Status]++
 		report.Results = append(report.Results, res)
+		if f.Suite == "extensions" {
+			if res.Status == "skipped-v1-out-of-scope" {
+				outOfScopeCount++
+			} else {
+				runnableCount++
+			}
+		}
 	}
+
+	// Sanity assertion (review finding 2): the data-driven v1-scope
+	// classification above must derive the exact same 13-out/1-real split a
+	// hand-maintained fixture-ID list used to encode. If contracts/
+	// extensions/ ever gains or loses a fixture, or a fixture's operation set
+	// changes, this fails loudly instead of silently drifting.
+	if outOfScopeCount != 13 || runnableCount != 1 {
+		return nil, fmt.Errorf(
+			"v1-scope classification drifted: expected 13 skipped-v1-out-of-scope + 1 runnable "+
+				"extensions fixture, got %d + %d", outOfScopeCount, runnableCount)
+	}
+
 	return report, nil
 }
 
@@ -115,11 +154,13 @@ func runOne(f Fixture) Result {
 	// cut namespace are reported skipped-v1-out-of-scope, never executed,
 	// regardless of the fixture's own declared compatibility (frozen "pass",
 	// authored pre-cut).
-	if f.Suite == "extensions" && v1OutOfScopeExtensionFixtures[f.ID] {
-		res.Status = "skipped-v1-out-of-scope"
-		lim := fmt.Sprintf("targets the %s namespace, cut from the v1 control-points surface (ADR-0010)", v1OutOfScopeNamespace(f.ID))
-		res.Limitation = &lim
-		return res
+	if f.Suite == "extensions" {
+		if namespace, outOfScope := v1OutOfScopeNamespace(f); outOfScope {
+			res.Status = "skipped-v1-out-of-scope"
+			lim := fmt.Sprintf("targets the %s namespace, cut from the v1 control-points surface (ADR-0010)", namespace)
+			res.Limitation = &lim
+			return res
+		}
 	}
 
 	if f.Compatibility[language] == "skipped-with-documented-limitation" {
@@ -789,7 +830,7 @@ func executeReplaceProvider(f Fixture) (map[string]any, string, error) {
 }
 
 // --- extensions (only invokeCapability reaches here; see
-// v1OutOfScopeExtensionFixtures) ---
+// cutOperationNamespace/v1OutOfScopeNamespace) ---
 
 func executeInvokeCapability(f Fixture) (map[string]any, string, error) {
 	adapter := inmemoryFrom(f.Given.Flags)

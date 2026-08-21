@@ -29,8 +29,9 @@ Suite -> execution backend:
   in-memory adapter instead (cache staleness is provisioned directly per
   ``given.flags[*].fromCache`` + ``providerState: STALE``).
 - extensions: 13 of 14 fixtures target namespaces cut from v1 (releases,
-  exposures, signals, capabilities — see V1_OUT_OF_SCOPE_EXTENSION_FIXTURES
-  below) and are reported ``skipped-v1-out-of-scope`` without executing.
+  exposures, signals, capabilities), classified data-driven from
+  ``when.operation`` (see CUT_OPERATION_NAMESPACE below) and are reported
+  ``skipped-v1-out-of-scope`` without executing.
   Only ``ext-unsupported-capability-degrade`` exercises real v1 surface
   (``FireweaveClient.invoke_capability``) and runs for real.
 
@@ -94,42 +95,53 @@ _DIRECTIVE_KEYS = {"errorMessageMustNotContain", "recordedMessageMustNotContain"
 
 # ---------------------------------------------------------------------------
 # v1-scope classification (contracts/harness.md "Extension fixtures — v1
-# scope rule", ruling 2). contracts/extensions/*.json are frozen and were
-# authored against the pre-v1 surface (releases/exposures/signals/
-# capabilities discovery) — cut entirely by ADR-0010. Each of the 14 fixtures
-# was read before classifying (see sdks/node/test/conformance/run.ts for the
-# identical, fully-annotated table — python's classification is the same set
-# for the same reason: the SDK surface these fixtures exercise is identical
-# across languages).
-V1_OUT_OF_SCOPE_EXTENSION_FIXTURES = {
-    "ext-capabilities-get",
-    "ext-exposures-dedup",
-    "ext-exposures-flush",
-    "ext-exposures-record",
-    "ext-lifecycle-gating",
-    "ext-releases-complete",
-    "ext-releases-fail",
-    "ext-releases-set-context",
-    "ext-releases-start",
-    "ext-signals-error",
-    "ext-signals-health",
-    "ext-signals-metric",
-    "ext-signals-outcome",
+# scope rule", ruling 2), DATA-DRIVEN from `when.operation` — not a
+# hand-maintained fixture-ID list. contracts/README.md's "Operations" table
+# names exactly which operation belongs to which namespace; every one of
+# those namespaces (releases/exposures/signals/capabilities) is cut in v1
+# (ADR-0010) except `invokeCapability`, which stays on the client precisely
+# to dispatch (and degrade) capability calls. A fixture is
+# `skipped-v1-out-of-scope` when EVERY operation it dispatches — the single
+# top-level `when.operation`, or, for a multi-case fixture, every
+# `cases[].when.operation` — maps to a cut namespace below.
+#
+# This derives the exact same 13-out/1-real split a hand-maintained ID list
+# used to encode (verified by re-running the full suite: counts unchanged —
+# see task-10-report.md's fix-report addendum), including the one fixture
+# worth reading individually rather than trusting the name:
+# ext-lifecycle-gating's description ("lifecycle-gated... ruling 17") reads
+# like the invoke_capability lifecycle-gate exception this rule carves out,
+# but all three of its cases dispatch `emitSignal` (signals, cut), including
+# a "ready-delivered-to-sink" case expecting `ok:true` — an outcome
+# invoke_capability can never produce, since v1's SUPPORTED_CAPABILITIES is
+# frozen empty and the unsupported-capability check runs before the
+# lifecycle gate in every state. The operation-based rule classifies it
+# correctly without needing that reasoning spelled out in a lookup table.
+CUT_OPERATION_NAMESPACE = {
+    "setContext": "releases",
+    "start": "releases",
+    "complete": "releases",
+    "fail": "releases",
+    "recordExposure": "exposures",
+    "flushExposures": "exposures",
+    "emitSignal": "signals",
+    "getCapabilities": "capabilities",
+    # invokeCapability is deliberately absent: it is v1 surface, not cut.
 }
 
 
-def v1_out_of_scope_namespace(fixture_id: str) -> str:
-    if fixture_id == "ext-capabilities-get":
-        return "capabilities"
-    if fixture_id.startswith("ext-exposures-"):
-        return "exposures"
-    if fixture_id == "ext-lifecycle-gating":
-        return "signals"
-    if fixture_id.startswith("ext-releases-"):
-        return "releases"
-    if fixture_id.startswith("ext-signals-"):
-        return "signals"
-    return "unknown"
+def v1_out_of_scope_namespace(fixture: Dict[str, Any]) -> Optional[str]:
+    """Returns the cut namespace name when every operation this fixture
+    dispatches targets one, or None when the fixture genuinely exercises v1
+    surface (today: only ext-unsupported-capability-degrade)."""
+    if "cases" in fixture:
+        operations = [case.get("when", {}).get("operation") for case in fixture["cases"]]
+    else:
+        operations = [fixture.get("when", {}).get("operation")]
+    namespaces = [CUT_OPERATION_NAMESPACE.get(op) for op in operations]
+    if all(ns is not None for ns in namespaces):
+        return namespaces[0]
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -429,7 +441,7 @@ def _run_shutdown(fixture: Dict[str, Any]) -> Dict[str, Any]:
 
 def _run_extension(fixture: Dict[str, Any]) -> Dict[str, Any]:
     """Only ext-unsupported-capability-degrade reaches here (see
-    V1_OUT_OF_SCOPE_EXTENSION_FIXTURES). Exercises
+    CUT_OPERATION_NAMESPACE/v1_out_of_scope_namespace above). Exercises
     FireweaveClient.invoke_capability, present and un-cut in v1."""
     given = fixture.get("given", {})
     when = fixture.get("when", {})
@@ -697,15 +709,17 @@ def run_fixture(fixture: Dict[str, Any]) -> Dict[str, Any]:
     # cut namespace are reported skipped-v1-out-of-scope, never executed,
     # regardless of the fixture's own declared compatibility (frozen "pass",
     # authored pre-cut).
-    if suite == "extensions" and fixture_id in V1_OUT_OF_SCOPE_EXTENSION_FIXTURES:
-        return {
-            "fixtureId": fixture_id,
-            "suite": suite,
-            "language": LANGUAGE,
-            "status": "skipped-v1-out-of-scope",
-            "limitation": f"targets the {v1_out_of_scope_namespace(fixture_id)} namespace, cut from the v1 control-points surface (ADR-0010)",
-            "message": None,
-        }
+    if suite == "extensions":
+        namespace = v1_out_of_scope_namespace(fixture)
+        if namespace is not None:
+            return {
+                "fixtureId": fixture_id,
+                "suite": suite,
+                "language": LANGUAGE,
+                "status": "skipped-v1-out-of-scope",
+                "limitation": f"targets the {namespace} namespace, cut from the v1 control-points surface (ADR-0010)",
+                "message": None,
+            }
 
     declared = (fixture.get("compatibility") or {}).get(LANGUAGE)
     if declared == "skipped-with-documented-limitation":
@@ -770,6 +784,21 @@ def run_all(contracts_dir: Path) -> Dict[str, Any]:
         ),
         "skipped-v1-out-of-scope": sum(1 for r in rows if r["status"] == "skipped-v1-out-of-scope"),
     }
+
+    # Sanity assertion (review finding 2): the data-driven v1-scope
+    # classification must derive the exact same 13-out/1-real split a
+    # hand-maintained fixture-ID list used to encode. If contracts/
+    # extensions/ ever gains or loses a fixture, or a fixture's operation set
+    # changes, this fails loudly instead of silently drifting.
+    extensions_rows = [r for r in rows if r["suite"] == "extensions"]
+    out_of_scope_count = sum(1 for r in extensions_rows if r["status"] == "skipped-v1-out-of-scope")
+    runnable_count = len(extensions_rows) - out_of_scope_count
+    if out_of_scope_count != 13 or runnable_count != 1:
+        raise AssertionError(
+            f"v1-scope classification drifted: expected 13 skipped-v1-out-of-scope + 1 "
+            f"runnable extensions fixture, got {out_of_scope_count} + {runnable_count}"
+        )
+
     return {
         "schemaVersion": 1,
         "generatedAt": "EXCLUDED",
