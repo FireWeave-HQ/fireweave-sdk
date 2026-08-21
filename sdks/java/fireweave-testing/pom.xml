@@ -23,9 +23,24 @@
     <automatic.module.name>ai.fireweave.testing</automatic.module.name>
     <!-- Conformance harness only — never publish this artifact (it drags
          jackson-databind into ai.fireweave:* coordinates for no consumer
-         benefit). The `release` profile's central.skipPublishing=false is
-         parent-wide; this overrides deploy for this module specifically. -->
-    <maven.deploy.skip>true</maven.deploy.skip>
+         benefit).
+
+         NOT maven.deploy.skip: central-publishing-maven-plugin:0.11.0 is
+         declared `<extensions>true</extensions>` in the parent pom, which
+         makes its DeployLifecycleParticipant active. That participant
+         unconditionally clears this module's implicit maven-deploy-plugin
+         execution and injects its own `publish` goal on the deploy phase
+         instead — so maven.deploy.skip has no consumer left to read it
+         (verified: the string appears nowhere in the plugin's classes, and
+         a module-level maven.deploy.skip=true left `central.skipPublishing`
+         resolving to `false` here — the deploy still would have run).
+
+         The plugin's own — and only — skip switch is `skipPublishing`,
+         bound to ${central.skipPublishing}. The `release` profile sets it
+         to false parent-wide (sdks/java/pom.xml); this module-level
+         property shadows that for fireweave-testing specifically, per
+         normal Maven child-property-overrides-parent resolution. -->
+    <central.skipPublishing>true</central.skipPublishing>
   </properties>
 
   <dependencies>
