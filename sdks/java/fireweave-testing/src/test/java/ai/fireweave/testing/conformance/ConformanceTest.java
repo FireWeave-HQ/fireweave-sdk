@@ -32,44 +32,29 @@ class ConformanceTest {
             Paths.get("..", "..", "..", "contracts").toAbsolutePath().normalize();
 
     /**
-     * Known, out-of-scope gaps (see task-10-report.md "Concerns" for the full writeup). Each is
-     * a genuine divergence between the frozen fixture's declared {@code compatibility.java:
-     * "pass"} and actual SDK behavior — not a runner bug. Task 10's scope limits forbid patching
-     * SDK src/ or editing frozen contracts/ fixtures, so these are assumption-skipped here (not
-     * silently — the reason is printed in the surefire report), rather than left failing the
-     * whole build. {@link ConformanceRunner}'s own report (compatibility-report.java.json,
-     * written by {@code main()}) still carries their TRUE "fail" status.
+     * Known, out-of-scope gaps (see task-10-report.md "Concerns" for the original writeup and
+     * task-10b-report.md for what since got fixed). Each is a genuine divergence between the
+     * frozen fixture's declared {@code compatibility.java: "pass"} and actual SDK behavior — not
+     * a runner bug. These are assumption-skipped here (not silently — the reason is printed in
+     * the surefire report), rather than left failing the whole build. {@link ConformanceRunner}'s
+     * own report (compatibility-report.java.json, written by {@code main()}) still carries their
+     * TRUE "fail" status.
      *
      * <p>Note eval-int-beyond-safe-integer needs no entry here: that fixture's
      * {@code compatibility.java} is itself declared {@code skipped-with-documented-limitation}
      * (java's Long-via-double getNumberValue path, same as node), so
      * {@link ConformanceRunner#runFixture} handles it via the ordinary declared-skip path.
+     *
+     * <p>task-10b fixed ctx-reserved-keys-rejected (FireweaveRuntime now bakes
+     * {@code Validation.DEFAULT_RESERVED_ATTRIBUTE_KEYS} into its constructor unconditionally,
+     * merged with caller-supplied keys), flipped eval-numeric-coercion-int-float's
+     * {@code compatibility.java} to the genuinely-declared skipped-with-documented-limitation
+     * (controller-ruled fixture edit), and implemented eval-payload-attached
+     * ({@code ai.fireweave.sdk.application.EvaluationOptions#includePayload()}, threaded through
+     * both {@code InMemoryAdapter} and {@code FireweaveRemoteAdapter}) — all three removed below;
+     * {@code KNOWN_GAPS} is now empty.
      */
     private static final Map<String, String> KNOWN_GAPS = new HashMap<>();
-
-    static {
-        KNOWN_GAPS.put("eval-numeric-coercion-int-float",
-                "v1's FlagType has exactly four members (boolean/string/number/object), no "
-                        + "integer/float split (conformance/surface/control-points.surface.json: "
-                        + "'number, NOT integer') — applied uniformly across every language by the "
-                        + "v1 cut. This fixture's go/python/java compatibility is still declared "
-                        + "\"pass\" from before that cut; structurally unsatisfiable today without "
-                        + "reintroducing a type the ratified spec deliberately removed.");
-        KNOWN_GAPS.put("eval-payload-attached",
-                "java's EvaluationOptions (application/EvaluationOptions.java) is an inert marker "
-                        + "type with no includePayload equivalent, so fireweave.payload is never "
-                        + "attached to flagMetadata.");
-        KNOWN_GAPS.put("ctx-reserved-keys-rejected",
-                "FireweaveConfig.Builder.reservedAttributeKeys defaults to Collections.emptySet() "
-                        + "and neither Fireweave.init (application/Fireweave.java) nor "
-                        + "FireweaveRuntime bakes in a targetingKey/kind baseline the way node/go/"
-                        + "python's entry points do (their DEFAULT_RESERVED_ATTRIBUTE_KEYS applies "
-                        + "unconditionally, inside the runtime constructor, regardless of "
-                        + "caller-supplied config) — so an attribute literally named "
-                        + "\"targetingKey\" is NOT rejected as reserved unless a caller explicitly "
-                        + "passes reservedAttributeKeys itself. A real cross-language behavior gap "
-                        + "in java's default configuration, not a runner bug.");
-    }
 
     @TestFactory
     Stream<DynamicTest> conformanceFixtures() throws IOException {

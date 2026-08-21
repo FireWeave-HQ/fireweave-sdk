@@ -203,6 +203,72 @@ class FireweaveRuntimeTest {
         assertEquals("INVALID_CONTEXT", rejected.error().openFeatureErrorCode());
     }
 
+    // ------------------------------------------------------------------ reserved attribute keys
+    // (task-10b item 4 / contracts/context/ctx-reserved-keys-rejected.json — the security-adjacent
+    // divergence: java previously accepted an attribute literally named "targetingKey" unless a
+    // caller explicitly configured reservedAttributeKeys).
+
+    @Test
+    void reservedAttributeKeyTargetingKeyRejectedByDefault() throws Exception {
+        // Default FireweaveConfig — no reservedAttributeKeys configured by the caller at all.
+        StubAdapter adapter = new StubAdapter();
+        FireweaveRuntime rt = runtime(adapter);
+        rt.initialize();
+        Decision d = rt.evaluate("f", FlagType.BOOLEAN, JsonValue.of(false), null,
+                EvaluationContext.builder().targetingKey("user_1")
+                        .attribute("targetingKey", "duplicate-illegal").build(), null);
+        assertEquals(ErrorKind.InvalidContext, d.error().kind());
+        assertEquals("INVALID_CONTEXT", d.error().openFeatureErrorCode());
+    }
+
+    @Test
+    void reservedAttributeKeyKindRejectedByDefault() throws Exception {
+        StubAdapter adapter = new StubAdapter();
+        FireweaveRuntime rt = runtime(adapter);
+        rt.initialize();
+        Decision d = rt.evaluate("f", FlagType.BOOLEAN, JsonValue.of(false), null,
+                EvaluationContext.builder().targetingKey("user_1")
+                        .attribute("kind", "user").build(), null);
+        assertEquals(ErrorKind.InvalidContext, d.error().kind());
+    }
+
+    @Test
+    void callerSuppliedReservedAttributeKeysAugmentRatherThanReplaceTheDefaultBaseline() throws Exception {
+        StubAdapter adapter = new StubAdapter();
+        FireweaveRuntime rt = new FireweaveRuntime(
+                FireweaveConfig.builder()
+                        .reservedAttributeKeys(java.util.Set.of("customSecret"))
+                        .build(),
+                adapter);
+        rt.initialize();
+
+        // The default baseline ("targetingKey") is still rejected even though the caller only
+        // configured an ADDITIONAL key — the defaults are merged in, not replaced.
+        Decision defaultStillRejected = rt.evaluate("f", FlagType.BOOLEAN, JsonValue.of(false), null,
+                EvaluationContext.builder().targetingKey("user_1")
+                        .attribute("targetingKey", "duplicate-illegal").build(), null);
+        assertEquals(ErrorKind.InvalidContext, defaultStillRejected.error().kind());
+
+        // The caller's own augmentation is honored too.
+        Decision callerKeyRejected = rt.evaluate("f", FlagType.BOOLEAN, JsonValue.of(false), null,
+                EvaluationContext.builder().targetingKey("user_1")
+                        .attribute("customSecret", "leak").build(), null);
+        assertEquals(ErrorKind.InvalidContext, callerKeyRejected.error().kind());
+
+        // An ordinary attribute not in either set is unaffected.
+        final boolean[] called = {false};
+        adapter.onEvaluate = req -> {
+            called[0] = true;
+            return Decision.builder(req.flagKey()).value(JsonValue.of(true))
+                    .reason(Reasons.TARGETING_MATCH).build();
+        };
+        Decision ok = rt.evaluate("f", FlagType.BOOLEAN, JsonValue.of(false), null,
+                EvaluationContext.builder().targetingKey("user_1")
+                        .attribute("plan", "pro").build(), null);
+        assertNull(ok.error());
+        assertTrue(called[0]);
+    }
+
     @Test
     void transientInitFailureIsErrorNotFatal() {
         StubAdapter adapter = new StubAdapter();

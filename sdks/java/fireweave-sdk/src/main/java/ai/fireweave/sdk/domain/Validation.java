@@ -1,6 +1,9 @@
 package ai.fireweave.sdk.domain;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -182,6 +185,21 @@ public final class Validation {
      */
     private static final Set<String> CANONICAL_RESERVED_KEYS =
             new java.util.HashSet<>(java.util.Arrays.asList(GROUPS_KEY, GROUP_PROPERTIES_KEY));
+
+    /**
+     * Default reserved evaluation-context attribute keys (contracts/context/
+     * ctx-reserved-keys-rejected.json): {@code targetingKey} and {@code kind} may never appear as
+     * ordinary attributes, matching node's {@code DEFAULT_RESERVED_ATTRIBUTE_KEYS}
+     * (application/runtime.ts), python's (domain/context.py), and go's hardcoded
+     * {@code attrTargetingKey}/{@code attrKind} check (domain/context.go). Unlike the other three
+     * languages, java previously left this baseline entirely to caller-supplied
+     * {@link FireweaveConfig.Builder#reservedAttributeKeys(Set)} configuration — task-10b item 4
+     * bakes it into {@link FireweaveRuntime}'s construction unconditionally, merged with whatever
+     * the caller additionally supplies, so an attribute literally named {@code targetingKey} is
+     * rejected by default rather than only when a caller opts in.
+     */
+    public static final Set<String> DEFAULT_RESERVED_ATTRIBUTE_KEYS =
+            Collections.unmodifiableSet(new LinkedHashSet<>(Arrays.asList("targetingKey", "kind")));
 
     /**
      * Promote the canonical {@code fireweave.groups} / {@code fireweave.groupProperties} context

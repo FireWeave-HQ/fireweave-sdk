@@ -31,6 +31,9 @@ public final class InMemoryAdapter implements BackendAdapter {
         public boolean enabled;
         public String variant;
         public JsonValue value;
+        /** Exposed as fireweave.payload metadata (task-10b item 5) only when the caller's
+         * EvaluationOptions requests it — null means "no payload declared". */
+        public JsonValue payload;
         public String reasonCode;
         public Integer conditionIndex;
         public Long version;
@@ -143,6 +146,11 @@ public final class InMemoryAdapter implements BackendAdapter {
         }
         if (def.fromCache) {
             b.metadata("fireweave.fromCache", true);
+        }
+        if (request.options().includePayload() && def.payload != null) {
+            // toCanonicalJson: sorted object keys, no whitespace — matches node's
+            // stableStringify byte-for-byte (contracts/evaluation/eval-payload-attached.json).
+            b.metadata("fireweave.payload", def.payload.toCanonicalJson());
         }
         return b.build();
     }

@@ -12,7 +12,9 @@ import ai.fireweave.sdk.domain.Reasons;
 import ai.fireweave.sdk.domain.Validation;
 import ai.fireweave.sdk.domain.Validation.Validated;
 
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Shared Fireweave runtime: lifecycle state machine + evaluation pipeline over an injected
@@ -40,6 +42,7 @@ public final class FireweaveRuntime implements AutoCloseable {
 
     private final FireweaveConfig config;
     private final BackendAdapter adapter;
+    private final Set<String> reservedAttributeKeys;
     private final Object stateLock = new Object();
     private volatile LifecycleState state = LifecycleState.UNINITIALIZED;
     private volatile FireweaveError lastError;
@@ -47,6 +50,19 @@ public final class FireweaveRuntime implements AutoCloseable {
     public FireweaveRuntime(FireweaveConfig config, BackendAdapter adapter) {
         this.config = java.util.Objects.requireNonNull(config, "config");
         this.adapter = java.util.Objects.requireNonNull(adapter, "adapter");
+        // task-10b item 4 (contracts/context/ctx-reserved-keys-rejected.json): bake
+        // Validation.DEFAULT_RESERVED_ATTRIBUTE_KEYS ("targetingKey", "kind") into the runtime
+        // unconditionally, merged with whatever the caller additionally configured via
+        // FireweaveConfig.Builder#reservedAttributeKeys — matching node's application/runtime.ts
+        // ([...DEFAULT_RESERVED_ATTRIBUTE_KEYS, ...(config.reservedAttributeKeys ?? [])]) and
+        // python's application/runtime.py (tuple(DEFAULT_RESERVED_ATTRIBUTE_KEYS) + tuple(...)).
+        // Computed once here (not per-evaluate call) since config is immutable for the runtime's
+        // lifetime. Previously this class passed config.reservedAttributeKeys() straight through,
+        // which defaults to Collections.emptySet() — an attribute literally named "targetingKey"
+        // was accepted unless a caller explicitly opted into rejecting it.
+        Set<String> merged = new LinkedHashSet<>(Validation.DEFAULT_RESERVED_ATTRIBUTE_KEYS);
+        merged.addAll(config.reservedAttributeKeys());
+        this.reservedAttributeKeys = java.util.Collections.unmodifiableSet(merged);
     }
 
     public FireweaveConfig config() {
@@ -163,7 +179,7 @@ public final class FireweaveRuntime implements AutoCloseable {
                 .merge(invocationContext == null ? EvaluationContext.empty() : invocationContext);
 
         Validated<EvaluationContext> contextResult = Validation.validateContext(
-                merged, config.requireTargetingKey(), config.limits(), config.reservedAttributeKeys());
+                merged, config.requireTargetingKey(), config.limits(), reservedAttributeKeys);
         if (!contextResult.isOk()) {
             return errorDecision(flagKey, defaultValue, contextResult.error());
         }

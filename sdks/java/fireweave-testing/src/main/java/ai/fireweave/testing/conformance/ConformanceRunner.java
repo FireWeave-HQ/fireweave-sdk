@@ -330,6 +330,16 @@ public final class ConformanceRunner {
         return out;
     }
 
+    /** contracts/evaluation/eval-payload-attached.json's {@code when.options} (task-10b item 5)
+     * -&gt; {@link EvaluationOptions}. */
+    static EvaluationOptions evaluationOptionsFrom(JsonNode when) {
+        JsonNode options = when.get("options");
+        if (options == null || !options.isObject()) {
+            return null;
+        }
+        return EvaluationOptions.withIncludePayload(options.path("includePayload").asBoolean(false));
+    }
+
     static InMemoryAdapter.FlagDefinition flagDefinitionFrom(JsonNode node) {
         InMemoryAdapter.FlagDefinition def = new InMemoryAdapter.FlagDefinition();
         def.type = flagTypeFrom(node.path("type").asText("boolean"));
@@ -338,6 +348,9 @@ public final class ConformanceRunner {
             def.variant = node.get("variant").asText();
         }
         def.value = jsonValueFrom(node.get("value"));
+        if (node.hasNonNull("payload")) {
+            def.payload = jsonValueFrom(node.get("payload"));
+        }
         if (node.hasNonNull("fireweaveReason")) {
             def.fireweaveReason = node.get("fireweaveReason").asText();
         }
@@ -617,7 +630,7 @@ public final class ConformanceRunner {
         EvaluationContext invocationCtx = contextFrom(when.get("invocationContext"));
         Decision d = client.controlPoints().evaluate(
                 when.get("flagKey").asText(), flagTypeFrom(when.get("flagType").asText()),
-                defaultValueFrom(when), invocationCtx, null);
+                defaultValueFrom(when), invocationCtx, evaluationOptionsFrom(when));
         ObjectNode actual = decisionToActual(d);
 
         JsonNode expect = fixture.get("expect");

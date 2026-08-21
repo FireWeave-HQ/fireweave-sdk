@@ -56,9 +56,9 @@
     "fixtureId" : "eval-numeric-coercion-int-float",
     "suite" : "evaluation",
     "language" : "java",
-    "status" : "fail",
-    "limitation" : null,
-    "message" : "value: expected 0, got 2.0; variant: expected null, got \"two\"; reason: expected \"ERROR\", got \"TARGETING_MATCH\"; errorCode: expected \"TYPE_MISMATCH\", got null; errorMessage: expected \"flag type mismatch\", got null; flagMetadata: expected {\"fireweave.errorKind\":\"TypeMismatch\"}, got {\"fireweave.flagVersion\":1}"
+    "status" : "skipped-with-documented-limitation",
+    "limitation" : "v1's FlagType has exactly four members (boolean/string/number/object), no integer/float split (conformance/surface/control-points.surface.json: 'number, NOT integer') — the same simplification node's own limitation describes, applied uniformly by the v1 cut.",
+    "message" : null
   }, {
     "fixtureId" : "eval-object-success",
     "suite" : "evaluation",
@@ -70,9 +70,9 @@
     "fixtureId" : "eval-payload-attached",
     "suite" : "evaluation",
     "language" : "java",
-    "status" : "fail",
+    "status" : "pass",
     "limitation" : null,
-    "message" : "flagMetadata: expected {\"fireweave.flagVersion\":3,\"fireweave.payload\":\"{\\\"maxRetries\\\":2,\\\"rolloutId\\\":\\\"rollout_01HZXRL00000000000000001\\\"}\"}, got {\"fireweave.flagVersion\":3}"
+    "message" : null
   }, {
     "fixtureId" : "eval-split-reason",
     "suite" : "evaluation",
@@ -168,9 +168,9 @@
     "fixtureId" : "ctx-reserved-keys-rejected",
     "suite" : "context",
     "language" : "java",
-    "status" : "fail",
+    "status" : "pass",
     "limitation" : null,
-    "message" : "value: expected false, got true; variant: expected null, got \"on\"; reason: expected \"ERROR\", got \"TARGETING_MATCH\"; errorCode: expected \"INVALID_CONTEXT\", got null; errorMessage: expected \"invalid evaluation context\", got null; flagMetadata: expected {\"fireweave.errorKind\":\"InvalidContext\"}, got null"
+    "message" : null
   }, {
     "fixtureId" : "ctx-serialized-size-exceeded",
     "suite" : "context",
@@ -460,9 +460,9 @@
     "message" : null
   } ],
   "summary" : {
-    "pass" : 48,
-    "fail" : 3,
-    "skipped-with-documented-limitation" : 1,
+    "pass" : 50,
+    "fail" : 0,
+    "skipped-with-documented-limitation" : 2,
     "skipped-v1-out-of-scope" : 13
   }
 }

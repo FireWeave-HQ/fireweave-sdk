@@ -209,6 +209,13 @@ public final class FireweaveRemoteAdapter implements BackendAdapter {
             if (quotaLimited) {
                 b.metadata("fireweave.quotaLimited", true);
             }
+            // task-10b item 5 parity (mirrors python's/node's remote adapters, which already
+            // read an item-level "payload" wire field): read unconditionally, attach only when
+            // the caller's EvaluationOptions requests it.
+            JsonValue payload = d.get("payload");
+            if (request.options().includePayload() && payload != null && payload.kind() != JsonValue.Kind.NULL) {
+                b.metadata("fireweave.payload", payload.toCanonicalJson());
+            }
             return b.build();
         }
         // Key absent from the decisions array entirely is the same "unknown to the backend"
