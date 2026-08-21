@@ -14,19 +14,14 @@ GAV; install from a repository checkout until a Central publication is confirmed
 | groupId | artifactId | version |
 | --- | --- | --- |
 | `ai.fireweave` | `fireweave-sdk` | `0.1.0-SNAPSHOT` |
-| `ai.fireweave` | `fireweave-openfeature` | `0.1.0-SNAPSHOT` |
-| `ai.fireweave` | `fireweave-adapter-posthog` | `0.1.0-SNAPSHOT` (seam only) |
-| `ai.fireweave` | `fireweave-testing` | `0.1.0-SNAPSHOT` |
+
+The reactor also builds `fireweave-testing` (the conformance harness) — it is
+`maven.deploy.skip=true` and is never published; see *Build / test / demo* below.
 
 ```xml
 <dependency>
   <groupId>ai.fireweave</groupId>
   <artifactId>fireweave-sdk</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
-</dependency>
-<dependency>
-  <groupId>ai.fireweave</groupId>
-  <artifactId>fireweave-openfeature</artifactId>
   <version>0.1.0-SNAPSHOT</version>
 </dependency>
 ```
@@ -44,10 +39,8 @@ Supported Java: **11+** (CI: Temurin 11 and 25). Do not raise the floor without 
 
 | Module | Contents |
 | --- | --- |
-| `fireweave-sdk` | `Fireweave.init` (the entry point), `FireweaveRuntime`, `FireweaveClient` (`controlPoints()`/`flags()`, `registerTarget`), `FireweaveRemoteAdapter`, `FireweaveLocalAdapter`, canonical types — relayered into `ai.fireweave.sdk.{domain,application,infrastructure}`. Zero runtime dependencies. |
-| `fireweave-openfeature` | `FireweaveProvider` (all five resolvers) and `FireweaveLocalProvider` (offline OpenFeature). |
-| `fireweave-adapter-posthog` | `PostHogAdapter` over `PostHogClientApi`. **Not a live vendor client** — `create(config)` is `UnsupportedCapability`. |
-| `fireweave-testing` | `InMemoryAdapter` and the conformance runner. |
+| `fireweave-sdk` | `Fireweave.init` (the entry point), `FireweaveRuntime`, `FireweaveClient` (`controlPoints()`/`flags()`, `registerTarget`), `FireweaveRemoteAdapter`, `FireweaveLocalAdapter`, canonical types — layered into `ai.fireweave.sdk.{domain,application,infrastructure}`. Zero runtime dependencies. |
+| `fireweave-testing` | `InMemoryAdapter` and the conformance runner (never published — `maven.deploy.skip=true`). |
 
 ## Direct client (control points)
 
@@ -79,23 +72,9 @@ FireweaveClient client = new FireweaveClient(runtime);
 ```
 
 `client.flags()` is the same object as `client.controlPoints()` (ADR-0007). It is `@Deprecated` in
-Javadoc only and is not scheduled for removal — it logs one notice per process, unconditionally
-(no env gate; the SDK reads no environment variables, spec/modes.md).
-
-## OpenFeature
-
-```java
-FireweaveRuntime runtime = new FireweaveRuntime(
-    FireweaveConfig.builder().build(),
-    new FireweaveLocalAdapter(Map.of("new-checkout", true)));
-OpenFeatureAPI.getInstance()
-    .setProviderAndWait("app", new FireweaveProvider(runtime));
-boolean enabled = OpenFeatureAPI.getInstance().getClient("app")
-    .getBooleanValue("new-checkout", false, new MutableContext("user_42"));
-OpenFeatureAPI.getInstance().shutdown();
-```
-
-The OpenFeature parameter is still `flagKey` — that name is fixed by the OpenFeature specification.
+Javadoc only and is not scheduled for removal. Silent at runtime — no log line, no env gate —
+because the SDK reads no environment variables regardless (spec/modes.md); the deprecation is
+conveyed by Javadoc only.
 
 ## Local development
 
@@ -128,7 +107,7 @@ client.registerTarget("user_42", RegisterTargetOptions.builder()
     .build()); // never throws; check result.ok()
 ```
 
-Auth: `Authorization: Bearer <FW_PROJECT_API_KEY>`. Endpoints: `POST /v1/flags/evaluate`, `/v1/capture`, `/v1/targets/register`.
+Auth: `Authorization: Bearer <FW_PROJECT_API_KEY>`. Endpoints: `POST /v1/flags/evaluate`, `/v1/targets/register`.
 
 ## Lifecycle
 
@@ -155,28 +134,31 @@ cd ../../examples/java
 mvn -q compile exec:java         # offline demo (builds SDK modules from this repo)
 ```
 
-Remote demo: `FW_PROJECT_API_KEY=… FW_API_URL=… mvn -q compile exec:java -Dexec.args="--remote"`.
+Remote demo: `mvn -q compile exec:java -Dexec.args="--remote"` (defaults to the local
+`test-server` stub; set `FW_API_URL`/`FW_PROJECT_API_KEY` for a real fw-server instead).
 
 ## Thread-safety
 
 - **`FireweaveRuntime`** — fully thread-safe. Lifecycle transitions are serialized; `evaluate` / `registerTarget` never throw to callers.
 - **`FireweaveClient`** — fully thread-safe. `controlPoints()` is a stateless facade over the runtime.
-- **`FireweaveProvider` / `FireweaveLocalProvider`** — safe for concurrent resolution.
 - Configuration and contexts are deeply immutable.
-- **No static global clients** except local-provider capture buffers (test/dev observability).
+- **No static global clients.**
 
 ## Error model
 
-The 15 PascalCase kinds live in `ErrorKind`. Evaluation never throws; `registerTarget` never throws. `AlreadyClosed` maps to OpenFeature `PROVIDER_NOT_READY`.
+The 15 PascalCase kinds live in `ErrorKind`. Evaluation never throws; `registerTarget` never throws.
 
 ## Security defaults
 
-- **Host allowlist (default-on):** Fireweave hosts (`app-server.fireweave.ai`, `staging-app-server.fireweave.ai`), PostHog hosts (Java still ships a PostHog seam), plus loopback. https required off-loopback.
-- **Bounded shutdown** (default 10s) as before. v1 reads are side-effect free (spec/control-points.md "Side effects") — there is no exposure queue or dedup window to clear.
+- **Host allowlist (default-on):** Fireweave hosts (`app-server.fireweave.ai`,
+  `staging-app-server.fireweave.ai`), plus loopback. https required off-loopback.
+  `FireweaveConfig.DEFAULT_ALLOWED_HOSTS` also still lists five legacy PostHog hostnames — a
+  documented pre-existing scope exclusion from the v1 relayer (see that constant's doc comment),
+  not a live vendor integration; there is no `fireweave-adapter-posthog` module or PostHog client
+  in this SDK.
+- **Bounded shutdown** (default 10s). v1 reads are side-effect free (spec/control-points.md "Side effects") — there is no exposure queue or dedup window to clear.
 
 ## Deviations & blockers
 
-1. **`dev.openfeature:sdk` 1.15.1** — newest on Central; decision brief pinned 1.21.0.
-2. **Java PostHog is seam only.** Prefer `FireweaveRemoteAdapter` for production.
-3. **`ai.fireweave` Maven Central namespace** is not verified. Publication workflows fail closed without secrets. Do not treat the GAV as published.
-4. **Long-clamp:** OF integer resolver is 32-bit `int`. Fixture `eval-int-beyond-safe-integer` is skipped-with-documented-limitation.
+1. **`ai.fireweave` Maven Central namespace** is not verified. Publication workflows fail closed without secrets. Do not treat the GAV as published.
+2. **Long-clamp:** the integer resolver is 32-bit `int`. Fixture `eval-int-beyond-safe-integer` is skipped-with-documented-limitation.

@@ -18,7 +18,7 @@ are not exposed.
 | `infrastructure/adapters/local` | The local-development `BackendAdapter` (`Init`'s `Mode: local`): an in-process boolean seed map (reason `STATIC` on a hit, `DEFAULT` on a miss — never an error), plus `RegisterTarget` recording + a `[fireweave:local]` trace line. |
 | `infrastructure/adapters/remote` | The production `BackendAdapter` (`Init`'s `Mode: remote`, ADR-0005): speaks only the Fireweave remote protocol to fw-server (`POST /v1/flags/evaluate`, `POST /v1/targets/register`) over `Authorization: Bearer <apiKey>`. No vendor SDK, key, or host in this process; which backend fw-server forwards to is fw-server's concern. |
 | `fireweave` | The public façade: re-exports the above via type aliases and a thin `Init` wrapper, so callers only ever import this one package. Also hosts the layering/surface/init guard tests (this package sits at the same nesting depth as `domain`/`application`, mirroring where the java reference keeps its equivalent guard tests). |
-| `internal/conformance`, `cmd/conformance`, `conformance` | Pre-existing, broken conformance-harness scaffolding predating the v1 relayer (references deleted `posthog`/`openfeature` packages) — Task 10 territory, deliberately untouched by this relayer. |
+| `internal/conformance`, `cmd/conformance`, `conformance` | The differential conformance gate: runs the canonical `contracts/` fixtures against the real v1 `fireweave.Client.ControlPoints` surface (no OpenFeature bridge — ADR-0010 retired it) and emits the `compatibility-report.go.json` compared across all seven languages by `scripts/conformance-all.sh`. |
 
 ### Why `BackendAdapter` lives in `domain`, not `application`
 
@@ -112,12 +112,11 @@ host explicitly, or pass `AllowedHosts: []string{"*"}` to opt out.
 ## Verification
 
 ```sh
-go build ./domain/... ./application/... ./infrastructure/... ./fireweave/...
-go vet ./domain/... ./application/... ./infrastructure/... ./fireweave/...
-go test ./domain/... ./application/... ./infrastructure/... ./fireweave/...
+go build ./...
+go vet ./...
+go test ./...
 ```
 
-`internal/conformance`, `cmd/conformance`, and `conformance` are excluded
-above: they are pre-existing, broken scaffolding (deleted `posthog`/
-`openfeature` package references) that predates the v1 relayer and is
-Task 10's rewrite target, not this package's.
+`internal/conformance`, `cmd/conformance`, and `conformance` build, vet, and test cleanly
+alongside `domain`/`application`/`infrastructure`/`fireweave` — they are the differential
+conformance gate (see the package-layout table above), not excluded scaffolding.

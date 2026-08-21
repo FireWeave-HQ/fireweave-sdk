@@ -46,7 +46,7 @@ test('the published build contains no vendor reference at all', () => {
   );
 });
 
-test('the published build declares no runtime dependency beyond OpenFeature', () => {
+test('the published build declares no runtime dependency at all', () => {
   const manifest = JSON.parse(
     readFileSync(join(here, '..', '..', 'package.json'), 'utf8'),
   ) as {
@@ -56,10 +56,10 @@ test('the published build declares no runtime dependency beyond OpenFeature', ()
   };
 
   assert.equal(manifest.dependencies, undefined, 'the SDK must stay dependency-free');
-  assert.deepEqual(
-    Object.keys(manifest.peerDependencies ?? {}),
-    ['@openfeature/server-sdk'],
-    'OpenFeature is the only permitted peer dependency',
+  assert.equal(
+    manifest.peerDependencies,
+    undefined,
+    'v1 has no OpenFeature provider (spec/control-points.md "Scope of v1") — no peer dependency is permitted',
   );
   assert.deepEqual(
     Object.keys(manifest.exports ?? {}),
