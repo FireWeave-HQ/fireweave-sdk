@@ -8,8 +8,12 @@ import PackageDescription
 // the Swift toolchain, not an SPM package dependency, exactly like Rust's
 // `std`/Go's stdlib are not entries in `[dependencies]`/`go.mod`.
 //
-// This manifest grows in later commits (executable conformance runner,
-// test target) — see git history / task-13-report.md for the sequence.
+// `dependencies: []` below is asserted by
+// Tests/FireweaveTests/ArchitectureGuardTests.swift
+// (`packageManifestDeclaresZeroDependencies`), which parses this very file's
+// text rather than trusting a comment. This manifest grows once more in a
+// later commit (the executable conformance runner) — see git history /
+// task-13-report.md for the sequence.
 let package = Package(
     name: "Fireweave",
     platforms: [
@@ -24,6 +28,10 @@ let package = Package(
         .target(
             name: "Fireweave",
             dependencies: []
-        )
+        ),
+        .testTarget(
+            name: "FireweaveTests",
+            dependencies: ["Fireweave"]
+        ),
     ]
 )
