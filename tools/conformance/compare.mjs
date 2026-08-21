@@ -46,12 +46,14 @@
  *     architecture can represent. UNLIKE web, swift is NOT synthesized:
  *     despite sharing web's prefetch-then-synchronous-cache-read
  *     architecture, swift also supports local mode and its InMemoryAdapter
- *     transfers cleanly for all but two structurally-narrow slices (6
+ *     transfers cleanly for 37 of the 65 (real pass). The other 15 are
+ *     individually classified `skipped-with-documented-limitation` by the
+ *     runner itself, not swallowed into a blanket per-column synthesis: 6
  *     invocation-context-matching-driven context fixtures, 8-of-9 faults
- *     fixtures) — both classified `skipped-with-documented-limitation` by
- *     the runner itself, not swallowed into a blanket per-column
- *     synthesis. See REAL_NO_BASELINE_LANGUAGES below and
- *     task-13-report.md's item-8 disposition for the full reasoning.
+ *     fixtures, and 1 fixture unrelated to swift's architecture (recurrence
+ *     of rust finding 5). 37 + 15 = 52 in-scope, + 13 skipped-v1-out-of-scope
+ *     = 65. See REAL_NO_BASELINE_LANGUAGES below and task-13-report.md's
+ *     item-8 disposition for the full reasoning.
  * contracts/README.md's field-rules table requires compatibility.<lang> only
  * for node/python/go/java; web carries no per-fixture declaration and no
  * real runner; rust/swift have real runners but (being newer than the
@@ -132,14 +134,20 @@ const DECLARED_LANGUAGES = ['node', 'python', 'go', 'java'];
 // fixtures whose backend matching is driven by invocation-only context,
 // and 8-of-9 faults fixtures whose premise is a live per-call HTTP fault —
 // both individually classified `skipped-with-documented-limitation` by the
-// swift runner itself, not silently absorbed into a blanket synthesis. The
-// other 44 (37 real pass + 1 v1-structural recurrence of rust finding 5 +
-// 13 v1-out-of-scope) genuinely exercise real swift code against the real
-// fixtures. Declaring all 65 `not-applicable` would discard that signal
-// for no architectural reason web actually has (web has no local mode and
-// no in-memory rich-matching adapter to even attempt this with) — running
-// the shared 65 where they transfer and reporting honest per-fixture
-// statuses is the more informative, still-honest choice.
+// swift runner itself, not silently absorbed into a blanket synthesis — a
+// THIRD such fixture, `eval-numeric-coercion-int-float`, is unrelated to
+// swift's architecture at all (recurrence of rust finding 5: v1's FlagType
+// has no integer/float split), bringing the documented-limitation count to
+// 15. The verified decomposition (matches
+// sdks/swift/conformance/compatibility-report.swift.json's own `summary`):
+// 37 pass + 15 skipped-with-documented-limitation = 52 in-scope, + 13
+// skipped-v1-out-of-scope (the ordinary extensions carve-out) = 65. The 37
+// that pass genuinely exercise real swift code against the real fixtures.
+// Declaring all 65 `not-applicable` would discard that signal for no
+// architectural reason web actually has (web has no local mode and no
+// in-memory rich-matching adapter to even attempt this with) — running the
+// shared 65 where they transfer and reporting honest per-fixture statuses
+// is the more informative, still-honest choice.
 const REAL_NO_BASELINE_LANGUAGES = ['rust', 'swift'];
 // Languages whose --report is required and loaded (the two tiers above,
 // combined) — everything else below is a language-shaped loop variable,

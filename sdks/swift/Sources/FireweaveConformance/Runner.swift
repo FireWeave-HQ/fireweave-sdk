@@ -47,10 +47,18 @@ import Foundation
 ///    trip"). `fault-stale-cache` is the one exception — see above.
 ///
 /// Rather than declaring the WHOLE 65 `not-applicable` (web's disposition,
-/// justified there by a wall of skips), this runner runs the 44 fixtures
-/// that genuinely transfer for real and documents the 14 structural
-/// mismatches individually with a limitation string — the more honest,
-/// more informative choice per the brief ("Pick the honest one").
+/// justified there by a wall of skips), this runner executes what
+/// genuinely transfers and documents the rest individually. The verified
+/// decomposition (matches `compatibility-report.swift.json`'s own
+/// `summary`): **37 pass** + **15 skipped-with-documented-limitation**
+/// (6 invocation-context-dependent context fixtures + 8 per-call-fault
+/// faults fixtures + 1 v1 type-model fixture,
+/// `eval-numeric-coercion-int-float` — see finding list in
+/// `task-13-report.md`) = **52 in-scope**, + **13 skipped-v1-out-of-scope**
+/// (the ordinary extensions carve-out) = **65**. The more honest, more
+/// informative choice per the brief ("Pick the honest one") than declaring
+/// the whole matrix not-applicable, since 37 of the 65 run real swift code
+/// against the real fixtures rather than being synthesized.
 enum Runner {
   static func runAll(contractsDir: URL) async -> Report {
     var report = Report()

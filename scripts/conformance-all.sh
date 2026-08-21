@@ -29,18 +29,22 @@
 # by this script silently skipping the aggregate or laundering a stale copy.
 #
 # The aggregate is 65 fixtures x 7 languages (contracts/harness.md ruling 3):
-# node/python/go/java/rust below each run a real conformance suite and
-# produce a report file; web/swift need no runner invocation here at all —
-# compare.mjs synthesizes their columns itself (web: not-applicable-web, per
-# ADR-0009's separate contracts/web/ suite; swift: not-implemented, no SDK
-# yet). rust (Task 12 / Phase 6) has a real runner like the first four, but
-# contracts/ is frozen and predates it, so its cells carry no frozen
-# compatibility.rust baseline to diverge from — see compare.mjs's
-# REAL_NO_BASELINE_LANGUAGES for what that changes (a real "fail" is still a
-# hard violation; there is just no declared-baseline divergence check).
+# node/python/go/java/rust/swift below each run a real conformance suite and
+# produce a report file; web ALONE needs no runner invocation here — compare.mjs
+# synthesizes its column itself (not-applicable-web, per ADR-0009's separate
+# contracts/web/ suite). rust (Task 12 / Phase 6) and swift (Task 13 / Phase 6)
+# both have a real runner like the first four, but contracts/ is frozen and
+# predates both, so their cells carry no frozen compatibility.<lang> baseline
+# to diverge from — see compare.mjs's REAL_NO_BASELINE_LANGUAGES for what that
+# changes (a real "fail" is still a hard violation; there is just no
+# declared-baseline divergence check). swift's own real/skip split (37 pass +
+# 15 skipped-with-documented-limitation + 13 skipped-v1-out-of-scope = 65) is
+# explained in sdks/swift/Sources/FireweaveConformance/Runner.swift's doc
+# comment and task-13-report.md's item-8 disposition — it is a real runner,
+# not a synthesized column, despite sharing web's architecture.
 #
 # Outputs (gitignored via root build/ rule):
-#   build/conformance/compatibility-report.<lang>.json  x5 (node/python/go/java/rust)
+#   build/conformance/compatibility-report.<lang>.json  x6 (node/python/go/java/rust/swift)
 #   build/conformance/compatibility-report.json         (merged, 65x7)
 #   build/conformance/summary.md
 #
@@ -78,6 +82,7 @@ fw_require python3 "install Python >= 3.10"
 fw_require go "install Go >= 1.25"
 fw_require mvn "install Maven (JDK 11+ toolchain)"
 fw_require cargo "install Rust >= 1.75 (rustup.rs)"
+fw_require swift "install Swift >= 6.0 (swift.org/install, or swift-actions/setup-swift in CI)"
 
 NODE_EXIT=0
 PYTHON_EXIT=0
@@ -148,6 +153,7 @@ printf '  %-8s exit=%s\n' python "$PYTHON_EXIT"
 printf '  %-8s exit=%s\n' go "$GO_EXIT"
 printf '  %-8s exit=%s\n' java "$JAVA_EXIT"
 printf '  %-8s exit=%s\n' rust "$RUST_EXIT"
+printf '  %-8s exit=%s\n' swift "$SWIFT_EXIT"
 printf 'A non-zero exit above is expected whenever that language has a real fixture\n'
 printf 'divergence (contracts/harness.md rule 5) — it does not stop the comparator below,\n'
 printf 'which is the actual gate (see this script'"'"'s own exit code).\n'
@@ -162,6 +168,7 @@ node "$FW_ROOT/tools/conformance/compare.mjs" \
   --report go="$OUT_DIR/compatibility-report.go.json" \
   --report java="$OUT_DIR/compatibility-report.java.json" \
   --report rust="$OUT_DIR/compatibility-report.rust.json" \
+  --report swift="$OUT_DIR/compatibility-report.swift.json" \
   --out "$OUT_DIR/compatibility-report.json" \
   --markdown "$OUT_DIR/summary.md" || COMPARE_EXIT=$?
 
