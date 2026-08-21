@@ -278,6 +278,43 @@ jobs:
         working-directory: sdks/java
         run: mvn -B -ntp clean install
 
+  # ---------------------------------------------------------------- rust
+  rust:
+    name: rust (${{ matrix.rust }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: ['1.75.0', 'stable'] # Cargo.toml rust-version minimum + latest stable
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+      - name: cargo fmt check
+        working-directory: sdks/rust
+        run: cargo fmt --check
+      - name: cargo clippy (dependency budget + layering guards are plain #[test]s under this same run)
+        working-directory: sdks/rust
+        run: cargo clippy --all-targets -- -D warnings
+      - name: cargo build --locked
+        working-directory: sdks/rust
+        run: cargo build --locked
+      - name: cargo test --locked (unit + doctests + architecture/surface guards)
+        working-directory: sdks/rust
+        run: cargo test --locked
+      - name: Conformance runner (per-version sanity; differential job is the gate)
+        working-directory: sdks/rust
+        run: cargo run --locked --bin conformance -- --contracts ../../contracts --out /tmp/compatibility-report.rust.json
+      # No separate assertion step on that report's own exit code beyond the
+      # command above failing the job: contracts/harness.md rule 5 says a
+      # runner "exit non-zero on any fail" is expected on any real
+      # divergence, not a crash signal — matching go/java's per-language job
+      # comment. The differential job (scripts/conformance-all.sh) is where
+      # that report is aggregated against the honest 65x7 cross-language
+      # gate.
+
   # -------------------------------------------- cross-language differential
   differential:
     name: cross-language differential (comparator)
@@ -301,7 +338,10 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - name: Run all four conformance runners + comparator
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Run all five conformance runners + comparator
         run: bash scripts/conformance-all.sh
       - name: Publish comparator summary
         if: always()
