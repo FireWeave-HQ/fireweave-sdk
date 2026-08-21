@@ -377,6 +377,15 @@ jobs:
       - uses: swift-actions/setup-swift@v2
         with:
           swift-version: '6.3.3'
+      - name: tools/release/version.sh unit tests (pure semver + staging-N logic)
+        # Chosen job: this is the one job in ci.yml with node, python, AND
+        # java/mvn all set up already (needed for the 65x7 conformance run
+        # below) — so version.test.sh's java `apply` case, which SKIPs
+        # without `mvn` on PATH, runs for real here instead of skipping.
+        # The script's own exit code is this step's exit code (no `|| true`,
+        # no continue-on-error) — a regression in the bump/strip/staging-N
+        # logic fails this job, not just the local dry run.
+        run: bash tools/release/version.test.sh
       - name: Run all six conformance runners + comparator
         run: bash scripts/conformance-all.sh
       - name: Publish comparator summary
