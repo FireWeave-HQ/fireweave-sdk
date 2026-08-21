@@ -28,6 +28,12 @@ type Flag struct {
 	ConditionIndex *int
 	Version        *int64
 	VendorID       *int64
+	// Payload is exposed as fireweave.payload metadata (a deterministic
+	// sorted-key JSON string) only when the caller's EvaluateOptions sets
+	// IncludePayload (contracts/evaluation/eval-payload-attached.json).
+	// nil means "no payload declared" — distinct from a present-but-empty
+	// object/array, which still round-trips ("{}" / "[]").
+	Payload any
 
 	// OverrideReason forces the normalized reason (e.g. SPLIT).
 	OverrideReason domain.Reason
@@ -138,6 +144,19 @@ func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain
 	}
 
 	meta := buildMetadata(flag)
+	if req.IncludePayload && flag.Payload != nil {
+		if meta == nil {
+			meta = map[string]any{}
+		}
+		// encoding/json.Marshal already sorts map[string]any keys at every
+		// nesting level (stdlib guarantee) and emits compact (no-space)
+		// output, matching node's stableStringify byte-for-byte
+		// (contracts/evaluation/eval-payload-attached.json's expected
+		// "{\"maxRetries\":2,\"rolloutId\":\"...\"}").
+		if b, err := json.Marshal(flag.Payload); err == nil {
+			meta[domain.MetaPayload] = string(b)
+		}
+	}
 	if !flag.Enabled {
 		return domain.Decision{
 			FlagKey:  req.FlagKey,
@@ -203,20 +222,30 @@ func jsonEqual(a, b any) bool {
 	return errA == nil && errB == nil && string(ab) == string(bb)
 }
 
-// convertValue coerces the stored fixture value to a float64 for a
-// declared "number" flag (preserving numeric fixture input shapes such as
-// json.Number/int), and passes every other type straight through.
+// convertValue normalizes the stored fixture value for a declared "number"
+// flag, preserving integral values EXACTLY (contracts/evaluation/eval-int-
+// beyond-safe-integer.json: 9007199254740993 = 2^53+1, matching python's
+// arbitrary-precision int) rather than unconditionally coercing every
+// numeric shape through float64, which silently rounds any integer beyond
+// 2^53-1. json.Number (the shape fixture-decoded numbers arrive in, via
+// json.Decoder.UseNumber) and int/int64 fixture values take the int64 path
+// when they fit exactly; only genuinely fractional values (or ones that
+// overflow int64) fall back to float64. Every other flag type passes
+// through unchanged.
 func convertValue(flag Flag) any {
 	if flag.Type == domain.FlagTypeNumber {
 		switch v := flag.Value.(type) {
 		case json.Number:
+			if i, err := v.Int64(); err == nil {
+				return i
+			}
 			if f, err := v.Float64(); err == nil {
 				return f
 			}
 		case int:
-			return float64(v)
+			return int64(v)
 		case int64:
-			return float64(v)
+			return v
 		case float32:
 			return float64(v)
 		case float64:

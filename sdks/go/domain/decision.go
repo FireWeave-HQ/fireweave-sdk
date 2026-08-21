@@ -33,11 +33,18 @@ const (
 )
 
 // Stable flag-metadata keys exposed under the fireweave.* namespace
-// (spec/decision.schema.json standardMetadataKeys). v1 carries no
-// fireweave.payload key: a v1 read is side-effect free and the pre-v1
-// includePayload/payload mechanism was cut alongside the extension surface
-// (spec/control-points.md "Side effects"; matches the java precedent, which
-// also dropped Decision.payload as part of the same cut).
+// (spec/decision.schema.json standardMetadataKeys).
+//
+// MetaPayload (task-10b item 5, contracts/evaluation/eval-payload-
+// attached.json): despite this file's prior claim that "v1 carries no
+// fireweave.payload key... cut alongside the extension surface", node's own
+// EvaluateOptions.includePayload was never actually cut (application/
+// runtime.ts attaches it unconditionally when the caller opts in) — v1 reads
+// remain side-effect free (spec/control-points.md "Side effects": no
+// telemetry is EMITTED as a consequence of a read), which is an orthogonal
+// concern from surfacing metadata the resolved flag already carries. That
+// prior claim was the divergence itself, not a description of the ratified
+// surface; this key restores go to node/python parity.
 const (
 	MetaErrorKind    = "fireweave.errorKind"
 	MetaFlagVersion  = "fireweave.flagVersion"
@@ -45,6 +52,7 @@ const (
 	MetaReasonCode   = "fireweave.reasonCode"
 	MetaQuotaLimited = "fireweave.quotaLimited"
 	MetaFromCache    = "fireweave.fromCache"
+	MetaPayload      = "fireweave.payload"
 )
 
 // Decision is the normalized outcome of a flag resolution

@@ -98,6 +98,13 @@ type decisionItem struct {
 	Found        bool           `json:"found"`
 	Enabled      *bool          `json:"enabled"`
 	FlagMetadata map[string]any `json:"flagMetadata"`
+	// Payload mirrors python's/node's remote adapter (both already read an
+	// item-level "payload" field): task-10b item 5 parity. Attached as
+	// fireweave.payload metadata only when the caller's EvaluateOptions sets
+	// IncludePayload — the wire value is read unconditionally (like
+	// python's FlagResolution.payload) and gated locally, matching node's
+	// resolution.payload / options.includePayload split.
+	Payload any `json:"payload,omitempty"`
 }
 
 type evaluateResponse struct {
@@ -143,13 +150,16 @@ func (a *Adapter) Initialize(ctx context.Context) error {
 	if !hostAllowed(host, allow) {
 		return domain.NewError(domain.KindConfiguration, "", nil)
 	}
-	timeout := a.cfg.RequestTimeout
-	if timeout <= 0 {
-		timeout = 3 * time.Second
-	}
 	client := a.cfg.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: timeout}
+		// No client-level Timeout here: postJSON derives its own
+		// per-request context.WithTimeout from cfg.RequestTimeout (task-10b
+		// item 3) and that is the sole, authoritative deadline. A
+		// second, independent http.Client.Timeout racing the same duration
+		// against a context deadline it cannot see would make timeout
+		// classification (ctx.Err() in postJSON) nondeterministic depending
+		// on which fires first.
+		client = &http.Client{}
 	}
 	a.client = client
 	a.baseURL = apiURL
@@ -225,6 +235,11 @@ func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain
 	if resp.QuotaLimited {
 		meta[domain.MetaQuotaLimited] = true
 	}
+	if req.IncludePayload && item.Payload != nil {
+		if b, err := json.Marshal(item.Payload); err == nil {
+			meta[domain.MetaPayload] = string(b)
+		}
+	}
 	reason := domain.Reason(item.Reason)
 	if reason == "" {
 		reason = domain.ReasonTargetingMatch
@@ -233,13 +248,38 @@ func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain
 	if item.Variant != nil {
 		variant = *item.Variant
 	}
+	value := item.Value
+	if req.Type == domain.FlagTypeNumber {
+		value = numberValue(value)
+	}
 	return domain.Decision{
 		FlagKey:  req.FlagKey,
-		Value:    item.Value,
+		Value:    value,
 		Variant:  variant,
 		Reason:   reason,
 		Metadata: meta,
 	}
+}
+
+// numberValue preserves integral wire values EXACTLY for NUMBER-typed
+// flags (contracts/evaluation/eval-int-beyond-safe-integer.json), mirroring
+// infrastructure/adapters/inmemory's convertValue fix and rationale: since
+// postJSON now decodes with json.Decoder.UseNumber (below), a NUMBER-typed
+// item.Value arrives as json.Number rather than a lossy float64 — this
+// converts it to int64 when it fits exactly, falling back to float64 only
+// for genuinely fractional wire values.
+func numberValue(v any) any {
+	n, ok := v.(json.Number)
+	if !ok {
+		return v
+	}
+	if i, err := n.Int64(); err == nil {
+		return i
+	}
+	if f, err := n.Float64(); err == nil {
+		return f
+	}
+	return v
 }
 
 // RegisterTarget implements domain.TargetRegistrar: POST
@@ -301,7 +341,27 @@ func (a *Adapter) postJSON(ctx context.Context, path string, body any, out any) 
 	if err != nil {
 		return domain.NewError(domain.KindInternal, "", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.baseURL+path, bytes.NewReader(raw))
+
+	// Derive a per-request deadline from the configured RequestTimeout
+	// INSIDE the adapter (task-10b item 3: ControlPoints.Evaluate hardcodes
+	// context.Background() with no public-API ctx to carry a deadline — the
+	// no-public-ctx ruling from Task 9 stands, so classification cannot
+	// depend on the caller supplying one). Relying on http.Client.Timeout
+	// alone does not work here: that mechanism cancels the request via its
+	// OWN internally-derived context, invisible to the ctx handle this
+	// function holds, so checking ctx.Err() after client.Do always saw a
+	// live (non-Background-derived) context and misclassified every
+	// timeout as Network. Holding our own cancel func means ctx.Err() is
+	// authoritative for classification below regardless of what client.Do
+	// does internally.
+	timeout := a.cfg.RequestTimeout
+	if timeout <= 0 {
+		timeout = 3 * time.Second
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, a.baseURL+path, bytes.NewReader(raw))
 	if err != nil {
 		return domain.NewError(domain.KindNetwork, "", err)
 	}
@@ -309,7 +369,7 @@ func (a *Adapter) postJSON(ctx context.Context, path string, body any, out any) 
 	req.Header.Set("Authorization", "Bearer "+a.apiKey)
 	resp, err := a.client.Do(req)
 	if err != nil {
-		if ctx.Err() != nil {
+		if reqCtx.Err() != nil {
 			return domain.NewError(domain.KindTimeout, "", err)
 		}
 		return domain.NewError(domain.KindNetwork, "", err)
@@ -329,7 +389,14 @@ func (a *Adapter) postJSON(ctx context.Context, path string, body any, out any) 
 		return domain.NewError(domain.KindBackendUnavailable, "", nil)
 	}
 	if out != nil {
-		if err := json.Unmarshal(data, out); err != nil {
+		// UseNumber preserves integral wire values exactly (task-10b item
+		// 2's remote-adapter parity check — see numberValue above): the
+		// default json.Unmarshal decodes every JSON number into float64,
+		// which would silently round a NUMBER-typed value beyond 2^53-1
+		// the same way inmemory's convertValue used to.
+		dec := json.NewDecoder(bytes.NewReader(data))
+		dec.UseNumber()
+		if err := dec.Decode(out); err != nil {
 			return domain.NewError(domain.KindMalformedResponse, "", err)
 		}
 	}

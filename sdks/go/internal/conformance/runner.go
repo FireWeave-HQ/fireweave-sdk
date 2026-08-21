@@ -363,6 +363,7 @@ func toInmemoryFlag(ff FixtureFlag) inmemory.Flag {
 		Enabled:           ff.Enabled,
 		Variant:           ff.Variant,
 		Value:             ff.Value,
+		Payload:           ff.Payload,
 		OverrideReason:    fireweave.Reason(ff.FireweaveReason),
 		FromCache:         ff.FromCache,
 		MatchTargetingKey: ff.MatchTargetingKey,
@@ -589,7 +590,11 @@ func evaluateThrough(s *session, when When, evalCtx domain.EvaluationContext) ma
 	flagType := toFlagType(when.FlagType)
 	defaultValue := defaultValueFor(when.FlagType, when.DefaultValue)
 
-	d := s.client.ControlPoints().Evaluate(when.FlagKey, flagType, defaultValue, &evalCtx, &fireweave.EvaluateOptions{})
+	opts := fireweave.EvaluateOptions{}
+	if includePayload, ok := when.Options["includePayload"].(bool); ok {
+		opts.IncludePayload = includePayload
+	}
+	d := s.client.ControlPoints().Evaluate(when.FlagKey, flagType, defaultValue, &evalCtx, &opts)
 
 	actual := map[string]any{
 		"value":        d.Value,
@@ -674,19 +679,26 @@ func executeFault(f Fixture) (map[string]any, string, error) {
 		note = "fault simulated via injected fake Transport (hermetic; no test-server stub)"
 	}
 
-	// http.Client.Timeout (not remote.Config.RequestTimeout, which only
-	// takes effect when THIS package leaves HTTPClient nil) bounds the
-	// request: ControlPoints.Evaluate hardcodes context.Background()
-	// (application/client.go), so there is no caller-supplied deadline for
-	// the adapter's own ctx.Err() check to observe — see the fault-timeout
-	// concern in task-10-report.md. Setting Timeout here at least keeps this
-	// fixture fast; it does not fix the misclassification.
-	httpClient := &http.Client{Timeout: timeout}
+	// RequestTimeout (task-10b item 3 fix, infrastructure/adapters/remote's
+	// postJSON) is now the sole, authoritative deadline: the adapter derives
+	// its own per-request context.WithTimeout from it, so ctx.Err() correctly
+	// observes an elapsed deadline regardless of ControlPoints.Evaluate's
+	// hardcoded context.Background() (no-public-ctx ruling, Task 9) — that's
+	// exactly what makes fault-timeout classify as Timeout rather than
+	// Network. httpClient itself carries NO independent Timeout: a second,
+	// client-level timeout racing the same duration via its own internal,
+	// adapter-invisible derived context would make classification here
+	// nondeterministic depending on which fires first (confirmed live: this
+	// used to set http.Client.Timeout directly, bypassing RequestTimeout
+	// entirely per the old comment here, which is exactly why this fixture
+	// still misclassified after the adapter fix landed until this line
+	// changed too).
+	httpClient := &http.Client{}
 	if transport != nil {
 		httpClient.Transport = transport
 	}
 
-	adapter := remote.New(remote.Config{APIURL: apiURL, APIKey: apiKey, HTTPClient: httpClient})
+	adapter := remote.New(remote.Config{APIURL: apiURL, APIKey: apiKey, HTTPClient: httpClient, RequestTimeout: timeout})
 	runtime := fireweave.NewRuntime(adapter, fireweave.Config{})
 	ctx := context.Background()
 	if err := runtime.Initialize(ctx); err != nil {

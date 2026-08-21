@@ -2,6 +2,7 @@ package inmemory
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"testing"
 
@@ -88,6 +89,81 @@ func TestConcurrentUse(t *testing.T) {
 	wg.Wait()
 	if a.ResolveCount() != 32 {
 		t.Fatalf("resolve count = %d", a.ResolveCount())
+	}
+}
+
+// TestNumberValuePreservesIntegersBeyondSafeInteger is the regression test
+// for task-10b item 2 (contracts/evaluation/eval-int-beyond-safe-integer.json):
+// convertValue() previously coerced every NUMBER-typed value through
+// float64 unconditionally, silently rounding 9007199254740993 (2^53+1) to
+// 9007199254740992 — this asserts the exact int64 value survives, both from
+// the json.Number shape the real fixture-decode path produces (via
+// json.Decoder.UseNumber, internal/conformance/runner.go) and from a plain
+// Go int64, while a genuinely fractional value still resolves through the
+// float64 path unchanged.
+func TestNumberValuePreservesIntegersBeyondSafeInteger(t *testing.T) {
+	const huge int64 = 9007199254740993 // 2^53 + 1
+	ec := domain.NewEvaluationContext("u", nil)
+
+	a := New(WithFlags(map[string]Flag{
+		"fw-big-int-jsonnumber": {Type: domain.FlagTypeNumber, Enabled: true, Variant: "huge", Value: json.Number("9007199254740993")},
+		"fw-big-int-int64":      {Type: domain.FlagTypeNumber, Enabled: true, Variant: "huge", Value: huge},
+		"fw-fractional":         {Type: domain.FlagTypeNumber, Enabled: true, Variant: "frac", Value: json.Number("2.5")},
+	}))
+
+	d := a.Resolve(context.Background(), domain.ResolveRequest{FlagKey: "fw-big-int-jsonnumber", Type: domain.FlagTypeNumber, DefaultValue: 0, Context: ec})
+	if got, ok := d.Value.(int64); !ok || got != huge {
+		t.Fatalf("json.Number path: want int64(%d), got %T(%v)", huge, d.Value, d.Value)
+	}
+
+	d = a.Resolve(context.Background(), domain.ResolveRequest{FlagKey: "fw-big-int-int64", Type: domain.FlagTypeNumber, DefaultValue: 0, Context: ec})
+	if got, ok := d.Value.(int64); !ok || got != huge {
+		t.Fatalf("int64 path: want int64(%d), got %T(%v)", huge, d.Value, d.Value)
+	}
+
+	d = a.Resolve(context.Background(), domain.ResolveRequest{FlagKey: "fw-fractional", Type: domain.FlagTypeNumber, DefaultValue: 0, Context: ec})
+	if got, ok := d.Value.(float64); !ok || got != 2.5 {
+		t.Fatalf("fractional path: want float64(2.5), got %T(%v)", d.Value, d.Value)
+	}
+}
+
+// TestIncludePayloadAttachesSortedKeyJSON is the regression test for
+// task-10b item 5 (contracts/evaluation/eval-payload-attached.json): go's
+// EvaluateOptions was an empty struct with no includePayload equivalent, so
+// fireweave.payload was never attached. Asserts the sorted-key JSON string
+// shape matches node's stableStringify output exactly, that it is omitted
+// when IncludePayload is false, and omitted when the flag has no payload at
+// all even if IncludePayload is true.
+func TestIncludePayloadAttachesSortedKeyJSON(t *testing.T) {
+	ec := domain.NewEvaluationContext("u", nil)
+	a := New(WithFlags(map[string]Flag{
+		"fw-payload": {
+			Type: domain.FlagTypeBoolean, Enabled: true, Variant: "on", Value: true,
+			Payload: map[string]any{"rolloutId": "rollout_1", "maxRetries": json.Number("2")},
+		},
+		"fw-no-payload": {Type: domain.FlagTypeBoolean, Enabled: true, Variant: "on", Value: true},
+	}))
+
+	d := a.Resolve(context.Background(), domain.ResolveRequest{
+		FlagKey: "fw-payload", Type: domain.FlagTypeBoolean, DefaultValue: false, Context: ec, IncludePayload: true,
+	})
+	want := `{"maxRetries":2,"rolloutId":"rollout_1"}`
+	if got, _ := d.Metadata[domain.MetaPayload].(string); got != want {
+		t.Fatalf("payload metadata = %q, want %q", got, want)
+	}
+
+	d = a.Resolve(context.Background(), domain.ResolveRequest{
+		FlagKey: "fw-payload", Type: domain.FlagTypeBoolean, DefaultValue: false, Context: ec, IncludePayload: false,
+	})
+	if _, ok := d.Metadata[domain.MetaPayload]; ok {
+		t.Fatalf("payload metadata must be absent when IncludePayload is false, got %+v", d.Metadata)
+	}
+
+	d = a.Resolve(context.Background(), domain.ResolveRequest{
+		FlagKey: "fw-no-payload", Type: domain.FlagTypeBoolean, DefaultValue: false, Context: ec, IncludePayload: true,
+	})
+	if _, ok := d.Metadata[domain.MetaPayload]; ok {
+		t.Fatalf("payload metadata must be absent when the flag has no payload, got %+v", d.Metadata)
 	}
 }
 

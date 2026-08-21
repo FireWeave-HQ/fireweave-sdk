@@ -20,32 +20,25 @@ func contractsDir(t *testing.T) string {
 }
 
 // knownGaps lists fixtures with a genuine, out-of-scope divergence between
-// their frozen "pass" declaration and actual v1 SDK behavior — Task 10's
-// scope limits forbid patching SDK src/ or editing frozen contracts/
-// fixtures, so these are skipped here (not silently: t.Skip's reason names
-// the concern), rather than left failing the whole suite.
-// internal/conformance.Run's own report (compatibility-report.go.json,
-// written by cmd/conformance) still carries their TRUE "fail" status — only
-// this test wrapper softens the CI-blocking consequence. See
+// their frozen "pass" declaration and actual v1 SDK behavior — these are
+// skipped here (not silently: t.Skip's reason names the concern), rather
+// than left failing the whole suite. internal/conformance.Run's own report
+// (compatibility-report.go.json, written by cmd/conformance) still carries
+// their TRUE "fail" status — only this test wrapper softens the
+// CI-blocking consequence. See
 // .superpowers/sdd/IMPLEMENTATION-PLAN/task-10-report.md "Concerns" for the
-// full writeup.
-var knownGaps = map[string]string{
-	"eval-int-beyond-safe-integer": "infrastructure/adapters/inmemory's convertValue() " +
-		"unconditionally coerces NUMBER-typed flag values through float64, losing precision " +
-		"beyond 2^53 — contradicts this fixture's declared go:\"pass\" (which assumes " +
-		"int64-exact preservation, matching python's arbitrary-precision int).",
-	"eval-numeric-coercion-int-float": "v1's FlagType has exactly four members " +
-		"(boolean/string/number/object), no integer/float split — applied uniformly across " +
-		"every language by the v1 cut. This fixture's go/python/java compatibility is still " +
-		"declared \"pass\" from before that cut.",
-	"eval-payload-attached": "go's EvaluateOptions is an empty struct " +
-		"(application/client.go) — no includePayload equivalent — so fireweave.payload is " +
-		"never attached to flagMetadata.",
-	"fault-timeout": "ControlPoints.Evaluate hardcodes context.Background() " +
-		"(application/client.go), so the remote adapter's own ctx.Err()-based timeout " +
-		"classification is unreachable via the public API — a slow backend always reports " +
-		"Network, never Timeout.",
-}
+// original writeup and task-10b-report.md for what since got fixed.
+//
+// task-10b fixed eval-int-beyond-safe-integer (convertValue/numberValue now
+// preserve integral values exactly), fault-timeout (postJSON derives its own
+// per-request context.WithTimeout), and eval-payload-attached (EvaluateOptions
+// now carries a real IncludePayload field, threaded through ResolveRequest to
+// both inmemory and remote adapters) — all removed below; their fixed status
+// now flows through the ordinary pass path. eval-numeric-coercion-int-float's
+// compatibility.go was flipped to skipped-with-documented-limitation
+// (controller-ruled fixture edit) and is handled generically by
+// internal/conformance's own declared-skip path — also removed below.
+var knownGaps = map[string]string{}
 
 func TestConformanceFixtures(t *testing.T) {
 	report, err := conformance.Run(contractsDir(t))

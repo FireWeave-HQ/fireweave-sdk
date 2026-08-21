@@ -10,6 +10,13 @@ type ResolveRequest struct {
 	Type         FlagType
 	DefaultValue any
 	Context      EvaluationContext
+	// IncludePayload threads EvaluateOptions.IncludePayload (task-10b item 5,
+	// contracts/evaluation/eval-payload-attached.json) through to whichever
+	// adapter resolves the flag: when true and the resolved flag carries a
+	// payload, the adapter attaches it as fireweave.payload metadata (a
+	// deterministic sorted-key JSON string), matching node's
+	// EvaluateOptions.includePayload.
+	IncludePayload bool
 }
 
 // BackendAdapter is the vendor seam. Implementations:

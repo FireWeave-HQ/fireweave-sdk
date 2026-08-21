@@ -11,12 +11,17 @@ import (
 // (conformance/surface/control-points.surface.json). v1 reads are
 // side-effect free (spec/control-points.md "Side effects": "no read emits
 // telemetry as a consequence of being called") — there is no per-call
-// exposure opt-in or payload-inclusion flag to carry, unlike the pre-v1 Go
-// surface this replaces. This type exists purely for cross-language surface
-// parity (every SDK's evaluate keeps the same arity) and is currently
-// INERT: constructed and threaded through, read by nothing (matches the
-// java precedent).
-type EvaluateOptions struct{}
+// exposure opt-in to carry, unlike the pre-v1 Go surface this replaces.
+//
+// IncludePayload (task-10b item 5, contracts/evaluation/eval-payload-
+// attached.json) is the one real field: node's EvaluateOptions.includePayload
+// has the equivalent effect (attach the resolved flag's payload, when any, as
+// fireweave.payload metadata — a deterministic sorted-key JSON string). Every
+// other cross-language surface concern this type existed for (arity parity)
+// remains unaffected.
+type EvaluateOptions struct {
+	IncludePayload bool
+}
 
 // supportedCapabilities names the capability strings InvokeCapability will
 // dispatch instead of degrading with UnsupportedCapability. Empty in v1:
@@ -116,11 +121,16 @@ func (cp *ControlPoints) Evaluate(flagKey string, flagType domain.FlagType, defa
 	if evalCtx != nil {
 		ec = *evalCtx
 	}
+	var includePayload bool
+	if opts != nil {
+		includePayload = opts.IncludePayload
+	}
 	return cp.c.runtime.Evaluate(context.Background(), ResolveRequest{
-		FlagKey:      flagKey,
-		Type:         flagType,
-		DefaultValue: defaultValue,
-		Context:      ec,
+		FlagKey:        flagKey,
+		Type:           flagType,
+		DefaultValue:   defaultValue,
+		Context:        ec,
+		IncludePayload: includePayload,
 	})
 }
 
