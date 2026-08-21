@@ -56,7 +56,16 @@
  *     --report node=path.json --report python=path.json \
  *     --report go=path.json --report java=path.json \
  *     --out build/conformance/compatibility-report.json \
- *     [--markdown build/conformance/summary.md]
+ *     [--markdown build/conformance/summary.md] \
+ *     [--web-report sdks/web/test/conformance/compatibility-report.web.json]
+ *
+ * `--web-report` (task-10b item 6, optional) surfaces web's OWN separate
+ * contracts/web/ suite (sdks/web/test/conformance/run.ts, ADR-0009 — 10
+ * fixtures the shared 65x7 matrix does not and should not cover, see the
+ * `web` bullet above) as a supplementary, informational-only section: it
+ * does not change the 65x7 matrix, does not add to `divergences`, and does
+ * not affect this tool's exit code — web's suite is gated independently by
+ * the "web" CI job's own `bun run conformance`.
  *
  * Zero dependencies; Node >= 20. Exit code 0 = no divergence, 1 = divergence,
  * 2 = usage / IO error.
@@ -91,7 +100,7 @@ function usageError(msg) {
 // ---------- argument parsing ----------
 
 function parseArgs(argv) {
-  const args = { contracts: 'contracts', reports: {}, out: null, markdown: null };
+  const args = { contracts: 'contracts', reports: {}, out: null, markdown: null, webReport: null };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     const next = () => {
@@ -102,6 +111,16 @@ function parseArgs(argv) {
     if (a === '--contracts') args.contracts = next();
     else if (a === '--out') args.out = next();
     else if (a === '--markdown') args.markdown = next();
+    // --web-report is OPTIONAL and purely informational (task-10b item 6):
+    // web's own contracts/web/ suite (sdks/web/test/conformance/run.ts) is a
+    // separate 10-fixture suite with its own gate (the "web" CI job runs
+    // `bun run conformance` and fails independently) — it is NOT one of the
+    // synthesized 65 `not-applicable-web` cells above and does not change
+    // this comparator's required inputs, matrix, or exit code. When passed,
+    // its counts are surfaced as a supplementary section so a reader of this
+    // report sees both signals in one place without this tool re-deriving or
+    // re-gating on web's own pass/fail (that stays sdks/web's job).
+    else if (a === '--web-report') args.webReport = next();
     else if (a === '--report') {
       const v = next();
       const eq = v.indexOf('=');
@@ -117,6 +136,28 @@ function parseArgs(argv) {
     } else usageError(`unknown argument "${a}"`);
   }
   return args;
+}
+
+// ---------- optional web-suite supplementary section (informational only) ----------
+
+/**
+ * Loads sdks/web/test/conformance/compatibility-report.web.json (or an
+ * equivalent path) if --web-report was given. Never affects `violations` or
+ * the exit code — web's own suite gates itself (the "web" CI job). Tolerant
+ * of a missing/unparseable file: reports a warning row rather than crashing
+ * the whole comparator over an optional, purely-informational input.
+ */
+function loadWebSuite(path) {
+  if (!path) return null;
+  try {
+    const raw = JSON.parse(readFileSync(path, 'utf8'));
+    const results = Array.isArray(raw.results) ? raw.results : [];
+    const pass = results.filter((r) => r.status === 'pass').length;
+    const fail = results.filter((r) => r.status === 'fail').length;
+    return { path, fixtureCount: results.length, pass, fail, ok: fail === 0 && results.length > 0 };
+  } catch (err) {
+    return { path, error: err.message, ok: false };
+  }
 }
 
 // ---------- fixture loading ----------
@@ -345,6 +386,8 @@ function main() {
     perLanguage[lang] = counts;
   }
 
+  const webSuite = loadWebSuite(args.webReport);
+
   const merged = {
     schemaVersion: 1,
     generatedAt: 'EXCLUDED',
@@ -354,6 +397,10 @@ function main() {
     summary: perLanguage,
     divergences: violations,
     results: mergedResults,
+    // Purely informational; see loadWebSuite's doc comment — never affects
+    // `divergences` or the exit code. Absent (null) when --web-report wasn't
+    // passed.
+    webSuite,
   };
 
   if (args.out) {
@@ -384,6 +431,20 @@ function main() {
     lines.push('No undeclared divergence. All skips are fixture-declared with documented limitations.');
   }
   lines.push('');
+  if (webSuite) {
+    lines.push(`## Web suite (contracts/web/, ADR-0009) — supplementary, not part of the 65x7 matrix above`);
+    lines.push('');
+    if (webSuite.error) {
+      lines.push(`Could not read ${webSuite.path}: ${webSuite.error}`);
+    } else {
+      lines.push(
+        `${webSuite.pass} passed, ${webSuite.fail} failed, ${webSuite.fixtureCount} fixtures total ` +
+          `(source: ${webSuite.path}). Gated independently by the "web" CI job's own ` +
+          '`bun run conformance` — this section does not affect this report\'s exit code.',
+      );
+    }
+    lines.push('');
+  }
   const markdown = lines.join('\n');
   if (args.markdown) {
     mkdirSync(dirname(args.markdown), { recursive: true });
