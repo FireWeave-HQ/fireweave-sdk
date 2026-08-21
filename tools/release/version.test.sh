@@ -16,6 +16,7 @@ source "$HERE/version.sh"
 
 PASS=0
 FAIL=0
+SKIP=0
 
 assert_eq() { # <label> <expected> <actual>
   if [ "$2" = "$3" ]; then
@@ -147,6 +148,38 @@ assert_eq "apply: pyproject.toml written" "0.1.1-staging.1" "$(python3 -c 'impor
 cmd_apply rust "0.1.1" --manifest-root "$scratch2"
 assert_eq "apply: Cargo.toml written" "0.1.1" "$(python3 -c 'import tomllib; print(tomllib.load(open("'"$scratch2"'/sdks/rust/Cargo.toml","rb"))["package"]["version"])')"
 
+# java: write_manifest shells out to `mvn versions:set` (same command
+# publish-maven now calls this way instead of repeating it inline — see
+# release.yml). Needs a real `mvn` on PATH; SKIP (not pass, not fail) rather
+# than silently no-op when it's absent, so an environment without Maven
+# doesn't get a false-green "44 passed" that never actually exercised this
+# path.
+mkdir -p "$scratch2/sdks/java"
+cat > "$scratch2/sdks/java/pom.xml" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>ai.fireweave</groupId>
+  <artifactId>fireweave-java-parent</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+</project>
+EOF
+if command -v mvn >/dev/null 2>&1; then
+  cmd_apply java "0.1.1" --manifest-root "$scratch2"
+  written="$(python3 -c '
+import sys
+import xml.etree.ElementTree as ET
+ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+root = ET.parse(sys.argv[1]).getroot()
+print(root.find("m:version", ns).text.strip())
+' "$scratch2/sdks/java/pom.xml")"
+  assert_eq "apply: pom.xml written via mvn versions:set" "0.1.1" "$written"
+else
+  SKIP=$((SKIP + 1))
+  echo "SKIP: apply: java (no 'mvn' on PATH in this environment — exercised in CI, which sets up Maven)" >&2
+fi
+
 # go/swift: apply() is a documented no-op (no manifest exists) — must not error.
 if cmd_apply go "0.1.0" --manifest-root "$scratch2" 2>/dev/null; then
   PASS=$((PASS + 1))
@@ -158,5 +191,5 @@ fi
 rm -rf "$scratch2"
 
 # ---------------------------------------------------------------------- summary
-echo "version.test.sh: ${PASS} passed, ${FAIL} failed"
+echo "version.test.sh: ${PASS} passed, ${FAIL} failed, ${SKIP} skipped"
 [ "$FAIL" -eq 0 ]

@@ -25,15 +25,26 @@
 # matrixed per component) sits between build and every publish-* job so a
 # release cannot publish without the gates running.
 #
-# STAGING PUBLISH (authorized 2026-07-27): npm (server + web) + TestPyPI +
-# a rust `cargo publish --dry-run` + Go proxy warm are enabled only when
-# dry_run=false AND channel=staging AND the matching component is selected.
-# Requires trusted publishers / secrets (see RELEASE.md). rust and swift have
-# no staging registry at all (crates.io has no TestPyPI equivalent, and
-# yanking is not deletion — a real staging publish would spend the version
-# permanently): rust staging stops at `cargo publish --dry-run` plus the git
-# tag; go and swift staging (and production) resolve from the git tag alone
-# — for swift there is no publish step whatsoever, staging or production.
+# STAGING PUBLISH (authorized 2026-07-27): npm (server) + TestPyPI + Go
+# proxy warm are enabled only when dry_run=false AND channel=staging AND the
+# matching component is selected. Requires trusted publishers / secrets (see
+# RELEASE.md).
+#
+# STAGING PUBLISH SCOPE EXTENDED (2026-08-21, during this implementation
+# work — NOT a separate human authorization; record it as such): npm for
+# `web` (identical OIDC trusted-publish mechanism as the already-authorized
+# `server`) and a rust `cargo publish --dry-run` (packages + validates only;
+# never uploads — see below) were added to the same dry_run=false AND
+# channel=staging gate. Flag for a human to backfill an explicit sign-off on
+# these two specifically if the 2026-07-27 authorization was meant to be
+# read as closed to new components.
+#
+# rust and swift have no staging registry at all (crates.io has no TestPyPI
+# equivalent, and yanking is not deletion — a real staging publish would
+# spend the version permanently): rust staging stops at
+# `cargo publish --dry-run` plus the git tag; go and swift staging (and
+# production) resolve from the git tag alone — for swift there is no publish
+# step whatsoever, staging or production.
 #
 # Production PyPI is enabled via channel=production (component=python) and also
 # via the dedicated tag-triggered workflow publish-python.yml (python/v*).
@@ -354,13 +365,15 @@ jobs:
           fi
       - name: Apply computed version
         run: tools/release/version.sh apply server "${{ steps.version.outputs.release_version }}"
-      - name: Build and publish @fireweaveai/server-sdk (dist-tag next)
+      - name: Build and publish @fireweaveai/server-sdk
         working-directory: sdks/node
+        env:
+          DIST_TAG: ${{ steps.version.outputs.dist_tag }}
         run: |
           npm install -g npm@latest
           npm ci
           npm run build
-          npm publish --provenance --access public --tag next
+          npm publish --provenance --access public --tag "$DIST_TAG"
 
   publish-npm-web:
     name: publish npm (staging → web-sdk, dist-tag next)
@@ -393,13 +406,15 @@ jobs:
           fi
       - name: Apply computed version
         run: tools/release/version.sh apply web "${{ steps.version.outputs.release_version }}"
-      - name: Build and publish @fireweaveai/web-sdk (dist-tag next)
+      - name: Build and publish @fireweaveai/web-sdk
         working-directory: sdks/web
+        env:
+          DIST_TAG: ${{ steps.version.outputs.dist_tag }}
         run: |
           npm install -g npm@latest
           npm ci
           npm run build
-          npm publish --provenance --access public --tag next
+          npm publish --provenance --access public --tag "$DIST_TAG"
 
   publish-npm-production:
     name: publish npm production (HARD-DISABLED)
@@ -538,15 +553,22 @@ jobs:
           server-password: MAVEN_CENTRAL_PASSWORD
           gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
           gpg-passphrase: MAVEN_GPG_PASSPHRASE
-      - name: Test, javadoc, sign, deploy
+      - name: Run Java tests (against the pre-bump committed version)
+        working-directory: sdks/java
+        run: mvn -B -ntp clean test
+      - name: Apply computed version
+        # tools/release/version.sh apply's java branch IS this mvn versions:set
+        # call (same command, -q instead of -B -ntp) — calling it here instead
+        # of repeating the invocation inline keeps one implementation of "how
+        # java's manifest gets written," exercised by version.test.sh.
+        run: tools/release/version.sh apply java "${{ steps.version.outputs.release_version }}"
+      - name: Sign + deploy
         working-directory: sdks/java
         env:
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
         run: |
-          mvn -B -ntp clean test
-          mvn -B -ntp versions:set -DnewVersion="${{ steps.version.outputs.release_version }}" -DgenerateBackupPoms=false
           if [ "${{ inputs.channel }}" = "production" ]; then AUTO=true; else AUTO=false; fi
           mvn -B -ntp -Prelease -DskipTests deploy \
             -Dcentral.autoPublish="$AUTO" \

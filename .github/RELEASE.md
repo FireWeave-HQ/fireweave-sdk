@@ -1,12 +1,22 @@
 # Fireweave SDK — Release Process
 
 Owner: release engineering (Agent K scope: `.github/`, `scripts/`, `tools/`).
-Status (2026-08-21): **staging publish authorized** for npm
-(`@fireweaveai/server-sdk`, `@fireweaveai/web-sdk`, both dist-tag `next`),
-TestPyPI (`fireweave`), a rust `cargo publish --dry-run` (no crates.io
-upload — see "Pre-release channels"), and Go proxy warm — only when
-`workflow_dispatch` has `dry_run=false` and `channel=staging`. **Production
-PyPI** is enabled for `fireweave` via:
+
+Status (2026-07-27): **staging publish authorized** for npm
+(`@fireweaveai/server-sdk`, dist-tag `next`), TestPyPI (`fireweave`), and Go
+proxy warm — only when `workflow_dispatch` has `dry_run=false` and
+`channel=staging`.
+
+Status (2026-08-21, during the task-14 implementation work — **not** a
+separate human authorization; flagged for a human to confirm rather than
+inherit the 2026-07-27 sign-off by association): staging publish SCOPE
+EXTENDED to also cover npm for `@fireweaveai/web-sdk` (dist-tag `next` —
+identical OIDC trusted-publish mechanism as the already-authorized
+`server-sdk`) and a rust `cargo publish --dry-run` (packages + validates
+only; no crates.io upload — see "Pre-release channels"), under the same
+`dry_run=false` / `channel=staging` gate.
+
+**Production PyPI** is enabled for `fireweave` via:
 
 - tag push `python/v<semver>` → [`.github/workflows/publish-python.yml`](workflows/publish-python.yml)
 - or `release.yml` with `component=python`, `channel=production`, `dry_run=false`
@@ -27,6 +37,12 @@ One release = one component (`server` | `web` | `python` | `java` | `go` |
 `rust` | `swift`, or `all` to fan out every component via a matrix) at one
 computed semver. Trigger [`Release (dry-run by default)`](workflows/release.yml)
 via `workflow_dispatch`:
+
+**`all` is not only a build-time convenience — with `dry_run=false` and
+`channel=staging` it fires every staging publish job at once, unattended**
+(both npm packages, TestPyPI, and the rust `cargo --dry-run`): `release-staging`
+carries no required-reviewer gate, so selecting `all` there is the same as
+approving all of them in one click, not just requesting seven builds.
 
 | Input | Meaning |
 | --- | --- |
