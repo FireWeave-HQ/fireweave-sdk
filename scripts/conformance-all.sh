@@ -12,13 +12,21 @@
 # non-zero-exits would mean the comparator — the 65x7 artifact this whole
 # pipeline exists to produce — never runs while ANY divergence exists
 # anywhere, which defeats its purpose. So each runner below is invoked
-# tolerantly (its exit code is captured for the diagnostic summary only), its
-# report is copied/left in place regardless, and the comparator always runs
-# on whatever report files exist. A runner crashing hard enough to never
-# write its report file at all (as opposed to writing one and then exiting
-# non-zero, which is normal) surfaces as a missing --report file that the
-# comparator itself reports clearly and fails on — not as this script
-# silently skipping the aggregate.
+# tolerantly (its exit code is captured for the diagnostic summary only), and
+# the comparator always runs on whatever report files exist.
+#
+# Each runner is passed an explicit --out/-out straight into $OUT_DIR — node
+# included (task-10 review round 2, finding 1): it used to have no such flag,
+# always writing to its own git-committed default path, with this script
+# copying that file into $OUT_DIR only when present. That let a stale,
+# previously-committed report survive an actual node crash (build failure,
+# uncaught exception, its own internal sanity assertion firing) and get
+# silently aggregated as if it were this run's — the `[ -f ]` check passed
+# either way. Now all four write only to the ephemeral $OUT_DIR path handed
+# to them; a runner crashing hard enough to never write it is caught
+# immediately below by fw_check_report (which names the language) and, as a
+# backstop, by compare.mjs's own loud read failure on the missing file — not
+# by this script silently skipping the aggregate or laundering a stale copy.
 #
 # The aggregate is 65 fixtures x 7 languages (contracts/harness.md ruling 3):
 # node/python/go/java below each run a real conformance suite and produce a
@@ -43,6 +51,23 @@ if [ "${1:-}" = "--out-dir" ]; then
 fi
 mkdir -p "$OUT_DIR"
 
+# A runner that ran but left no report file behind did not merely "fail on a
+# real divergence" (that shape always writes a report, then exits non-zero) —
+# it crashed or exited before reaching its write (build failure, uncaught
+# exception, an internal sanity assertion firing, etc). compare.mjs's own
+# readFileSync throws loudly on that missing file too (an acceptable
+# backstop), but this check runs first so the language is named in the
+# script's own output rather than relying solely on compare.mjs's stack trace.
+fw_check_report() {
+  local lang="$1"
+  local report_path="$2"
+  local exit_code="$3"
+  if [ ! -f "$report_path" ]; then
+    fw_warn "$lang: no report file at $report_path after the runner ran (exit=$exit_code)."
+    fw_warn "$lang: this is NOT the normal shape of a real fixture divergence — treat $lang's own logs above as the primary diagnostic. The differential comparator below will also fail loudly on this missing file."
+  fi
+}
+
 fw_require node "install Node >= 20"
 fw_require npm "install Node >= 20"
 fw_require python3 "install Python >= 3.10"
@@ -57,11 +82,12 @@ JAVA_EXIT=0
 # ---------- Node ----------
 fw_node_deps
 fw_section "node: conformance runner"
-(cd "$FW_ROOT/sdks/node" && npm run --silent conformance) || NODE_EXIT=$?
-if [ -f "$FW_ROOT/sdks/node/test/conformance/compatibility-report.node.json" ]; then
-  cp "$FW_ROOT/sdks/node/test/conformance/compatibility-report.node.json" \
-     "$OUT_DIR/compatibility-report.node.json"
-fi
+# --out (task-10 review round 2, finding 1): writes straight into $OUT_DIR,
+# same as python/go/java below — no more copying from node's own gitignored
+# default report path, which removes the "stale committed file survives a
+# crash and gets copied as if fresh" hazard entirely.
+(cd "$FW_ROOT/sdks/node" && npm run --silent conformance -- --out "$OUT_DIR/compatibility-report.node.json") || NODE_EXIT=$?
+fw_check_report node "$OUT_DIR/compatibility-report.node.json" "$NODE_EXIT"
 
 # ---------- Python ----------
 fw_python_venv
@@ -69,12 +95,14 @@ fw_section "python: conformance runner"
 "$FW_PY" "$FW_ROOT/sdks/python/conformance/run_conformance.py" \
      --contracts "$FW_ROOT/contracts" \
      --out "$OUT_DIR/compatibility-report.python.json" || PYTHON_EXIT=$?
+fw_check_report python "$OUT_DIR/compatibility-report.python.json" "$PYTHON_EXIT"
 
 # ---------- Go ----------
 fw_section "go: conformance runner"
 (cd "$FW_ROOT/sdks/go" && go run ./cmd/conformance \
       -contracts "$FW_ROOT/contracts" \
       -out "$OUT_DIR/compatibility-report.go.json") || GO_EXIT=$?
+fw_check_report go "$OUT_DIR/compatibility-report.go.json" "$GO_EXIT"
 
 # ---------- Java ----------
 fw_section "java: conformance runner (exec:java)"
@@ -84,6 +112,7 @@ fw_section "java: conformance runner (exec:java)"
    && cd "$FW_ROOT/sdks/java" \
    && mvn -q -pl fireweave-testing exec:java \
         -Dexec.args="$FW_ROOT/contracts $OUT_DIR/compatibility-report.java.json" ) || JAVA_EXIT=$?
+fw_check_report java "$OUT_DIR/compatibility-report.java.json" "$JAVA_EXIT"
 
 fw_section "per-language runner exit codes (informational only)"
 printf '  %-8s exit=%s\n' node "$NODE_EXIT"

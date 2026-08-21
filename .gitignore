@@ -20,3 +20,14 @@ examples/go/go
 # (verified), so a second lockfile would only add drift.
 bun.lock
 bun.lockb
+
+# Node conformance runner's default report path (sdks/node/test/conformance/run.ts,
+# no --out given). Untracked deliberately (task-10 review round 2, finding 1): a
+# committed default would let a stale report from a prior run silently masquerade
+# as fresh if the runner ever crashed before reaching its write. Unlike node,
+# go/python/java's own committed compatibility-report.<lang>.json snapshots are
+# refreshed only by an explicit, human-run standalone command (CONTRIBUTING.md)
+# and are never read back by scripts/conformance-all.sh (it always passes each of
+# them an explicit ephemeral -out/--out path) — that asymmetry is intentional and
+# scoped to this fix; see task-10-report.md.
+sdks/node/test/conformance/compatibility-report.node.json

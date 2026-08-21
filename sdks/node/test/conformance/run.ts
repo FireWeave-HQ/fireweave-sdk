@@ -5,8 +5,19 @@
  * fixtures, provisions `given`, invokes `when` through the real v1 control-point
  * surface (`FireweaveClient.controlPoints`, NOT OpenFeature — the OpenFeature
  * provider was retired by ADR-0010; see contracts/harness.md "Shared pipeline"),
- * normalizes actual output, diffs against `expect`, and writes
- * compatibility-report.node.json. Exits non-zero on any fail.
+ * normalizes actual output, diffs against `expect`, and writes the compatibility
+ * report. Exits non-zero on any fail.
+ *
+ * Usage: tsx test/conformance/run.ts [--out PATH]
+ *   --out PATH   Where to write the report (resolved relative to cwd if not
+ *                absolute). Default: test/conformance/compatibility-report.node.json
+ *                — a gitignored scratch file, NOT a committed artifact (task-10
+ *                review round 2: a committed default would let a stale report
+ *                from a prior run silently masquerade as fresh if this runner
+ *                ever crashed before reaching its write). scripts/conformance-all.sh
+ *                always passes an explicit --out into its own ephemeral
+ *                build/conformance/ directory, matching how python/go/java are
+ *                already invoked there.
  *
  * Backends:
  *  - evaluation/context/lifecycle/security → InMemoryAdapter from given.flags,
@@ -39,7 +50,7 @@
  *    (`FireweaveClient.invokeCapability`) and runs for real.
  */
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   FireweaveClient,
@@ -709,6 +720,23 @@ async function runFaultFixture(fixture: Fixture): Promise<ActualOutput> {
 // ---------------------------------------------------------------------------
 // main
 
+/**
+ * `--out PATH` (task-10 review round 2, finding 1): lets
+ * scripts/conformance-all.sh redirect the report straight into its own
+ * ephemeral build/conformance/ directory instead of relying on this file's
+ * gitignored default — the same shape python's `--out`/go's `-out` already
+ * take. Absent, falls back to the gitignored default path next to this file.
+ */
+function parseOutPath(): string {
+  const args = process.argv.slice(2);
+  const idx = args.indexOf('--out');
+  const value = idx !== -1 ? args[idx + 1] : undefined;
+  if (idx !== -1 && value === undefined) {
+    throw new Error('--out requires a path argument');
+  }
+  return value !== undefined ? resolve(value) : join(HERE, 'compatibility-report.node.json');
+}
+
 /** Run one fully-resolved when/expect pair; returns comparator failures. */
 async function executeOne(fixture: Fixture): Promise<string[]> {
   let actual: ActualOutput;
@@ -730,6 +758,9 @@ async function executeOne(fixture: Fixture): Promise<string[]> {
 }
 
 async function main(): Promise<void> {
+  // Parsed first, before running a single fixture, so a malformed `--out`
+  // invocation fails fast rather than after paying for the whole suite.
+  const reportPath = parseOutPath();
   const fixtures = loadFixtures();
   const rows: ReportRow[] = [];
 
@@ -831,7 +862,6 @@ async function main(): Promise<void> {
     results: rows,
     summary,
   };
-  const reportPath = join(HERE, 'compatibility-report.node.json');
   writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
 
   for (const row of rows) {
