@@ -1,15 +1,13 @@
-// Command example demonstrates the Fireweave Go SDK end to end:
+// Command example demonstrates the Fireweave Go SDK's v1 surface:
 //
-//  1. provider construction (in-memory by default; PostHog-backed when
-//     FW_PROJECT_API_KEY and FW_POSTHOG_HOST are set),
-//  2. OpenFeature registration and boolean evaluation,
-//  3. detailed resolution with variant/reason/metadata,
-//  4. targeting context (targetingKey → distinct_id),
-//  5. FireweaveClient extensions: Releases.SetContext + Signals.RecordHealth,
-//  6. clean, deadline-bounded shutdown.
+//  1. fireweave.Init — the single entry point (spec/modes.md): local
+//     (offline, default) or remote (--remote / FW_API_URL set),
+//  2. a boolean control-point read + detailed resolution, with a targeting
+//     context,
+//  3. RegisterTarget — durable targeting facts, once per login,
+//  4. clean, deadline-bounded shutdown.
 //
-// The example is offline by default: without PostHog credentials it runs
-// entirely against the deterministic in-memory adapter.
+// Stub: node test-server/implementation/server.mjs  (127.0.0.1:3901)
 package main
 
 import (
@@ -17,118 +15,88 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"time"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/adapters/inmemory"
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/adapters/posthog"
 	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/fireweave"
-	fwprovider "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/openfeature"
-	of "github.com/open-feature/go-sdk/openfeature"
 )
 
-func buildAdapter() fireweave.BackendAdapter {
-	apiKey := os.Getenv("FW_PROJECT_API_KEY")
-	host := os.Getenv("FW_POSTHOG_HOST")
-	if apiKey != "" && host != "" {
-		fmt.Println("mode: PostHog-backed (live)")
-		return posthog.New(posthog.Config{
-			ProjectAPIKey:      apiKey,
-			SecretKey:          os.Getenv("FW_SECRET_KEY"), // optional: enables local evaluation
-			Endpoint:           host,
-			FlagRequestTimeout: 3 * time.Second,
-			CloseTimeout:       10 * time.Second,
+func main() {
+	useRemote := slices.Contains(os.Args[1:], "--remote")
+	apiURL := os.Getenv("FW_API_URL")
+	if apiURL != "" {
+		useRemote = true
+	}
+
+	// 1. fireweave.Init is the single entry point (spec/modes.md) — it
+	// validates the mode, builds the matching adapter, and brings the
+	// client to READY.
+	var (
+		client *fireweave.Client
+		err    error
+	)
+	if useRemote {
+		if apiURL == "" {
+			apiURL = "http://127.0.0.1:3901"
+		}
+		apiKey := os.Getenv("FW_PROJECT_API_KEY")
+		if apiKey == "" {
+			apiKey = "project-api-key_dev"
+		}
+		client, err = fireweave.Init(fireweave.Options{
+			Mode:   fireweave.ModeRemote,
+			APIURL: apiURL,
+			APIKey: apiKey,
+		})
+	} else {
+		// Local mode seeds a deterministic in-process map — no network, no
+		// credentials. Great for tests and offline dev.
+		client, err = fireweave.Init(fireweave.Options{
+			Mode:  fireweave.ModeLocal,
+			Local: &fireweave.LocalOptions{ControlPoints: map[string]bool{"new-checkout": true}},
 		})
 	}
-
-	fmt.Println("mode: in-memory (offline by default)")
-	version := int64(4)
-	return inmemory.New(inmemory.WithFlags(map[string]inmemory.Flag{
-		"checkout-redesign": {
-			Type: fireweave.FlagTypeBoolean, Enabled: true, Variant: "on", Value: true,
-			Version: &version, ReasonCode: "condition_match",
-		},
-		"theme": {
-			Type: fireweave.FlagTypeString, Enabled: true, Variant: "dark", Value: "dark",
-			// Only organizations on the "pro" tier get the dark theme.
-			MatchAttributes: map[string]any{"tier": "pro"},
-		},
-	}))
-}
-
-func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// 1. Build the Fireweave runtime + client + provider.
-	runtime := fireweave.NewRuntime(buildAdapter(), fireweave.Config{
-		RequireTargetingKey: true,
-	})
-	client := fireweave.NewClient(runtime)
-	provider := fwprovider.NewProvider(client)
-
-	// 2. Register with OpenFeature and wait for READY.
-	if err := of.SetProviderAndWait(provider); err != nil {
-		log.Fatalf("provider initialization failed: %v", err)
-	}
-	ofClient := of.NewClient("example-app")
-
-	// 4. Targeting context: targetingKey maps to the PostHog distinct_id.
-	evalCtx := of.NewEvaluationContext("org_01HZXEXAMPLE0000000000001", map[string]any{
-		"tier":   "pro",
-		"region": "us",
-	})
-
-	// 2. Simple boolean evaluation (defaults are returned, never thrown).
-	enabled := ofClient.Boolean(ctx, "checkout-redesign", false, evalCtx)
-	fmt.Printf("checkout-redesign enabled: %v\n", enabled)
-
-	// 3. Detailed resolution via FireweaveClient.Flags().Evaluate (ruling 16)
-	// — no Runtime() reach-in required for Decision-shaped results.
-	fwCtx := fireweave.EvaluationContext{
-		TargetingKey: "org_01HZXEXAMPLE0000000000001",
-		Attributes:   map[string]any{"tier": "pro", "region": "us"},
-	}
-	decision := client.Flags().Evaluate(ctx, "theme", fireweave.FlagTypeString, "light", fwCtx, fireweave.EvaluateOptions{})
-	if decision.Error != nil {
-		fmt.Printf("theme fell back to default %q (%s: %s)\n",
-			decision.Value, decision.Error.Kind, decision.Error.Message)
-	} else {
-		fmt.Printf("theme = %q variant=%q reason=%s metadata=%v\n",
-			decision.Value, decision.Variant, decision.Reason, decision.Metadata)
-	}
-
-	// OpenFeature detailed resolution remains available for OF-native callers.
-	details, err := ofClient.StringValueDetails(ctx, "theme", "light", evalCtx)
 	if err != nil {
-		fmt.Printf("of theme fell back to default %q (%s: %s)\n", details.Value, details.ErrorCode, details.ErrorMessage)
+		log.Fatalf("init failed: %v", err)
+	}
+
+	// Stub fixture key when talking to the Fireweave remote protocol.
+	boolFlag := "new-checkout"
+	if useRemote {
+		boolFlag = "fw-bool-on"
+	}
+
+	// 2. Evaluate a boolean control point with a targeting context.
+	evalCtx := fireweave.NewEvaluationContext("user_01HZXEXAMPLE0000000000001", map[string]any{
+		"plan": "pro",
+	})
+	enabled := client.ControlPoints().GetBooleanValue(boolFlag, false, &evalCtx)
+	fmt.Printf("%s enabled: %v\n", boolFlag, enabled)
+
+	// 3. Detailed resolution: value + variant + reason (upgrades from
+	// GetBooleanValue without restructuring the call).
+	details := client.ControlPoints().GetBooleanDetails(boolFlag, false, &evalCtx)
+	fmt.Printf("%s details: value=%v variant=%q reason=%s\n", boolFlag, details.Value, details.Variant, details.Reason)
+
+	// 4. Register the durable targeting facts for this user — once per
+	// login, not on every evaluation. Resolves OK: false rather than
+	// erroring (it runs in sign-in paths); the offline default and the
+	// --remote stub (which has no /v1/targets/register route) both degrade
+	// the same, honest way.
+	registered := client.RegisterTarget(evalCtx.TargetingKey, &fireweave.RegisterTargetOptions{
+		Kind:       fireweave.TargetKindUser,
+		Properties: map[string]any{"plan": "pro"},
+	})
+	if registered.OK {
+		fmt.Println("registerTarget ok: true")
 	} else {
-		fmt.Printf("of theme = %q variant=%q reason=%s\n", details.Value, details.Variant, details.Reason)
+		fmt.Printf("registerTarget ok: false (%s)\n", registered.Error.Kind)
 	}
 
-	// 5. Fireweave extensions: bind the rollout and report health.
-	// stampIds/changeId are typed 26-char Crockford ULIDs, validated
-	// against spec/release-context.schema.json by SetContext.
-	release := fireweave.ReleaseContext{
-		RolloutID: "rollout_example_checkout_redesign",
-		ChangeID:  "chg_01HZXEG0000000000000000001",
-		StampIDs:  []string{"stmp_01HZXEG0000000000000000001"},
-	}
-	if err := client.Releases().SetContext(ctx, release); err != nil {
-		log.Fatalf("release context: %v", err)
-	}
-	if err := client.Signals().RecordHealth(ctx, fireweave.HealthSignal{
-		Name: "provider", Status: "ok", RolloutID: release.RolloutID,
-	}); err != nil {
-		log.Fatalf("health signal: %v", err)
-	}
-	caps := client.Capabilities().Get()
-	fmt.Printf("release bound: %s (backend=%s lifecycle=%s operations=%v)\n",
-		release.RolloutID, caps.Runtime.Backend, caps.Runtime.Lifecycle, client.Capabilities().Operations())
-
-	// 6. Clean shutdown: bounded by context, idempotent.
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer shutdownCancel()
-	if err := of.ShutdownWithContext(shutdownCtx); err != nil {
+	// 5. Clean shutdown, bounded by context.
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := client.Runtime().Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("shutdown: %v", err)
 	}
 	fmt.Println("shut down cleanly")

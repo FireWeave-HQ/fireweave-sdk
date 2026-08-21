@@ -21,7 +21,6 @@
 
   <modules>
     <module>../../sdks/java/fireweave-sdk</module>
-    <module>../../sdks/java/fireweave-openfeature</module>
     <module>demo</module>
   </modules>
 

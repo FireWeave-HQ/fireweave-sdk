@@ -1,127 +1,61 @@
 /**
  * Fireweave SDK — minimal Node example.
  *
- * Default mode runs fully OFFLINE against the deterministic in-memory adapter.
+ * Default mode runs fully OFFLINE (mode: 'local', no network, no credentials).
  *
  * Production path (ADR-0005):
- *   --remote + FW_API_URL + FW_PROJECT_API_KEY  → FireweaveRemoteAdapter (fw-server / stub)
+ *   --remote + FW_API_URL + FW_PROJECT_API_KEY  → mode: 'remote' (fw-server / stub)
  *
  * Stub: node test-server/implementation/server.mjs  (127.0.0.1:3901)
  *
  * Runs unchanged under `node`, `bun`, and `deno run --allow-net --allow-env`.
  */
-import { OpenFeature } from '@openfeature/server-sdk';
-import {
-  FireweaveClient,
-  FireweaveProvider,
-  FireweaveRemoteAdapter,
-  FireweaveRuntime,
-  InMemoryAdapter,
-} from '@fireweaveai/server-sdk';
+import { initFireweave } from '@fireweaveai/server-sdk';
 
 const useRemote = process.argv.includes('--remote') || process.env.FW_API_URL !== undefined;
 
-// ---------------------------------------------------------------------------
-// 1. Configure a backend adapter.
-async function makeAdapter() {
-  if (useRemote) {
-    return new FireweaveRemoteAdapter({
+// 1. `initFireweave` is the single entry point (spec/modes.md) — it validates
+// the mode, builds the matching adapter, and brings the client to READY.
+const fireweave = useRemote
+  ? await initFireweave({
+      mode: 'remote',
       apiUrl: process.env.FW_API_URL ?? 'http://127.0.0.1:3901',
       apiKey: process.env.FW_PROJECT_API_KEY ?? 'project-api-key_dev',
-      requestTimeoutMs: 3000,
+    })
+  : await initFireweave({
+      // Local mode seeds a deterministic in-process map — no network, no
+      // credentials. Great for tests and offline dev.
+      mode: 'local',
+      local: { controlPoints: { 'new-checkout': true } },
     });
-  }
-  // Offline default: deterministic in-memory control points (great for tests/CI).
-  return new InMemoryAdapter({
-    flags: {
-      'new-checkout': {
-        type: 'boolean',
-        enabled: true,
-        value: true,
-        variant: 'on',
-        metadata: { version: 4 },
-      },
-      'checkout-theme': {
-        type: 'string',
-        enabled: true,
-        value: 'midnight',
-        variant: 'midnight',
-        // Only members of the beta cohort get the variant:
-        matchAttribute: { cohort: 'beta' },
-      },
-    },
-  });
-}
 
-const adapter = await makeAdapter();
-
-// Stub fixture keys when talking to the Fireweave remote protocol.
+// Stub fixture key when talking to the Fireweave remote protocol.
 const boolFlag = useRemote ? 'fw-bool-on' : 'new-checkout';
-const stringFlag = useRemote ? 'fw-string-theme' : 'checkout-theme';
 
-// 2. Build the runtime + provider and register with OpenFeature.
-const runtime = new FireweaveRuntime(adapter);
-const provider = new FireweaveProvider(runtime, { lazyReady: false });
-await OpenFeature.setProviderAndWait('checkout', provider);
-const flags = OpenFeature.getClient('checkout');
-
-// 3. Evaluate a boolean control point with a targeting context.
-const context = { targetingKey: 'user_01HZXEXAMPLE0000000000001', cohort: 'beta', plan: 'pro' };
-const enabled = await flags.getBooleanValue(boolFlag, false, context);
+// 2. Evaluate a boolean control point with a targeting context.
+const context = { targetingKey: 'user_01HZXEXAMPLE0000000000001', plan: 'pro' };
+const enabled = await fireweave.controlPoints.getBooleanValue(boolFlag, false, context);
 console.log(`${boolFlag} enabled: ${enabled}`);
 
-// 4. Detailed resolution: value + variant + reason + Fireweave metadata.
-const details = await flags.getStringDetails(stringFlag, 'classic', context);
-console.log(`${stringFlag} details:`, {
+// 3. Detailed resolution: value + variant + reason (upgrades from `*Value`
+// without restructuring the call — same arguments, richer return).
+const details = await fireweave.controlPoints.getBooleanDetails(boolFlag, false, context);
+console.log(`${boolFlag} details:`, {
   value: details.value,
   variant: details.variant,
   reason: details.reason,
-  flagMetadata: details.flagMetadata,
 });
 
-if (!useRemote) {
-  // Targeting: a user outside the beta cohort falls back to the default.
-  const fallback = await flags.getStringValue(stringFlag, 'classic', {
-    targetingKey: 'user_01HZXEXAMPLE0000000000002',
-  });
-  console.log(`${stringFlag} for non-beta user: ${fallback}`);
-}
-
-// 5. Fireweave extensions: detailed evaluation, targets, releases, signals, exposures.
-const fireweave = new FireweaveClient(runtime);
-
-// Detailed Decision-returning evaluation on the public client surface:
-const decision = await fireweave.controlPoints.evaluate(boolFlag, 'boolean', false, context);
-console.log(`controlPoints.evaluate reason: ${decision.reason}`);
-
-// Register the durable targeting facts for this user. Reports ok:false rather
-// than throwing — the in-memory adapter has no such capability, so a dev
-// harness never looks registered when it is not.
-const registered = await runtime.registerTarget(context.targetingKey, {
+// 4. Register the durable targeting facts for this user — once per login,
+// not on every evaluation. Resolves `{ ok: false }` rather than throwing (it
+// runs in sign-in paths); the offline default and the --remote stub (which
+// has no /v1/targets/register route) both degrade the same, honest way.
+const registered = await fireweave.registerTarget(context.targetingKey, {
   kind: 'user',
-  properties: { plan: context.plan, cohort: context.cohort },
+  properties: { plan: context.plan },
 });
 console.log(`registerTarget ok: ${registered.ok}${registered.ok ? '' : ` (${registered.error?.kind})`}`);
 
-// Ratified ID shapes: stmp_/chg_/sfc_ + 26-char Crockford ULIDs.
-const release = fireweave.releases.setContext({
-  stampIds: ['stmp_01HZXEXAMPE000000000000001'],
-  rolloutId: 'rollout_01HZXEXAMPE000000000000001',
-  changeId: 'chg_01HZXEXAMPE000000000000001',
-  surfaces: [{ surfaceId: 'sfc_01HZXEXAMPE000000000000001', kind: 'node-server' }],
-});
-console.log('release context set:', release.ok);
-
-fireweave.signals.recordHealth({ name: 'checkout-api', status: 'healthy' });
-fireweave.exposures.record({
-  targetingKey: context.targetingKey,
-  flagKey: boolFlag,
-  value: enabled,
-  variant: enabled ? 'on' : undefined,
-});
-await fireweave.exposures.flush();
-console.log('capabilities:', fireweave.capabilities.get().runtime);
-
-// 6. Clean shutdown (flushes queued telemetry, closes the provider).
-await OpenFeature.close();
+// 5. Clean shutdown.
+await fireweave.shutdown();
 console.log('shut down cleanly');

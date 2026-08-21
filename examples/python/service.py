@@ -1,118 +1,69 @@
-"""Fireweave Python SDK — plain service example.
+"""Fireweave Python SDK — minimal service example.
 
-Offline by default: runs against the in-memory adapter with the demo flags
-below. Set ``FIREWEAVE_POSTHOG_KEY`` (a ``phc_`` project API key) to switch to
-the PostHog-backed adapter instead — no code changes required.
+Default mode runs fully OFFLINE (mode="local", no network, no credentials).
 
-    python service.py                          # offline, in-memory
-    FIREWEAVE_POSTHOG_KEY=phc_... python service.py   # PostHog-backed
+Production path (ADR-0005):
+    FW_API_URL=... FW_PROJECT_API_KEY=... python service.py --remote
 
-Demonstrates:
-  * PostHog-backed (or in-memory) OpenFeature provider registration
-  * boolean evaluation and detailed resolution
-  * targeting context (targetingKey -> distinct_id)
-  * releases.set_context + signals.record_health
+Stub: node test-server/implementation/server.mjs  (127.0.0.1:3901)
+
+Demonstrates the two v1 capabilities (spec/control-points.md):
+  * init_fireweave — the single entry point, local or remote
+  * control_points boolean read + detailed resolution, with a targeting context
+  * register_target — durable targeting facts, once per login
   * clean, deterministic shutdown
 """
 
 from __future__ import annotations
 
 import os
+import sys
 
-from openfeature import api
-from openfeature.evaluation_context import EvaluationContext as OFContext
+from fireweave import EvaluationContext, RegisterTargetOptions, init_fireweave
 
-from fireweave import (
-    BackendAdapter,
-    EvaluationContext,
-    FireweaveClient,
-    FireweaveConfig,
-    FireweaveRuntime,
-    FlagType,
-    InMemoryAdapter,
-)
-from fireweave.openfeature import FireweaveProvider
-
-DEMO_FLAGS = {
-    "new-checkout": {
-        "type": "boolean",
-        "enabled": True,
-        "variant": "on",
-        "value": True,
-        "metadata": {"version": 3},
-    },
-    "checkout-theme": {
-        "type": "string",
-        "enabled": True,
-        "variant": "dark",
-        "value": "dark",
-        "matchAttribute": {"tier": "gold"},
-    },
-}
-
-
-def build_adapter() -> BackendAdapter:
-    """In-memory by default; PostHog-backed when FIREWEAVE_POSTHOG_KEY is set."""
-    api_key = os.environ.get("FIREWEAVE_POSTHOG_KEY")
-    if not api_key:
-        return InMemoryAdapter(DEMO_FLAGS)
-    # Requires: pip install 'fireweave[posthog]'
-    from fireweave.adapters.posthog import PostHogAdapter
-
-    config = FireweaveConfig(
-        project_api_key=api_key,
-        host=os.environ.get("FIREWEAVE_POSTHOG_HOST", "https://us.i.posthog.com"),
-    )
-    return PostHogAdapter(config=config)
+USE_REMOTE = "--remote" in sys.argv or os.environ.get("FW_API_URL") is not None
 
 
 def main() -> None:
-    # 1. Construct everything explicitly — no hidden globals.
-    runtime = FireweaveRuntime(build_adapter())
-    provider = FireweaveProvider(runtime)
+    # 1. `init_fireweave` is the single entry point (spec/modes.md) — it
+    # validates the mode, builds the matching adapter, and brings the client
+    # to READY.
+    if USE_REMOTE:
+        client = init_fireweave(
+            mode="remote",
+            api_url=os.environ.get("FW_API_URL", "http://127.0.0.1:3901"),
+            api_key=os.environ.get("FW_PROJECT_API_KEY", "project-api-key_dev"),
+        )
+    else:
+        # Local mode seeds a deterministic in-process map — no network, no
+        # credentials. Great for tests and offline dev.
+        client = init_fireweave(mode="local", local={"control_points": {"new-checkout": True}})
 
-    # 2. Register the provider with OpenFeature (this initializes the runtime).
-    api.set_provider(provider)
-    of_client = api.get_client()
+    # Stub fixture key when talking to the Fireweave remote protocol.
+    bool_flag = "fw-bool-on" if USE_REMOTE else "new-checkout"
 
-    # 3. Boolean evaluation with a targeting context.
-    ctx = OFContext(targeting_key="user_42", attributes={"tier": "gold"})
-    if of_client.get_boolean_value("new-checkout", False, ctx):
-        print("new-checkout: ENABLED for user_42")
+    # 2. Evaluate a boolean control point with a targeting context.
+    ctx = EvaluationContext(targeting_key="user_42", attributes={"plan": "pro"})
+    enabled = client.control_points.get_boolean_value(bool_flag, False, ctx)
+    print(f"{bool_flag} enabled: {enabled}")
 
-    # 4. Detailed resolution: variant, reason, and Fireweave flag metadata.
-    details = of_client.get_string_details("checkout-theme", "light", ctx)
-    print(
-        f"checkout-theme: value={details.value!r} variant={details.variant!r} "
-        f"reason={details.reason} metadata={dict(details.flag_metadata)}"
+    # 3. Detailed resolution: value + variant + reason (upgrades from
+    # get_boolean_value without restructuring the call).
+    details = client.control_points.get_boolean_details(bool_flag, False, ctx)
+    print(f"{bool_flag} details: value={details.value!r} variant={details.variant!r} reason={details.reason}")
+
+    # 4. Register the durable targeting facts for this user — once per login,
+    # not on every evaluation. Resolves ok=False rather than raising (it runs
+    # in sign-in paths); the offline default and the --remote stub (which has
+    # no /v1/targets/register route) both degrade the same, honest way.
+    registered = client.register_target(
+        "user_42", RegisterTargetOptions(kind="user", properties={"plan": "pro"})
     )
+    suffix = "" if registered.ok else f" ({registered.error.kind.value})"
+    print(f"register_target ok: {registered.ok}{suffix}")
 
-    # 5. Release-safety extensions on the Fireweave client (same runtime).
-    fw = FireweaveClient(runtime)
-    # rolloutId is free-form; changeId/stampIds are typed 26-char ULIDs
-    # (spec/release-context.schema.json — ruling 15: both rolloutId and
-    # stampIds are required, and set_context validates the patterns).
-    fw.releases.set_context(
-        rollout_id="rollout_01HZX3",
-        change_id="chg_01HZXEX0000000000000000001",
-        stamp_ids=["stmp_01HZXEX0000000000000000001"],
-    )
-    fw.releases.start()
-    fw.signals.record_health("checkout-service", "ok", rollout_id="rollout_01HZX3")
-    fw.exposures.record("user_42", "new-checkout", "on", True)
-
-    # Fireweave evaluation API works alongside OpenFeature, same semantics.
-    decision = fw.flags.get_details(
-        "new-checkout", FlagType.BOOLEAN, False,
-        EvaluationContext("user_42", {"tier": "gold"}),
-    )
-    print(f"fireweave decision: value={decision.value} reason={decision.reason}")
-
-    # 6. Clean shutdown: flushes exposures, closes the adapter, and makes
-    #    later evaluations degrade to defaults (AlreadyClosed) — never raise.
-    fw.releases.complete()
-    fw.shutdown()
-    api.shutdown()
+    # 5. Clean shutdown.
+    client.shutdown()
     print("shut down cleanly")
 
 

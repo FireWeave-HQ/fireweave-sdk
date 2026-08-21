@@ -1,20 +1,19 @@
 # Fireweave Go SDK example
 
-Offline by default — runs against the deterministic in-memory adapter:
+Offline by default (`Mode: fireweave.ModeLocal` — no network, no credentials):
 
 ```sh
 go run .
 ```
 
-To exercise the PostHog-backed provider instead, supply credentials:
+To exercise the remote path instead, supply credentials (or point `FW_API_URL`
+at the local `test-server` stub):
 
 ```sh
-FW_PROJECT_API_KEY=phc_... FW_POSTHOG_HOST=https://us.i.posthog.com go run .
-# optional: FW_SECRET_KEY=phs_... enables local flag evaluation
+go run . --remote
+FW_API_URL=... FW_PROJECT_API_KEY=... go run . --remote
 ```
 
-The example demonstrates OpenFeature registration (`SetProviderAndWait`),
-boolean evaluation, detailed resolution (variant / reason / `fireweave.*`
-metadata), targeting context (`targetingKey` → `distinct_id`),
-`Releases.SetContext`, `Signals.RecordHealth`, capability discovery, and a
-deadline-bounded clean shutdown.
+The example demonstrates `fireweave.Init` (the single entry point), boolean
+control-point evaluation, detailed resolution (variant / reason),
+a targeting context, `RegisterTarget`, and a deadline-bounded clean shutdown.

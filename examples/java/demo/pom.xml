@@ -27,22 +27,6 @@
       <artifactId>fireweave-sdk</artifactId>
       <version>${project.version}</version>
     </dependency>
-    <dependency>
-      <groupId>ai.fireweave</groupId>
-      <artifactId>fireweave-openfeature</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>dev.openfeature</groupId>
-      <artifactId>sdk</artifactId>
-      <version>1.15.1</version>
-    </dependency>
-    <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-nop</artifactId>
-      <version>2.0.17</version>
-      <scope>runtime</scope>
-    </dependency>
   </dependencies>
 
   <build>
