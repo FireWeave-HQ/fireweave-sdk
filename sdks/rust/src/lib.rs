@@ -48,7 +48,8 @@ pub const SPEC_VERSION: &str = "0.1.0";
 pub use application::client::{ControlPointsNamespace, ExtensionResult, FireweaveClient};
 pub use application::mode::{init_fireweave, InitOptions};
 pub use application::ports::{
-    BackendAdapter, EvaluateOptions, FlagResolution, RegisterTargetOptions, RegisterTargetResult,
+    AsAny, BackendAdapter, EvaluateOptions, FlagResolution, RegisterTargetOptions,
+    RegisterTargetResult,
 };
 pub use application::runtime::{
     FireweaveRuntime, LifecycleState, RuntimeConfig, DEFAULT_SHUTDOWN_TIMEOUT_MS,

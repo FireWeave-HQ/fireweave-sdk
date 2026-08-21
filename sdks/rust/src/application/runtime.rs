@@ -358,13 +358,20 @@ impl FireweaveRuntime {
                 JsonValue::from(version),
             );
         }
-        // Detailed enrichment: only when the backend supplied a flag id, a
-        // matched-condition index, AND a reason code together (ruling 11).
-        if let (Some(vendor_flag_id), Some(_condition_index), Some(reason_code)) = (
-            resolution.vendor_flag_id,
-            resolution.condition_index,
-            resolution.reason_code.clone(),
-        ) {
+        // Detailed enrichment (ruling 11): emit fireweave.vendorFlagId +
+        // fireweave.reasonCode together, or neither. The runtime's job is
+        // only this pass-through pairing — it does NOT re-derive the
+        // ruling-11 gate itself (that gate needs a "did the backend report
+        // a condition index" signal that only InMemoryAdapter's fixture
+        // input carries; FireweaveRemoteAdapter has no such field on the
+        // wire and relies on fw-server having already gated flagMetadata
+        // before responding). See FlagResolution's doc comment for the
+        // full reasoning (task-12 review finding: a stale client-side
+        // re-gate on a field the remote wire protocol doesn't carry used
+        // to suppress both keys unconditionally for every remote decision).
+        if let (Some(vendor_flag_id), Some(reason_code)) =
+            (resolution.vendor_flag_id, resolution.reason_code.clone())
+        {
             metadata.insert(
                 "fireweave.vendorFlagId".to_string(),
                 JsonValue::from(vendor_flag_id),

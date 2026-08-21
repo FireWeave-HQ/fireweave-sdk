@@ -75,6 +75,27 @@ client.register_target("user_42", None); // recorded in-process + traced; nothin
 client.shutdown();
 ```
 
+The recorded target set is readable back (`spec/modes.md`: "The recorded
+set MUST be readable ... so tests can assert registration without
+capturing stdout") by downcasting the runtime's adapter — the same pattern
+node/go/java's own test suites use on their equivalent `runtime.adapter`
+accessor:
+
+```rust
+use fireweave::{init_fireweave, FireweaveLocalAdapter, InitOptions};
+
+let client = init_fireweave(InitOptions::local()).unwrap();
+client.register_target("user_42", None);
+
+let local_adapter = client
+    .runtime()
+    .adapter()
+    .as_any()
+    .downcast_ref::<FireweaveLocalAdapter>()
+    .expect("local mode is always backed by FireweaveLocalAdapter");
+assert_eq!(local_adapter.registered_targets()[0].targeting_key, "user_42");
+```
+
 ## The nine methods
 
 `get_boolean_value` / `get_string_value` / `get_number_value` /
@@ -93,7 +114,7 @@ alias returning a reference to the same field
 | `application/runtime.rs` | Lifecycle state machine, context layering, the evaluation pipeline. Evaluation never panics. |
 | `application/client.rs` | `FireweaveClient` — `control_points`, `register_target`, `invoke_capability` (degrades; v1 has no supported capabilities). |
 | `application/mode.rs` | `init_fireweave` — the single entry point and sanctioned composition root (the only file allowed to import concrete adapters). |
-| `application/ports.rs` | The `BackendAdapter` trait boundary. |
+| `application/ports.rs` | The `BackendAdapter` trait boundary + `AsAny` (checked downcast back to a concrete adapter, e.g. `FireweaveLocalAdapter`). |
 | `infrastructure/adapters/remote.rs` | `FireweaveRemoteAdapter` — the production backend (`POST /v1/flags/evaluate`, `POST /v1/targets/register`) over `ureq`. |
 | `infrastructure/adapters/local.rs` | `FireweaveLocalAdapter` — the dev substrate: seeded boolean overrides, no network. `register_target` records in-process and traces the call. |
 | `infrastructure/adapters/memory.rs` | Deterministic fixture-driven adapter for tests. |

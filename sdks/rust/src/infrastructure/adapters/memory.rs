@@ -218,15 +218,33 @@ impl BackendAdapter for InMemoryAdapter {
         };
 
         let matched = Self::conditions_match(definition, context);
+        // Ruling 11 gate (spec/decision.schema.json `standardMetadataKeys`):
+        // fireweave.vendorFlagId + fireweave.reasonCode are emitted only
+        // when the fixture reports a vendor flag id, a matched-condition
+        // index, AND a reason code together — this adapter is the one
+        // place that raw "condition index" signal exists (fixture
+        // `reason.condition_index`), so it applies the gate itself before
+        // handing FlagResolution to the (adapter-agnostic) runtime, rather
+        // than exposing `condition_index` on the shared port type. See
+        // `application::ports::FlagResolution`'s doc comment for why
+        // FireweaveRemoteAdapter does not — and must not — replicate this
+        // gate (task-12 review finding).
+        let (vendor_flag_id, reason_code) = match (
+            definition.vendor_flag_id,
+            definition.condition_index,
+            definition.reason_code.clone(),
+        ) {
+            (Some(id), Some(_condition_index), Some(code)) => (Some(id), Some(code)),
+            _ => (None, None),
+        };
         Ok(FlagResolution {
             value: definition.value.clone(),
             variant: definition.variant.clone(),
             enabled: definition.enabled,
             matched,
             version: definition.version,
-            vendor_flag_id: definition.vendor_flag_id,
-            reason_code: definition.reason_code.clone(),
-            condition_index: definition.condition_index,
+            vendor_flag_id,
+            reason_code,
             payload: definition.payload.clone(),
             fireweave_reason: definition.fireweave_reason.clone(),
             from_cache: definition.from_cache,

@@ -257,11 +257,16 @@ impl BackendAdapter for FireweaveRemoteAdapter {
             vendor_flag_id: meta
                 .and_then(|m| m.get("fireweave.vendorFlagId"))
                 .and_then(JsonValue::as_i64),
+            // vendor_flag_id/reason_code above are passed straight through
+            // from the server's own flagMetadata, no client-side re-gate:
+            // fw-server already applies ruling 11 before this response is
+            // built, and spec/remote-evaluate.schema.json's decisionItem
+            // carries no separate conditionIndex field to re-check against
+            // (see application::ports::FlagResolution's doc comment).
             reason_code: meta
                 .and_then(|m| m.get("fireweave.reasonCode"))
                 .and_then(JsonValue::as_str)
                 .map(str::to_string),
-            condition_index: None,
             payload: item.get("payload").cloned().filter(|v| !v.is_null()),
             fireweave_reason: item
                 .get("reason")
@@ -335,5 +340,148 @@ impl BackendAdapter for FireweaveRemoteAdapter {
         RegisterTargetResult::failure(
             last_error.unwrap_or_else(|| FireweaveError::new(ErrorKind::Internal)),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::application::runtime::{FireweaveRuntime, RuntimeConfig};
+    use crate::domain::types::FlagType;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::thread;
+
+    /// One-shot loopback HTTP/1.1 responder: accepts exactly one
+    /// connection, reads the request (headers + declared body) fully, and
+    /// writes back a canned 200 JSON response. Self-contained test-only
+    /// stub — deliberately NOT shared with `conformance/fake_server.rs`
+    /// (a separate top-level tree with its own scope); this one only needs
+    /// to answer a single mocked remote round-trip.
+    fn spawn_one_shot_json_server(body: &'static str) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let addr = listener.local_addr().expect("local_addr");
+        thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = Vec::new();
+                let mut chunk = [0u8; 512];
+                loop {
+                    match stream.read(&mut chunk) {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            buf.extend_from_slice(&chunk[..n]);
+                            let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") else {
+                                continue;
+                            };
+                            let headers = String::from_utf8_lossy(&buf[..pos]);
+                            let content_length: usize = headers
+                                .lines()
+                                .find_map(|line| {
+                                    line.to_ascii_lowercase()
+                                        .strip_prefix("content-length:")
+                                        .and_then(|rest| rest.trim().parse().ok())
+                                })
+                                .unwrap_or(0);
+                            let body_start = pos + 4;
+                            while buf.len() < body_start + content_length {
+                                match stream.read(&mut chunk) {
+                                    Ok(0) => break,
+                                    Ok(n) => buf.extend_from_slice(&chunk[..n]),
+                                    Err(_) => break,
+                                }
+                            }
+                            break;
+                        }
+                        Err(_) => break,
+                    }
+                }
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.flush();
+            }
+        });
+        format!("http://{addr}")
+    }
+
+    /// Task-12 review regression test: a mocked remote response carrying
+    /// BOTH `fireweave.vendorFlagId` and `fireweave.reasonCode` in
+    /// `flagMetadata` must surface both on the resulting `Decision`.
+    /// Exercises the FULL pipeline (mocked HTTP -> `FireweaveRemoteAdapter`
+    /// -> `FireweaveRuntime::evaluate`), not just the adapter's own
+    /// `FlagResolution`, because the bug this guards against (a client-side
+    /// re-gate on a `condition_index` the remote wire protocol never
+    /// carries) lived in the runtime's decision-building step, not the
+    /// adapter's response parsing. Before the fix, this failed: the
+    /// runtime's old 3-way gate always saw `condition_index: None`
+    /// (hardcoded in the adapter, since `spec/remote-evaluate.schema.json`
+    /// has no such field) and suppressed BOTH metadata keys unconditionally
+    /// for every remote decision, no fixture having covered the gap.
+    #[test]
+    fn remote_decision_surfaces_vendor_metadata_when_server_sends_both_keys() {
+        let body = r#"{"decisions":[{"flagKey":"f","value":true,"variant":"on","reason":"TARGETING_MATCH","found":true,"enabled":true,"flagMetadata":{"fireweave.vendorFlagId":1001,"fireweave.reasonCode":"condition_match"}}]}"#;
+        let api_url = spawn_one_shot_json_server(body);
+
+        let adapter = FireweaveRemoteAdapter::new(RemoteAdapterConfig {
+            api_url,
+            api_key: "test-key".to_string(),
+            allowed_hosts: None,
+            request_timeout_ms: 3000,
+        });
+        let runtime = FireweaveRuntime::new(Box::new(adapter), RuntimeConfig::default());
+        runtime.initialize().expect("initialize");
+
+        let ctx = EvaluationContext::new().with_targeting_key("user-1");
+        let decision = runtime.evaluate(
+            "f",
+            FlagType::Boolean,
+            JsonValue::Bool(false),
+            Some(&ctx),
+            None,
+        );
+
+        assert_eq!(decision.value, JsonValue::Bool(true));
+        assert_eq!(
+            decision.flag_metadata.get("fireweave.vendorFlagId"),
+            Some(&JsonValue::from(1001))
+        );
+        assert_eq!(
+            decision.flag_metadata.get("fireweave.reasonCode"),
+            Some(&JsonValue::String("condition_match".to_string()))
+        );
+    }
+
+    /// The flip side: when the server sends only ONE of the two keys (or
+    /// neither), the runtime must not fabricate the other — the pass-
+    /// through pairing stays symmetric.
+    #[test]
+    fn remote_decision_omits_vendor_metadata_when_only_one_key_present() {
+        let body = r#"{"decisions":[{"flagKey":"f","value":true,"variant":"on","reason":"TARGETING_MATCH","found":true,"enabled":true,"flagMetadata":{"fireweave.reasonCode":"condition_match"}}]}"#;
+        let api_url = spawn_one_shot_json_server(body);
+
+        let adapter = FireweaveRemoteAdapter::new(RemoteAdapterConfig {
+            api_url,
+            api_key: "test-key".to_string(),
+            allowed_hosts: None,
+            request_timeout_ms: 3000,
+        });
+        let runtime = FireweaveRuntime::new(Box::new(adapter), RuntimeConfig::default());
+        runtime.initialize().expect("initialize");
+
+        let ctx = EvaluationContext::new().with_targeting_key("user-1");
+        let decision = runtime.evaluate(
+            "f",
+            FlagType::Boolean,
+            JsonValue::Bool(false),
+            Some(&ctx),
+            None,
+        );
+
+        assert!(!decision
+            .flag_metadata
+            .contains_key("fireweave.vendorFlagId"));
+        assert!(!decision.flag_metadata.contains_key("fireweave.reasonCode"));
     }
 }

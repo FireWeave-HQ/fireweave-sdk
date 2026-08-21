@@ -217,6 +217,51 @@ fn register_target_exists_with_local_mode_recorded_and_traced() {
     assert!(result.ok);
 }
 
+/// Task-12 review regression test: `spec/modes.md` requires "The recorded
+/// set MUST be readable (`getRegisteredTargets`) so tests can assert
+/// registration without capturing stdout." Reachable through the
+/// sanctioned entry point (`init_fireweave`) via the SAME accessor node's
+/// own test suite uses on the equivalent field
+/// (`client.runtime.adapter as FireweaveLocalAdapter`, an unchecked TS
+/// cast) — `AsAny::as_any()` (a `BackendAdapter` supertrait, blanket-
+/// implemented for every adapter) gives Rust a CHECKED downcast from
+/// `FireweaveRuntime::adapter()`'s `&dyn BackendAdapter` back to the
+/// concrete `FireweaveLocalAdapter`, mirroring go's type assertion / java's
+/// `instanceof`-checked cast on their own identically-shaped
+/// `Runtime.Adapter()`/`getAdapter()` accessors. Before this fix there was
+/// no path from `FireweaveClient`/`FireweaveRuntime` back to
+/// `FireweaveLocalAdapter::registered_targets()` at all — a caller
+/// following the spec's own contract (and the README's local-mode
+/// quick-start) had no way to verify registration except by capturing the
+/// `[fireweave:local]` trace line, exactly what the spec forbids.
+#[test]
+fn registered_target_is_readable_through_the_sanctioned_entry_point_after_client_register_target() {
+    let fw = fireweave::init_fireweave(fireweave::InitOptions::local()).unwrap();
+
+    let mut properties = serde_json::Map::new();
+    properties.insert("plan".to_string(), fireweave::JsonValue::from("pro"));
+    let options = fireweave::RegisterTargetOptions {
+        properties: Some(properties),
+        ..Default::default()
+    };
+    let result = fw.register_target("user_42", Some(&options));
+    assert!(result.ok);
+
+    let local_adapter = fw
+        .runtime()
+        .adapter()
+        .as_any()
+        .downcast_ref::<fireweave::FireweaveLocalAdapter>()
+        .expect("local mode must be backed by FireweaveLocalAdapter");
+    let recorded = local_adapter.registered_targets();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(recorded[0].targeting_key, "user_42");
+    assert_eq!(
+        recorded[0].properties.get("plan"),
+        Some(&fireweave::JsonValue::from("pro"))
+    );
+}
+
 #[test]
 fn must_not_expose_list_matches_the_fixed_v1_scope_boundary() {
     let d = load_descriptor();
