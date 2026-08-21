@@ -20,7 +20,19 @@
  *
  * The matrix is 65 fixtures x 7 languages (contracts/harness.md ruling 3):
  *   - node / python / go / java: loaded from --report <lang>=<path>, each
- *     one of the four SDK conformance runners actually executed.
+ *     one of the four SDK conformance runners actually executed, graded
+ *     against contracts/README.md's frozen per-fixture
+ *     compatibility.<lang> declaration.
+ *   - rust (landed Task 12 / Phase 6): ALSO loaded from
+ *     --report rust=<path> — a real conformance runner
+ *     (sdks/rust/conformance) executes all 65 fixtures for real — but
+ *     graded WITHOUT a frozen baseline: contracts/ is frozen and predates
+ *     rust, so none of the 65 fixtures carry a compatibility.rust entry to
+ *     check declarations or divergence against. A real "fail" status is
+ *     still a hard violation (rule 1); only rule 2 (declared-vs-reported
+ *     divergence) and the "missing compatibility.<lang>" fixture problem
+ *     are inapplicable, because there is no declaration to diverge from in
+ *     the first place. See REAL_NO_BASELINE_LANGUAGES below.
  *   - web: SYNTHESIZED, not loaded — ADR-0009 gave web its own
  *     contracts/web/ suite instead of the shared 65 (the shared fixtures
  *     encode async server semantics a synchronous cache-read surface can't
@@ -28,12 +40,13 @@
  *     web's real signal is sdks/web/test/conformance/run.ts's own
  *     compatibility-report.web.json against contracts/web/*, tracked
  *     outside this matrix.
- *   - rust / swift: SYNTHESIZED as `not-implemented` — no SDK exists yet
- *     (Phase 6).
+ *   - swift: SYNTHESIZED as `not-implemented` — no SDK exists yet.
  * contracts/README.md's field-rules table requires compatibility.<lang> only
- * for node/python/go/java; web/rust/swift carry no per-fixture declaration,
- * so rule 2 and the "missing compatibility.<lang>" fixture check apply only
- * to the first four.
+ * for node/python/go/java; web/swift carry no per-fixture declaration and no
+ * real runner; rust has a real runner but (being newer than the frozen
+ * fixture set) also carries no per-fixture declaration. Rule 2 and the
+ * "missing compatibility.<lang>" fixture check apply only to
+ * node/python/go/java.
  *
  * Extensions v1-scope carve-out (contracts/harness.md ruling 2): 13 of the
  * 14 contracts/extensions/*.json fixtures declare `compatibility.<lang> =
@@ -55,6 +68,7 @@
  *     --contracts contracts \
  *     --report node=path.json --report python=path.json \
  *     --report go=path.json --report java=path.json \
+ *     --report rust=path.json \
  *     --out build/conformance/compatibility-report.json \
  *     [--markdown build/conformance/summary.md] \
  *     [--web-report sdks/web/test/conformance/compatibility-report.web.json]
@@ -74,14 +88,36 @@
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 
-// Languages with a real conformance runner: --report <lang>=<path> is
-// required for each, and contracts/README.md requires compatibility.<lang>
-// declared on every fixture.
+// Languages with a real conformance runner AND a frozen, per-fixture
+// compatibility.<lang> baseline to check declarations/divergence against
+// (contracts/README.md's field-rules table promises compatibility.<lang>
+// only for these four — the 65 fixtures were authored against exactly
+// this set): --report <lang>=<path> is required for each.
 const DECLARED_LANGUAGES = ['node', 'python', 'go', 'java'];
+// Task 12 (Phase 6) real-cell tier: rust has a real conformance runner and
+// writes a real per-fixture report (--report rust=<path> is required, same
+// as the four above), but `contracts/` is frozen and predates rust — none
+// of the 65 fixtures carry a `compatibility.rust`/`limitations.rust` entry
+// to check against. So rust's cells are graded on their own merits (a real
+// "fail" status is still a hard violation below) WITHOUT the
+// declared-baseline machinery (the "missing compatibility.<lang>" fixture
+// problem, and the "declared vs reported status" divergence check) that
+// depends on a frozen declaration existing in the first place — that
+// machinery still applies unchanged to DECLARED_LANGUAGES only. This is a
+// genuine harness-wiring ambiguity the Phase 6 brief left for this task to
+// resolve (recorded as a numbered finding in task-12-report.md), not a
+// pre-existing ruling to follow.
+const REAL_NO_BASELINE_LANGUAGES = ['rust'];
+// Languages whose --report is required and loaded (the two tiers above,
+// combined) — everything else below is a language-shaped loop variable,
+// not a new concept.
+const REPORT_LANGUAGES = [...DECLARED_LANGUAGES, ...REAL_NO_BASELINE_LANGUAGES];
 // Synthesized columns (contracts/harness.md ruling 3): no --report file, no
-// per-fixture compatibility.<lang> declaration — computed for all 65.
-const SYNTHESIZED_LANGUAGES = ['web', 'rust', 'swift'];
-const LANGUAGES = [...DECLARED_LANGUAGES, ...SYNTHESIZED_LANGUAGES];
+// per-fixture compatibility.<lang> declaration, no real runner — computed
+// for all 65 by this tool itself.
+const SYNTHESIZED_LANGUAGES = ['web', 'swift'];
+// Display/output order (unchanged from before rust had a real runner).
+const LANGUAGES = ['node', 'python', 'go', 'java', 'web', 'rust', 'swift'];
 const SUITES = ['evaluation', 'context', 'lifecycle', 'faults', 'security', 'extensions'];
 const STATUSES = new Set([
   'pass',
@@ -126,10 +162,10 @@ function parseArgs(argv) {
       const eq = v.indexOf('=');
       if (eq < 1) usageError(`--report expects <lang>=<path>, got "${v}"`);
       const lang = v.slice(0, eq);
-      if (!DECLARED_LANGUAGES.includes(lang)) {
+      if (!REPORT_LANGUAGES.includes(lang)) {
         usageError(
-          `unknown language "${lang}" for --report (only ${DECLARED_LANGUAGES.join(', ')} load a ` +
-            `report file — web/rust/swift are synthesized, not loaded)`,
+          `unknown language "${lang}" for --report (only ${REPORT_LANGUAGES.join(', ')} load a ` +
+            `report file — web/swift are synthesized, not loaded)`,
         );
       }
       args.reports[lang] = v.slice(eq + 1);
@@ -196,8 +232,9 @@ function loadFixtures(contractsDir) {
       }
       const compat = fixture.compatibility ?? {};
       // Only node/python/go/java carry a per-fixture declaration
-      // (contracts/README.md field-rules table); web/rust/swift are
-      // synthesized aggregate-only columns.
+      // (contracts/README.md field-rules table); web/swift are synthesized
+      // aggregate-only columns, and rust — real runner, no baseline — is
+      // deliberately excluded from this check too (REAL_NO_BASELINE_LANGUAGES).
       for (const lang of DECLARED_LANGUAGES) {
         const declared = compat[lang];
         if (declared === undefined) {
@@ -284,7 +321,7 @@ function webRow(fixture) {
   };
 }
 
-/** rust/swift have no SDK yet (contracts/harness.md ruling 3, Phase 6). */
+/** swift has no SDK yet (contracts/harness.md ruling 3, Phase 6). */
 function notImplementedRow(fixture, lang) {
   return {
     fixtureId: fixture.id,
@@ -300,7 +337,7 @@ function notImplementedRow(fixture, lang) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  for (const lang of DECLARED_LANGUAGES) {
+  for (const lang of REPORT_LANGUAGES) {
     if (!args.reports[lang]) usageError(`missing --report ${lang}=<path>`);
   }
 
@@ -309,7 +346,12 @@ function main() {
   const mergedResults = [];
   const perLanguage = {};
 
-  for (const lang of DECLARED_LANGUAGES) {
+  // Real cells for every REPORT_LANGUAGES entry (node/python/go/java's
+  // frozen-baseline checks below key off `declared`, which is simply
+  // `undefined` for rust on every fixture — see REAL_NO_BASELINE_LANGUAGES
+  // above — so this one loop correctly grades both tiers without a
+  // separate code path.
+  for (const lang of REPORT_LANGUAGES) {
     let rows;
     try {
       const loaded = loadReport(lang, args.reports[lang]);

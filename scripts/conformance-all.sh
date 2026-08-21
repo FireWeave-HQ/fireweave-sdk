@@ -29,14 +29,18 @@
 # by this script silently skipping the aggregate or laundering a stale copy.
 #
 # The aggregate is 65 fixtures x 7 languages (contracts/harness.md ruling 3):
-# node/python/go/java below each run a real conformance suite and produce a
-# report file; web/rust/swift need no runner invocation here at all —
+# node/python/go/java/rust below each run a real conformance suite and
+# produce a report file; web/swift need no runner invocation here at all —
 # compare.mjs synthesizes their columns itself (web: not-applicable-web, per
-# ADR-0009's separate contracts/web/ suite; rust/swift: not-implemented,
-# Phase 6 not landed yet).
+# ADR-0009's separate contracts/web/ suite; swift: not-implemented, no SDK
+# yet). rust (Task 12 / Phase 6) has a real runner like the first four, but
+# contracts/ is frozen and predates it, so its cells carry no frozen
+# compatibility.rust baseline to diverge from — see compare.mjs's
+# REAL_NO_BASELINE_LANGUAGES for what that changes (a real "fail" is still a
+# hard violation; there is just no declared-baseline divergence check).
 #
 # Outputs (gitignored via root build/ rule):
-#   build/conformance/compatibility-report.<lang>.json  x4 (node/python/go/java)
+#   build/conformance/compatibility-report.<lang>.json  x5 (node/python/go/java/rust)
 #   build/conformance/compatibility-report.json         (merged, 65x7)
 #   build/conformance/summary.md
 #
@@ -73,11 +77,13 @@ fw_require npm "install Node >= 20"
 fw_require python3 "install Python >= 3.10"
 fw_require go "install Go >= 1.25"
 fw_require mvn "install Maven (JDK 11+ toolchain)"
+fw_require cargo "install Rust >= 1.75 (rustup.rs)"
 
 NODE_EXIT=0
 PYTHON_EXIT=0
 GO_EXIT=0
 JAVA_EXIT=0
+RUST_EXIT=0
 
 # ---------- Node ----------
 fw_node_deps
@@ -114,11 +120,19 @@ fw_section "java: conformance runner (exec:java)"
         -Dexec.args="$FW_ROOT/contracts $OUT_DIR/compatibility-report.java.json" ) || JAVA_EXIT=$?
 fw_check_report java "$OUT_DIR/compatibility-report.java.json" "$JAVA_EXIT"
 
+# ---------- Rust ----------
+fw_section "rust: conformance runner"
+(cd "$FW_ROOT/sdks/rust" && cargo run --quiet --bin conformance -- \
+      --contracts "$FW_ROOT/contracts" \
+      --out "$OUT_DIR/compatibility-report.rust.json") || RUST_EXIT=$?
+fw_check_report rust "$OUT_DIR/compatibility-report.rust.json" "$RUST_EXIT"
+
 fw_section "per-language runner exit codes (informational only)"
 printf '  %-8s exit=%s\n' node "$NODE_EXIT"
 printf '  %-8s exit=%s\n' python "$PYTHON_EXIT"
 printf '  %-8s exit=%s\n' go "$GO_EXIT"
 printf '  %-8s exit=%s\n' java "$JAVA_EXIT"
+printf '  %-8s exit=%s\n' rust "$RUST_EXIT"
 printf 'A non-zero exit above is expected whenever that language has a real fixture\n'
 printf 'divergence (contracts/harness.md rule 5) — it does not stop the comparator below,\n'
 printf 'which is the actual gate (see this script'"'"'s own exit code).\n'
@@ -132,6 +146,7 @@ node "$FW_ROOT/tools/conformance/compare.mjs" \
   --report python="$OUT_DIR/compatibility-report.python.json" \
   --report go="$OUT_DIR/compatibility-report.go.json" \
   --report java="$OUT_DIR/compatibility-report.java.json" \
+  --report rust="$OUT_DIR/compatibility-report.rust.json" \
   --out "$OUT_DIR/compatibility-report.json" \
   --markdown "$OUT_DIR/summary.md" || COMPARE_EXIT=$?
 
