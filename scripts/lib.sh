@@ -32,7 +32,7 @@ fw_node_deps() {
     fw_section "node: installing workspace dependencies"
     (cd "$FW_ROOT/sdks/node" && if [ -f package-lock.json ]; then npm ci; else npm install; fi)
   fi
-  if [ ! -f "$FW_ROOT/sdks/node/packages/sdk/dist/index.js" ]; then
+  if [ ! -f "$FW_ROOT/sdks/node/dist/index.js" ]; then
     fw_section "node: building SDK dist/"
     (cd "$FW_ROOT/sdks/node" && npm run build)
   fi

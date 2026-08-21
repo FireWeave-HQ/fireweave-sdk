@@ -29,7 +29,7 @@ fw_require mvn "install Maven (JDK 11+ toolchain)"
 fw_node_deps
 fw_section "node: build + npm pack (dry-run packaging)"
 (cd "$FW_ROOT/sdks/node" && npm run --silent build)
-(cd "$FW_ROOT/sdks/node/packages/sdk" && npm pack --pack-destination "$OUT_DIR")
+(cd "$FW_ROOT/sdks/node" && npm pack --pack-destination "$OUT_DIR")
 
 # ---------- Python: python -m build ----------
 fw_python_venv
@@ -54,7 +54,7 @@ fw_section "go: build + go mod verify"
 # (examples/go would otherwise get an untracked/overwritten `go` binary).
 GO_TMP="$(mktemp -d)"
 trap 'rm -rf "$GO_TMP"' EXIT
-(cd "$FW_ROOT/sdks/go" && go build -o "$GO_TMP/" ./... && go mod verify)
+(cd "$FW_ROOT/go" && go build -o "$GO_TMP/" ./... && go mod verify)
 (cd "$FW_ROOT/examples/go" && go build -o "$GO_TMP/" ./... && go mod verify)
 
 # ---------- Java: mvn package ----------

@@ -17,7 +17,7 @@ import {
   FireweaveRemoteAdapter,
   FireweaveRuntime,
   InMemoryAdapter,
-} from '@fireweaveai/sdk';
+} from '@fireweaveai/server-sdk';
 
 const useRemote = process.argv.includes('--remote') || process.env.FW_API_URL !== undefined;
 

@@ -78,12 +78,12 @@
       "description": "Working package names — company ratification open.",
       "additionalProperties": false,
       "properties": {
-        "npm": { "type": "string", "const": "@fireweaveai/sdk" },
+        "npm": { "type": "string", "const": "@fireweaveai/server-sdk" },
         "pypi": { "type": "string", "const": "fireweave" },
         "pypiExtraPosthog": { "type": "string", "const": "fireweave[posthog]" },
         "goModule": {
           "type": "string",
-          "const": "github.com/FireWeave-HQ/fireweave-sdk/sdks/go"
+          "const": "github.com/FireWeave-HQ/fireweave-sdk/go"
         },
         "mavenGroupId": { "type": "string", "const": "ai.fireweave" },
         "mavenArtifactId": { "type": "string", "const": "sdk" },

@@ -6,7 +6,7 @@
 #   version:   semver without leading v (e.g. 0.1.0)
 #
 # Range: commits since the last tag matching this component's tag convention
-# (node/v* | python/v* | java/v* | sdks/go/v* — Go's tag must equal the module
+# (node/v* | python/v* | java/v* | go/v* — Go's tag must equal the module
 # subdirectory path for `go get` resolution), scoped to the paths that ship in
 # the component. Commits are grouped by conventional-commit type; anything
 # unparseable lands under "Other changes" rather than being dropped.
@@ -20,7 +20,7 @@ OUT="${3:-/dev/stdout}"
 case "$COMPONENT" in
   node)   TAG_PREFIX="node/v";    PATHS=("sdks/node" "examples/node") ;;
   python) TAG_PREFIX="python/v";  PATHS=("sdks/python" "examples/python") ;;
-  go)     TAG_PREFIX="sdks/go/v"; PATHS=("sdks/go" "examples/go") ;;
+  go)     TAG_PREFIX="go/v";      PATHS=("go" "examples/go") ;;
   java)   TAG_PREFIX="java/v";    PATHS=("sdks/java" "examples/java") ;;
   *) echo "changelog: unknown component '$COMPONENT' (node|python|go|java)" >&2; exit 2 ;;
 esac

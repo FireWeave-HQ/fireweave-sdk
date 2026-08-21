@@ -14,7 +14,7 @@
     "start:deno": "deno run --allow-net --allow-env --allow-read index.mjs"
   },
   "dependencies": {
-    "@fireweaveai/sdk": "file:../../sdks/node/packages/sdk",
+    "@fireweaveai/server-sdk": "file:../../sdks/node",
     "@openfeature/server-sdk": "1.22.0"
   }
 }

@@ -21,12 +21,12 @@ Applications authenticate with a **Fireweave project key** and talk to **fw-serv
 ## Install
 
 ```bash
-npm install @fireweaveai/sdk @openfeature/server-sdk   # or: bun add …
+npm install @fireweaveai/server-sdk @openfeature/server-sdk   # or: bun add …
 ```
 
 ```ts
 // Deno needs no install step
-import { FireweaveClient, FireweaveRemoteAdapter, FireweaveRuntime } from 'npm:@fireweaveai/sdk';
+import { FireweaveClient, FireweaveRemoteAdapter, FireweaveRuntime } from 'npm:@fireweaveai/server-sdk';
 ```
 
 Not yet published — until then, install from a checkout: `cd sdks/node && npm install && npm run build`.
@@ -53,7 +53,7 @@ cd sdks/java && mvn install
 ## Quickstart
 
 ```ts
-import { FireweaveClient, FireweaveRemoteAdapter, FireweaveRuntime } from '@fireweaveai/sdk';
+import { FireweaveClient, FireweaveRemoteAdapter, FireweaveRuntime } from '@fireweaveai/server-sdk';
 
 // Reads FW_API_URL and FW_PROJECT_API_KEY when not passed explicitly.
 const runtime = new FireweaveRuntime(new FireweaveRemoteAdapter());
@@ -98,7 +98,7 @@ OpenFeature is one supported way to evaluate — useful when you want your call 
 
 ```ts
 import { OpenFeature } from '@openfeature/server-sdk';
-import { FireweaveProvider, FireweaveRuntime, InMemoryAdapter } from '@fireweaveai/sdk';
+import { FireweaveProvider, FireweaveRuntime, InMemoryAdapter } from '@fireweaveai/server-sdk';
 
 const runtime = new FireweaveRuntime(new InMemoryAdapter({
   flags: { 'new-checkout': { type: 'boolean', enabled: true, value: true, variant: 'on' } },
@@ -143,9 +143,9 @@ Zero runtime dependencies, one peer dependency (`@openfeature/server-sdk`), no N
 
 ## Upgrading from v2
 
-Only one thing is mandatory: if you imported `PostHogAdapter` from `@fireweaveai/sdk/posthog`, switch to `FireweaveRemoteAdapter`. Everything else keeps working — `client.flags` still exists and is identical to `client.controlPoints`, and no type or option was renamed.
+Only one thing is mandatory: if you imported `PostHogAdapter` from `@fireweaveai/server-sdk/posthog`, switch to `FireweaveRemoteAdapter`. Everything else keeps working — `client.flags` still exists and is identical to `client.controlPoints`, and no type or option was renamed.
 
-Step-by-step, including what *not* to change and how to scope a `flags` → `controlPoints` rename safely: **[the Node module README](sdks/node/packages/sdk/README.md#upgrading-from-v20-to-21)**. Cross-language migration notes: [docs/migration.md](docs/migration.md).
+Step-by-step, including what *not* to change and how to scope a `flags` → `controlPoints` rename safely: **[the Node module README](sdks/node/README.md#upgrading-from-v20-to-21)**. Cross-language migration notes: [docs/migration.md](docs/migration.md).
 
 ## Documentation
 

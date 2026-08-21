@@ -17,7 +17,7 @@
 #   node   -> node/v0.1.0
 #   python -> python/v0.1.0
 #   java   -> java/v0.1.0
-#   go     -> sdks/go/v0.1.0   (Go REQUIRES the tag to equal the module
+#   go     -> go/v0.1.0        (Go REQUIRES the tag to equal the module
 #                               subdirectory path; see RELEASE.md)
 name: Release (dry-run by default)
 
@@ -70,7 +70,7 @@ jobs:
             exit 1
           fi
           case "$COMPONENT" in
-            go) tag="sdks/go/v${VERSION}" ;;
+            go) tag="go/v${VERSION}" ;;
             *)  tag="${COMPONENT}/v${VERSION}" ;;
           esac
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
@@ -98,8 +98,8 @@ jobs:
           python-version: '3.14'
       - uses: actions/setup-go@v6
         with:
-          go-version-file: sdks/go/go.mod
-          cache-dependency-path: sdks/go/go.sum
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -197,13 +197,12 @@ jobs:
             echo "::error::OIDC id-token request vars absent — configure npm Trusted Publisher and permissions.id-token: write"
             exit 1
           fi
-      - name: Build and publish @fireweaveai/sdk (dist-tag next)
+      - name: Build and publish @fireweaveai/server-sdk (dist-tag next)
         working-directory: sdks/node
         run: |
           npm install -g npm@latest
           npm ci
           npm run build
-          cd packages/sdk
           npm publish --provenance --access public --tag next
 
   publish-npm-production:
@@ -340,6 +339,6 @@ jobs:
         env:
           TAG: ${{ needs.validate.outputs.tag }}
         run: |
-          VERSION="${TAG#sdks/go/}"
+          VERSION="${TAG#go/}"
           GOPROXY=proxy.golang.org \
-            go list -m "github.com/FireWeave-HQ/fireweave-sdk/sdks/go@${VERSION}"
+            go list -m "github.com/FireWeave-HQ/fireweave-sdk/go@${VERSION}"
