@@ -4,9 +4,16 @@
 # comparator (tools/conformance/compare.mjs). Fails on any fixture failure or
 # undeclared divergence (contracts/README.md "CI: fail on silent divergence").
 #
+# The aggregate is 65 fixtures x 7 languages (contracts/harness.md ruling 3):
+# node/python/go/java below each run a real conformance suite and produce a
+# report file; web/rust/swift need no runner invocation here at all —
+# compare.mjs synthesizes their columns itself (web: not-applicable-web, per
+# ADR-0009's separate contracts/web/ suite; rust/swift: not-implemented,
+# Phase 6 not landed yet).
+#
 # Outputs (gitignored via root build/ rule):
-#   build/conformance/compatibility-report.<lang>.json  x4
-#   build/conformance/compatibility-report.json         (merged)
+#   build/conformance/compatibility-report.<lang>.json  x4 (node/python/go/java)
+#   build/conformance/compatibility-report.json         (merged, 65x7)
 #   build/conformance/summary.md
 #
 # Usage: scripts/conformance-all.sh [--out-dir DIR]

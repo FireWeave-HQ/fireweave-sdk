@@ -9,18 +9,43 @@
  *
  *   1. Any report row with status "fail"                          -> FAIL
  *   2. Report status != fixture-declared compatibility.<lang>
- *      (undeclared divergence / silent status drift)              -> FAIL
+ *      (undeclared divergence / silent status drift) for
+ *      node/python/go/java — EXCEPT the ruled v1-scope carve-out
+ *      below                                                       -> FAIL
  *   3. Missing fixture x language cell in a report                -> FAIL
- *   4. Report row for an unknown fixture id                       -> FAIL
+ *   4. Report row for an unknown fixture id                        -> FAIL
  *   5. skipped-with-documented-limitation without limitation text
  *      (in fixture or report)                                     -> FAIL
  *   6. Duplicate fixture ids / missing compatibility entries      -> FAIL
  *
- * Accepts both report dialects that the SDKs emit today:
+ * The matrix is 65 fixtures x 7 languages (contracts/harness.md ruling 3):
+ *   - node / python / go / java: loaded from --report <lang>=<path>, each
+ *     one of the four SDK conformance runners actually executed.
+ *   - web: SYNTHESIZED, not loaded — ADR-0009 gave web its own
+ *     contracts/web/ suite instead of the shared 65 (the shared fixtures
+ *     encode async server semantics a synchronous cache-read surface can't
+ *     answer), so every one of the 65 reports `not-applicable-web` here;
+ *     web's real signal is sdks/web/test/conformance/run.ts's own
+ *     compatibility-report.web.json against contracts/web/*, tracked
+ *     outside this matrix.
+ *   - rust / swift: SYNTHESIZED as `not-implemented` — no SDK exists yet
+ *     (Phase 6).
+ * contracts/README.md's field-rules table requires compatibility.<lang> only
+ * for node/python/go/java; web/rust/swift carry no per-fixture declaration,
+ * so rule 2 and the "missing compatibility.<lang>" fixture check apply only
+ * to the first four.
+ *
+ * Extensions v1-scope carve-out (contracts/harness.md ruling 2): 13 of the
+ * 14 contracts/extensions/*.json fixtures declare `compatibility.<lang> =
+ * "pass"` from before ADR-0010's v1 cut but target a namespace (releases/
+ * exposures/signals/capabilities) no longer exposed by any language. Each
+ * runner reports these `skipped-v1-out-of-scope` instead of executing them —
+ * an EXPECTED, ruled divergence from the frozen "pass" declaration, not an
+ * undeclared one, so rule 2 does not fire for this specific combination.
+ *
+ * Accepts both report dialects the SDKs emit:
  *   - harness.md schema: { schemaVersion, results: [{fixtureId, ...}], summary }
- *     (node, go, java)
- *   - python runner schema: { language, total, passed, failed, skipped,
- *     results: [{id, suite, status, ...}] }
+ *     (node, go, java, python — all four now share this shape post-Task-10)
  *
  * Usage:
  *   node tools/conformance/compare.mjs \
@@ -37,9 +62,23 @@
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 
-const LANGUAGES = ['node', 'python', 'go', 'java'];
+// Languages with a real conformance runner: --report <lang>=<path> is
+// required for each, and contracts/README.md requires compatibility.<lang>
+// declared on every fixture.
+const DECLARED_LANGUAGES = ['node', 'python', 'go', 'java'];
+// Synthesized columns (contracts/harness.md ruling 3): no --report file, no
+// per-fixture compatibility.<lang> declaration — computed for all 65.
+const SYNTHESIZED_LANGUAGES = ['web', 'rust', 'swift'];
+const LANGUAGES = [...DECLARED_LANGUAGES, ...SYNTHESIZED_LANGUAGES];
 const SUITES = ['evaluation', 'context', 'lifecycle', 'faults', 'security', 'extensions'];
-const STATUSES = new Set(['pass', 'fail', 'skipped-with-documented-limitation']);
+const STATUSES = new Set([
+  'pass',
+  'fail',
+  'skipped-with-documented-limitation',
+  'skipped-v1-out-of-scope',
+  'not-applicable-web',
+  'not-implemented',
+]);
 
 function usageError(msg) {
   process.stderr.write(`compare: ${msg}\n`);
@@ -65,7 +104,12 @@ function parseArgs(argv) {
       const eq = v.indexOf('=');
       if (eq < 1) usageError(`--report expects <lang>=<path>, got "${v}"`);
       const lang = v.slice(0, eq);
-      if (!LANGUAGES.includes(lang)) usageError(`unknown language "${lang}"`);
+      if (!DECLARED_LANGUAGES.includes(lang)) {
+        usageError(
+          `unknown language "${lang}" for --report (only ${DECLARED_LANGUAGES.join(', ')} load a ` +
+            `report file — web/rust/swift are synthesized, not loaded)`,
+        );
+      }
       args.reports[lang] = v.slice(eq + 1);
     } else usageError(`unknown argument "${a}"`);
   }
@@ -107,7 +151,10 @@ function loadFixtures(contractsDir) {
         continue;
       }
       const compat = fixture.compatibility ?? {};
-      for (const lang of LANGUAGES) {
+      // Only node/python/go/java carry a per-fixture declaration
+      // (contracts/README.md field-rules table); web/rust/swift are
+      // synthesized aggregate-only columns.
+      for (const lang of DECLARED_LANGUAGES) {
         const declared = compat[lang];
         if (declared === undefined) {
           problems.push(`${id}: missing compatibility.${lang}`);
@@ -167,11 +214,49 @@ function loadReport(lang, path) {
   return { rows, problems };
 }
 
+// ---------- synthesized columns (contracts/harness.md ruling 3) ----------
+
+/**
+ * ADR-0009: web has its own contracts/web/ suite instead of the shared 65 —
+ * the shared fixtures encode async server semantics (awaited evaluation,
+ * per-call round trips, lifecycle gating around a promise) a synchronous
+ * cache-read surface does not answer, so forcing web through them would
+ * produce a wall of pre-declared skips. Every one of the 65 is therefore
+ * `not-applicable-web`, not a skip — an absent fixture, not a false-asserting
+ * one.
+ */
+function webRow(fixture) {
+  return {
+    fixtureId: fixture.id,
+    suite: fixture.suite,
+    language: 'web',
+    status: 'not-applicable-web',
+    limitation:
+      'ADR-0009: web has its own contracts/web/ suite (async prefetch + synchronous read ' +
+      'contract); the shared 65 fixtures encode async server semantics a synchronous ' +
+      'cache-read surface cannot answer. See sdks/web/test/conformance/run.ts / ' +
+      'compatibility-report.web.json for web\'s real conformance signal.',
+    message: null,
+  };
+}
+
+/** rust/swift have no SDK yet (contracts/harness.md ruling 3, Phase 6). */
+function notImplementedRow(fixture, lang) {
+  return {
+    fixtureId: fixture.id,
+    suite: fixture.suite,
+    language: lang,
+    status: 'not-implemented',
+    limitation: `${lang} SDK does not exist yet (Phase 6 of the v1 control-points plan).`,
+    message: null,
+  };
+}
+
 // ---------- comparison ----------
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  for (const lang of LANGUAGES) {
+  for (const lang of DECLARED_LANGUAGES) {
     if (!args.reports[lang]) usageError(`missing --report ${lang}=<path>`);
   }
 
@@ -180,7 +265,7 @@ function main() {
   const mergedResults = [];
   const perLanguage = {};
 
-  for (const lang of LANGUAGES) {
+  for (const lang of DECLARED_LANGUAGES) {
     let rows;
     try {
       const loaded = loadReport(lang, args.reports[lang]);
@@ -190,7 +275,8 @@ function main() {
       usageError(`cannot read report for ${lang} at ${args.reports[lang]}: ${err.message}`);
     }
 
-    const counts = { pass: 0, fail: 0, 'skipped-with-documented-limitation': 0 };
+    const counts = {};
+    for (const s of STATUSES) counts[s] = 0;
 
     for (const [id, fixture] of fixtures) {
       const declared = (fixture.compatibility ?? {})[lang];
@@ -203,7 +289,7 @@ function main() {
         continue;
       }
       rows.delete(id);
-      counts[row.status] += 1;
+      counts[row.status] = (counts[row.status] ?? 0) + 1;
       mergedResults.push(row);
 
       if (row.status === 'fail') {
@@ -212,7 +298,11 @@ function main() {
           detail: `${lang}: ${id} FAILED${row.message ? ` — ${row.message}` : ''}`,
         });
       }
-      if (declared && row.status !== declared) {
+      // Extensions v1-scope carve-out (ruling 2): skipped-v1-out-of-scope
+      // against a frozen "pass" declaration is the RULED outcome for the 13
+      // classified extension fixtures, not an undeclared divergence.
+      const ruledV1Carveout = fixture.suite === 'extensions' && row.status === 'skipped-v1-out-of-scope';
+      if (declared && row.status !== declared && !ruledV1Carveout) {
         violations.push({
           kind: 'undeclared-divergence',
           detail:
@@ -240,6 +330,18 @@ function main() {
     perLanguage[lang] = counts;
   }
 
+  // Synthesized columns: no --report file, no fixture-declared baseline to diverge from.
+  for (const lang of SYNTHESIZED_LANGUAGES) {
+    const counts = {};
+    for (const s of STATUSES) counts[s] = 0;
+    for (const [, fixture] of fixtures) {
+      const row = lang === 'web' ? webRow(fixture) : notImplementedRow(fixture, lang);
+      counts[row.status] += 1;
+      mergedResults.push(row);
+    }
+    perLanguage[lang] = counts;
+  }
+
   const merged = {
     schemaVersion: 1,
     generatedAt: 'EXCLUDED',
@@ -259,13 +361,16 @@ function main() {
   const lines = [];
   lines.push(`# Fireweave cross-language compatibility report`);
   lines.push('');
-  lines.push(`Fixtures: ${fixtures.size}`);
+  lines.push(`Fixtures: ${fixtures.size} (${fixtures.size} x ${LANGUAGES.length} matrix)`);
   lines.push('');
-  lines.push('| language | pass | fail | skipped-with-documented-limitation |');
-  lines.push('| --- | ---: | ---: | ---: |');
+  lines.push('| language | pass | fail | skipped-with-documented-limitation | skipped-v1-out-of-scope | not-applicable-web | not-implemented |');
+  lines.push('| --- | ---: | ---: | ---: | ---: | ---: | ---: |');
   for (const lang of LANGUAGES) {
     const c = perLanguage[lang];
-    lines.push(`| ${lang} | ${c.pass} | ${c.fail} | ${c['skipped-with-documented-limitation']} |`);
+    lines.push(
+      `| ${lang} | ${c.pass ?? 0} | ${c.fail ?? 0} | ${c['skipped-with-documented-limitation'] ?? 0} | ` +
+        `${c['skipped-v1-out-of-scope'] ?? 0} | ${c['not-applicable-web'] ?? 0} | ${c['not-implemented'] ?? 0} |`,
+    );
   }
   lines.push('');
   if (violations.length) {
