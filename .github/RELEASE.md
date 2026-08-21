@@ -49,7 +49,7 @@ Org convention `<component>/v<semver>`, with one forced exception:
 | node | `node/v0.1.0` | org convention |
 | python | `python/v0.1.0` | org convention |
 | java | `java/v0.1.0` | org convention |
-| go | `sdks/go/v0.1.0` | **Go toolchain requirement**: a module in subdirectory `sdks/go` is only resolvable when the tag prefix equals the subdirectory path. `go/v0.1.0` would not resolve. |
+| go | `go/v0.1.0` | **Go toolchain requirement**: a module in subdirectory `go` is only resolvable when the tag prefix equals the subdirectory path. `sdks/go/v0.1.0` would not resolve. |
 
 ### Signed tags
 
