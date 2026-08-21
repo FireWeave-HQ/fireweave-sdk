@@ -53,7 +53,7 @@ Three, all listed separately in the CHANGELOG so a reader can tell in seconds wh
 | `posthog-node` peer dependency removed | apps relying on the SDK to declare it |
 | `'posthog'` dropped from `BackendAdapter['name']` and `Capabilities['runtime']['backend']` | custom-adapter authors; exhaustive switches |
 
-Everything else a consumer touches is unchanged — see ADR-0007 and `test/compat/`. The consumer-facing migration guide is the [Node module README](../../sdks/node/packages/sdk/README.md#upgrading-from-v20-to-21), which ships on the npm package page.
+Everything else a consumer touches is unchanged — see ADR-0007 and `test/compat/`. The consumer-facing migration guide is the [Node module README](../../sdks/node/README.md#upgrading-from-v20-to-21), which ships on the npm package page.
 
 ## Follow-ups
 

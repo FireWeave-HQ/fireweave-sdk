@@ -4,7 +4,7 @@
 
 **One change is mandatory.** If you imported the direct vendor adapter, switch to `FireweaveRemoteAdapter`. Everything else in v2 still works — this section exists mostly to tell you what you *don't* have to do.
 
-The full step-by-step — including the rename-scoping rules — is in the [Node module README](../sdks/node/packages/sdk/README.md#upgrading-from-v20-to-21). This page is the condensed, cross-language view.
+The full step-by-step — including the rename-scoping rules — is in the [Node module README](../sdks/node/README.md#upgrading-from-v20-to-21). This page is the condensed, cross-language view.
 
 ### Required
 

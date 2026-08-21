@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Run all four language conformance runners against contracts/, collect the
+# Run all six language conformance runners (node/python/go/java/rust/swift —
+# web's column is synthesized by compare.mjs itself, see below) against
+# contracts/, collect the
 # per-language compatibility reports, then ALWAYS run the cross-language
 # differential comparator (tools/conformance/compare.mjs) on whatever reports
 # were produced. This script's own exit code is the comparator's exit code —
@@ -8,7 +10,7 @@
 # Why not fail-fast on a runner's own exit code: contracts/harness.md rule 5
 # requires every runner to "exit non-zero on any fail" — that is the EXPECTED
 # behavior whenever a real (documented or not) fixture divergence exists, not
-# a signal that the runner crashed. Dying the moment any one of the four
+# a signal that the runner crashed. Dying the moment any one of the six
 # non-zero-exits would mean the comparator — the 65x7 artifact this whole
 # pipeline exists to produce — never runs while ANY divergence exists
 # anywhere, which defeats its purpose. So each runner below is invoked
@@ -22,7 +24,7 @@
 # previously-committed report survive an actual node crash (build failure,
 # uncaught exception, its own internal sanity assertion firing) and get
 # silently aggregated as if it were this run's — the `[ -f ]` check passed
-# either way. Now all four write only to the ephemeral $OUT_DIR path handed
+# either way. Now all six write only to the ephemeral $OUT_DIR path handed
 # to them; a runner crashing hard enough to never write it is caught
 # immediately below by fw_check_report (which names the language) and, as a
 # backstop, by compare.mjs's own loud read failure on the missing file — not
@@ -33,7 +35,7 @@
 # produce a report file; web ALONE needs no runner invocation here — compare.mjs
 # synthesizes its column itself (not-applicable-web, per ADR-0009's separate
 # contracts/web/ suite). rust (Task 12 / Phase 6) and swift (Task 13 / Phase 6)
-# both have a real runner like the first four, but contracts/ is frozen and
+# both have a real runner like node/python/go/java, but contracts/ is frozen and
 # predates both, so their cells carry no frozen compatibility.<lang> baseline
 # to diverge from — see compare.mjs's REAL_NO_BASELINE_LANGUAGES for what that
 # changes (a real "fail" is still a hard violation; there is just no
@@ -142,7 +144,15 @@ fw_check_report rust "$OUT_DIR/compatibility-report.rust.json" "$RUST_EXIT"
 # skipped-with-documented-limitation or skipped-v1-out-of-scope, never
 # silently absorbed.
 fw_section "swift: conformance runner"
-(cd "$FW_ROOT/sdks/swift" && swift run --quiet FireweaveConformance -- \
+# NOTE: no `--` before --contracts. `swift run`'s own usage is
+# `swift run [<options>] [<executable>] [<arguments>...]` — everything after
+# the executable name is forwarded to it verbatim, with no `--` convention of
+# its own to strip (unlike npm/cargo run). FireweaveConformance's hand-rolled
+# arg parser (Entry.swift) doesn't special-case a stray `--` either, so
+# passing one crashes it with `Fatal error: unknown argument --` before it
+# reads a single fixture — reproduced on both Swift 6.1 and the CI-pinned
+# 6.3.3. Verified fixed by dropping it: 37 passed, 0 failed.
+(cd "$FW_ROOT/sdks/swift" && swift run --quiet FireweaveConformance \
       --contracts "$FW_ROOT/contracts" \
       --out "$OUT_DIR/compatibility-report.swift.json") || SWIFT_EXIT=$?
 fw_check_report swift "$OUT_DIR/compatibility-report.swift.json" "$SWIFT_EXIT"
