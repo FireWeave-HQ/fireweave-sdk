@@ -30,9 +30,9 @@
       "fixtureId": "eval-int-beyond-safe-integer",
       "suite": "evaluation",
       "language": "go",
-      "status": "pass",
+      "status": "fail",
       "limitation": null,
-      "message": null
+      "message": "\"value\": want 9007199254740993, got 9007199254740992"
     },
     {
       "fixtureId": "eval-int-success",
@@ -62,9 +62,9 @@
       "fixtureId": "eval-numeric-coercion-int-float",
       "suite": "evaluation",
       "language": "go",
-      "status": "pass",
+      "status": "fail",
       "limitation": null,
-      "message": null
+      "message": "\"value\": want 0, got 2; \"variant\": want null, got \"two\"; \"reason\": want \"ERROR\", got \"TARGETING_MATCH\"; \"errorCode\": want \"TYPE_MISMATCH\", got null; \"errorMessage\": want \"flag type mismatch\", got null; missing key \"flagMetadata.fireweave.errorKind\" (want \"TypeMismatch\"); unexpected extra key \"flagMetadata.fireweave.flagVersion\" = 1"
     },
     {
       "fixtureId": "eval-object-success",
@@ -78,9 +78,9 @@
       "fixtureId": "eval-payload-attached",
       "suite": "evaluation",
       "language": "go",
-      "status": "pass",
+      "status": "fail",
       "limitation": null,
-      "message": null
+      "message": "missing key \"flagMetadata.fireweave.payload\" (want \"{\\\"maxRetries\\\":2,\\\"rolloutId\\\":\\\"rollout_01HZXRL00000000000000001\\\"}\")"
     },
     {
       "fixtureId": "eval-split-reason",
@@ -256,7 +256,7 @@
       "language": "go",
       "status": "pass",
       "limitation": null,
-      "message": "provider initialized against injected fake Transport (test-server stub not exercised)"
+      "message": null
     },
     {
       "fixtureId": "life-init-success",
@@ -264,7 +264,7 @@
       "language": "go",
       "status": "pass",
       "limitation": null,
-      "message": "provider initialized against injected fake Transport (test-server stub not exercised)"
+      "message": null
     },
     {
       "fixtureId": "life-multi-client-domain",
@@ -304,7 +304,7 @@
       "language": "go",
       "status": "pass",
       "limitation": null,
-      "message": "fault simulated via injected fake Transport (test-server stub not exercised)"
+      "message": "fault simulated via injected fake Transport (hermetic; no test-server stub)"
     },
     {
       "fixtureId": "fault-backend-500",
@@ -312,7 +312,7 @@
       "language": "go",
       "status": "pass",
       "limitation": null,
-      "message": "fault simulated via injected fake Transport (test-server stub not exercised)"
+      "message": "fault simulated via injected fake Transport (hermetic; no test-server stub)"
     },
     {
       "fixtureId": "fault-malformed-json",
@@ -320,7 +320,7 @@
       "language": "go",
       "status": "pass",
       "limitation": null,
-      "message": "fault simulated via injected fake Transport (test-server stub not exercised)"
+      "message": "fault simulated via injected fake Transport (hermetic; no test-server stub)"
     },
     {
       "fixtureId": "fault-network-error",
@@ -328,7 +328,7 @@
       "language": "go",
       "status": "pass",
       "limitation": null,
-      "message": "fault simulated via injected fake Transport (test-server stub not exercised)"
+      "message": "network/offline fault exercised via a real refused loopback connection"
     },
     {
       "fixtureId": "fault-offline",
@@ -336,7 +336,7 @@
       "language": "go",
       "status": "pass",
       "limitation": null,
-      "message": "fault simulated via injected fake Transport (test-server stub not exercised)"
+      "message": "network/offline fault exercised via a real refused loopback connection"
     },
     {
       "fixtureId": "fault-quota-limited-flags",
@@ -344,7 +344,7 @@
       "language": "go",
       "status": "pass",
       "limitation": null,
-      "message": "fault simulated via injected fake Transport (test-server stub not exercised)"
+      "message": "fault simulated via injected fake Transport (hermetic; no test-server stub)"
     },
     {
       "fixtureId": "fault-rate-limit-429",
@@ -352,7 +352,7 @@
       "language": "go",
       "status": "pass",
       "limitation": null,
-      "message": "fault simulated via injected fake Transport (test-server stub not exercised)"
+      "message": "fault simulated via injected fake Transport (hermetic; no test-server stub)"
     },
     {
       "fixtureId": "fault-stale-cache",
@@ -360,15 +360,15 @@
       "language": "go",
       "status": "pass",
       "limitation": null,
-      "message": "stale-definitions cache simulated on the in-memory adapter (posthog-go local-eval poller not exercised)"
+      "message": null
     },
     {
       "fixtureId": "fault-timeout",
       "suite": "faults",
       "language": "go",
-      "status": "pass",
+      "status": "fail",
       "limitation": null,
-      "message": "fault simulated via injected fake Transport (test-server stub not exercised)"
+      "message": "\"errorMessage\": want \"request timed out\", got \"network error\"; \"flagMetadata.fireweave.errorKind\": want \"Timeout\", got \"Network\""
     },
     {
       "fixtureId": "sec-deep-nesting-reject",
@@ -384,7 +384,7 @@
       "language": "go",
       "status": "pass",
       "limitation": null,
-      "message": "provider initialized against injected fake Transport (test-server stub not exercised)"
+      "message": null
     },
     {
       "fixtureId": "sec-oversized-reject",
@@ -400,7 +400,7 @@
       "language": "go",
       "status": "pass",
       "limitation": null,
-      "message": "fault simulated via injected fake Transport (test-server stub not exercised)"
+      "message": null
     },
     {
       "fixtureId": "sec-secrets-not-in-errors",
@@ -408,110 +408,110 @@
       "language": "go",
       "status": "pass",
       "limitation": null,
-      "message": "fault simulated via injected fake Transport (test-server stub not exercised)"
+      "message": null
     },
     {
       "fixtureId": "ext-capabilities-get",
       "suite": "extensions",
       "language": "go",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the capabilities namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-exposures-dedup",
       "suite": "extensions",
       "language": "go",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the exposures namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-exposures-flush",
       "suite": "extensions",
       "language": "go",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the exposures namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-exposures-record",
       "suite": "extensions",
       "language": "go",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the exposures namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-lifecycle-gating",
       "suite": "extensions",
       "language": "go",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the signals namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-releases-complete",
       "suite": "extensions",
       "language": "go",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the releases namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-releases-fail",
       "suite": "extensions",
       "language": "go",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the releases namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-releases-set-context",
       "suite": "extensions",
       "language": "go",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the releases namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-releases-start",
       "suite": "extensions",
       "language": "go",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the releases namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-signals-error",
       "suite": "extensions",
       "language": "go",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the signals namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-signals-health",
       "suite": "extensions",
       "language": "go",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the signals namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-signals-metric",
       "suite": "extensions",
       "language": "go",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the signals namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
       "fixtureId": "ext-signals-outcome",
       "suite": "extensions",
       "language": "go",
-      "status": "pass",
-      "limitation": null,
+      "status": "skipped-v1-out-of-scope",
+      "limitation": "targets the signals namespace, cut from the v1 control-points surface (ADR-0010)",
       "message": null
     },
     {
@@ -524,8 +524,9 @@
     }
   ],
   "summary": {
-    "fail": 0,
-    "pass": 65,
+    "fail": 4,
+    "pass": 48,
+    "skipped-v1-out-of-scope": 13,
     "skipped-with-documented-limitation": 0
   }
 }

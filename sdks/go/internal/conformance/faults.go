@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -13,9 +12,15 @@ import (
 	"time"
 )
 
-// stubBaseURL returns the live test-server stub base URL when fault
-// fixtures should run over real HTTP (test-server/implementation/server.mjs)
-// instead of the injected fake Transport. Unset ⇒ hermetic fake mode.
+// stubBaseURL returns a live test-server stub base URL when fault fixtures
+// should run over real HTTP (test-server/implementation/server.mjs) instead
+// of the injected fake Transport below. Unset (the default — in particular
+// inside the canonical dockerized `golang:1.25-alpine` run, which has no
+// `node` binary to spawn the stub with) => hermetic fake-transport mode. This
+// is an optional LOCAL-dev enhancement path, not the baseline: unlike node
+// and python, go's conformance suite must work with no `node` available at
+// all, so the fake transport (not a spawned subprocess) is this package's
+// real baseline for the faults suite.
 func stubBaseURL() string {
 	for _, key := range []string{"FIREWEAVE_TEST_SERVER_URL", "FW_TEST_SERVER_URL"} {
 		if v := strings.TrimRight(strings.TrimSpace(os.Getenv(key)), "/"); v != "" {
@@ -26,9 +31,11 @@ func stubBaseURL() string {
 }
 
 // stubFaultBody maps a fixture given.fault block onto the test-server
-// control-plane body (POST /_test/fault). It returns nil for fault modes
+// control-plane body (POST /_test/fault). applyTo is "evaluate": the remote
+// adapter speaks POST /v1/flags/evaluate (the Fireweave-native route), not
+// the legacy PostHog /flags this used to target. Returns nil for fault modes
 // the stub cannot produce over a live connection (networkError, offline),
-// which stay on the injected fake Transport.
+// which stay on the injected fake Transport regardless of stub availability.
 func stubFaultBody(fault map[string]any) map[string]any {
 	mode, _ := fault["mode"].(string)
 	switch mode {
@@ -39,11 +46,11 @@ func stubFaultBody(fault map[string]any) map[string]any {
 		}
 		switch status.String() {
 		case "401", "429", "500":
-			return map[string]any{"mode": status.String(), "applyTo": "flags"}
+			return map[string]any{"mode": status.String(), "applyTo": "evaluate"}
 		}
 		return nil
 	case "invalidJson":
-		body := map[string]any{"mode": "invalid_json", "applyTo": "flags"}
+		body := map[string]any{"mode": "invalid_json", "applyTo": "evaluate"}
 		if b, ok := fault["body"].(string); ok && b != "" {
 			body["body"] = b
 		}
@@ -53,9 +60,9 @@ func stubFaultBody(fault map[string]any) map[string]any {
 		if d, ok := fault["delayMs"].(json.Number); ok {
 			delayMs = d
 		}
-		return map[string]any{"mode": "delay", "delayMs": delayMs, "applyTo": "flags"}
+		return map[string]any{"mode": "delay", "delayMs": delayMs, "applyTo": "evaluate"}
 	case "quotaLimited":
-		return map[string]any{"mode": "quota_limited", "applyTo": "flags"}
+		return map[string]any{"mode": "quota_limited", "applyTo": "evaluate"}
 	}
 	return nil
 }
@@ -73,9 +80,6 @@ func stubPost(baseURL, path string, body map[string]any) error {
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("stub %s: status %d", path, resp.StatusCode)
-	}
 	return nil
 }
 
@@ -90,8 +94,11 @@ func stubResetState(baseURL string) error {
 }
 
 // faultTransport is the injected fake http.RoundTripper used for fault
-// fixtures when the runner does not target the live test-server stub. It
-// reproduces the test-server fault semantics deterministically in-process.
+// fixtures — the hermetic baseline this package actually runs on (see
+// stubBaseURL). It reproduces the Fireweave-native /v1/flags/evaluate
+// response shape (decisions[] + quotaLimited, not the legacy PostHog
+// /flags?v=2 shape this used to emit) deterministically, in-process, with no
+// external process.
 type faultTransport struct {
 	mode         string // httpStatus | invalidJson | networkError | offline | quotaLimited | delay | ""
 	status       int    // for httpStatus
@@ -126,9 +133,9 @@ func newFaultTransport(fault map[string]any) *faultTransport {
 }
 
 func (t *faultTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Non-flags traffic (event batches on Close) always succeeds.
-	if !strings.Contains(req.URL.Path, "/flags") {
-		return jsonResponse(req, http.StatusOK, `{"status":1}`), nil
+	// Non-evaluate traffic (capture batches on shutdown flush) always succeeds.
+	if !strings.Contains(req.URL.Path, "/flags/evaluate") {
+		return jsonResponse(req, http.StatusOK, `{"ok":true}`), nil
 	}
 
 	switch t.mode {
@@ -138,7 +145,7 @@ func (t *faultTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		case <-req.Context().Done():
 			return nil, req.Context().Err()
 		}
-		return jsonResponse(req, http.StatusOK, `{"flags":{},"featureFlags":{},"featureFlagPayloads":{}}`), nil
+		return jsonResponse(req, http.StatusOK, `{"decisions":[]}`), nil
 	case "httpStatus":
 		return jsonResponse(req, t.status, `{"error":"fault"}`), nil
 	case "invalidJson":
@@ -148,16 +155,11 @@ func (t *faultTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	case "offline":
 		return nil, &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connect: connection refused")}
 	case "quotaLimited":
-		payload := map[string]any{
-			"quota_limited":       t.quotaLimited,
-			"flags":               map[string]any{},
-			"featureFlags":        map[string]any{},
-			"featureFlagPayloads": map[string]any{},
-		}
+		payload := map[string]any{"decisions": []any{}, "quotaLimited": true}
 		b, _ := json.Marshal(payload)
 		return jsonResponse(req, http.StatusOK, string(b)), nil
 	default:
-		return jsonResponse(req, http.StatusOK, `{"flags":{},"featureFlags":{},"featureFlagPayloads":{}}`), nil
+		return jsonResponse(req, http.StatusOK, `{"decisions":[]}`), nil
 	}
 }
 

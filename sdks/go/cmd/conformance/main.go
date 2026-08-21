@@ -1,6 +1,7 @@
 // Command conformance runs the contracts/ fixtures against the Fireweave Go
-// SDK (real OpenFeature client + Fireweave provider + in-memory / fake-
-// transport backends) and writes the compatibility report JSON.
+// SDK's v1 control-points surface (fireweave.Client.ControlPoints — no
+// OpenFeature bridge, retired by ADR-0010; in-memory / remote-adapter
+// backends) and writes the compatibility report JSON.
 //
 // Usage:
 //
@@ -52,8 +53,10 @@ func main() {
 			fmt.Fprintf(os.Stderr, "FAIL %s (%s): %s\n", r.FixtureID, r.Suite, msg)
 		}
 	}
-	fmt.Printf("conformance: pass=%d fail=%d skipped=%d\n",
-		report.Summary["pass"], report.Summary["fail"], report.Summary["skipped-with-documented-limitation"])
+	// Written to stderr (not stdout) so `-out -` leaves stdout as pure JSON.
+	fmt.Fprintf(os.Stderr, "conformance: pass=%d fail=%d skipped-with-documented-limitation=%d skipped-v1-out-of-scope=%d\n",
+		report.Summary["pass"], report.Summary["fail"],
+		report.Summary["skipped-with-documented-limitation"], report.Summary["skipped-v1-out-of-scope"])
 	if report.Summary["fail"] > 0 {
 		os.Exit(1)
 	}
