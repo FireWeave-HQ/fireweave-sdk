@@ -23,7 +23,11 @@
 # `verify` (build + test + conformance, the full scripts/{build,test,
 # conformance}-all.sh suite — see that job's own comment for why it is not
 # matrixed per component) sits between build and every publish-* job so a
-# release cannot publish without the gates running.
+# release cannot publish without the gates running. The release tag itself
+# is pushed by a dedicated `tag` job that also needs `verify` (I7 fix — a
+# tag push living inside `build` could previously race `verify` or outrun a
+# failure), and every publish-* job needs `tag` too, preserving the
+# pre-existing ordering where no publish step could start before the tag.
 #
 # STAGING PUBLISH (authorized 2026-07-27): npm (server) + TestPyPI + Go
 # proxy warm are enabled only when dry_run=false AND channel=staging AND the
@@ -144,7 +148,6 @@ jobs:
         component: ${{ fromJson(needs.validate.outputs.components) }}
     runs-on: ubuntu-latest
     permissions:
-      contents: write      # tag push (gated on dry_run == false)
       id-token: write      # build provenance attestation
       attestations: write  # build provenance attestation
     steps:
@@ -162,7 +165,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: sdks/go/go.mod
-          cache-dependency-path: sdks/go/go.sum
+          cache-dependency-path: sdks/go/go.mod
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -240,20 +243,6 @@ jobs:
           path: build/packages/
           if-no-files-found: error
 
-      - name: Create + push tag (skipped in dry runs)
-        # NOTE ON SIGNED TAGS: GitHub-hosted runners have no org signing key.
-        # Org convention is a SIGNED annotated tag; until a signing identity is
-        # provisioned (RELEASE.md "Signed tags"), the release owner should
-        # re-create this tag locally with `git tag -s` or enable gitsign here.
-        if: ${{ inputs.dry_run == false }}
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          git config user.name "fireweave-release-bot"
-          git config user.email "releases@fireweave.ai"
-          git tag -a "$TAG" -m "Release ${TAG} (channel: ${{ inputs.channel }})"
-          git push origin "refs/tags/${TAG}"
-
   # =========================================================================
   # VERIFY — the gate the plan calls out as missing: "today a release can
   # publish without running the gates." Runs build + test + conformance for
@@ -286,7 +275,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: sdks/go/go.mod
-          cache-dependency-path: sdks/go/go.sum
+          cache-dependency-path: sdks/go/go.mod
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -313,6 +302,50 @@ jobs:
           fi
 
   # =========================================================================
+  # TAG — split out from `build` (I7 fix). `build` and `verify` both only
+  # `needs: validate`, so a tag-push step living inside `build` could complete
+  # while `verify` was still in flight or had already failed — and for go and
+  # swift the tag IS the release (no further publish step). This job needs
+  # verify explicitly so a release tag is never created before the full
+  # build+test+conformance suite (scripts/{build,test,conformance}-all.sh) is
+  # green. Matrixed the same way `build` is, since each component gets its
+  # own tag; reads the version/tag computed by build's matching leg from the
+  # release-info-<component> artifact rather than recomputing it.
+  # =========================================================================
+  tag:
+    name: create + push release tag (${{ matrix.component }})
+    needs: [validate, build, verify]
+    if: ${{ inputs.dry_run == false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJson(needs.validate.outputs.components) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-${{ matrix.component }}
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
+      - name: Create + push tag
+        # NOTE ON SIGNED TAGS: GitHub-hosted runners have no org signing key.
+        # Org convention is a SIGNED annotated tag; until a signing identity is
+        # provisioned (RELEASE.md "Signed tags"), the release owner should
+        # re-create this tag locally with `git tag -s` or enable gitsign here.
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "fireweave-release-bot"
+          git config user.email "releases@fireweave.ai"
+          git tag -a "$TAG" -m "Release ${TAG} (channel: ${{ inputs.channel }})"
+          git push origin "refs/tags/${TAG}"
+
+  # =========================================================================
   # PUBLISHING
   # - Staging, when dry_run=false and channel=staging (two DIFFERENT dates —
   #   see the file header for the full split, not restated here):
@@ -324,22 +357,24 @@ jobs:
   #   authorization (both server and web).
   # - Production PyPI / Maven / crates.io: gated on channel=production,
   #   dry_run=false, and the matching secret — missing secrets fail closed.
-  # - go / swift: no publish job beyond the tag `build` already pushed —
-  #   both ecosystems resolve purely from git tags, for staging AND
+  # - go / swift: no publish job beyond the tag the `tag` job already
+  #   pushed — both ecosystems resolve purely from git tags, for staging AND
   #   production (go additionally gets an optional proxy warm on staging).
   #
-  # Every job below downloads its own release-info-<component> artifact
-  # (uploaded by build's matching matrix leg) instead of recomputing the
-  # version: build already queried the registry once; a publish job
-  # re-querying afterwards would — for go/java/swift specifically, whose
-  # "registry" is the git tag list itself — see the tag `build` just pushed
-  # and double-count. Reusing the one computed value sidesteps that for
-  # every ecosystem uniformly.
+  # Every job below needs `tag` (in addition to `build`/`verify`) and
+  # downloads its own release-info-<component> artifact (uploaded by build's
+  # matching matrix leg) instead of recomputing the version: build already
+  # queried the registry once; a publish job re-querying afterwards would —
+  # for go/java/swift specifically, whose "registry" is the git tag list
+  # itself — see the tag the `tag` job just pushed and double-count.
+  # Reusing the one computed value sidesteps that for every ecosystem
+  # uniformly, and needing `tag` preserves the pre-fix ordering where no
+  # publish step could start before the release tag existed.
   # =========================================================================
 
   publish-npm:
     name: publish npm (staging → server-sdk, dist-tag next)
-    needs: [validate, build, verify]
+    needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'server') }}
     runs-on: ubuntu-latest
     environment: release-staging
@@ -380,7 +415,7 @@ jobs:
 
   publish-npm-web:
     name: publish npm (staging → web-sdk, dist-tag next)
-    needs: [validate, build, verify]
+    needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'web') }}
     runs-on: ubuntu-latest
     environment: release-staging
@@ -400,6 +435,15 @@ jobs:
         with:
           node-version: '24'
           registry-url: https://registry.npmjs.org
+      # web's lockfile of record is bun.lock (package-lock.json is deliberately
+      # gitignored — see .gitignore) and its own build script shells out to
+      # `bun` (sdks/web/package.json's "build": "bun run clean && tsc ...").
+      # `npm ci`/`npm run build` on a Node-only runner fails on both counts;
+      # bun installs + builds (mirroring ci.yml's web job), npm stays only for
+      # the OIDC-authenticated `npm publish` step below.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
       - name: Assert OIDC preconditions
         run: |
           echo "npm version: $(npm --version)"
@@ -409,19 +453,23 @@ jobs:
           fi
       - name: Apply computed version
         run: tools/release/version.sh apply web "${{ steps.version.outputs.release_version }}"
-      - name: Build and publish @fireweaveai/web-sdk
+      - name: Install workspace dependencies (bun — see comment above)
+        working-directory: sdks/web
+        run: bun install --frozen-lockfile
+      - name: Build @fireweaveai/web-sdk (bun — see comment above)
+        working-directory: sdks/web
+        run: bun run build
+      - name: Publish @fireweaveai/web-sdk (npm — OIDC trusted publisher)
         working-directory: sdks/web
         env:
           DIST_TAG: ${{ steps.version.outputs.dist_tag }}
         run: |
           npm install -g npm@latest
-          npm ci
-          npm run build
           npm publish --provenance --access public --tag "$DIST_TAG"
 
   publish-npm-production:
     name: publish npm production (HARD-DISABLED)
-    needs: [validate, build, verify]
+    needs: [validate, build, verify, tag]
     if: ${{ false }} # HARD-DISABLED — second authorization required for dist-tag latest (server-sdk AND web-sdk)
     runs-on: ubuntu-latest
     permissions:
@@ -432,7 +480,7 @@ jobs:
 
   publish-pypi:
     name: publish TestPyPI (staging)
-    needs: [validate, build, verify]
+    needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'python') }}
     runs-on: ubuntu-latest
     environment: release-staging
@@ -474,7 +522,7 @@ jobs:
 
   publish-pypi-production:
     name: publish PyPI (production)
-    needs: [validate, build, verify]
+    needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'python') }}
     runs-on: ubuntu-latest
     environment: release
@@ -508,7 +556,7 @@ jobs:
 
   publish-maven:
     name: publish Maven Central (Central Publisher Portal)
-    needs: [validate, build, verify]
+    needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && contains(fromJson(needs.validate.outputs.components), 'java') }}
     runs-on: ubuntu-latest
     # Stays on `release` for BOTH channels: Maven Central Portal has no
@@ -579,7 +627,7 @@ jobs:
 
   publish-go:
     name: warm Go module proxy (staging)
-    needs: [validate, build, verify]
+    needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'go') }}
     runs-on: ubuntu-latest
     environment: release-staging
@@ -604,7 +652,7 @@ jobs:
 
   publish-cargo:
     name: cargo publish --dry-run (staging — no crates.io upload)
-    needs: [validate, build, verify]
+    needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'rust') }}
     runs-on: ubuntu-latest
     environment: release-staging
@@ -626,14 +674,14 @@ jobs:
         # No staging registry exists for crates.io (unlike TestPyPI) and
         # yanking is not deletion, so a real staging publish would spend the
         # version permanently. --dry-run proves the package is publishable
-        # without spending anything; the git tag (already pushed by `build`)
-        # IS this release's staging artifact.
+        # without spending anything; the git tag (already pushed by the `tag`
+        # job, which this job needs) IS this release's staging artifact.
         working-directory: sdks/rust
         run: cargo publish --dry-run --locked
 
   publish-cargo-production:
     name: publish crates.io (production)
-    needs: [validate, build, verify]
+    needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'rust') }}
     runs-on: ubuntu-latest
     environment: release
