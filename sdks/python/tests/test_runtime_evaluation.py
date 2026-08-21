@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fireweave import (
     ErrorKind,
+    EvaluateOptions,
     EvaluationContext,
     FireweaveRuntime,
     FlagType,
@@ -101,6 +102,38 @@ class TestReasonsAndMetadata:
         assert d.flag_metadata["fireweave.vendorFlagId"] == 42
         assert d.flag_metadata["fireweave.reasonCode"] == "condition_match"
         assert d.flag_metadata["fireweave.flagVersion"] == 3
+
+
+class TestIncludePayload:
+    """task-10b item 5 (contracts/evaluation/eval-payload-attached.json):
+    regression coverage for EvaluateOptions.include_payload — previously
+    control_points.evaluate had no options concept at all (`del options`)."""
+
+    def test_include_payload_attaches_sorted_key_json(self):
+        rt = make_runtime(
+            {"p": {"enabled": True, "variant": "on", "value": True, "payload": {"b": 1, "a": 2}}}
+        )
+        d = rt.evaluate("p", FlagType.BOOLEAN, False, CTX, EvaluateOptions(include_payload=True))
+        assert d.flag_metadata["fireweave.payload"] == '{"a":2,"b":1}'
+
+    def test_payload_omitted_when_include_payload_false(self):
+        rt = make_runtime(
+            {"p": {"enabled": True, "variant": "on", "value": True, "payload": {"a": 1}}}
+        )
+        d = rt.evaluate("p", FlagType.BOOLEAN, False, CTX, EvaluateOptions(include_payload=False))
+        assert "fireweave.payload" not in d.flag_metadata
+
+    def test_payload_omitted_when_options_absent(self):
+        rt = make_runtime(
+            {"p": {"enabled": True, "variant": "on", "value": True, "payload": {"a": 1}}}
+        )
+        d = rt.evaluate("p", FlagType.BOOLEAN, False, CTX)
+        assert "fireweave.payload" not in d.flag_metadata
+
+    def test_payload_omitted_when_flag_has_none_even_if_requested(self):
+        rt = make_runtime({"p": {"enabled": True, "variant": "on", "value": True}})
+        d = rt.evaluate("p", FlagType.BOOLEAN, False, CTX, EvaluateOptions(include_payload=True))
+        assert "fireweave.payload" not in d.flag_metadata
 
 
 class TestContextLayering:

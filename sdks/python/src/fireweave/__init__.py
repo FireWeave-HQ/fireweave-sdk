@@ -72,7 +72,13 @@ from .domain.validation import (
 )
 from .application.client import ExtensionResult, FireweaveClient
 from .application.mode import init_fireweave
-from .application.ports import BackendAdapter, FlagResolution, RegisterTargetOptions, RegisterTargetResult
+from .application.ports import (
+    BackendAdapter,
+    EvaluateOptions,
+    FlagResolution,
+    RegisterTargetOptions,
+    RegisterTargetResult,
+)
 from .application.runtime import DEFAULT_SHUTDOWN_TIMEOUT_MS, FireweaveRuntime, LifecycleState
 from .infrastructure.adapters.local import FireweaveLocalAdapter, LocalRegisteredTarget
 from .infrastructure.adapters.memory import InMemoryAdapter
@@ -91,6 +97,7 @@ __all__ = [
     "DEFAULT_SHUTDOWN_TIMEOUT_MS",
     # adapters
     "BackendAdapter",
+    "EvaluateOptions",
     "FlagResolution",
     "RegisterTargetOptions",
     "RegisterTargetResult",

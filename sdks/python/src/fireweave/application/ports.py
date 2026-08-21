@@ -18,10 +18,29 @@ from ..domain.types import JsonValue
 
 __all__ = [
     "BackendAdapter",
+    "EvaluateOptions",
     "FlagResolution",
     "RegisterTargetOptions",
     "RegisterTargetResult",
 ]
+
+
+@dataclass(frozen=True)
+class EvaluateOptions:
+    """``evaluate()``'s reserved fifth argument
+    (conformance/surface/control-points.surface.json:
+    ``evaluate(key, type, default, context?, options?)``).
+
+    ``include_payload`` (task-10b item 5, contracts/evaluation/eval-payload-
+    attached.json): when True and the resolved flag carries a payload
+    (:attr:`FlagResolution.payload`), it is attached to
+    ``flag_metadata['fireweave.payload']`` as a deterministic (sorted-key)
+    JSON string — matching node's ``EvaluateOptions.includePayload``. Before
+    task-10b this was entirely absent (``evaluate()`` had no ``options``
+    concept whatsoever; the parameter existed but was always discarded).
+    """
+
+    include_payload: bool = False
 
 
 @dataclass(frozen=True)

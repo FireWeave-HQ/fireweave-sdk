@@ -55,6 +55,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 from fireweave import (
     ContextLimits,
+    EvaluateOptions,
     EvaluationContext,
     FireweaveClient,
     FireweaveRemoteAdapter,
@@ -157,6 +158,14 @@ def _context_from(ctx: Optional[Dict[str, Any]]) -> Optional[EvaluationContext]:
     if ctx is None:
         return None
     return EvaluationContext(targeting_key=ctx.get("targetingKey"), attributes=ctx.get("attributes") or {})
+
+
+def _evaluate_options_from(options: Optional[Dict[str, Any]]) -> Optional[EvaluateOptions]:
+    """contracts/evaluation/eval-payload-attached.json's ``when.options``
+    (task-10b item 5) -> :class:`EvaluateOptions`."""
+    if not options:
+        return None
+    return EvaluateOptions(include_payload=bool(options.get("includePayload", False)))
 
 
 def _limits_from(config: Dict[str, Any]) -> ContextLimits:
@@ -345,8 +354,9 @@ def _run_evaluate(fixture: Dict[str, Any]) -> Dict[str, Any]:
     _provision_state(runtime, given.get("providerState"))
 
     invocation_ctx = _context_from(when.get("invocationContext"))
+    options = _evaluate_options_from(when.get("options"))
     decision = client.control_points.evaluate(
-        when["flagKey"], _to_expected_type(when["flagType"]), when.get("defaultValue"), invocation_ctx
+        when["flagKey"], _to_expected_type(when["flagType"]), when.get("defaultValue"), invocation_ctx, options
     )
     actual = _decision_to_actual(decision)
 

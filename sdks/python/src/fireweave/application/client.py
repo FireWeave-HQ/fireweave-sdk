@@ -13,7 +13,7 @@ from ..domain.context import EvaluationContext
 from ..domain.decision import Decision
 from ..domain.errors import ErrorKind, FireweaveError, UnsupportedCapabilityError
 from ..domain.types import FlagType, JsonValue
-from .ports import RegisterTargetOptions, RegisterTargetResult
+from .ports import EvaluateOptions, RegisterTargetOptions, RegisterTargetResult
 from .runtime import FireweaveRuntime
 
 __all__ = ["FireweaveClient", "ExtensionResult"]
@@ -55,22 +55,24 @@ class _ControlPointsNamespace:
         flag_type: FlagType,
         default: Any,
         context: Optional[EvaluationContext] = None,
-        options: Optional[Any] = None,
+        options: Optional[EvaluateOptions] = None,
     ) -> Decision:
         """Evaluate a flag to a canonical Decision — the general form the
         eight ``get_*`` methods delegate to.
 
-        ``options`` is reserved for cross-language surface parity
-        (conformance/surface/control-points.surface.json pins
+        ``options`` is the reserved fifth argument for cross-language surface
+        parity (conformance/surface/control-points.surface.json pins
         ``evaluate(key, type, default, context?, options?)`` across every
-        language) — currently INERT, accepted and typed, nothing reads it.
-        The python control-point surface is synchronous (server SDK —
-        blocking I/O like node's ``await`` is fine), so there is no
-        in-flight-call `signal` to carry, and v1 reads are side-effect-free
-        by design (no per-call exposure opt-in to carry either).
+        language). ``options.include_payload`` (task-10b item 5) is the one
+        real field: it attaches the resolved flag's payload, when any, to
+        ``flag_metadata['fireweave.payload']`` — a deterministic sorted-key
+        JSON string, matching node's ``EvaluateOptions.includePayload``. The
+        python control-point surface is synchronous (server SDK — blocking
+        I/O like node's ``await`` is fine), so there is no in-flight-call
+        `signal` to carry, and v1 reads are side-effect-free by design (no
+        per-call exposure opt-in to carry either) — those two remain N/A.
         """
-        del options
-        return self._runtime.evaluate(flag_key, flag_type, default, context)
+        return self._runtime.evaluate(flag_key, flag_type, default, context, options)
 
     def get_boolean_value(self, flag_key: str, default: bool, context: Optional[EvaluationContext] = None) -> bool:
         return self.evaluate(flag_key, FlagType.BOOLEAN, default, context).value

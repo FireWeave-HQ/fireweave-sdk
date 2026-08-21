@@ -58,7 +58,7 @@ def _init_remote(options: Mapping[str, Any]) -> FireweaveClient:
     # own `initialize()` carries a second, more permissive check (its own
     # hostname self-allowed) as a safety net for direct adapter construction
     # that bypasses `init_fireweave` entirely.
-    assert_host_allowed(api_url, allowed_hosts)
+    assert_host_allowed(api_url, allowed_hosts, init_fatal=True)
 
     adapter = FireweaveRemoteAdapter(
         api_url=api_url,

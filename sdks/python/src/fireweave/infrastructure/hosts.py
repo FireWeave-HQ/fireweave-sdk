@@ -37,28 +37,35 @@ def is_loopback_hostname(hostname: str) -> bool:
     return hostname in _LOOPBACK_HOSTS
 
 
-def assert_host_allowed(host: str, allowed_hosts: Optional[Sequence[str]] = None) -> None:
+def assert_host_allowed(
+    host: str, allowed_hosts: Optional[Sequence[str]] = None, *, init_fatal: bool = False
+) -> None:
     """Validate a backend host URL against the allowlist.
 
-    Raises ``ConfigurationError`` — fixed message, no host echo.
+    Raises ``ConfigurationError`` — fixed message, no host echo. Both of this
+    function's call sites (``application/mode.py``'s sanctioned entry point,
+    ``infrastructure/adapters/remote.py``'s ``initialize()``) run only during
+    initialisation, so ``init_fatal`` is threaded through unconditionally by
+    both callers — a host-allowlist rejection maps to ``PROVIDER_FATAL``,
+    matching node/go/java (contracts/security/sec-endpoint-ssrf-allowlist.json).
     """
     try:
         parsed = urlparse(host)
     except ValueError as exc:
-        raise ConfigurationError() from exc
+        raise ConfigurationError(init_fatal=init_fatal) from exc
 
     hostname = (parsed.hostname or "").lower()
     if parsed.scheme not in ("http", "https") or not hostname:
-        raise ConfigurationError()
+        raise ConfigurationError(init_fatal=init_fatal)
 
     loopback = is_loopback_hostname(hostname)
     if parsed.scheme == "http" and not loopback:
         # https required for anything that leaves the machine.
-        raise ConfigurationError()
+        raise ConfigurationError(init_fatal=init_fatal)
 
     allow = list(allowed_hosts) if allowed_hosts else list(DEFAULT_ALLOWED_HOSTS)
     if "*" in allow:
         return  # explicit opt-out
     allow_lower = {h.lower() for h in allow}
     if hostname not in allow_lower:
-        raise ConfigurationError()
+        raise ConfigurationError(init_fatal=init_fatal)

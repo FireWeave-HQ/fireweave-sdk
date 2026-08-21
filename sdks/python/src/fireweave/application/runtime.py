@@ -7,6 +7,7 @@ raise: evaluation always returns a :class:`Decision`
 from __future__ import annotations
 
 import enum
+import json
 import threading
 from typing import Optional
 
@@ -30,12 +31,20 @@ from ..domain.validation import (
     validate_control_point_key,
     validate_default_value,
 )
-from .ports import BackendAdapter, FlagResolution, RegisterTargetOptions, RegisterTargetResult
+from .ports import BackendAdapter, EvaluateOptions, FlagResolution, RegisterTargetOptions, RegisterTargetResult
 
 __all__ = ["LifecycleState", "FireweaveRuntime", "DEFAULT_SHUTDOWN_TIMEOUT_MS"]
 
 # Default bound on shutdown (matches node's DEFAULT_SHUTDOWN_TIMEOUT_MS).
 DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000
+
+
+def _stable_json(value) -> str:
+    """JSON-serialize with deterministic (sorted) key order at every nesting
+    level and no extraneous whitespace — matches node's ``stableStringify``
+    byte-for-byte (contracts/evaluation/eval-payload-attached.json's expected
+    ``fireweave.payload`` string)."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
 class LifecycleState(enum.Enum):
@@ -219,6 +228,7 @@ class FireweaveRuntime:
         flag_type: FlagType,
         default_value,
         invocation_context: Optional[EvaluationContext] = None,
+        options: Optional[EvaluateOptions] = None,
     ) -> Decision:
         """Evaluate a flag. Never raises; failures return the default.
 
@@ -226,6 +236,9 @@ class FireweaveRuntime:
         before any I/O" names, stopping at the first failure: (1) key, (2)
         default vs type, (3) context, (4) lifecycle. Only once all four pass
         does this reach the adapter (the one I/O call in this method).
+
+        ``options.include_payload`` (task-10b item 5) attaches the resolved
+        flag's payload, when any, to ``flag_metadata['fireweave.payload']``.
         """
         key_result = validate_control_point_key(flag_key)
         if not key_result.ok:
@@ -259,7 +272,7 @@ class FireweaveRuntime:
             wrapped.__cause__ = exc
             return self._error_decision(default_value, wrapped)
 
-        return self._decision_from_resolution(resolution, flag_type, default_value)
+        return self._decision_from_resolution(resolution, flag_type, default_value, options)
 
     # -- helpers ---------------------------------------------------------------
 
@@ -268,6 +281,7 @@ class FireweaveRuntime:
         resolution: FlagResolution,
         flag_type: FlagType,
         default_value,
+        options: Optional[EvaluateOptions] = None,
     ) -> Decision:
         if not resolution.matched:
             # spec/modes.md "Behaviour per mode": local's unknown-key row is
@@ -306,6 +320,10 @@ class FireweaveRuntime:
             metadata["fireweave.reasonCode"] = resolution.reason_code
         if resolution.from_cache:
             metadata["fireweave.fromCache"] = True
+        if options is not None and options.include_payload and resolution.payload is not None:
+            metadata["fireweave.payload"] = (
+                resolution.payload if isinstance(resolution.payload, str) else _stable_json(resolution.payload)
+            )
         metadata.update(resolution.extra_metadata)
 
         return Decision(value=value, variant=resolution.variant, reason=reason, flag_metadata=metadata)

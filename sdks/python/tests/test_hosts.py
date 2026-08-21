@@ -75,3 +75,19 @@ def test_non_http_scheme_rejected():
 def test_malformed_url_rejected():
     with pytest.raises(ConfigurationError):
         assert_host_allowed("not-a-url")
+
+
+def test_init_fatal_maps_to_provider_fatal():
+    """contracts/security/sec-endpoint-ssrf-allowlist.json: a host-allowlist
+    rejection during initialize() must map to errorCode PROVIDER_FATAL, not
+    GENERAL — both real call sites (application/mode.py,
+    infrastructure/adapters/remote.py's initialize()) pass init_fatal=True."""
+    with pytest.raises(ConfigurationError) as excinfo:
+        assert_host_allowed("https://169.254.169.254", init_fatal=True)
+    assert excinfo.value.openfeature_error_code == "PROVIDER_FATAL"
+
+
+def test_default_init_fatal_false_maps_to_general():
+    with pytest.raises(ConfigurationError) as excinfo:
+        assert_host_allowed("https://169.254.169.254")
+    assert excinfo.value.openfeature_error_code == "GENERAL"

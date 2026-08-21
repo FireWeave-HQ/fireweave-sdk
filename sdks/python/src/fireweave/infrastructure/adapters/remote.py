@@ -85,7 +85,7 @@ class FireweaveRemoteAdapter:
         allow = self.allowed_hosts
         if allow is None:
             allow = _default_allowed_hosts_for(api_url)
-        assert_host_allowed(api_url, allow)
+        assert_host_allowed(api_url, allow, init_fatal=True)
         self.api_url = api_url
         self.api_key = api_key
         self._ready = True
