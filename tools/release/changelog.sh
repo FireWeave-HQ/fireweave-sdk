@@ -2,14 +2,21 @@
 # Generate a conventional-commits changelog for one SDK component.
 #
 # Usage: tools/release/changelog.sh <component> <version> [<out-file>]
-#   component: node | python | go | java
+#   component: server | web | python | java | go | rust | swift
 #   version:   semver without leading v (e.g. 0.1.0)
 #
 # Range: commits since the last tag matching this component's tag convention
-# (node/v* | python/v* | java/v* | go/v* — Go's tag must equal the module
-# subdirectory path for `go get` resolution), scoped to the paths that ship in
-# the component. Commits are grouped by conventional-commit type; anything
-# unparseable lands under "Other changes" rather than being dropped.
+# (server/v* | web/v* | python/v* | java/v* | rust/v* | swift/v* | go/v* — Go's
+# tag must equal the module subdirectory path for `go get` resolution), scoped
+# to the paths that ship in the component. Commits are grouped by
+# conventional-commit type; anything unparseable lands under "Other changes"
+# rather than being dropped.
+#
+# NOTE (pre-existing, not touched by the server/web/rust/swift additions
+# below): this file's own go entry has always used TAG_PREFIX="go/v" and
+# PATHS=("go" ...), while release.yml's tag (and tools/release/version.sh's
+# tag_prefix) is "sdks/go/v" and the module lives at "sdks/go" — both
+# mismatches predate this change and are left alone here (see task-14-report.md).
 
 set -euo pipefail
 
@@ -18,11 +25,14 @@ VERSION="${2:?usage: changelog.sh <component> <version> [out-file]}"
 OUT="${3:-/dev/stdout}"
 
 case "$COMPONENT" in
-  node)   TAG_PREFIX="node/v";    PATHS=("sdks/node" "examples/node") ;;
-  python) TAG_PREFIX="python/v";  PATHS=("sdks/python" "examples/python") ;;
-  go)     TAG_PREFIX="go/v";      PATHS=("go" "examples/go") ;;
-  java)   TAG_PREFIX="java/v";    PATHS=("sdks/java" "examples/java") ;;
-  *) echo "changelog: unknown component '$COMPONENT' (node|python|go|java)" >&2; exit 2 ;;
+  server) TAG_PREFIX="server/v"; PATHS=("sdks/node" "examples/node") ;;
+  web)    TAG_PREFIX="web/v";    PATHS=("sdks/web" "examples/web") ;;
+  python) TAG_PREFIX="python/v"; PATHS=("sdks/python" "examples/python") ;;
+  go)     TAG_PREFIX="go/v";     PATHS=("go" "examples/go") ;;
+  java)   TAG_PREFIX="java/v";   PATHS=("sdks/java" "examples/java") ;;
+  rust)   TAG_PREFIX="rust/v";   PATHS=("sdks/rust" "examples/rust") ;;
+  swift)  TAG_PREFIX="swift/v";  PATHS=("sdks/swift" "examples/swift") ;;
+  *) echo "changelog: unknown component '$COMPONENT' (server|web|python|java|go|rust|swift)" >&2; exit 2 ;;
 esac
 # Shared surfaces always included: contract fixtures and spec affect every SDK.
 PATHS+=("contracts" "spec")

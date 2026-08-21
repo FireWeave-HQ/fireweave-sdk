@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+# Offline tests for tools/release/version.sh's pure logic, plus one
+# end-to-end "compute" run with the registry seam (registry_versions)
+# stubbed out — proving the seam is real and swappable, not just asserted.
+#
+# Zero network calls anywhere in this file. Run: bash tools/release/version.test.sh
+
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source version.sh as a library: BASH_SOURCE[0] != $0 here, so main() does
+# not run — only functions are defined.
+# shellcheck source=/dev/null
+source "$HERE/version.sh"
+
+PASS=0
+FAIL=0
+
+assert_eq() { # <label> <expected> <actual>
+  if [ "$2" = "$3" ]; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    printf 'FAIL: %s\n  expected: %s\n  actual:   %s\n' "$1" "$2" "$3" >&2
+  fi
+}
+
+assert_fail() { # <label> <command...> — asserts the command exits non-zero
+  local label="$1"
+  shift
+  if "$@" >/dev/null 2>&1; then
+    FAIL=$((FAIL + 1))
+    printf 'FAIL: %s (expected non-zero exit, got 0)\n' "$label" >&2
+  else
+    PASS=$((PASS + 1))
+  fi
+}
+
+# -------------------------------------------------------------- strip_prerelease
+assert_eq "strip: plain version unchanged" "1.4.0" "$(semver_strip_prerelease "1.4.0")"
+assert_eq "strip: drops -staging.N" "1.4.0" "$(semver_strip_prerelease "1.4.0-staging.3")"
+assert_eq "strip: drops -SNAPSHOT" "0.1.0" "$(semver_strip_prerelease "0.1.0-SNAPSHOT")"
+assert_eq "strip: drops build metadata" "1.4.0" "$(semver_strip_prerelease "1.4.0+build5")"
+assert_eq "strip: drops prerelease AND build metadata" "1.4.0" "$(semver_strip_prerelease "1.4.0-rc.1+build5")"
+
+# -------------------------------------------------------------------- semver_bump
+assert_eq "bump patch" "1.4.1" "$(semver_bump "1.4.0" patch)"
+assert_eq "bump minor resets patch" "1.5.0" "$(semver_bump "1.4.9" minor)"
+assert_eq "bump major resets minor+patch" "2.0.0" "$(semver_bump "1.4.9" major)"
+assert_eq "bump from 0.0.0" "0.1.0" "$(semver_bump "0.0.0" minor)"
+assert_fail "bump: invalid bump kind rejected" semver_bump "1.4.0" bogus
+assert_fail "bump: non-semver base rejected" semver_bump "1.4" patch
+
+# ---------------------------------------------------- strip THEN bump (the mandate)
+# "1.4.0-staging.3 + patch must give 1.4.1" — never 1.4.0-staging.4.
+staged_base="$(semver_strip_prerelease "1.4.0-staging.3")"
+assert_eq "mandate: strip(1.4.0-staging.3)=1.4.0" "1.4.0" "$staged_base"
+assert_eq "mandate: strip-then-bump patch = 1.4.1" "1.4.1" "$(semver_bump "$staged_base" patch)"
+snapshot_base="$(semver_strip_prerelease "0.1.0-SNAPSHOT")"
+assert_eq "mandate: java -SNAPSHOT strips + bumps patch = 0.1.1" "0.1.1" "$(semver_bump "$snapshot_base" patch)"
+
+# -------------------------------------------------------------- extract_staging_n
+assert_eq "extract: matching base+N" "3" "$(extract_staging_n "1.4.0-staging.3" "1.4.0")"
+assert_eq "extract: double-digit N" "12" "$(extract_staging_n "1.4.0-staging.12" "1.4.0")"
+assert_fail "extract: non-matching base" extract_staging_n "1.4.0-staging.3" "1.5.0"
+assert_fail "extract: plain version (no staging suffix)" extract_staging_n "1.4.0" "1.4.0"
+assert_fail "extract: non-numeric N" extract_staging_n "1.4.0-staging.rc1" "1.4.0"
+
+# ------------------------------------------------------------------ max_staging_n
+existing="$(printf '1.4.0\n1.4.0-staging.1\n1.4.0-staging.3\n1.4.0-staging.2\n2.0.0-staging.9\n')"
+assert_eq "max_staging_n: picks the highest N for the matching base" \
+  "3" "$(printf '%s' "$existing" | max_staging_n "1.4.0")"
+assert_eq "max_staging_n: 0 when nothing matches the base" \
+  "0" "$(printf '%s' "$existing" | max_staging_n "9.9.9")"
+assert_eq "max_staging_n: 0 on empty registry (first-ever staging release)" \
+  "0" "$(printf '' | max_staging_n "1.4.0")"
+
+# -------------------------------------------------------------- highest_plain_version
+tags="$(printf '0.1.0\n0.2.0\n0.10.0\n0.2.0-staging.1\nnot-a-version\n')"
+assert_eq "highest_plain_version: numeric-safe (0.10.0 beats 0.2.0)" \
+  "0.10.0" "$(highest_plain_version "$tags")"
+assert_fail "highest_plain_version: empty input fails (no prior tag)" highest_plain_version ""
+
+# ------------------------------------------------------------ component tables
+assert_eq "manifest: server" "sdks/node/package.json" "$(component_manifest server)"
+assert_eq "manifest: go is tag-only (empty)" "" "$(component_manifest go)"
+assert_eq "manifest: swift is tag-only (empty)" "" "$(component_manifest swift)"
+assert_eq "tag prefix: go forced exception" "sdks/go" "$(component_tag_prefix go)"
+assert_eq "tag prefix: server uses its own name (not node)" "server" "$(component_tag_prefix server)"
+assert_eq "tag prefix: swift matches org convention" "swift" "$(component_tag_prefix swift)"
+assert_fail "unknown component is rejected" component_manifest bogus
+
+# ---------------------------------------------- end-to-end compute(), network stubbed
+# Prove the registry query is a genuinely swappable seam: override it with a
+# fixed, in-memory stub (no curl/npm/git ever invoked) and confirm cmd_compute
+# wires the stub's answer through staging_n / release_version / tag correctly.
+registry_versions() { printf '2.1.0\n2.1.1-staging.1\n2.1.1-staging.2\n'; }
+
+scratch="$(mktemp -d)"
+mkdir -p "$scratch/sdks/node"
+printf '{"name":"@fireweaveai/server-sdk","version":"2.1.0"}\n' > "$scratch/sdks/node/package.json"
+
+out="$(cmd_compute server patch staging --manifest-root "$scratch")"
+get() { printf '%s\n' "$out" | sed -n "s/^$1=//p"; }
+
+assert_eq "stubbed e2e: current_version read from scratch manifest" "2.1.0" "$(get current_version)"
+assert_eq "stubbed e2e: bumped_version" "2.1.1" "$(get bumped_version)"
+assert_eq "stubbed e2e: staging_n continues past the stub's existing .1/.2" "3" "$(get staging_n)"
+assert_eq "stubbed e2e: release_version" "2.1.1-staging.3" "$(get release_version)"
+assert_eq "stubbed e2e: tag" "server/v2.1.1-staging.3" "$(get tag)"
+assert_eq "stubbed e2e: npm dist-tag stays 'next' for staging (never latest)" "next" "$(get dist_tag)"
+
+out_prod="$(cmd_compute server patch production --manifest-root "$scratch")"
+assert_eq "stubbed e2e: production has no staging suffix" "2.1.1" "$(printf '%s\n' "$out_prod" | sed -n 's/^release_version=//p')"
+assert_eq "stubbed e2e: production dist-tag is latest" "latest" "$(printf '%s\n' "$out_prod" | sed -n 's/^dist_tag=//p')"
+
+rm -rf "$scratch"
+
+# ------------------------------------------------------------- apply() offline
+# apply() never touches the network — exercise every manifest writer against
+# scratch copies (never the real repo manifests).
+scratch2="$(mktemp -d)"
+mkdir -p "$scratch2/sdks/node" "$scratch2/sdks/web" "$scratch2/sdks/python" "$scratch2/sdks/rust"
+printf '{"name":"@fireweaveai/server-sdk","version":"2.1.0"}\n' > "$scratch2/sdks/node/package.json"
+printf '{"name":"@fireweaveai/web-sdk","version":"2.1.0"}\n' > "$scratch2/sdks/web/package.json"
+cat > "$scratch2/sdks/python/pyproject.toml" <<'EOF'
+[project]
+name = "fireweave"
+version = "0.1.0"
+EOF
+cat > "$scratch2/sdks/rust/Cargo.toml" <<'EOF'
+[package]
+name = "fireweave"
+version = "0.1.0"
+EOF
+
+cmd_apply server "2.1.1-staging.3" --manifest-root "$scratch2"
+assert_eq "apply: server package.json written" '"2.1.1-staging.3"' "$(node -e 'console.log(JSON.stringify(require(process.argv[1]).version))' "$scratch2/sdks/node/package.json")"
+
+cmd_apply web "2.1.1" --manifest-root "$scratch2"
+assert_eq "apply: web package.json written" '"2.1.1"' "$(node -e 'console.log(JSON.stringify(require(process.argv[1]).version))' "$scratch2/sdks/web/package.json")"
+
+cmd_apply python "0.1.1-staging.1" --manifest-root "$scratch2"
+assert_eq "apply: pyproject.toml written" "0.1.1-staging.1" "$(python3 -c 'import tomllib; print(tomllib.load(open("'"$scratch2"'/sdks/python/pyproject.toml","rb"))["project"]["version"])')"
+
+cmd_apply rust "0.1.1" --manifest-root "$scratch2"
+assert_eq "apply: Cargo.toml written" "0.1.1" "$(python3 -c 'import tomllib; print(tomllib.load(open("'"$scratch2"'/sdks/rust/Cargo.toml","rb"))["package"]["version"])')"
+
+# go/swift: apply() is a documented no-op (no manifest exists) — must not error.
+if cmd_apply go "0.1.0" --manifest-root "$scratch2" 2>/dev/null; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  printf 'FAIL: apply: go no-op should exit 0\n' >&2
+fi
+
+rm -rf "$scratch2"
+
+# ---------------------------------------------------------------------- summary
+echo "version.test.sh: ${PASS} passed, ${FAIL} failed"
+[ "$FAIL" -eq 0 ]
