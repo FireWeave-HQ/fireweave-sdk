@@ -4,7 +4,7 @@ import {
   FireweaveRemoteAdapter,
   FireweaveRuntime,
   InMemoryAdapter,
-} from '@fireweaveai/sdk';
+} from '@fireweaveai/server-sdk';
 
 type FetchCall = {
   url: string;

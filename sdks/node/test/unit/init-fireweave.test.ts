@@ -24,8 +24,8 @@ import {
   FireweaveLocalAdapter,
   FireweaveRemoteAdapter,
   initFireweave,
-} from '@fireweaveai/sdk';
-import type { InitFireweaveOptions } from '@fireweaveai/sdk';
+} from '@fireweaveai/server-sdk';
+import type { InitFireweaveOptions } from '@fireweaveai/server-sdk';
 
 type FetchCall = {
   url: string;

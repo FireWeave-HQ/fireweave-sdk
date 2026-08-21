@@ -18,17 +18,17 @@
  * (The old `readEnv` check is gone along with it: spec/modes.md bans env
  * reads outright, so the SDK no longer exposes an env-reading helper at all.)
  */
-import { FireweaveRuntime } from '../packages/sdk/dist/application/runtime.js';
-import { FireweaveClient } from '../packages/sdk/dist/application/client.js';
-import { InMemoryAdapter } from '../packages/sdk/dist/infrastructure/adapters/inmemory.js';
-import { FireweaveRemoteAdapter } from '../packages/sdk/dist/infrastructure/adapters/remote.js';
+import { FireweaveRuntime } from '../dist/application/runtime.js';
+import { FireweaveClient } from '../dist/application/client.js';
+import { InMemoryAdapter } from '../dist/infrastructure/adapters/inmemory.js';
+import { FireweaveRemoteAdapter } from '../dist/infrastructure/adapters/remote.js';
 // The dev substrate's ADAPTER only — pure computation, no I/O, no env, so it
 // must behave identically on every runtime (ADR-0008).
-import { FireweaveLocalAdapter } from '../packages/sdk/dist/infrastructure/adapters/local.js';
-import { DEFAULT_CONTEXT_LIMITS } from '../packages/sdk/dist/domain/context.js';
-import { canonicalizeContext } from '../packages/sdk/dist/domain/validation.js';
-import { DEFAULT_ALLOWED_HOSTS } from '../packages/sdk/dist/infrastructure/hosts.js';
-import { isFireweaveError } from '../packages/sdk/dist/domain/errors.js';
+import { FireweaveLocalAdapter } from '../dist/infrastructure/adapters/local.js';
+import { DEFAULT_CONTEXT_LIMITS } from '../dist/domain/context.js';
+import { canonicalizeContext } from '../dist/domain/validation.js';
+import { DEFAULT_ALLOWED_HOSTS } from '../dist/infrastructure/hosts.js';
+import { isFireweaveError } from '../dist/domain/errors.js';
 
 const failures = [];
 const check = (name, condition, detail = '') => {

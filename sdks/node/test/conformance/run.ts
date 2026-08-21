@@ -67,7 +67,7 @@ import {
   type InMemoryFlagDefinition,
   type JsonValue,
   type LifecycleState,
-} from '@fireweaveai/sdk';
+} from '@fireweaveai/server-sdk';
 // The test-server stub is plain JS by design (test-server/implementation/PLAN.md).
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore -- no type declarations for the stub

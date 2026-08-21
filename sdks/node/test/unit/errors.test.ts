@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ERROR_TAXONOMY, FireweaveError, redactSecrets } from '@fireweaveai/sdk';
+import { ERROR_TAXONOMY, FireweaveError, redactSecrets } from '@fireweaveai/server-sdk';
 
 test('taxonomy has exactly the 15 canonical kinds', () => {
   const kinds = Object.keys(ERROR_TAXONOMY).sort();
@@ -29,7 +29,7 @@ test('taxonomy matches contracts/errors.json mappings', async () => {
   const { join, dirname } = await import('node:path');
   const { fileURLToPath } = await import('node:url');
   const here = dirname(fileURLToPath(import.meta.url));
-  const contractPath = join(here, '..', '..', '..', '..', '..', '..', 'contracts', 'errors.json');
+  const contractPath = join(here, '..', '..', '..', '..', 'contracts', 'errors.json');
   const contract = JSON.parse(readFileSync(contractPath, 'utf8')) as {
     errors: Array<{ kind: string; openFeatureErrorCode: string; retryable: boolean; defaultMessage: string }>;
   };

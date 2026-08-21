@@ -6,12 +6,12 @@ import assert from 'node:assert/strict';
 import { describe, it, before, after } from 'node:test';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FireweaveRemoteAdapter, FireweaveRuntime, FireweaveClient } from '@fireweaveai/sdk';
+import { FireweaveRemoteAdapter, FireweaveRuntime, FireweaveClient } from '@fireweaveai/server-sdk';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const serverPath = join(
   __dirname,
-  '../../../../../../test-server/implementation/server.mjs',
+  '../../../../test-server/implementation/server.mjs',
 );
 
 type Started = { url: string; close: () => Promise<void> };

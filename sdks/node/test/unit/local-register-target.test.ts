@@ -13,7 +13,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FireweaveLocalAdapter, FireweaveRuntime, FireweaveClient } from '@fireweaveai/sdk';
+import { FireweaveLocalAdapter, FireweaveRuntime, FireweaveClient } from '@fireweaveai/server-sdk';
 
 function harness() {
   const lines: string[] = [];

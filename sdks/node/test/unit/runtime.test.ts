@@ -6,13 +6,13 @@ import {
   FireweaveRuntime,
   InMemoryAdapter,
   stableStringify,
-} from '@fireweaveai/sdk';
+} from '@fireweaveai/server-sdk';
 import type {
   BackendAdapter,
   AdapterResolution,
   CanonicalContext,
   InMemoryFlagDefinition,
-} from '@fireweaveai/sdk';
+} from '@fireweaveai/server-sdk';
 
 function adapterWith(flags: Record<string, InMemoryFlagDefinition>): InMemoryAdapter {
   return new InMemoryAdapter({ flags });

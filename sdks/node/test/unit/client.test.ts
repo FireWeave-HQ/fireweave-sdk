@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FireweaveClient, FireweaveRuntime, InMemoryAdapter } from '@fireweaveai/sdk';
+import { FireweaveClient, FireweaveRuntime, InMemoryAdapter } from '@fireweaveai/server-sdk';
 
 /** Ready-state client (extension calls are lifecycle-gated per ruling 17). */
 async function makeClient(): Promise<{

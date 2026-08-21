@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { FireweaveRemoteAdapter, FireweaveError } from '@fireweaveai/sdk';
+import { FireweaveRemoteAdapter, FireweaveError } from '@fireweaveai/server-sdk';
 
 type FetchCall = { url: string; init?: { method?: string; headers?: Record<string, string>; body?: string } };
 

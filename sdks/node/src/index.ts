@@ -1,5 +1,5 @@
 /**
- * @fireweaveai/sdk — Fireweave release-engineering SDK for server runtimes
+ * @fireweaveai/server-sdk — Fireweave release-engineering SDK for server runtimes
  * (Node, Bun, Deno). Public API per docs/architecture.md §6.
  *
  * Exactly two v1 capabilities (spec/control-points.md): control points and

@@ -15,7 +15,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as sdk from '@fireweaveai/sdk';
+import * as sdk from '@fireweaveai/server-sdk';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const distDir = join(here, '..', '..', 'dist');

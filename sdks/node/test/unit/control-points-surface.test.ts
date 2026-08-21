@@ -16,12 +16,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FireweaveClient, FireweaveRuntime, InMemoryAdapter } from '@fireweaveai/sdk';
-import * as sdk from '@fireweaveai/sdk';
+import { FireweaveClient, FireweaveRuntime, InMemoryAdapter } from '@fireweaveai/server-sdk';
+import * as sdk from '@fireweaveai/server-sdk';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SURFACE_DESCRIPTOR_PATH = join(
-  here, '..', '..', '..', '..', '..', '..', 'conformance', 'surface', 'control-points.surface.json',
+  here, '..', '..', '..', '..', 'conformance', 'surface', 'control-points.surface.json',
 );
 
 interface SurfaceMethod {

@@ -15,8 +15,8 @@ import {
   validateContext,
   validateTargetingKey,
   validateInitOptions,
-} from '@fireweaveai/sdk';
-import type { ContextPolicy } from '@fireweaveai/sdk';
+} from '@fireweaveai/server-sdk';
+import type { ContextPolicy } from '@fireweaveai/server-sdk';
 
 const POLICY: ContextPolicy = {
   limits: DEFAULT_CONTEXT_LIMITS,

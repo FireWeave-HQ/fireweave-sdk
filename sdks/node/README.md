@@ -1,26 +1,26 @@
-# @fireweaveai/sdk (Node SDK)
+# @fireweaveai/server-sdk (Node SDK)
 
 Fireweave release-engineering SDK for server runtimes — **control points**, target registration, release lifecycle, exposures, and health/outcome signals, with an OpenFeature provider for standards-compatible evaluation (spec v0.1.0).
 
 - **Zero runtime dependencies.** One peer: `@openfeature/server-sdk` (needed only if you use the OpenFeature provider).
-- **Runs on Node ≥ 20.20, Bun ≥ 1.2, and Deno ≥ 2.0** — no Node built-ins, no Node globals ([ADR-0008](../../../../docs/adr/0008-multi-runtime-support.md)).
-- **No vendor SDK, key, or hostname in your process.** Applications hold a Fireweave project key and talk to fw-server; which backend fw-server forwards to is fw-server's concern ([ADR-0005](../../../../docs/adr/0005-fireweave-proxy-backend.md), [ADR-0006](../../../../docs/adr/0006-node-drops-direct-posthog-adapter.md)).
+- **Runs on Node ≥ 20.20, Bun ≥ 1.2, and Deno ≥ 2.0** — no Node built-ins, no Node globals ([ADR-0008](../../docs/adr/0008-multi-runtime-support.md)).
+- **No vendor SDK, key, or hostname in your process.** Applications hold a Fireweave project key and talk to fw-server; which backend fw-server forwards to is fw-server's concern ([ADR-0005](../../docs/adr/0005-fireweave-proxy-backend.md), [ADR-0006](../../docs/adr/0006-node-drops-direct-posthog-adapter.md)).
 
 ## Install
 
 ```bash
-npm install @fireweaveai/sdk @openfeature/server-sdk   # or: bun add …
+npm install @fireweaveai/server-sdk @openfeature/server-sdk   # or: bun add …
 ```
 
 ```ts
 // Deno needs no install step
-import { FireweaveClient, FireweaveRemoteAdapter, FireweaveRuntime } from 'npm:@fireweaveai/sdk';
+import { FireweaveClient, FireweaveRemoteAdapter, FireweaveRuntime } from 'npm:@fireweaveai/server-sdk';
 ```
 
 ## Quick start (production path)
 
 ```ts
-import { FireweaveClient, FireweaveRemoteAdapter, FireweaveRuntime } from '@fireweaveai/sdk';
+import { FireweaveClient, FireweaveRemoteAdapter, FireweaveRuntime } from '@fireweaveai/server-sdk';
 
 // apiUrl/apiKey are required, explicit options — the SDK reads no
 // environment variables (spec/modes.md).
@@ -51,7 +51,7 @@ await fireweave.shutdown();   // flushes queued exposures first
 ## Quick start (offline, in-memory)
 
 ```ts
-import { FireweaveClient, FireweaveRuntime, InMemoryAdapter } from '@fireweaveai/sdk';
+import { FireweaveClient, FireweaveRuntime, InMemoryAdapter } from '@fireweaveai/server-sdk';
 
 const runtime = new FireweaveRuntime(new InMemoryAdapter({
   flags: { 'new-checkout': { type: 'boolean', enabled: true, value: true, variant: 'on' } },
@@ -67,7 +67,7 @@ await fireweave.controlPoints.getBooleanValue('new-checkout', false, { targeting
 
 ```ts
 import { OpenFeature } from '@openfeature/server-sdk';
-import { FireweaveProvider, FireweaveRuntime, InMemoryAdapter } from '@fireweaveai/sdk';
+import { FireweaveProvider, FireweaveRuntime, InMemoryAdapter } from '@fireweaveai/server-sdk';
 
 const runtime = new FireweaveRuntime(new InMemoryAdapter({ flags: { /* … */ } }));
 await OpenFeature.setProviderAndWait(new FireweaveProvider(runtime));
@@ -78,7 +78,7 @@ const enabled = await OpenFeature.getClient()
 await OpenFeature.close();
 ```
 
-The per-call parameter is `flagKey`, not `controlPointKey` — that name is fixed by the OpenFeature specification, by `spec/decision.schema.json`, and by the wire protocol shared with the Python, Go, and Java SDKs. "Control point" is the product noun; `flagKey` is its key at those boundaries ([ADR-0007](../../../../docs/adr/0007-control-point-vocabulary.md)).
+The per-call parameter is `flagKey`, not `controlPointKey` — that name is fixed by the OpenFeature specification, by `spec/decision.schema.json`, and by the wire protocol shared with the Python, Go, and Java SDKs. "Control point" is the product noun; `flagKey` is its key at those boundaries ([ADR-0007](../../docs/adr/0007-control-point-vocabulary.md)).
 
 ## Module layout
 
@@ -115,7 +115,7 @@ The SDK reads no environment variables (spec/modes.md, unscoped) — every optio
 
 ```bash
 # Mandatory to fix (any hit ⇒ migration required)
-rg -n "@fireweaveai/sdk/posthog|PostHogAdapter"
+rg -n "@fireweaveai/server-sdk/posthog|PostHogAdapter"
 rg -n '"posthog-node"' package.json
 
 # Configuration that moves
@@ -128,7 +128,7 @@ No hits? Bump the version; you are done.
 
 ```ts
 // before
-import { PostHogAdapter } from '@fireweaveai/sdk/posthog';
+import { PostHogAdapter } from '@fireweaveai/server-sdk/posthog';
 const adapter = new PostHogAdapter({
   projectApiKey: process.env.POSTHOG_API_KEY,
   host: process.env.POSTHOG_HOST,
@@ -136,7 +136,7 @@ const adapter = new PostHogAdapter({
 });
 
 // after
-import { FireweaveRemoteAdapter } from '@fireweaveai/sdk';
+import { FireweaveRemoteAdapter } from '@fireweaveai/server-sdk';
 const adapter = new FireweaveRemoteAdapter({
   apiUrl: process.env.FW_API_URL,
   apiKey: process.env.FW_PROJECT_API_KEY,
@@ -188,7 +188,7 @@ Both are rare, and `tsc` points straight at them.
 
 v2's vendor adapter could evaluate in-process from polled definitions with a secret key. 2.1 has no equivalent: caching is fw-server's concern, and both shipped adapters report `localEvaluation: false`.
 
-If in-process evaluation is load-bearing for you — an air-gapped service, or a latency floor below one network hop — **stay on v2 for now and tell us**. The interface seam (`AdapterRuntimeFeatures.localEvaluation` / `localOnly`, `AdapterResolution.fromCache`, the `STALE` reason) is deliberately preserved for a future Fireweave-native cache ([ADR-0006](../../../../docs/adr/0006-node-drops-direct-posthog-adapter.md)).
+If in-process evaluation is load-bearing for you — an air-gapped service, or a latency floor below one network hop — **stay on v2 for now and tell us**. The interface seam (`AdapterRuntimeFeatures.localEvaluation` / `localOnly`, `AdapterResolution.fromCache`, the `STALE` reason) is deliberately preserved for a future Fireweave-native cache ([ADR-0006](../../docs/adr/0006-node-drops-direct-posthog-adapter.md)).
 
 ## 5. Worth re-checking
 
@@ -199,10 +199,10 @@ If in-process evaluation is load-bearing for you — an air-gapped service, or a
 ## 6. Verify
 
 ```bash
-npm install @fireweaveai/sdk@^3
+npm install @fireweaveai/server-sdk@^3
 npx tsc --noEmit                                  # catches §3
 <your test command>
-rg -n "@fireweaveai/sdk/posthog|PostHogAdapter"   # expect no hits
+rg -n "@fireweaveai/server-sdk/posthog|PostHogAdapter"   # expect no hits
 ```
 
 At runtime:
@@ -220,7 +220,7 @@ If `backend` is still `'inmemory'` somewhere you expected to be live, the remote
 ## Rollback
 
 ```bash
-npm install @fireweaveai/sdk@2   # re-add posthog-node if you removed it
+npm install @fireweaveai/server-sdk@2   # re-add posthog-node if you removed it
 ```
 
 Revert the adapter swap and the env vars. No data migration is involved, so rollback is code and config only.
@@ -254,15 +254,15 @@ npm run build        # emit dist/ (package exports resolve to it)
 npm run verify       # typecheck + unit + integration + compat + conformance + smoke
 npm run smoke        # cross-runtime smoke (Node leg)
 
-bun test packages/sdk/test/unit packages/sdk/test/integration packages/sdk/test/compat
+bun test test/unit test/integration test/compat
 bun  scripts/smoke-runtimes.mjs
 deno run --allow-read scripts/smoke-runtimes.mjs
 ```
 
 ## Documentation
 
-Full docs live in [`docs/`](../../../../docs/): [quickstart](../../../../docs/quickstart.md) · [remote adapter](../../../../docs/remote.md) · [extensions](../../../../docs/extensions.md) · [OpenFeature](../../../../docs/openfeature.md) · [runtimes](../../../../docs/runtimes.md) · [testing](../../../../docs/testing.md) · [migration](../../../../docs/migration.md) · [troubleshooting](../../../../docs/troubleshooting.md) · [ADRs](../../../../docs/adr/).
+Full docs live in [`docs/`](../../docs/): [quickstart](../../docs/quickstart.md) · [remote adapter](../../docs/remote.md) · [extensions](../../docs/extensions.md) · [OpenFeature](../../docs/openfeature.md) · [runtimes](../../docs/runtimes.md) · [testing](../../docs/testing.md) · [migration](../../docs/migration.md) · [troubleshooting](../../docs/troubleshooting.md) · [ADRs](../../docs/adr/).
 
 ## License
 
-[MIT](../../../../LICENSE).
+[MIT](../../LICENSE).
