@@ -315,6 +315,39 @@ jobs:
       # that report is aggregated against the honest 65x7 cross-language
       # gate.
 
+  # --------------------------------------------------------------- swift
+  swift:
+    name: swift (${{ matrix.swift }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        swift: ['6.0.3', '6.3.3'] # Package.swift swift-tools-version floor + latest verified stable
+    steps:
+      - uses: actions/checkout@v5
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: ${{ matrix.swift }}
+      - name: swift-format lint (built-in `swift format`, no separate config)
+        working-directory: sdks/swift
+        run: find Sources Tests -name '*.swift' | xargs swift format lint --strict
+      - name: swift build
+        working-directory: sdks/swift
+        run: swift build
+      - name: swift test (unit + architecture/surface guards)
+        working-directory: sdks/swift
+        run: swift test
+      - name: Conformance runner (per-version sanity; differential job is the gate)
+        working-directory: sdks/swift
+        run: swift run FireweaveConformance -- --contracts ../../contracts --out /tmp/compatibility-report.swift.json
+      # No separate assertion step on that report's own exit code beyond the
+      # command above failing the job: contracts/harness.md rule 5 says a
+      # runner "exit non-zero on any fail" is expected on any real
+      # divergence, not a crash signal — matching go/java/rust's per-language
+      # job comment. The differential job (scripts/conformance-all.sh) is
+      # where that report is aggregated against the honest 65x7 cross-
+      # language gate.
+
   # -------------------------------------------- cross-language differential
   differential:
     name: cross-language differential (comparator)
@@ -341,7 +374,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-      - name: Run all five conformance runners + comparator
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '6.3.3'
+      - name: Run all six conformance runners + comparator
         run: bash scripts/conformance-all.sh
       - name: Publish comparator summary
         if: always()
