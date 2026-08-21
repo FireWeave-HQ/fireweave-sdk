@@ -1,0 +1,32 @@
+[package]
+name = "fireweave"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Fireweave SDK for Rust — control-point evaluation and target registration (spec v0.1.0)."
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/FireWeave-HQ/fireweave-sdk"
+keywords = ["feature-flags", "fireweave", "control-points"]
+categories = ["api-bindings"]
+
+# Dependency budget (Phase 6 controller ruling): exactly an HTTP client
+# (ureq) and a JSON parser (serde + serde_json) — nothing else in
+# [dependencies]. Guarded by tests/architecture_guard.rs
+# ("dependency_budget_is_exactly_ureq_serde_serde_json"). dev-dependencies
+# are free (contracts/harness.md-equivalent test-only tooling); this crate
+# needs none — the conformance faults suite is exercised over a real
+# std::net loopback HTTP stub (conformance/fake_server.rs), not a
+# third-party test-HTTP crate.
+[dependencies]
+ureq = "3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# The fixture conformance runner (contracts/harness.md) ships as a binary
+# target in the same crate so it can use the library's public API directly
+# (InMemoryAdapter, FireweaveRuntime, validate_context, ...) exactly like
+# python's conformance/runner.py does against `fireweave`.
+[[bin]]
+name = "conformance"
+path = "conformance/main.rs"
