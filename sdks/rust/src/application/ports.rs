@@ -112,7 +112,9 @@ impl RegisterTargetResult {
 /// agnostic port type — and re-gating on it a second time in the runtime —
 /// meant the remote path's hardcoded `None` silently defeated the gate for
 /// every remote decision (task-12 review finding; regression-tested by
-/// `application::runtime::tests::remote_style_metadata_passes_through_when_both_keys_present`).
+/// `infrastructure::adapters::remote::tests::remote_decision_surfaces_vendor_metadata_when_server_sends_both_keys`
+/// and its symmetric counterpart,
+/// `infrastructure::adapters::remote::tests::remote_decision_omits_vendor_metadata_when_only_one_key_present`).
 #[derive(Debug, Clone)]
 pub struct FlagResolution {
     pub value: JsonValue,

@@ -11,7 +11,7 @@ decision is produced — that is `remote-protocol.md` and the adapter's business
 ## Scope of v1
 
 Exactly two capabilities: **control points** (this document) and **target registration**
-(`target.schema.json`). Releases, exposures, signals, capabilities discovery and guardrails
+(`remote-register-target.schema.json`). Releases, exposures, signals, capabilities discovery and guardrails
 are out of v1. An SDK MUST NOT expose them, and MUST NOT expose an OpenFeature provider.
 
 ## The namespace

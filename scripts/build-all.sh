@@ -40,13 +40,6 @@ fi
 # PYTHONSAFEPATH keeps cwd off sys.path so stray build/ directories cannot
 # shadow the pypa 'build' module (ignored harmlessly on Python 3.10).
 (cd "$FW_ROOT/sdks/python" && PYTHONSAFEPATH=1 "$FW_PY" -m build --outdir "$OUT_DIR")
-# Setuptools regenerates src/fireweave.egg-info/ during the sdist build.
-# That directory is (defectively) committed — reported to the orchestrator as
-# an sdks/python hygiene issue; until it is gitignored, restore it so a
-# packaging DRY RUN leaves the working tree clean.
-if git -C "$FW_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  git -C "$FW_ROOT" checkout --quiet -- sdks/python/src/fireweave.egg-info/ 2>/dev/null || true
-fi
 
 # ---------- Go: build + module verification ----------
 fw_section "go: build + go mod verify"

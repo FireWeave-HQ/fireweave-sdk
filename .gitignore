@@ -46,3 +46,25 @@ sdks/web/package-lock.json
 # them an explicit ephemeral -out/--out path) — that asymmetry is intentional and
 # scoped to this fix; see task-10-report.md.
 sdks/node/test/conformance/compatibility-report.node.json
+
+# Same rationale as node's entry above (task-10 review round 2, finding 1),
+# extended to the other six languages (final fix wave, C-report snapshot
+# cleanup): these compatibility-report.<lang>.json files are never read by
+# scripts/conformance-all.sh (it always passes each language's runner an
+# explicit ephemeral -out/--out path) and are refreshed only by an explicit,
+# human-run standalone command (CONTRIBUTING.md). A committed snapshot reads
+# as authoritative but drifts the moment the real fixtures move on.
+sdks/go/conformance/compatibility-report.go.json
+sdks/java/fireweave-testing/compatibility-report.java.json
+sdks/python/conformance/compatibility-report.python.json
+sdks/rust/conformance/compatibility-report.rust.json
+sdks/swift/conformance/compatibility-report.swift.json
+sdks/web/test/conformance/compatibility-report.web.json
+
+# .superpowers/ holds task briefs + review diffs for this implementation
+# effort (~6 MB) — not project source, never meant to ship. A nested
+# .gitignore at .superpowers/sdd/.gitignore already ignores everything
+# under sdd/, but that's brittle (misses anything added directly under
+# .superpowers/, or if that nested file is ever removed); this root entry
+# is the authoritative one.
+.superpowers/
