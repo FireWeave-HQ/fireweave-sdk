@@ -398,9 +398,10 @@ function main() {
     divergences: violations,
     results: mergedResults,
     // Purely informational; see loadWebSuite's doc comment — never affects
-    // `divergences` or the exit code. Absent (null) when --web-report wasn't
-    // passed.
-    webSuite,
+    // `divergences` or the exit code. The key itself is OMITTED (not merely
+    // null) when --web-report wasn't passed, so output is byte-identical to
+    // before this flag existed unless a caller opts in.
+    ...(webSuite ? { webSuite } : {}),
   };
 
   if (args.out) {
