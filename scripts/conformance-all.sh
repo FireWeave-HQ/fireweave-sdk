@@ -105,7 +105,7 @@ fw_check_report python "$OUT_DIR/compatibility-report.python.json" "$PYTHON_EXIT
 
 # ---------- Go ----------
 fw_section "go: conformance runner"
-(cd "$FW_ROOT/go" && go run ./cmd/conformance \
+(cd "$FW_ROOT/sdks/go" && go run ./cmd/conformance \
       -contracts "$FW_ROOT/contracts" \
       -out "$OUT_DIR/compatibility-report.go.json") || GO_EXIT=$?
 fw_check_report go "$OUT_DIR/compatibility-report.go.json" "$GO_EXIT"

@@ -25,7 +25,7 @@
 /examples/node/             @FireWeave-HQ/sdk-node
 /sdks/python/               @FireWeave-HQ/sdk-python
 /examples/python/           @FireWeave-HQ/sdk-python
-/go/                        @FireWeave-HQ/sdk-go
+/sdks/go/                   @FireWeave-HQ/sdk-go
 /examples/go/               @FireWeave-HQ/sdk-go
 /sdks/java/                 @FireWeave-HQ/sdk-java
 /examples/java/             @FireWeave-HQ/sdk-java

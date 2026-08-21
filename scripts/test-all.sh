@@ -56,15 +56,15 @@ run_step "python: pytest" env -C "$FW_ROOT/sdks/python" "$FW_PY" -m pytest
 
 # ---------- Go ----------
 fw_section "go: gofmt check"
-UNFORMATTED="$(cd "$FW_ROOT/go" && gofmt -l .)"
+UNFORMATTED="$(cd "$FW_ROOT/sdks/go" && gofmt -l .)"
 if [ -n "$UNFORMATTED" ]; then
   FAILED+=("go: gofmt")
   fw_warn "gofmt: files need formatting:"
   printf '%s\n' "$UNFORMATTED"
 fi
-run_step "go: vet" env -C "$FW_ROOT/go" go vet ./...
-run_step "go: build" env -C "$FW_ROOT/go" go build ./...
-run_step "go: test -race" env -C "$FW_ROOT/go" go test -race ./...
+run_step "go: vet" env -C "$FW_ROOT/sdks/go" go vet ./...
+run_step "go: build" env -C "$FW_ROOT/sdks/go" go build ./...
+run_step "go: test -race" env -C "$FW_ROOT/sdks/go" go test -race ./...
 
 # ---------- Java ----------
 run_step "java: mvn clean install (tests + conformance gate)" \

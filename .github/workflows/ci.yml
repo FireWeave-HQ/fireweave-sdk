@@ -230,9 +230,9 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go }}
-          cache-dependency-path: go/go.sum
+          cache-dependency-path: sdks/go/go.sum
       - name: gofmt check
-        working-directory: go
+        working-directory: sdks/go
         run: |
           unformatted="$(gofmt -l .)"
           if [ -n "$unformatted" ]; then
@@ -241,13 +241,13 @@ jobs:
             exit 1
           fi
       - name: go vet
-        working-directory: go
+        working-directory: sdks/go
         run: go vet ./...
       - name: go build
-        working-directory: go
+        working-directory: sdks/go
         run: go build ./...
       - name: go test -race (includes the conformance suite via conformance/harness_test.go, softened for known out-of-scope gaps — see task-10-report.md)
-        working-directory: go
+        working-directory: sdks/go
         run: go test -race ./...
       # No separate raw-CLI "conformance runner" step here: it would exercise
       # the same 65 fixtures go test above just ran, but via cmd/conformance's
@@ -331,8 +331,8 @@ jobs:
           python-version: '3.14'
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go/go.mod
-          cache-dependency-path: go/go.sum
+          go-version-file: sdks/go/go.mod
+          cache-dependency-path: sdks/go/go.sum
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -455,8 +455,8 @@ jobs:
           python-version: '3.14'
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go/go.mod
-          cache-dependency-path: go/go.sum
+          go-version-file: sdks/go/go.mod
+          cache-dependency-path: sdks/go/go.sum
       - uses: actions/setup-java@v5
         with:
           distribution: temurin

@@ -54,7 +54,7 @@ fw_section "go: build + go mod verify"
 # (examples/go would otherwise get an untracked/overwritten `go` binary).
 GO_TMP="$(mktemp -d)"
 trap 'rm -rf "$GO_TMP"' EXIT
-(cd "$FW_ROOT/go" && go build -o "$GO_TMP/" ./... && go mod verify)
+(cd "$FW_ROOT/sdks/go" && go build -o "$GO_TMP/" ./... && go mod verify)
 (cd "$FW_ROOT/examples/go" && go build -o "$GO_TMP/" ./... && go mod verify)
 
 # ---------- Java: mvn package ----------

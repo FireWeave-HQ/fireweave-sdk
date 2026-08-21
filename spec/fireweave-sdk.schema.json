@@ -83,7 +83,7 @@
         "pypiExtraPosthog": { "type": "string", "const": "fireweave[posthog]" },
         "goModule": {
           "type": "string",
-          "const": "github.com/FireWeave-HQ/fireweave-sdk/go"
+          "const": "github.com/FireWeave-HQ/fireweave-sdk/sdks/go"
         },
         "mavenGroupId": { "type": "string", "const": "ai.fireweave" },
         "mavenArtifactId": { "type": "string", "const": "sdk" },

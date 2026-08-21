@@ -115,7 +115,7 @@ jobs:
           osv-scanner scan source \
             --lockfile sdks/node/package-lock.json \
             --lockfile examples/node/package-lock.json \
-            --lockfile go/go.mod \
+            --lockfile sdks/go/go.mod \
             --lockfile examples/go/go.mod \
             --lockfile 'requirements.txt:/tmp/requirements-osv.txt' \
             --lockfile sdks/java/pom.xml
@@ -135,8 +135,8 @@ jobs:
           python-version: '3.14'
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go/go.mod
-          cache-dependency-path: go/go.sum
+          go-version-file: sdks/go/go.mod
+          cache-dependency-path: sdks/go/go.sum
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -157,13 +157,13 @@ jobs:
           pip-licenses --partial-match --allow-only \
             'MIT;MIT License;Apache-2.0;Apache Software License;BSD;BSD License;ISC;ISC License;Python Software Foundation License;PSF-2.0;Python-2.0;Zlib;Public Domain;The Unlicense;CC0;Mozilla Public License 2.0 (MPL 2.0);MPL 2.0'
       - name: go — go-licenses (fails on anything off-allowlist)
-        working-directory: go
+        working-directory: sdks/go
         run: |
           go install github.com/google/go-licenses@v1.6.0
           # Ignore first-party module paths (LICENSE lives at repo root).
           # MPL-2.0: hashicorp/golang-lru (transitive via posthog-go) — reviewed.
           "$(go env GOPATH)/bin/go-licenses" check ./... \
-            --ignore=github.com/FireWeave-HQ/fireweave-sdk/go \
+            --ignore=github.com/FireWeave-HQ/fireweave-sdk/sdks/go \
             --allowed_licenses=MIT,Apache-2.0,BSD-2-Clause,BSD-3-Clause,ISC,0BSD,Unlicense,CC0-1.0,MPL-2.0
       - name: java — license-maven-plugin third-party report (advisory listing)
         working-directory: sdks/java

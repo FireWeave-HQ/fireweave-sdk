@@ -3,7 +3,7 @@ module github.com/FireWeave-HQ/fireweave-sdk/examples/go
 go 1.25.13
 
 require (
-	github.com/FireWeave-HQ/fireweave-sdk/go v0.0.0
+	github.com/FireWeave-HQ/fireweave-sdk/sdks/go v0.0.0
 	github.com/open-feature/go-sdk v1.17.2
 )
 
@@ -20,4 +20,4 @@ require (
 )
 
 // The SDK module is not published yet; resolve it from the sibling path.
-replace github.com/FireWeave-HQ/fireweave-sdk/go => ../../go
+replace github.com/FireWeave-HQ/fireweave-sdk/sdks/go => ../../sdks/go
