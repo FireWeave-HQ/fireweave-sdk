@@ -40,11 +40,22 @@
  *     web's real signal is sdks/web/test/conformance/run.ts's own
  *     compatibility-report.web.json against contracts/web/*, tracked
  *     outside this matrix.
- *   - swift: SYNTHESIZED as `not-implemented` — no SDK exists yet.
+ *   - swift (landed Task 13 / Phase 6): loaded from --report swift=<path>,
+ *     the SAME real-no-baseline tier as rust — a real conformance runner
+ *     (sdks/swift/Sources/FireweaveConformance) executes the fixtures its
+ *     architecture can represent. UNLIKE web, swift is NOT synthesized:
+ *     despite sharing web's prefetch-then-synchronous-cache-read
+ *     architecture, swift also supports local mode and its InMemoryAdapter
+ *     transfers cleanly for all but two structurally-narrow slices (6
+ *     invocation-context-matching-driven context fixtures, 8-of-9 faults
+ *     fixtures) — both classified `skipped-with-documented-limitation` by
+ *     the runner itself, not swallowed into a blanket per-column
+ *     synthesis. See REAL_NO_BASELINE_LANGUAGES below and
+ *     task-13-report.md's item-8 disposition for the full reasoning.
  * contracts/README.md's field-rules table requires compatibility.<lang> only
- * for node/python/go/java; web/swift carry no per-fixture declaration and no
- * real runner; rust has a real runner but (being newer than the frozen
- * fixture set) also carries no per-fixture declaration. Rule 2 and the
+ * for node/python/go/java; web carries no per-fixture declaration and no
+ * real runner; rust/swift have real runners but (being newer than the
+ * frozen fixture set) also carry no per-fixture declaration. Rule 2 and the
  * "missing compatibility.<lang>" fixture check apply only to
  * node/python/go/java.
  *
@@ -107,16 +118,39 @@ const DECLARED_LANGUAGES = ['node', 'python', 'go', 'java'];
 // genuine harness-wiring ambiguity the Phase 6 brief left for this task to
 // resolve (recorded as a numbered finding in task-12-report.md), not a
 // pre-existing ruling to follow.
-const REAL_NO_BASELINE_LANGUAGES = ['rust'];
+//
+// Task 13 (Phase 6) item-8 disposition: swift joins this SAME tier, not
+// SYNTHESIZED_LANGUAGES below, despite sharing web's prefetch-then-
+// synchronous-cache-read architecture (ADR-0009, studied for the seam).
+// The reasoning (task-13-report.md, REQUIRED item-8 justification): web's
+// `not-applicable-web` disposition is right for web because ALL 65 shared
+// fixtures encode async server semantics a synchronous cache-read surface
+// cannot answer at all, so running them would be a wall of assertion-free
+// skips. Swift's architecture additionally supports local mode (unlike
+// web, remote-only) and its InMemoryAdapter's rich condition-matching only
+// breaks down for TWO structurally-narrow slices of the 65 — 6 context
+// fixtures whose backend matching is driven by invocation-only context,
+// and 8-of-9 faults fixtures whose premise is a live per-call HTTP fault —
+// both individually classified `skipped-with-documented-limitation` by the
+// swift runner itself, not silently absorbed into a blanket synthesis. The
+// other 44 (37 real pass + 1 v1-structural recurrence of rust finding 5 +
+// 13 v1-out-of-scope) genuinely exercise real swift code against the real
+// fixtures. Declaring all 65 `not-applicable` would discard that signal
+// for no architectural reason web actually has (web has no local mode and
+// no in-memory rich-matching adapter to even attempt this with) — running
+// the shared 65 where they transfer and reporting honest per-fixture
+// statuses is the more informative, still-honest choice.
+const REAL_NO_BASELINE_LANGUAGES = ['rust', 'swift'];
 // Languages whose --report is required and loaded (the two tiers above,
 // combined) — everything else below is a language-shaped loop variable,
 // not a new concept.
 const REPORT_LANGUAGES = [...DECLARED_LANGUAGES, ...REAL_NO_BASELINE_LANGUAGES];
 // Synthesized columns (contracts/harness.md ruling 3): no --report file, no
 // per-fixture compatibility.<lang> declaration, no real runner — computed
-// for all 65 by this tool itself.
-const SYNTHESIZED_LANGUAGES = ['web', 'swift'];
-// Display/output order (unchanged from before rust had a real runner).
+// for all 65 by this tool itself. Web only, as of Task 13 — see the
+// REAL_NO_BASELINE_LANGUAGES comment above for why swift is NOT here.
+const SYNTHESIZED_LANGUAGES = ['web'];
+// Display/output order (unchanged from before rust/swift had real runners).
 const LANGUAGES = ['node', 'python', 'go', 'java', 'web', 'rust', 'swift'];
 const SUITES = ['evaluation', 'context', 'lifecycle', 'faults', 'security', 'extensions'];
 const STATUSES = new Set([
@@ -165,7 +199,7 @@ function parseArgs(argv) {
       if (!REPORT_LANGUAGES.includes(lang)) {
         usageError(
           `unknown language "${lang}" for --report (only ${REPORT_LANGUAGES.join(', ')} load a ` +
-            `report file — web/swift are synthesized, not loaded)`,
+            `report file — web is synthesized, not loaded)`,
         );
       }
       args.reports[lang] = v.slice(eq + 1);
@@ -232,9 +266,9 @@ function loadFixtures(contractsDir) {
       }
       const compat = fixture.compatibility ?? {};
       // Only node/python/go/java carry a per-fixture declaration
-      // (contracts/README.md field-rules table); web/swift are synthesized
-      // aggregate-only columns, and rust — real runner, no baseline — is
-      // deliberately excluded from this check too (REAL_NO_BASELINE_LANGUAGES).
+      // (contracts/README.md field-rules table); web is a synthesized
+      // aggregate-only column, and rust/swift — real runners, no baseline —
+      // are deliberately excluded from this check too (REAL_NO_BASELINE_LANGUAGES).
       for (const lang of DECLARED_LANGUAGES) {
         const declared = compat[lang];
         if (declared === undefined) {
@@ -321,17 +355,16 @@ function webRow(fixture) {
   };
 }
 
-/** swift has no SDK yet (contracts/harness.md ruling 3, Phase 6). */
-function notImplementedRow(fixture, lang) {
-  return {
-    fixtureId: fixture.id,
-    suite: fixture.suite,
-    language: lang,
-    status: 'not-implemented',
-    limitation: `${lang} SDK does not exist yet (Phase 6 of the v1 control-points plan).`,
-    message: null,
-  };
-}
+/**
+ * `not-implemented` (contracts/harness.md ruling 3) is still a member of
+ * STATUSES below for schema completeness — it was swift's synthesized
+ * status before Task 13 gave swift a real runner (REAL_NO_BASELINE_LANGUAGES
+ * above) and remains the correct status for a FUTURE language with no SDK
+ * yet. No language is currently synthesized this way (SYNTHESIZED_LANGUAGES
+ * is web-only), so there is no live caller for a `notImplementedRow`-shaped
+ * function today; re-add one, keyed the same way `webRow` is, if an 8th
+ * language lands in this repo before its SDK does.
+ */
 
 // ---------- comparison ----------
 
@@ -417,11 +450,15 @@ function main() {
   }
 
   // Synthesized columns: no --report file, no fixture-declared baseline to diverge from.
+  // web-only as of Task 13 (see SYNTHESIZED_LANGUAGES's doc comment) — this
+  // loop is written generically (not hardcoded to a single language) so a
+  // future synthesized language only needs its own `<lang>Row` function and
+  // an entry in the array above, not a change here.
   for (const lang of SYNTHESIZED_LANGUAGES) {
     const counts = {};
     for (const s of STATUSES) counts[s] = 0;
     for (const [, fixture] of fixtures) {
-      const row = lang === 'web' ? webRow(fixture) : notImplementedRow(fixture, lang);
+      const row = webRow(fixture);
       counts[row.status] += 1;
       mergedResults.push(row);
     }

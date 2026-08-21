@@ -11,9 +11,7 @@ import PackageDescription
 // `dependencies: []` below is asserted by
 // Tests/FireweaveTests/ArchitectureGuardTests.swift
 // (`packageManifestDeclaresZeroDependencies`), which parses this very file's
-// text rather than trusting a comment. This manifest grows once more in a
-// later commit (the executable conformance runner) — see git history /
-// task-13-report.md for the sequence.
+// text rather than trusting a comment.
 let package = Package(
     name: "Fireweave",
     platforms: [
@@ -28,6 +26,16 @@ let package = Package(
         .target(
             name: "Fireweave",
             dependencies: []
+        ),
+        // Fixture conformance runner (contracts/harness.md) ships as an
+        // executable target in the same package so it can use the library's
+        // public API directly (InMemoryAdapter, FireweaveRuntime, ...) —
+        // mirrors rust's `[[bin]] conformance` in the same crate. This is an
+        // in-package TARGET dependency, not an external package dependency;
+        // it does not count against the zero-dependency ruling above.
+        .executableTarget(
+            name: "FireweaveConformance",
+            dependencies: ["Fireweave"]
         ),
         .testTarget(
             name: "FireweaveTests",

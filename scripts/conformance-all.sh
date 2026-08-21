@@ -84,6 +84,7 @@ PYTHON_EXIT=0
 GO_EXIT=0
 JAVA_EXIT=0
 RUST_EXIT=0
+SWIFT_EXIT=0
 
 # ---------- Node ----------
 fw_node_deps
@@ -126,6 +127,20 @@ fw_section "rust: conformance runner"
       --contracts "$FW_ROOT/contracts" \
       --out "$OUT_DIR/compatibility-report.rust.json") || RUST_EXIT=$?
 fw_check_report rust "$OUT_DIR/compatibility-report.rust.json" "$RUST_EXIT"
+
+# ---------- Swift ----------
+# Task 13 (Phase 6): same real-no-baseline tier as rust (tools/conformance/
+# compare.mjs's REAL_NO_BASELINE_LANGUAGES). Runs the fixtures swift's
+# prefetch-then-synchronous-cache-read architecture can represent for real
+# (see sdks/swift/Sources/FireweaveConformance/Runner.swift's doc comment
+# for the item-8 disposition); the rest are individually classified
+# skipped-with-documented-limitation or skipped-v1-out-of-scope, never
+# silently absorbed.
+fw_section "swift: conformance runner"
+(cd "$FW_ROOT/sdks/swift" && swift run --quiet FireweaveConformance -- \
+      --contracts "$FW_ROOT/contracts" \
+      --out "$OUT_DIR/compatibility-report.swift.json") || SWIFT_EXIT=$?
+fw_check_report swift "$OUT_DIR/compatibility-report.swift.json" "$SWIFT_EXIT"
 
 fw_section "per-language runner exit codes (informational only)"
 printf '  %-8s exit=%s\n' node "$NODE_EXIT"
