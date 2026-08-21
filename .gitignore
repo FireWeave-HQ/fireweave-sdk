@@ -16,10 +16,20 @@ results.*.json
 examples/go/go
 
 # Bun writes this when `bun install` runs in sdks/node. The lockfile of record
-# is npm's package-lock.json — `bun install --frozen-lockfile` reads it directly
-# (verified), so a second lockfile would only add drift.
-bun.lock
-bun.lockb
+# for sdks/node is npm's package-lock.json — `bun install --frozen-lockfile`
+# reads it directly (verified), so a second lockfile would only add drift.
+# sdks/web is the opposite: bun IS its toolchain, so sdks/web/bun.lock is
+# tracked (not matched by this node-scoped pattern) and sdks/web/package-lock.json
+# is the one ignored below instead.
+sdks/node/bun.lock
+sdks/node/bun.lockb
+
+# npm writes this when `npm install`/`npm pack` touch sdks/web (package build
+# dry runs, editor tooling). The lockfile of record for sdks/web is bun's
+# bun.lock — bun is the only toolchain sdks/web's scripts use (Task 11 phase-5
+# restructure: web flatten dropped the tracked package-lock.json in favor of
+# this ignore, matching node's npm/bun split the other way around).
+sdks/web/package-lock.json
 
 # Node conformance runner's default report path (sdks/node/test/conformance/run.ts,
 # no --out given). Untracked deliberately (task-10 review round 2, finding 1): a

@@ -1,5 +1,5 @@
 /**
- * Layering guard, mirroring sdks/node/packages/sdk/test/unit/architecture-layers.test.ts:
+ * Layering guard, mirroring sdks/node/test/unit/architecture-layers.test.ts:
  *
  *  - the SDK stays dependency-free — `package.json`'s `dependencies` never
  *    grows beyond zero entries (peerDependencies/devDependencies are a

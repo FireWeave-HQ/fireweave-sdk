@@ -1,7 +1,7 @@
 /**
  * Control-point SURFACE parity (spec/control-points.md,
  * conformance/surface/control-points.surface.json), mirroring
- * sdks/node/packages/sdk/test/unit/control-points-surface.test.ts.
+ * sdks/node/test/unit/control-points-surface.test.ts.
  *
  * Behaviour is asserted elsewhere; this file asserts the surface EXISTS.
  * That distinction matters because a missing method is invisible: nothing
@@ -32,7 +32,7 @@ import * as sdk from '@fireweaveai/web-sdk';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SURFACE_DESCRIPTOR_PATH = join(
-  here, '..', '..', '..', '..', '..', '..', 'conformance', 'surface', 'control-points.surface.json'
+  here, '..', '..', '..', '..', 'conformance', 'surface', 'control-points.surface.json'
 );
 
 interface SurfaceMethod {

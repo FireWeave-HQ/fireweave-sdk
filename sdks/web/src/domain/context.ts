@@ -4,7 +4,7 @@
  * Bound/reserved-key ENFORCEMENT (the Validated<T>-returning checks) lives in
  * validation.ts (`validateContext`) — spec/control-points.md "Validation,
  * before any I/O" rule 3. This module has no throwing/failing surface of its
- * own, mirroring the split sdks/node/packages/sdk/src/domain/{context,validation}.ts
+ * own, mirroring the split sdks/node/src/domain/{context,validation}.ts
  * makes.
  *
  * A browser context is smaller than a server one — there is one user per

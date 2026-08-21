@@ -1,6 +1,6 @@
 /**
  * Local-mode target registration (spec/modes.md), mirroring
- * sdks/node/packages/sdk/test/unit/local-register-target.test.ts.
+ * sdks/node/test/unit/local-register-target.test.ts.
  *
  * This reverses an earlier design in which the local adapter reported
  * `UnsupportedCapability`. That existed to stop a dev harness *silently*

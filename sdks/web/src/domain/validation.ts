@@ -3,7 +3,7 @@
  * spec/control-points.md "Validation, before any I/O" and spec/modes.md
  * "Initialisation validation".
  *
- * Ported from sdks/node/packages/sdk/src/domain/validation.ts (the reference
+ * Ported from sdks/node/src/domain/validation.ts (the reference
  * implementation) — same five validators, same `Validated<T>` discipline,
  * same malformed-key → FlagNotFound mapping. Reimplemented here rather than
  * shared so the browser package keeps zero cross-package dependency to
