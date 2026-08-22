@@ -321,7 +321,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        swift: ['6.0.3', '6.3.3'] # Package.swift swift-tools-version floor + latest verified stable
+        swift: ['6.0.3', '6.2.1'] # Package.swift swift-tools-version floor + newest patch known to setup-swift@v2
     steps:
       - uses: actions/checkout@v5
       - uses: swift-actions/setup-swift@v2
@@ -342,7 +342,7 @@ jobs:
         # convention to strip, and FireweaveConformance's own arg parser
         # (Entry.swift) doesn't special-case one either — a stray `--` here
         # crashes it with `Fatal error: unknown argument --` (verified on
-        # both 6.1 and 6.3.3) before it reads a single fixture.
+        # both 6.1 and 6.2.1) before it reads a single fixture.
         working-directory: sdks/swift
         run: swift run FireweaveConformance --contracts ../../contracts --out /tmp/compatibility-report.swift.json
       # No separate assertion step on that report's own exit code beyond the
@@ -381,7 +381,8 @@ jobs:
           toolchain: stable
       - uses: swift-actions/setup-swift@v2
         with:
-          swift-version: '6.3.3'
+          # 6.2.1 is the newest patch known to setup-swift@v2 (6.3.x is not listed).
+          swift-version: '6.2.1'
       - name: tools/release/version.sh unit tests (pure semver + staging-N logic)
         # Chosen job: this is the one job in ci.yml with node, python, AND
         # java/mvn all set up already (needed for the 65x7 conformance run
