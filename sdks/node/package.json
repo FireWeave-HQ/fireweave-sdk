@@ -1,6 +1,6 @@
 {
   "name": "@fireweaveai/server-sdk",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Fireweave release-engineering SDK for server runtimes (Node, Bun, Deno): control points and target registration. Zero runtime dependencies (spec v0.1.0).",
   "license": "MIT",
   "type": "module",
