@@ -1,6 +1,6 @@
 {
   "name": "@fireweaveai/web-sdk",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Fireweave SDK for browsers: control points and target registration, in remote (fw-server) or local (in-process, no network) mode. Holds no secrets.",
   "license": "MIT",
   "type": "module",
