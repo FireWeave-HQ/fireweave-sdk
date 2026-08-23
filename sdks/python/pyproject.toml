@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fireweave"
-version = "0.1.0"
+version = "0.1.1"
 description = "Fireweave polyglot SDK for Python — server-first control-point evaluation and target registration (spec v0.1.0)."
 readme = "README.md"
 requires-python = ">=3.10"
