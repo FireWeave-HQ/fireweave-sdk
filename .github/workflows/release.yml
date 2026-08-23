@@ -682,7 +682,7 @@ jobs:
         # without spending anything; the git tag (already pushed by the `tag`
         # job, which this job needs) IS this release's staging artifact.
         working-directory: sdks/rust
-        run: cargo publish --dry-run --locked
+        run: cargo publish --dry-run --locked --allow-dirty
 
   publish-cargo-production:
     name: publish crates.io (production)
@@ -718,4 +718,4 @@ jobs:
         working-directory: sdks/rust
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --locked
+        run: cargo publish --locked --allow-dirty
