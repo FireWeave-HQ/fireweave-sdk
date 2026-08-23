@@ -670,7 +670,11 @@ jobs:
         with:
           toolchain: stable
       - name: Apply computed version
-        run: tools/release/version.sh apply rust "${{ steps.version.outputs.release_version }}"
+        run: |
+          tools/release/version.sh apply rust "${{ steps.version.outputs.release_version }}"
+          # apply() rewrites Cargo.toml only; refresh Cargo.lock so --locked
+          # does not fail on the package's own version field.
+          (cd sdks/rust && cargo check --quiet)
       - name: cargo publish --dry-run (packages + validates only — never uploads)
         # No staging registry exists for crates.io (unlike TestPyPI) and
         # yanking is not deletion, so a real staging publish would spend the
@@ -707,7 +711,9 @@ jobs:
         with:
           toolchain: stable
       - name: Apply computed version
-        run: tools/release/version.sh apply rust "${{ steps.version.outputs.release_version }}"
+        run: |
+          tools/release/version.sh apply rust "${{ steps.version.outputs.release_version }}"
+          (cd sdks/rust && cargo check --quiet)
       - name: Publish to crates.io
         working-directory: sdks/rust
         env:

@@ -1,6 +1,6 @@
 [package]
 name = "fireweave"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.75"
 description = "Fireweave SDK for Rust — control-point evaluation and target registration (spec v0.1.0)."
