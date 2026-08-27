@@ -154,7 +154,7 @@ signing into the workflow.
 | server (npm) | npmjs.com | `@fireweaveai/server-sdk` | Publish via **OIDC trusted publishing** (no long-lived `NPM_TOKEN`). |
 | web (npm) | npmjs.com | `@fireweaveai/web-sdk` | Publish via **OIDC trusted publishing**. |
 | Python | pypi.org | `fireweave` | Publish via **`PYPI_API_TOKEN`** GitHub secret (environment `release`) with `pypa/gh-action-pypi-publish`. Preferred auto path: push tag `python/v<semver>` → `publish-python.yml`. Staging goes to **TestPyPI** via `TEST_PYPI_API_TOKEN` (environment `release-staging`). |
-| Go | proxy.golang.org | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go` | No registry credentials — "publishing" is pushing the `sdks/go/v*` tag on the public repo; the proxy picks it up. |
+| Go | proxy.golang.org | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2` | No registry credentials — "publishing" is pushing the `sdks/go/v*` tag on the public repo; the proxy picks it up. **Major ≥ 2 requires the `/v2` module-path suffix** (Go modules rule); the git tag prefix stays `sdks/go/`. |
 | Java | Maven Central | groupId `ai.fireweave` | **Pending namespace verification** on the Central portal (DNS TXT proof for `fireweave.ai`). Workflows are release-ready and fail closed without secrets. Do not claim a coordinate is published until Central confirms. |
 | Rust | crates.io | `fireweave` | Publish via **`CARGO_REGISTRY_TOKEN`** GitHub secret (environment `release`). No staging registry exists — see "Pre-release channels". |
 | Swift | — | — | No package registry is used; consumption is git-tag-only, and (see "Tag convention") not currently resolvable as a direct SwiftPM dependency against this repo at all. |

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
 )
 
 func TestDeterministicResolution(t *testing.T) {

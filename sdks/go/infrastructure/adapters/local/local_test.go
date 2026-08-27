@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
 )
 
 func TestSeededKeyResolvesStatic(t *testing.T) {

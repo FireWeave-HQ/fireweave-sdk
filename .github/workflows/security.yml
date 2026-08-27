@@ -168,7 +168,7 @@ jobs:
           # Ignore first-party module paths (LICENSE lives at repo root).
           # MPL-2.0: hashicorp/golang-lru (transitive via posthog-go) — reviewed.
           "$(go env GOPATH)/bin/go-licenses" check ./... \
-            --ignore=github.com/FireWeave-HQ/fireweave-sdk/sdks/go \
+            --ignore=github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2 \
             --allowed_licenses=MIT,Apache-2.0,BSD-2-Clause,BSD-3-Clause,ISC,0BSD,Unlicense,CC0-1.0,MPL-2.0
       - name: java — license-maven-plugin third-party report (advisory listing)
         working-directory: sdks/java

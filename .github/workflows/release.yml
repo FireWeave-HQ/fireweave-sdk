@@ -644,12 +644,18 @@ jobs:
         with:
           go-version: stable
       - name: Warm proxy.golang.org for the new version
+        # Go modules at major >= 2 must use a /vN path suffix (see go.mod).
+        # Tag stays `sdks/go/vX.Y.Z`; module path is `…/sdks/go/vN`.
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           VERSION="${TAG#sdks/go/}"
-          GOPROXY=proxy.golang.org \
-            go list -m "github.com/FireWeave-HQ/fireweave-sdk/sdks/go@${VERSION}"
+          MAJOR="$(printf '%s' "$VERSION" | sed -E 's/^v([0-9]+).*/\1/')"
+          MODULE='github.com/FireWeave-HQ/fireweave-sdk/sdks/go'
+          if [ "$MAJOR" -ge 2 ]; then
+            MODULE="${MODULE}/v${MAJOR}"
+          fi
+          GOPROXY=proxy.golang.org go list -m "${MODULE}@${VERSION}"
 
   publish-cargo:
     name: cargo publish --dry-run (staging — no crates.io upload)

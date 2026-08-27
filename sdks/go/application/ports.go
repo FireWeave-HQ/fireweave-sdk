@@ -1,6 +1,6 @@
 package application
 
-import "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/domain"
+import "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
 
 // The BackendAdapter port and its request/result types live in domain (see
 // domain/adapter.go's doc comment for why — a Go-specific, import-cycle-

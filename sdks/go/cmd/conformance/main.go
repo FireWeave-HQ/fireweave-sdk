@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/internal/conformance"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/internal/conformance"
 )
 
 func main() {
