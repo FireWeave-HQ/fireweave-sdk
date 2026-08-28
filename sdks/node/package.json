@@ -1,22 +1,38 @@
 {
-  "name": "fireweave-sdk-node-workspace",
-  "private": true,
-  "version": "0.1.0",
-  "description": "Fireweave polyglot SDK \u2014 Node workspace (packages, tests, conformance)",
+  "name": "@fireweaveai/server-sdk",
+  "version": "2.2.0",
+  "description": "Fireweave release-engineering SDK for server runtimes (Node, Bun, Deno): control points and target registration. Zero runtime dependencies (spec v0.1.0).",
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=20.20"
   },
-  "workspaces": [
-    "packages/*"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FireWeave-HQ/fireweave-sdk.git",
+    "directory": "sdks/node"
+  },
+  "homepage": "https://github.com/FireWeave-HQ/fireweave-sdk/tree/master/sdks/node#readme",
+  "bugs": "https://github.com/FireWeave-HQ/fireweave-sdk/issues",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
   ],
   "scripts": {
-    "build": "tsc -p packages/sdk/tsconfig.json",
-    "typecheck": "npm run build && tsc -p packages/sdk/tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
+    "clean": "rm -rf dist",
+    "build": "npm run clean && tsc -p tsconfig.json",
+    "typecheck": "npm run build && tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
     "test": "npm run test:unit && npm run test:integration && npm run test:compat",
-    "test:unit": "npm run build && tsx --test packages/sdk/test/unit/*.test.ts",
-    "test:integration": "npm run build && tsx --test packages/sdk/test/integration/*.test.ts",
-    "test:compat": "npm run build && tsx --test packages/sdk/test/compat/*.compat.test.ts",
+    "test:unit": "npm run build && tsx --test test/unit/*.test.ts",
+    "test:integration": "npm run build && tsx --test test/integration/*.test.ts",
+    "test:compat": "npm run build && tsx --test test/compat/*.compat.test.ts",
     "conformance": "npm run build && tsx test/conformance/run.ts",
     "smoke": "npm run build && node scripts/smoke-runtimes.mjs",
     "verify": "npm run typecheck && npm run test && npm run conformance && npm run smoke"
@@ -26,5 +42,15 @@
     "@types/node": "^24.0.0",
     "tsx": "^4.20.3",
     "typescript": "^5.6.0"
-  }
+  },
+  "keywords": [
+    "fireweave",
+    "release-engineering",
+    "progressive-delivery",
+    "control-points",
+    "feature-flags",
+    "server",
+    "bun",
+    "deno"
+  ]
 }

@@ -1,57 +1,85 @@
 package ai.fireweave.testing;
 
-import ai.fireweave.sdk.BackendAdapter;
-import ai.fireweave.sdk.Decision;
-import ai.fireweave.sdk.ErrorKind;
-import ai.fireweave.sdk.EvaluationContext;
-import ai.fireweave.sdk.EvaluationRequest;
-import ai.fireweave.sdk.Exposure;
-import ai.fireweave.sdk.FireweaveConfig;
-import ai.fireweave.sdk.FireweaveException;
-import ai.fireweave.sdk.FlagType;
-import ai.fireweave.sdk.JsonValue;
-import ai.fireweave.sdk.Reasons;
-import ai.fireweave.sdk.Signal;
+import ai.fireweave.sdk.application.BackendAdapter;
+import ai.fireweave.sdk.application.EvaluationRequest;
+import ai.fireweave.sdk.application.FireweaveConfig;
+import ai.fireweave.sdk.domain.Decision;
+import ai.fireweave.sdk.domain.ErrorKind;
+import ai.fireweave.sdk.domain.EvaluationContext;
+import ai.fireweave.sdk.domain.FireweaveException;
+import ai.fireweave.sdk.domain.FlagType;
+import ai.fireweave.sdk.domain.JsonValue;
+import ai.fireweave.sdk.domain.Reasons;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Deterministic, fixture-driven {@link BackendAdapter}. No I/O, no clocks, no randomness:
- * resolution depends only on the configured {@link FlagDefinition}s, the optional
- * {@link FaultConfig}, and the request. Fault modes are simulated in-process (delay compares
- * against the configured timeout instead of sleeping).
- *
- * <p>Thread-safe: definitions are immutable after construction; recorded exposures/signals use
- * concurrent collections.
+ * Deterministic, fixture-driven {@link BackendAdapter} for conformance and unit tests.
+ * Resolution model mirrors contracts/ fixture flag definitions: flags, variants, payloads,
+ * targeting by targeting key / person attributes / groups. Deliberately NO bucketing /
+ * percentage logic (mirrors node/go/python's InMemoryAdapter).
  */
 public final class InMemoryAdapter implements BackendAdapter {
 
-    private final Map<String, FlagDefinition> flags;
-    private final FaultConfig fault;
-    private volatile boolean stale;
-    private volatile int requestTimeoutMs = FireweaveConfig.DEFAULT_REQUEST_TIMEOUT_MS;
-    private final AtomicInteger evaluateCalls = new AtomicInteger();
-    private final AtomicReference<EvaluationContext> lastContext = new AtomicReference<>();
-    private final List<Exposure> deliveredExposures = new CopyOnWriteArrayList<>();
-    private final List<Signal> deliveredSignals = new CopyOnWriteArrayList<>();
-    private final Map<String, Boolean> runtimeFeatures = new ConcurrentHashMap<>();
-
-    public InMemoryAdapter(Map<String, FlagDefinition> flags) {
-        this(flags, null);
+    /** One deterministic flag definition, mirroring contracts/ fixture given.flags shape. */
+    public static final class FlagDefinition {
+        public FlagType type;
+        public boolean enabled;
+        public String variant;
+        public JsonValue value;
+        /** Exposed as fireweave.payload metadata (task-10b item 5) only when the caller's
+         * EvaluationOptions requests it — null means "no payload declared". */
+        public JsonValue payload;
+        public String reasonCode;
+        public Integer conditionIndex;
+        public Long version;
+        public Long vendorId;
+        /** Canonical reason override (fixtures: "SPLIT"). */
+        public String fireweaveReason;
+        /** Served from last-good cache (stale scenarios). */
+        public boolean fromCache;
+        public String matchTargetingKey;
+        public Map<String, JsonValue> matchAttribute;
+        public Map<String, String> matchGroups;
+        public Map<String, JsonValue> matchPerson;
     }
 
-    public InMemoryAdapter(Map<String, FlagDefinition> flags, FaultConfig fault) {
-        this.flags = Collections.unmodifiableMap(new LinkedHashMap<>(flags));
+    private volatile Map<String, FlagDefinition> flags;
+    private volatile boolean stale;
+    private volatile FireweaveException fault;
+    private volatile boolean closed;
+    private final AtomicLong resolveCount = new AtomicLong();
+    private volatile EvaluationContext lastContext;
+
+    public InMemoryAdapter(Map<String, FlagDefinition> flags) {
+        this.flags = new ConcurrentHashMap<>(flags == null ? Collections.emptyMap() : flags);
+    }
+
+    public void setFlags(Map<String, FlagDefinition> flags) {
+        this.flags = new ConcurrentHashMap<>(flags == null ? Collections.emptyMap() : flags);
+    }
+
+    /** Fault to throw on every resolve (fault-mode conformance without HTTP). */
+    public void setFault(FireweaveException fault) {
         this.fault = fault;
-        this.runtimeFeatures.put("sideEffectFreeReads", true);
-        this.runtimeFeatures.put("exposureEmission", false);
+    }
+
+    public long resolveCount() {
+        return resolveCount.get();
+    }
+
+    /** Most recently resolved context, for resolvedContext observations. */
+    public EvaluationContext lastContext() {
+        return lastContext;
+    }
+
+    /** Marks this adapter as serving a stale snapshot (fault-stale-cache; STALE providerState). */
+    public void setStale(boolean stale) {
+        this.stale = stale;
     }
 
     @Override
@@ -60,13 +88,8 @@ public final class InMemoryAdapter implements BackendAdapter {
     }
 
     @Override
-    public void initialize(FireweaveConfig config) throws FireweaveException {
-        this.requestTimeoutMs = config.requestTimeoutMs();
-    }
-
-    /** Mark the snapshot stale (fixture given.providerState == STALE). */
-    public void setStale(boolean stale) {
-        this.stale = stale;
+    public void initialize(FireweaveConfig config) {
+        closed = false;
     }
 
     @Override
@@ -76,185 +99,102 @@ public final class InMemoryAdapter implements BackendAdapter {
 
     @Override
     public Decision evaluate(EvaluationRequest request) throws FireweaveException {
-        evaluateCalls.incrementAndGet();
-        lastContext.set(request.context());
-
-        boolean servingStaleDefinitions = false;
-        if (fault != null) {
-            servingStaleDefinitions = applyFault();
+        resolveCount.incrementAndGet();
+        lastContext = request.context();
+        if (closed) {
+            throw new FireweaveException(ErrorKind.AlreadyClosed);
         }
-
-        FlagDefinition flag = flags.get(request.flagKey());
-        if (flag == null) {
+        if (fault != null) {
+            throw fault;
+        }
+        FlagDefinition def = flags.get(request.flagKey());
+        if (def == null) {
             throw new FireweaveException(ErrorKind.FlagNotFound);
         }
-        checkType(flag.type(), request.type());
-
-        if (!matches(flag, request.context())) {
+        if (def.type != request.type()) {
+            throw new FireweaveException(ErrorKind.TypeMismatch);
+        }
+        if (!matches(def, request.context())) {
             return Decision.builder(request.flagKey())
                     .value(request.defaultValue())
                     .reason(Reasons.DEFAULT)
                     .build();
         }
 
-        String reason;
-        if (flag.fireweaveReason() != null) {
-            reason = flag.fireweaveReason();
-        } else if (!flag.enabled()) {
-            reason = Reasons.DISABLED;
-        } else if (flag.fromCache() || servingStaleDefinitions || stale) {
-            reason = Reasons.STALE;
-        } else {
-            reason = Reasons.TARGETING_MATCH;
-        }
-
         Decision.Builder b = Decision.builder(request.flagKey())
-                .value(flag.value())
-                .variant(flag.variant())
-                .reason(reason)
-                .payload(flag.payload());
-        if (flag.metadataVersion() != null) {
-            b.metadata("fireweave.flagVersion", flag.metadataVersion());
+                .value(def.value)
+                .variant(def.variant);
+        if (!def.enabled) {
+            b.reason(Reasons.DISABLED);
+        } else if (def.fromCache) {
+            b.reason(Reasons.STALE);
+        } else if (def.fireweaveReason != null) {
+            b.reason(def.fireweaveReason);
+        } else {
+            b.reason(Reasons.TARGETING_MATCH);
         }
-        // Enrichment fields are emitted only for fully-detailed vendor responses: both the vendor
-        // flag id and a condition index must be present (contracts eval-detailed-fields vs
-        // eval-multivariate-string / eval-payload-attached).
-        if (flag.metadataId() != null && flag.conditionIndex() != null) {
-            b.metadata("fireweave.vendorFlagId", flag.metadataId());
-            if (flag.reasonCode() != null) {
-                b.metadata("fireweave.reasonCode", flag.reasonCode());
+        if (def.version != null) {
+            b.metadata("fireweave.flagVersion", def.version);
+        }
+        // Detailed vendor fields travel together: only when the backend reports BOTH a
+        // vendor flag id AND a matched condition index (mirrors node/go/python).
+        if (def.vendorId != null && def.conditionIndex != null) {
+            b.metadata("fireweave.vendorFlagId", def.vendorId);
+            if (def.reasonCode != null) {
+                b.metadata("fireweave.reasonCode", def.reasonCode);
             }
         }
-        if (flag.fromCache()) {
+        if (def.fromCache) {
             b.metadata("fireweave.fromCache", true);
+        }
+        if (request.options().includePayload() && def.payload != null) {
+            // toPayloadString: a raw JSON-string payload passes through verbatim; every other
+            // kind is sorted-key, no-whitespace canonical JSON — matches node's stableStringify
+            // byte-for-byte (contracts/evaluation/eval-payload-attached.json).
+            b.metadata("fireweave.payload", def.payload.toPayloadString());
         }
         return b.build();
     }
 
-    /** Returns true when the fault only degrades definitions freshness (serve stale). */
-    private boolean applyFault() throws FireweaveException {
-        switch (fault.mode()) {
-            case DELAY:
-                if (fault.delayMs() > requestTimeoutMs) {
-                    throw new FireweaveException(ErrorKind.Timeout);
-                }
-                return false;
-            case HTTP_STATUS:
-                if ("definitions".equals(fault.applyTo())) {
-                    return true; // definitions poll failed; evaluation serves last-good snapshot
-                }
-                throw httpStatusError(fault.status());
-            case INVALID_JSON:
-                throw new FireweaveException(ErrorKind.MalformedResponse);
-            case NETWORK_ERROR:
-            case OFFLINE:
-                throw new FireweaveException(ErrorKind.Network);
-            case QUOTA_LIMITED:
-                if (fault.quotaLimited().contains("feature_flags")) {
-                    throw FireweaveException.quotaLimited();
-                }
-                return false;
-            default:
-                return false;
-        }
-    }
-
-    private static FireweaveException httpStatusError(int status) {
-        if (status == 401) {
-            return new FireweaveException(ErrorKind.Authentication);
-        }
-        if (status == 403) {
-            return new FireweaveException(ErrorKind.Authorization);
-        }
-        if (status == 429) {
-            return new FireweaveException(ErrorKind.RateLimited);
-        }
-        if (status >= 500) {
-            return new FireweaveException(ErrorKind.BackendUnavailable);
-        }
-        return new FireweaveException(ErrorKind.Network);
-    }
-
-    private static void checkType(FlagType flagType, FlagType requested) throws FireweaveException {
-        if (flagType == requested) {
-            return;
-        }
-        // Integral flags may be read as floats (lossless widening); everything else is a mismatch,
-        // including float→integer even for integral values like 2.0 (eval-numeric-coercion-int-float).
-        if (flagType == FlagType.INTEGER && requested == FlagType.FLOAT) {
-            return;
-        }
-        throw new FireweaveException(ErrorKind.TypeMismatch);
-    }
-
-    private static boolean matches(FlagDefinition flag, EvaluationContext ctx) {
-        if (flag.matchTargetingKey() != null
-                && !flag.matchTargetingKey().equals(ctx.targetingKey())) {
+    private boolean matches(FlagDefinition def, EvaluationContext ctx) {
+        if (def.matchTargetingKey != null && !def.matchTargetingKey.equals(ctx.targetingKey())) {
             return false;
         }
-        for (Map.Entry<String, JsonValue> e : flag.matchAttribute().entrySet()) {
-            if (!e.getValue().equals(ctx.attributes().get(e.getKey()))) {
-                return false;
-            }
-        }
-        for (Map.Entry<String, JsonValue> e : flag.matchPerson().entrySet()) {
-            if (!e.getValue().equals(ctx.attributes().get(e.getKey()))) {
-                return false;
-            }
-        }
-        for (Map.Entry<String, String> e : flag.matchGroups().entrySet()) {
-            String actual = ctx.groups().get(e.getKey());
-            if (actual == null) {
-                // Harness-normalized contexts may carry groups as a plain "groups" attribute.
-                JsonValue groupsAttr = ctx.attributes().get("groups");
-                if (groupsAttr != null && groupsAttr.kind() == JsonValue.Kind.OBJECT) {
-                    JsonValue v = groupsAttr.asObject().get(e.getKey());
-                    if (v != null && v.kind() == JsonValue.Kind.STRING) {
-                        actual = v.asString();
-                    }
+        if (def.matchAttribute != null) {
+            for (Map.Entry<String, JsonValue> e : def.matchAttribute.entrySet()) {
+                if (!e.getValue().equals(ctx.attributes().get(e.getKey()))) {
+                    return false;
                 }
             }
-            if (!e.getValue().equals(actual)) {
-                return false;
+        }
+        if (def.matchGroups != null) {
+            for (Map.Entry<String, String> e : def.matchGroups.entrySet()) {
+                if (!e.getValue().equals(ctx.groups().get(e.getKey()))) {
+                    return false;
+                }
+            }
+        }
+        if (def.matchPerson != null) {
+            for (Map.Entry<String, JsonValue> e : def.matchPerson.entrySet()) {
+                if (!e.getValue().equals(ctx.attributes().get(e.getKey()))) {
+                    return false;
+                }
             }
         }
         return true;
     }
 
     @Override
-    public void deliverExposure(Exposure exposure) {
-        deliveredExposures.add(exposure);
-    }
-
-    @Override
-    public void deliverSignal(Signal signal) {
-        deliveredSignals.add(signal);
-    }
-
-    @Override
-    public Map<String, Boolean> runtimeFeatures() {
-        return Collections.unmodifiableMap(runtimeFeatures);
-    }
-
-    @Override
     public void shutdown() {
-        // Nothing to release; recorded events stay readable for assertions after shutdown.
+        closed = true;
     }
 
-    public int evaluateCallCount() {
-        return evaluateCalls.get();
+    public boolean isClosed() {
+        return closed;
     }
 
-    /** Last merged context seen by evaluate(), for resolved-context assertions. */
-    public EvaluationContext lastContext() {
-        return lastContext.get();
-    }
-
-    public List<Exposure> deliveredExposures() {
-        return Collections.unmodifiableList(deliveredExposures);
-    }
-
-    public List<Signal> deliveredSignals() {
-        return Collections.unmodifiableList(deliveredSignals);
+    /** Empty flag table convenience. */
+    public static InMemoryAdapter empty() {
+        return new InMemoryAdapter(new LinkedHashMap<>());
     }
 }

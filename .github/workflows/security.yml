@@ -4,7 +4,10 @@
 #                              gitleaks-action requires an org license key,
 #                              the CLI does not)
 #   - dependency review      : PRs only — diff-based vuln + license gate
-#   - vulnerability scanning : osv-scanner over all four ecosystems
+#   - vulnerability scanning : osv-scanner over node/go/python/java/rust/web
+#                              (swift has no lockfile-based ecosystem osv-scanner
+#                              understands; go/java carry no third-party deps
+#                              to flag but are scanned for completeness)
 #   - license checks         : per-ecosystem allowlist (OSI-compatible,
 #                              permissive); copyleft fails the job so it is
 #                              explicitly flagged for human review
@@ -118,7 +121,9 @@ jobs:
             --lockfile sdks/go/go.mod \
             --lockfile examples/go/go.mod \
             --lockfile 'requirements.txt:/tmp/requirements-osv.txt' \
-            --lockfile sdks/java/pom.xml
+            --lockfile sdks/java/pom.xml \
+            --lockfile sdks/rust/Cargo.lock \
+            --lockfile sdks/web/bun.lock
 
   licenses:
     name: license allowlist (flag copyleft)
@@ -136,7 +141,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: sdks/go/go.mod
-          cache-dependency-path: sdks/go/go.sum
+          cache-dependency-path: sdks/go/go.mod
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -150,7 +155,7 @@ jobs:
             --onlyAllow "$FW_LICENSE_ALLOWLIST"
       - name: python — pip-licenses (fails on anything off-allowlist)
         run: |
-          python -m pip install --quiet -e './sdks/python[posthog,openfeature]' pip-licenses
+          python -m pip install --quiet -e './sdks/python[dev]' pip-licenses
           # pip-licenses uses classifier/metadata names, not SPDX ids.
           # MPL 2.0 is allowlisted only for certifi (Mozilla CA bundle; transitive
           # via requests/httpx) — reviewed as an unavoidable HTTPS dependency.
@@ -163,7 +168,7 @@ jobs:
           # Ignore first-party module paths (LICENSE lives at repo root).
           # MPL-2.0: hashicorp/golang-lru (transitive via posthog-go) — reviewed.
           "$(go env GOPATH)/bin/go-licenses" check ./... \
-            --ignore=github.com/FireWeave-HQ/fireweave-sdk/sdks/go \
+            --ignore=github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2 \
             --allowed_licenses=MIT,Apache-2.0,BSD-2-Clause,BSD-3-Clause,ISC,0BSD,Unlicense,CC0-1.0,MPL-2.0
       - name: java — license-maven-plugin third-party report (advisory listing)
         working-directory: sdks/java

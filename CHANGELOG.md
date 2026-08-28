@@ -71,7 +71,7 @@ Node-only. The Python, Go, and Java SDKs are unchanged and remain at `0.1.0`.
 
 Exactly three things break. Everything else a consumer touches is unchanged — see *Not breaking* below.
 
-1. **`@fireweaveai/sdk/posthog` no longer resolves.** The direct vendor adapter was removed ([ADR-0006](docs/adr/0006-node-drops-direct-posthog-adapter.md)). Replace `PostHogAdapter` with `FireweaveRemoteAdapter`; env vars `POSTHOG_HOST`/`POSTHOG_API_KEY` become `FW_API_URL`/`FW_PROJECT_API_KEY`. One-line change; full guide in the [Node module README](sdks/node/packages/sdk/README.md#upgrading-from-v20-to-21), condensed cross-language view in [docs/migration.md](docs/migration.md#from-fireweaveaisdk-v20-to-21-node).
+1. **`@fireweaveai/sdk/posthog` no longer resolves.** The direct vendor adapter was removed ([ADR-0006](docs/adr/0006-node-drops-direct-posthog-adapter.md)). Replace `PostHogAdapter` with `FireweaveRemoteAdapter`; env vars `POSTHOG_HOST`/`POSTHOG_API_KEY` become `FW_API_URL`/`FW_PROJECT_API_KEY`. One-line change; full guide in the [Node module README](sdks/node/README.md#upgrading-from-v20-to-21), condensed cross-language view in [docs/migration.md](docs/migration.md#from-fireweaveaisdk-v20-to-21-node).
 2. **`posthog-node` is no longer a peer dependency.** If you use it for your own analytics, depend on it directly.
 3. **Type-level:** `'posthog'` is no longer a member of `BackendAdapter['name']` or `Capabilities['runtime']['backend']`. Affects custom adapters declaring `name: 'posthog'` (use `'other'`) and exhaustive switches on `backend`.
 

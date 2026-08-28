@@ -1,19 +1,33 @@
 {
-  "name": "fireweave-sdk-web-workspace",
-  "private": true,
-  "version": "0.1.0",
-  "description": "Fireweave polyglot SDK \u2014 browser workspace (package, tests, conformance)",
+  "name": "@fireweaveai/web-sdk",
+  "version": "2.2.0",
+  "description": "Fireweave SDK for browsers: control points and target registration, in remote (fw-server) or local (in-process, no network) mode. Holds no secrets.",
+  "license": "MIT",
   "type": "module",
-  "engines": {
-    "node": ">=20.20"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FireWeave-HQ/fireweave-sdk.git",
+    "directory": "sdks/web"
   },
-  "workspaces": [
-    "packages/*"
+  "homepage": "https://github.com/FireWeave-HQ/fireweave-sdk/tree/master/sdks/web#readme",
+  "bugs": "https://github.com/FireWeave-HQ/fireweave-sdk/issues",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
   ],
   "scripts": {
-    "build": "bun run --cwd packages/sdk build",
-    "typecheck": "bun run build && tsc -p packages/sdk/tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
-    "test": "bun run build && bun test packages/sdk/test/unit",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.json",
+    "typecheck": "bun run build && tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
+    "test": "bun run build && bun test test/unit",
     "conformance": "bun run build && bun test/conformance/run.ts",
     "verify": "bun run typecheck && bun run test && bun run conformance"
   },
@@ -23,5 +37,14 @@
     "@types/node": "^24.0.0",
     "happy-dom": "^20.0.0",
     "typescript": "^5.6.0"
-  }
+  },
+  "keywords": [
+    "fireweave",
+    "release-engineering",
+    "progressive-delivery",
+    "control-points",
+    "feature-flags",
+    "browser",
+    "web"
+  ]
 }

@@ -1,5 +1,8 @@
 package ai.fireweave.sdk;
 
+import ai.fireweave.sdk.domain.ErrorKind;
+import ai.fireweave.sdk.domain.FireweaveException;
+import ai.fireweave.sdk.domain.Redaction;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;

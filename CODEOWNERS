@@ -23,17 +23,21 @@
 # Language SDKs + their examples.
 /sdks/node/                 @FireWeave-HQ/sdk-node
 /examples/node/             @FireWeave-HQ/sdk-node
+/sdks/web/                  @FireWeave-HQ/sdk-web
 /sdks/python/               @FireWeave-HQ/sdk-python
 /examples/python/           @FireWeave-HQ/sdk-python
 /sdks/go/                   @FireWeave-HQ/sdk-go
 /examples/go/               @FireWeave-HQ/sdk-go
 /sdks/java/                 @FireWeave-HQ/sdk-java
 /examples/java/             @FireWeave-HQ/sdk-java
+/sdks/rust/                 @FireWeave-HQ/sdk-rust
+/sdks/swift/                @FireWeave-HQ/sdk-swift
 
 # Canonical contract: schema + fixtures + protocol stub. Changes are
 # orchestrated-review-only (see CONTRIBUTING.md).
 /spec/                      @FireWeave-HQ/sdk-spec
 /contracts/                 @FireWeave-HQ/sdk-spec
+/conformance/               @FireWeave-HQ/sdk-spec
 /test-server/               @FireWeave-HQ/sdk-spec
 
 # CI, release automation, and repo tooling.

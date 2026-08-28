@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from fireweave import (
+    ErrorKind,
     FireweaveRemoteAdapter,
     FireweaveRuntime,
     InMemoryAdapter,
     RegisterTargetOptions,
 )
-from fireweave.errors import ErrorKind
 
 
 def _ready_adapter(transport):

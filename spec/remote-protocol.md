@@ -23,7 +23,7 @@ Never send PostHog `phc_` / `phs_` / `phx_` keys on this path.
 | --- | --- | --- | --- |
 | `POST` | `/v1/flags/evaluate` | [`remote-evaluate.schema.json`](./remote-evaluate.schema.json) | Batch flag evaluation (side-effect-free) |
 | `POST` | `/v1/capture` | [`remote-capture.schema.json`](./remote-capture.schema.json) | Exposures / signals / events batch |
-| `POST` | `/v1/targets/register` | [`remote-register-target.schema.json`](./remote-register-target.schema.json) | Register a user or device for targeting (optional; Node SDK only today) |
+| `POST` | `/v1/targets/register` | [`remote-register-target.schema.json`](./remote-register-target.schema.json) | Register a user or device for targeting (implemented by all seven SDKs) |
 
 Optional later: `GET /v1/flags/definitions` for local-eval parity.
 

@@ -178,5 +178,5 @@ jobs:
       - name: List published coordinates
         run: |
           echo "Published (or staged) ai.fireweave:fireweave-sdk:${{ steps.ver.outputs.version }}"
-          echo "Also: fireweave-openfeature, fireweave-adapter-posthog, fireweave-testing, fireweave-java-parent"
+          echo "Also: fireweave-java-parent (parent POM; fireweave-testing is maven.deploy.skip=true — conformance harness only, never published)"
           echo "Portal: https://central.sonatype.com/publishing"

@@ -1,5 +1,12 @@
 package ai.fireweave.sdk;
 
+import ai.fireweave.sdk.application.FireweaveConfig;
+import ai.fireweave.sdk.application.FireweaveRuntime;
+import ai.fireweave.sdk.domain.Decision;
+import ai.fireweave.sdk.domain.ErrorKind;
+import ai.fireweave.sdk.domain.EvaluationContext;
+import ai.fireweave.sdk.domain.FlagType;
+import ai.fireweave.sdk.domain.JsonValue;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -110,37 +117,6 @@ class ConcurrencyTest {
             assertTrue(successes.get() > 0, "some evaluations succeeded before shutdown");
             assertTrue(closedDefaults.get() > 0, "some evaluations observed AlreadyClosed defaults");
             assertEquals(1, adapter.shutdownCalls);
-        } finally {
-            pool.shutdownNow();
-        }
-    }
-
-    @Test
-    @Timeout(30)
-    void concurrentExposureRecordingKeepsDedupInvariant() throws Exception {
-        StubAdapter adapter = new StubAdapter();
-        FireweaveRuntime rt = new FireweaveRuntime(FireweaveConfig.builder().build(), adapter);
-        rt.initialize();
-        FireweaveClient client = new FireweaveClient(rt);
-
-        int threads = 8;
-        ExecutorService pool = Executors.newFixedThreadPool(threads);
-        try {
-            CountDownLatch start = new CountDownLatch(1);
-            List<Future<?>> futures = IntStream.range(0, threads)
-                    .mapToObj(t -> pool.submit(() -> {
-                        start.await();
-                        for (int i = 0; i < 200; i++) {
-                            client.exposures().record(new Exposure("org", "flag-" + (i % 10),
-                                    "on", JsonValue.of(true), null));
-                        }
-                        return null;
-                    })).collect(Collectors.toList());
-            start.countDown();
-            for (Future<?> f : futures) {
-                f.get(20, TimeUnit.SECONDS);
-            }
-            assertEquals(10, client.exposures().queuedCount(), "deduped to distinct flags");
         } finally {
             pool.shutdownNow();
         }

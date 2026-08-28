@@ -2,15 +2,16 @@
 # Generate a conventional-commits changelog for one SDK component.
 #
 # Usage: tools/release/changelog.sh <component> <version> [<out-file>]
-#   component: node | python | go | java
+#   component: server | web | python | java | go | rust | swift
 #   version:   semver without leading v (e.g. 0.1.0)
 #
 # Range: commits since the last tag matching this component's tag convention
-# (node/v* | python/v* | java/v* | sdks/go/v* — Go's tag must equal the module
-# subdirectory path for `go get` resolution), scoped to the paths that ship in
-# the component. Commits are grouped by conventional-commit type; anything
-# unparseable lands under "Other changes" rather than being dropped.
-
+# (server/v* | web/v* | python/v* | java/v* | rust/v* | swift/v* | sdks/go/v* —
+# Go's tag must equal the module subdirectory path for `go get` resolution),
+# scoped to the paths that ship in the component. Commits are grouped by
+# conventional-commit type; anything unparseable lands under "Other changes"
+# rather than being dropped.
+#
 set -euo pipefail
 
 COMPONENT="${1:?usage: changelog.sh <component> <version> [out-file]}"
@@ -18,11 +19,14 @@ VERSION="${2:?usage: changelog.sh <component> <version> [out-file]}"
 OUT="${3:-/dev/stdout}"
 
 case "$COMPONENT" in
-  node)   TAG_PREFIX="node/v";    PATHS=("sdks/node" "examples/node") ;;
+  server) TAG_PREFIX="server/v";  PATHS=("sdks/node" "examples/node") ;;
+  web)    TAG_PREFIX="web/v";     PATHS=("sdks/web" "examples/web") ;;
   python) TAG_PREFIX="python/v";  PATHS=("sdks/python" "examples/python") ;;
   go)     TAG_PREFIX="sdks/go/v"; PATHS=("sdks/go" "examples/go") ;;
   java)   TAG_PREFIX="java/v";    PATHS=("sdks/java" "examples/java") ;;
-  *) echo "changelog: unknown component '$COMPONENT' (node|python|go|java)" >&2; exit 2 ;;
+  rust)   TAG_PREFIX="rust/v";    PATHS=("sdks/rust" "examples/rust") ;;
+  swift)  TAG_PREFIX="swift/v";   PATHS=("sdks/swift" "examples/swift") ;;
+  *) echo "changelog: unknown component '$COMPONENT' (server|web|python|java|go|rust|swift)" >&2; exit 2 ;;
 esac
 # Shared surfaces always included: contract fixtures and spec affect every SDK.
 PATHS+=("contracts" "spec")

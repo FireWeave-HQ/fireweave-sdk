@@ -1,7 +1,13 @@
 package ai.fireweave.sdk;
 
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
+import ai.fireweave.sdk.application.BackendAdapter;
+import ai.fireweave.sdk.application.EvaluationRequest;
+import ai.fireweave.sdk.application.FireweaveConfig;
+import ai.fireweave.sdk.domain.Decision;
+import ai.fireweave.sdk.domain.FireweaveException;
+import ai.fireweave.sdk.domain.JsonValue;
+import ai.fireweave.sdk.domain.Reasons;
+
 import java.util.function.Function;
 
 /** Minimal configurable adapter for runtime/client unit tests. */
@@ -12,8 +18,6 @@ final class StubAdapter implements BackendAdapter {
                     .variant("on").reason(Reasons.TARGETING_MATCH).build();
     volatile FireweaveException initFailure;
     volatile FireweaveException evalFailure;
-    final List<Exposure> exposures = new CopyOnWriteArrayList<>();
-    final List<Signal> signals = new CopyOnWriteArrayList<>();
     volatile int shutdownCalls;
     volatile boolean shutdownBlocksForever;
 
@@ -35,16 +39,6 @@ final class StubAdapter implements BackendAdapter {
             throw evalFailure;
         }
         return onEvaluate.apply(request);
-    }
-
-    @Override
-    public void deliverExposure(Exposure exposure) {
-        exposures.add(exposure);
-    }
-
-    @Override
-    public void deliverSignal(Signal signal) {
-        signals.add(signal);
     }
 
     @Override

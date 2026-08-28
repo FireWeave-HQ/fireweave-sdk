@@ -1,0 +1,62 @@
+---
+description: Go SDK folder layout, package-per-layer, facade, and zero-require traps
+globs: sdks/go/**
+alwaysApply: false
+---
+
+# Go SDK (`sdks/go`)
+
+Module `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2`. `go 1.25`. **Zero `require` directives** — Go cannot scope a dep to tests, so any dependency is a runtime dependency. Guard: `fireweave/architecture_guard_test.go`.
+
+## Folder structure
+
+```
+sdks/go/
+  domain/                            # own package — compiler-enforced purity
+  application/                       # runtime, client, ports, mode.go COMPOSITION ROOT
+  infrastructure/adapters/
+    remote/  local/  inmemory/
+  fireweave/                         # public façade: type aliases + Init forwarder ONLY
+  internal/conformance/              # harness internals — os.Getenv allowed HERE only
+  cmd/conformance/                   # CLI runner
+  conformance/                       # harness_test.go
+```
+
+Logic does **not** live in `fireweave/`. That package re-exports so callers import one path. `Init` lives in `application/mode.go`; the façade forwards. The façade must not import `infrastructure/adapters`.
+
+Do not add `pkg/`, `utils/`, or flatten everything into `package fireweave` — separate packages **are** the layer boundary.
+
+## Layering (enforced)
+
+- `domain/` imports nothing from `application/` or `infrastructure/`.
+- `application/` imports infrastructure only from `mode.go`.
+- **No dot-imports** (`.`) in domain or application — they bypass the boundary the way Java `import pkg.*` does. Guard forbids the syntax, not just today's instances.
+- Scan with `go/parser` in tests, not regex. Do not “fix” a guard by switching it to regex.
+
+## Surface
+
+```go
+c.ControlPoints()  // documented
+c.Flags()          // identical pointer, silent, deprecated in godoc only
+```
+
+Nine methods: `GetBooleanValue`, `GetStringValue`, `GetNumberValue`, `GetObjectValue`, four `*Details`, `Evaluate`. `RegisterTarget` does not fail the caller with a thrown panic; return the result struct.
+
+`internal/conformance` may use `os.Getenv` for harness URLs. **Production packages must not.**
+
+## Go-specific traps
+
+- Export casing is API. `ControlPoints` not `controlPoints`. Changing case is a breaking change.
+- All client methods must be safe for concurrent use (mutex/atomics in runtime/adapters, not in domain).
+- Do not add `replace` / `exclude` in `go.mod` to sneak a dep past the guard.
+- Do not put HTTP in `domain`. `net/http` belongs in `infrastructure/adapters/remote`.
+- `context.Context` on network calls in the remote adapter; do not thread it through pure validators.
+- Missing `ControlPoints` with only `Flags()` already shipped once — surface tests exist so that cannot recur. Adding a method to `Flags` but not `ControlPoints` is impossible if they share identity; keep it that way (`c.Flags() == c.ControlPoints()`).
+
+## Verify
+
+```bash
+cd sdks/go && go test ./fireweave/ ./application/ ./domain/ ./infrastructure/...
+```
+
+Architecture + surface: `go test ./fireweave/ -run 'Guard|Surface|ControlPoints'`.

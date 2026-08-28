@@ -8,7 +8,6 @@
     "checkJs": false
   },
   "include": [
-    "./**/*.ts",
-    "../packages/sdk/test/**/*.ts"
+    "./**/*.ts"
   ]
 }

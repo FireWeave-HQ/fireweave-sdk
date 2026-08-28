@@ -78,7 +78,7 @@
       "description": "Working package names — company ratification open.",
       "additionalProperties": false,
       "properties": {
-        "npm": { "type": "string", "const": "@fireweaveai/sdk" },
+        "npm": { "type": "string", "const": "@fireweaveai/server-sdk" },
         "pypi": { "type": "string", "const": "fireweave" },
         "pypiExtraPosthog": { "type": "string", "const": "fireweave[posthog]" },
         "goModule": {

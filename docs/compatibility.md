@@ -10,7 +10,7 @@ Spec version **0.1.0**; OpenFeature specification compliance floor **v0.8.0**. S
 
 | | Node | Python | Go | Java |
 | --- | --- | --- | --- | --- |
-| **Package (working name)** | `@fireweaveai/sdk` | `fireweave` | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go` | `ai.fireweave:fireweave-{sdk,openfeature,adapter-posthog,testing}` |
+| **Package (working name)** | `@fireweaveai/sdk` | `fireweave` | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2` | `ai.fireweave:fireweave-{sdk,openfeature,adapter-posthog,testing}` |
 | **Language version** | Node ≥ 20.20 · Bun ≥ 1.2 · Deno ≥ 2.0 | Python ≥ 3.10 | Go 1.25 | Java ≥ 11 |
 | **Package version** | `2.1.0` | `0.1.0` | `0.1.0` | `0.1.0-SNAPSHOT` |
 | **OpenFeature SDK pin** | `@openfeature/server-sdk` 1.22.0 (peer) | `openfeature-sdk` ≥ 0.10, < 0.11 (**pre-1.0**) | `go-sdk` v1.17.2 | `dev.openfeature:sdk` **1.15.1** (newest published; orchestrator ruling 10) |

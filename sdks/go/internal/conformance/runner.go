@@ -1,20 +1,24 @@
+// Package conformance runs the canonical contracts/ fixtures against the
+// real v1 control-points surface (fireweave.Client.ControlPoints — there is
+// no OpenFeature bridge to reach for any more; ADR-0010 retired it and the
+// go/openfeature package with it) and emits the compatibility-report JSON
+// defined by contracts/README.md.
 package conformance
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"strings"
-	"sync/atomic"
 	"time"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/adapters/inmemory"
-	phadapter "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/adapters/posthog"
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/fireweave"
-	fwof "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/openfeature"
-	of "github.com/open-feature/go-sdk/openfeature"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fireweave"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/infrastructure/adapters/inmemory"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/infrastructure/adapters/remote"
 )
 
 // Result is one compatibility-report row.
@@ -37,6 +41,68 @@ type Report struct {
 
 const language = "go"
 
+// cutOperationNamespace classifies extensions fixtures (contracts/harness.md
+// "Extension fixtures — v1 scope rule", ruling 2) DATA-DRIVEN from
+// When.Operation — not a hand-maintained fixture-ID list.
+// contracts/README.md's "Operations" table names exactly which operation
+// belongs to which namespace; every one of those namespaces (releases/
+// exposures/signals/capabilities) is cut in v1 (ADR-0010) except
+// InvokeCapability, which stays on the client precisely to dispatch (and
+// degrade) capability calls. A fixture is skipped-v1-out-of-scope when EVERY
+// operation it dispatches — the single top-level When.Operation, or, for a
+// multi-case fixture, every Cases[].When.Operation — maps to a cut namespace
+// below.
+//
+// This derives the exact same 13-out/1-real split a hand-maintained ID list
+// used to encode (verified by re-running the full suite: counts unchanged —
+// see task-10-report.md's fix-report addendum), including the one fixture
+// worth reading individually rather than trusting the name:
+// ext-lifecycle-gating's description ("lifecycle-gated... ruling 17") reads
+// like the InvokeCapability lifecycle-gate exception this rule carves out,
+// but all three of its cases dispatch "emitSignal" (signals, cut), including
+// a "ready-delivered-to-sink" case expecting ok:true — an outcome
+// InvokeCapability can never produce, since v1's supportedCapabilities is
+// frozen empty and the unsupported-capability check runs before the
+// lifecycle gate in every state. The operation-based rule classifies it
+// correctly without needing that reasoning spelled out in a lookup table.
+var cutOperationNamespace = map[string]string{
+	"setContext":      "releases",
+	"start":           "releases",
+	"complete":        "releases",
+	"fail":            "releases",
+	"recordExposure":  "exposures",
+	"flushExposures":  "exposures",
+	"emitSignal":      "signals",
+	"getCapabilities": "capabilities",
+	// invokeCapability is deliberately absent: it is v1 surface, not cut.
+}
+
+// v1OutOfScopeNamespace returns the cut namespace name (and true) when
+// every operation f dispatches targets one, or ("", false) when the fixture
+// genuinely exercises v1 surface (today: only
+// ext-unsupported-capability-degrade).
+func v1OutOfScopeNamespace(f Fixture) (string, bool) {
+	var operations []string
+	if len(f.Cases) > 0 {
+		for _, c := range f.Cases {
+			operations = append(operations, c.When.Operation)
+		}
+	} else {
+		operations = []string{f.When.Operation}
+	}
+	namespace := ""
+	for i, op := range operations {
+		ns, ok := cutOperationNamespace[op]
+		if !ok {
+			return "", false
+		}
+		if i == 0 {
+			namespace = ns
+		}
+	}
+	return namespace, true
+}
+
 // Run executes every fixture and returns the aggregated report.
 func Run(contractsDir string) (*Report, error) {
 	fixtures, err := LoadFixtures(contractsDir)
@@ -46,18 +112,56 @@ func Run(contractsDir string) (*Report, error) {
 	report := &Report{
 		SchemaVersion: 1,
 		GeneratedAt:   "EXCLUDED",
-		Summary:       map[string]int{"pass": 0, "fail": 0, "skipped-with-documented-limitation": 0},
+		Summary: map[string]int{
+			"pass": 0, "fail": 0,
+			"skipped-with-documented-limitation": 0,
+			"skipped-v1-out-of-scope":            0,
+		},
 	}
+	outOfScopeCount := 0
+	runnableCount := 0
 	for _, f := range fixtures {
 		res := runOne(f)
 		report.Summary[res.Status]++
 		report.Results = append(report.Results, res)
+		if f.Suite == "extensions" {
+			if res.Status == "skipped-v1-out-of-scope" {
+				outOfScopeCount++
+			} else {
+				runnableCount++
+			}
+		}
 	}
+
+	// Sanity assertion (review finding 2): the data-driven v1-scope
+	// classification above must derive the exact same 13-out/1-real split a
+	// hand-maintained fixture-ID list used to encode. If contracts/
+	// extensions/ ever gains or loses a fixture, or a fixture's operation set
+	// changes, this fails loudly instead of silently drifting.
+	if outOfScopeCount != 13 || runnableCount != 1 {
+		return nil, fmt.Errorf(
+			"v1-scope classification drifted: expected 13 skipped-v1-out-of-scope + 1 runnable "+
+				"extensions fixture, got %d + %d", outOfScopeCount, runnableCount)
+	}
+
 	return report, nil
 }
 
 func runOne(f Fixture) Result {
 	res := Result{FixtureID: f.ID, Suite: f.Suite, Language: language}
+
+	// v1-scope rule (contracts/harness.md): extensions fixtures targeting a
+	// cut namespace are reported skipped-v1-out-of-scope, never executed,
+	// regardless of the fixture's own declared compatibility (frozen "pass",
+	// authored pre-cut).
+	if f.Suite == "extensions" {
+		if namespace, outOfScope := v1OutOfScopeNamespace(f); outOfScope {
+			res.Status = "skipped-v1-out-of-scope"
+			lim := fmt.Sprintf("targets the %s namespace, cut from the v1 control-points surface (ADR-0010)", namespace)
+			res.Limitation = &lim
+			return res
+		}
+	}
 
 	if f.Compatibility[language] == "skipped-with-documented-limitation" {
 		res.Status = "skipped-with-documented-limitation"
@@ -122,12 +226,8 @@ func runSingle(f Fixture) ([]string, string) {
 	if err != nil {
 		return []string{"harness error: " + err.Error()}, note
 	}
-	// getCapabilities exception (contracts/harness.md, ruling 18): validate
-	// the full structured matrix against spec/capabilities.schema.json
-	// constraints, then compare expect.capabilities as a subset.
-	diffs := adjustCapabilitiesResult(f, actual)
 	assertionDiffs := assertMustNotContain(f, actual)
-	diffs = append(diffs, append(Compare(actual, f.Expect), assertionDiffs...)...)
+	diffs := append(Compare(actual, f.Expect), assertionDiffs...)
 	return diffs, note
 }
 
@@ -182,9 +282,6 @@ func assertMustNotContain(f Fixture, actual map[string]any) []string {
 	if s, ok := actual["errorMessage"].(string); ok {
 		haystacks = append(haystacks, s)
 	}
-	if s, ok := actual["reason"].(string); ok && f.When.Operation == "fail" {
-		haystacks = append(haystacks, s)
-	}
 	diffs := checkMustNotContain(f.Expect, "errorMessageMustNotContain", haystacks)
 	if recorded, ok := actual["__recordedMessage"].(string); ok {
 		diffs = append(diffs, checkMustNotContain(f.Expect, "recordedMessageMustNotContain", []string{recorded})...)
@@ -195,6 +292,9 @@ func assertMustNotContain(f Fixture, actual map[string]any) []string {
 
 // execute dispatches one fixture; it returns the normalized actual output.
 func execute(f Fixture) (map[string]any, string, error) {
+	if f.Suite == "faults" {
+		return executeFault(f)
+	}
 	switch f.When.Operation {
 	case "evaluate":
 		return executeEvaluate(f)
@@ -204,11 +304,10 @@ func execute(f Fixture) (map[string]any, string, error) {
 		return executeShutdown(f)
 	case "replaceProvider":
 		return executeReplaceProvider(f)
-	case "getCapabilities", "recordExposure", "flushExposures",
-		"setContext", "start", "complete", "fail", "emitSignal", "invokeCapability":
-		return executeExtension(f)
+	case "invokeCapability":
+		return executeInvokeCapability(f)
 	default:
-		return nil, "", fmt.Errorf("unsupported operation %q", f.When.Operation)
+		return nil, "", fmt.Errorf("unsupported operation %q (should have been classified skipped-v1-out-of-scope)", f.When.Operation)
 	}
 }
 
@@ -216,6 +315,9 @@ func execute(f Fixture) (map[string]any, string, error) {
 
 func runtimeConfigFrom(given Given) fireweave.Config {
 	cfg := fireweave.Config{}
+	if given.GlobalContext != nil {
+		cfg.GlobalContext = contextFrom(given.GlobalContext)
+	}
 	if given.Config == nil {
 		return cfg
 	}
@@ -224,9 +326,8 @@ func runtimeConfigFrom(given Given) fireweave.Config {
 	}
 	if limits, ok := given.Config["limits"].(map[string]any); ok {
 		asInt := func(key string) int {
-			if n, ok := limits[key].(json.Number); ok {
-				v, _ := n.Int64()
-				return int(v)
+			if n, ok := limits[key]; ok {
+				return numberLikeToInt(n)
 			}
 			return 0
 		}
@@ -241,6 +342,13 @@ func runtimeConfigFrom(given Given) fireweave.Config {
 	return cfg
 }
 
+func contextFrom(spec *ContextSpec) domain.EvaluationContext {
+	if spec == nil {
+		return domain.EvaluationContext{}
+	}
+	return domain.NewEvaluationContext(spec.TargetingKey, spec.Attributes)
+}
+
 func inmemoryFrom(flags map[string]FixtureFlag) *inmemory.Adapter {
 	out := map[string]inmemory.Flag{}
 	for key, ff := range flags {
@@ -251,7 +359,7 @@ func inmemoryFrom(flags map[string]FixtureFlag) *inmemory.Adapter {
 
 func toInmemoryFlag(ff FixtureFlag) inmemory.Flag {
 	flag := inmemory.Flag{
-		Type:              fireweave.FlagType(ff.Type),
+		Type:              toFlagType(ff.Type),
 		Enabled:           ff.Enabled,
 		Variant:           ff.Variant,
 		Value:             ff.Value,
@@ -274,122 +382,133 @@ func toInmemoryFlag(ff FixtureFlag) inmemory.Flag {
 	return flag
 }
 
-// bareProvider masks the provider's StateHandler so the OpenFeature SDK
-// registers it without initializing — required to hold a NOT_READY/CLOSED
-// Fireweave runtime behind a registered provider.
-type bareProvider struct{ of.FeatureProvider }
+// toFlagType maps a fixture's declared flag type onto v1's four-member
+// FlagType (boolean/string/number/object) — v1 has no separate integer/float
+// distinction (conformance/surface/control-points.surface.json: "number, NOT
+// integer"). NOTE: eval-numeric-coercion-int-float specifically requests
+// flagType "integer" against a stored "float" value expecting TYPE_MISMATCH;
+// collapsing both to "number" here means the in-memory adapter's flag.Type
+// == req.Type check can no longer see that distinction, so this fixture
+// fails for go the same way it does for python — a v1-wide gap (every
+// language's public surface only knows "number"), not a go-specific bug. See
+// task-10-report.md "Concerns".
+func toFlagType(raw string) fireweave.FlagType {
+	if raw == "integer" || raw == "float" {
+		return fireweave.FlagTypeNumber
+	}
+	return fireweave.FlagType(raw)
+}
 
-// session is one arranged provider + client + runtime.
+// session is one arranged client + runtime (+ the in-memory adapter, when
+// used, for LastContext()/ResolveCount() observations).
 type session struct {
-	provider  *fwof.Provider
-	ofClient  *of.Client
-	client    *fireweave.Client
-	adapter   *inmemory.Adapter  // nil when PostHog-backed
-	ph        *phadapter.Adapter // nil when in-memory
-	domain    string
-	stubReset func() // clears live test-server stub fault state (nil when unused)
+	client  *fireweave.Client
+	adapter *inmemory.Adapter
 }
 
 func (s *session) close() {
-	if s.provider != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = s.provider.ShutdownWithContext(ctx)
-	}
-	if s.stubReset != nil {
-		s.stubReset()
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.client.Runtime().Shutdown(ctx)
 }
 
-var domainSeq atomic.Int64
-
-func nextDomain(id string) string {
-	return fmt.Sprintf("conformance/%s/%d", id, domainSeq.Add(1))
-}
-
-// setupSession arranges a provider per the fixture given block.
-// providerState drives lifecycle: READY/STALE initialize, NOT_READY leaves
-// the runtime untouched, CLOSED initializes then shuts down.
-func setupSession(f Fixture, given Given, flags map[string]FixtureFlag, state string) (*session, string, error) {
-	s := &session{domain: nextDomain(f.ID)}
-	note := ""
-
-	useFault := given.Fault != nil && f.ID != "fault-stale-cache"
-	if useFault {
-		cfg := phadapter.Config{
-			ProjectAPIKey:      "phc_conformance000000000000000001",
-			Endpoint:           "http://127.0.0.1:3901",
-			FlagRequestTimeout: 2 * time.Second,
-			CloseTimeout:       2 * time.Second,
-		}
-		// Live-stub mode (FIREWEAVE_TEST_SERVER_URL): fault modes the
-		// test-server control plane supports run over real HTTP against
-		// the stub; the remaining modes (networkError, offline) stay on
-		// the injected fake Transport, which is also the default when no
-		// stub URL is configured (hermetic `go test`).
-		stubURL := stubBaseURL()
-		stubFault := stubFaultBody(given.Fault)
-		if stubURL != "" && stubFault != nil {
-			if err := stubSetFault(stubURL, stubFault); err != nil {
-				return s, note, fmt.Errorf("test-server stub fault setup: %w", err)
-			}
-			cfg.Endpoint = stubURL
-			s.stubReset = func() { _ = stubResetState(stubURL) }
-			note = "fault exercised via live test-server HTTP stub"
-		} else {
-			cfg.Transport = newFaultTransport(given.Fault)
-			note = "fault simulated via injected fake Transport (test-server stub not exercised)"
-		}
-		if given.Config != nil {
-			if k, ok := given.Config["projectApiKey"].(string); ok && k != "" {
-				cfg.ProjectAPIKey = k
-			}
-			if t, ok := given.Config["featureFlagsRequestTimeoutMs"].(json.Number); ok {
-				ms, _ := t.Int64()
-				cfg.FlagRequestTimeout = time.Duration(ms) * time.Millisecond
-			}
-		}
-		s.ph = phadapter.New(cfg)
-		s.client = fireweave.NewClient(fireweave.NewRuntime(s.ph, runtimeConfigFrom(given)))
-	} else {
-		s.adapter = inmemoryFrom(flags)
-		s.client = fireweave.NewClient(fireweave.NewRuntime(s.adapter, runtimeConfigFrom(given)))
-		if f.ID == "fault-stale-cache" {
-			note = "stale-definitions cache simulated on the in-memory adapter (posthog-go local-eval poller not exercised)"
+// setupSession arranges a client per the fixture given block. providerState
+// drives lifecycle: READY/STALE initialize, NOT_READY leaves the runtime
+// uninitialized (go's lifecycle-error mapping treats UNINITIALIZED and a
+// hypothetical in-flight INITIALIZING identically — both -> NotReady — so
+// there is no in-flight-init gate to model, unlike node's async runtime),
+// CLOSED initializes then shuts down.
+func setupSession(given Given, flags map[string]FixtureFlag, state string) (*session, error) {
+	adapter := inmemoryFrom(flags)
+	// Security-suite fixtures declare protocol faults but run on the
+	// in-memory adapter (not the faults suite's real remote/HTTP path):
+	// model them as a fixed error the adapter raises on every Resolve, the
+	// same way node/python's runners wrap their in-memory adapter. Faults
+	// scoped to other endpoints (e.g. fault-stale-cache's applyTo:
+	// "definitions") do not affect evaluation reads.
+	var runtimeAdapter domain.BackendAdapter = adapter
+	if given.Fault != nil {
+		applyTo, _ := given.Fault["applyTo"].(string)
+		if applyTo == "" || applyTo == "flags" {
+			runtimeAdapter = &faultyAdapter{inner: adapter, err: faultToError(given.Fault)}
 		}
 	}
-	s.provider = fwof.NewProvider(s.client)
+	client := fireweave.NewClient(fireweave.NewRuntime(runtimeAdapter, runtimeConfigFrom(given)))
+	s := &session{client: client, adapter: adapter}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	switch state {
 	case "READY", "STALE", "":
-		if err := of.SetNamedProviderAndWait(s.domain, s.provider); err != nil {
-			return s, note, fmt.Errorf("provider registration: %w", err)
+		if err := client.Runtime().Initialize(ctx); err != nil {
+			return s, fmt.Errorf("init: %w", err)
 		}
 		if state == "STALE" {
-			s.client.Runtime().MarkStale()
+			client.Runtime().MarkStale()
 		}
 	case "NOT_READY":
-		if err := of.SetNamedProviderAndWait(s.domain, bareProvider{s.provider}); err != nil {
-			return s, note, fmt.Errorf("bare registration: %w", err)
-		}
+		// leave uninitialized
 	case "CLOSED":
-		if err := s.client.Runtime().Initialize(ctx); err != nil {
-			return s, note, fmt.Errorf("pre-close init: %w", err)
+		if err := client.Runtime().Initialize(ctx); err != nil {
+			return s, fmt.Errorf("pre-close init: %w", err)
 		}
-		if err := s.client.Runtime().Shutdown(ctx); err != nil {
-			return s, note, fmt.Errorf("pre-close shutdown: %w", err)
-		}
-		if err := of.SetNamedProviderAndWait(s.domain, bareProvider{s.provider}); err != nil {
-			return s, note, fmt.Errorf("bare registration: %w", err)
+		if err := client.Runtime().Shutdown(ctx); err != nil {
+			return s, fmt.Errorf("pre-close shutdown: %w", err)
 		}
 	default:
-		return s, note, fmt.Errorf("unsupported providerState %q", state)
+		return s, fmt.Errorf("unsupported providerState %q", state)
 	}
-	s.ofClient = of.NewClient(s.domain)
-	return s, note, nil
+	return s, nil
+}
+
+// faultyAdapter wraps a BackendAdapter so every Resolve raises a fixed
+// error — the in-memory-path fault model for security-suite fixtures that
+// declare a protocol fault (contracts/security/sec-pii-redaction-in-messages,
+// sec-secrets-not-in-errors).
+type faultyAdapter struct {
+	inner domain.BackendAdapter
+	err   *domain.Error
+}
+
+func (a *faultyAdapter) Initialize(ctx context.Context) error { return a.inner.Initialize(ctx) }
+func (a *faultyAdapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain.Decision {
+	return domain.ErrorDecision(req.FlagKey, req.DefaultValue, a.err, nil)
+}
+func (a *faultyAdapter) Close(ctx context.Context) error { return a.inner.Close(ctx) }
+
+// faultToError maps a fixture fault declaration to the FireweaveError kind
+// it must produce (mirrors node's faultToErrorKind / python's
+// _fault_to_error).
+func faultToError(fault map[string]any) *domain.Error {
+	mode, _ := fault["mode"].(string)
+	switch mode {
+	case "httpStatus":
+		status := 500
+		if s, ok := fault["status"].(json.Number); ok {
+			if v, err := s.Int64(); err == nil {
+				status = int(v)
+			}
+		}
+		switch status {
+		case 401:
+			return domain.NewError(domain.KindAuthentication, "", nil)
+		case 403:
+			return domain.NewError(domain.KindAuthorization, "", nil)
+		case 429:
+			return domain.NewError(domain.KindRateLimited, "", nil)
+		default:
+			return domain.NewError(domain.KindBackendUnavailable, "", nil)
+		}
+	case "networkError", "offline":
+		return domain.NewError(domain.KindNetwork, "", nil)
+	case "timeout":
+		return domain.NewError(domain.KindTimeout, "", nil)
+	case "invalidJson", "malformedJson", "truncated":
+		return domain.NewError(domain.KindMalformedResponse, "", nil)
+	default:
+		return domain.NewError(domain.KindInternal, "", nil)
+	}
 }
 
 // --- evaluate ---
@@ -400,7 +519,8 @@ func executeEvaluate(f Fixture) (map[string]any, string, error) {
 	state := given.ProviderState
 	when := f.When
 
-	// Multi-domain fixtures nest state under given.domains.
+	// Multi-domain lifecycle fixture support: independent session per
+	// domain (no OpenFeature domain multiplexing to reach for post-ADR-0010).
 	if len(given.Domains) > 0 {
 		d, ok := given.Domains[when.Domain]
 		if !ok {
@@ -410,7 +530,7 @@ func executeEvaluate(f Fixture) (map[string]any, string, error) {
 			if name == when.Domain {
 				continue
 			}
-			otherSess, _, err := setupSession(f, Given{ProviderState: other.ProviderState}, other.Flags, other.ProviderState)
+			otherSess, err := setupSession(Given{ProviderState: other.ProviderState}, other.Flags, other.ProviderState)
 			if err != nil {
 				return nil, "", err
 			}
@@ -421,24 +541,29 @@ func executeEvaluate(f Fixture) (map[string]any, string, error) {
 		given = Given{ProviderState: state, Flags: flags}
 	}
 
-	s, note, err := setupSession(f, given, flags, state)
+	s, err := setupSession(given, flags, state)
 	if err != nil {
-		return nil, note, err
+		return nil, "", err
 	}
 	defer s.close()
 
-	// Context layers: API-global and client-level contexts per fixture.
-	if f.Given.GlobalContext != nil {
-		of.SetEvaluationContext(of.NewEvaluationContext(f.Given.GlobalContext.TargetingKey, f.Given.GlobalContext.Attributes))
-		defer of.SetEvaluationContext(of.EvaluationContext{})
-	}
+	// Client-context layer folded into the per-call context before
+	// evaluation (contracts/context/ctx-merge-global-client-invocation.json
+	// "later layers win"): go's Client/Runtime has no separate durable
+	// "client context" setter the way node/python do (a real surface gap,
+	// documented in task-10-report.md), so this pre-merges clientContext
+	// under invocationContext at the call site — client, then invocation
+	// overriding it — which reproduces the fixture's merge-order assertion
+	// exactly (global is still applied by Runtime itself, via
+	// Config.GlobalContext, one layer beneath this).
+	invocationCtx := contextFrom(when.InvocationContext)
 	if f.Given.ClientContext != nil {
-		s.ofClient.SetEvaluationContext(of.NewEvaluationContext(f.Given.ClientContext.TargetingKey, f.Given.ClientContext.Attributes))
+		invocationCtx = domain.MergeContexts(contextFrom(f.Given.ClientContext), invocationCtx)
 	}
 
-	actual := evaluateThrough(s, when)
+	actual := evaluateThrough(s, when, invocationCtx)
 
-	if _, wantResolved := f.Expect["resolvedContext"]; wantResolved && s.adapter != nil {
+	if _, wantResolved := f.Expect["resolvedContext"]; wantResolved {
 		if rc, ok := s.adapter.LastContext(); ok {
 			actual["resolvedContext"] = contextToJSON(rc)
 		}
@@ -454,130 +579,224 @@ func executeEvaluate(f Fixture) (map[string]any, string, error) {
 		actual["contextSnapshotAfter"] = snap
 	}
 	if _, wantNet := f.Expect["networkCalls"]; wantNet {
-		calls := int64(0)
-		if s.adapter != nil {
-			calls = s.adapter.ResolveCount()
-		}
-		actual["networkCalls"] = calls
+		actual["networkCalls"] = s.adapter.ResolveCount()
 	}
+	return actual, "", nil
+}
+
+// evaluateThrough performs the typed evaluation via the real v1
+// ControlPoints surface and normalizes the Decision.
+func evaluateThrough(s *session, when When, evalCtx domain.EvaluationContext) map[string]any {
+	flagType := toFlagType(when.FlagType)
+	defaultValue := defaultValueFor(when.FlagType, when.DefaultValue)
+
+	opts := fireweave.EvaluateOptions{}
+	if includePayload, ok := when.Options["includePayload"].(bool); ok {
+		opts.IncludePayload = includePayload
+	}
+	d := s.client.ControlPoints().Evaluate(when.FlagKey, flagType, defaultValue, &evalCtx, &opts)
+
+	actual := map[string]any{
+		"value":        d.Value,
+		"variant":      nilIfEmpty(d.Variant),
+		"reason":       string(d.Reason),
+		"errorCode":    decisionErrorCode(d),
+		"errorMessage": decisionErrorMessage(d),
+	}
+	if len(d.Metadata) > 0 {
+		actual["flagMetadata"] = d.Metadata
+	}
+	return actual
+}
+
+// defaultValueFor converts a fixture-declared default value (json.Number for
+// numerics, since fixture.go decodes with UseNumber) into the concrete Go
+// type domain.MatchesExpectedType recognizes for the requested flag type.
+func defaultValueFor(flagType string, raw any) any {
+	if flagType == "integer" || flagType == "float" {
+		return numberToFloat(raw)
+	}
+	return raw
+}
+
+// --- faults ---
+
+// executeFault exercises the remote adapter's real HTTP path
+// (POST /v1/flags/evaluate). Baseline: an injected fake http.RoundTripper
+// (faults.go) reproducing the Fireweave-native response shape — the
+// canonical dockerized `golang:1.25-alpine` run has no `node` binary to
+// spawn test-server/implementation/server.mjs with, unlike node/python's
+// runners, so this package cannot depend on a live stub being available.
+// FIREWEAVE_TEST_SERVER_URL / FW_TEST_SERVER_URL opt into a real spawned
+// stub for local iteration when node happens to be on PATH.
+func executeFault(f Fixture) (map[string]any, string, error) {
+	given := f.Given
+	when := f.When
+	fault := given.Fault
+	if fault == nil {
+		fault = map[string]any{"mode": "none"}
+	}
+
+	// Stale-cache runs on the in-memory adapter (cache state provisioned directly).
+	if f.ID == "fault-stale-cache" {
+		return executeEvaluate(f)
+	}
+
+	apiKey := "phc_TESTKEY0000000000000000000001"
+	if k, ok := given.Config["projectApiKey"].(string); ok && k != "" {
+		apiKey = k
+	}
+	timeout := 3 * time.Second
+	if t, ok := given.Config["featureFlagsRequestTimeoutMs"].(json.Number); ok {
+		if ms, err := t.Int64(); err == nil {
+			timeout = time.Duration(ms) * time.Millisecond
+		}
+	}
+
+	mode, _ := fault["mode"].(string)
+	stubURL := stubBaseURL()
+	stubBody := stubFaultBody(fault)
+
+	var apiURL string
+	var transport http.RoundTripper
+	note := ""
+	switch {
+	case stubURL != "" && stubBody != nil:
+		if err := stubResetState(stubURL); err != nil {
+			return nil, "", fmt.Errorf("stub reset: %w", err)
+		}
+		if err := stubSetFault(stubURL, stubBody); err != nil {
+			return nil, "", fmt.Errorf("stub fault: %w", err)
+		}
+		apiURL = stubURL
+		note = "fault exercised via live test-server HTTP stub"
+	case mode == "networkError" || mode == "offline":
+		apiURL = deadLoopbackURL()
+		note = "network/offline fault exercised via a real refused loopback connection"
+	default:
+		apiURL = "http://127.0.0.1:1" // never dialed; the fake Transport intercepts every request
+		transport = newFaultTransport(fault)
+		note = "fault simulated via injected fake Transport (hermetic; no test-server stub)"
+	}
+
+	// RequestTimeout (task-10b item 3 fix, infrastructure/adapters/remote's
+	// postJSON) is now the sole, authoritative deadline: the adapter derives
+	// its own per-request context.WithTimeout from it, so ctx.Err() correctly
+	// observes an elapsed deadline regardless of ControlPoints.Evaluate's
+	// hardcoded context.Background() (no-public-ctx ruling, Task 9) — that's
+	// exactly what makes fault-timeout classify as Timeout rather than
+	// Network. httpClient itself carries NO independent Timeout: a second,
+	// client-level timeout racing the same duration via its own internal,
+	// adapter-invisible derived context would make classification here
+	// nondeterministic depending on which fires first (confirmed live: this
+	// used to set http.Client.Timeout directly, bypassing RequestTimeout
+	// entirely per the old comment here, which is exactly why this fixture
+	// still misclassified after the adapter fix landed until this line
+	// changed too).
+	httpClient := &http.Client{}
+	if transport != nil {
+		httpClient.Transport = transport
+	}
+
+	adapter := remote.New(remote.Config{APIURL: apiURL, APIKey: apiKey, HTTPClient: httpClient, RequestTimeout: timeout})
+	runtime := fireweave.NewRuntime(adapter, fireweave.Config{})
+	ctx := context.Background()
+	if err := runtime.Initialize(ctx); err != nil {
+		return nil, note, fmt.Errorf("remote adapter init: %w", err)
+	}
+	defer func() {
+		if stubURL != "" {
+			_ = stubResetState(stubURL)
+		}
+		_ = runtime.Shutdown(ctx)
+	}()
+	client := fireweave.NewClient(runtime)
+
+	evalCtx := contextFrom(when.InvocationContext)
+	actual := evaluateThrough(&session{client: client}, when, evalCtx)
 	return actual, note, nil
 }
 
-// evaluateThrough performs the typed evaluation via the real OpenFeature
-// client and normalizes the details.
-func evaluateThrough(s *session, when When) map[string]any {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	if inc, ok := when.Options["includePayload"].(bool); ok && inc {
-		ctx = fireweave.WithIncludePayload(ctx)
+// deadLoopbackURL binds an ephemeral loopback port and immediately releases
+// it, producing a real ECONNREFUSED on connect — no fake transport involved
+// for the networkError/offline fault modes.
+func deadLoopbackURL() string {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "http://127.0.0.1:1"
 	}
-
-	evalCtx := of.EvaluationContext{}
-	if when.InvocationContext != nil {
-		evalCtx = of.NewEvaluationContext(when.InvocationContext.TargetingKey, when.InvocationContext.Attributes)
-	}
-
-	var value any
-	var detail of.EvaluationDetails
-	switch when.FlagType {
-	case "boolean":
-		def, _ := when.DefaultValue.(bool)
-		d, _ := s.ofClient.BooleanValueDetails(ctx, when.FlagKey, def, evalCtx)
-		value, detail = d.Value, d.EvaluationDetails
-	case "string":
-		def, _ := when.DefaultValue.(string)
-		d, _ := s.ofClient.StringValueDetails(ctx, when.FlagKey, def, evalCtx)
-		value, detail = d.Value, d.EvaluationDetails
-	case "integer":
-		def := numberToInt(when.DefaultValue)
-		d, _ := s.ofClient.IntValueDetails(ctx, when.FlagKey, def, evalCtx)
-		value, detail = d.Value, d.EvaluationDetails
-	case "float":
-		def := numberToFloat(when.DefaultValue)
-		d, _ := s.ofClient.FloatValueDetails(ctx, when.FlagKey, def, evalCtx)
-		value, detail = d.Value, d.EvaluationDetails
-	case "object":
-		d, _ := s.ofClient.ObjectValueDetails(ctx, when.FlagKey, when.DefaultValue, evalCtx)
-		value, detail = d.Value, d.EvaluationDetails
-	}
-
-	actual := map[string]any{
-		"value":        value,
-		"variant":      nilIfEmpty(detail.Variant),
-		"reason":       string(detail.Reason),
-		"errorCode":    nilIfEmpty(string(detail.ErrorCode)),
-		"errorMessage": nilIfEmpty(detail.ErrorMessage),
-	}
-	if len(detail.FlagMetadata) > 0 {
-		actual["flagMetadata"] = map[string]any(detail.FlagMetadata)
-	}
-	return actual
+	addr := l.Addr().String()
+	_ = l.Close()
+	return "http://" + addr
 }
 
 // --- initialize / shutdown / replaceProvider ---
 
 func executeInitialize(f Fixture) (map[string]any, string, error) {
-	cfg := phadapter.Config{
-		Transport:    newFaultTransport(nil),
-		CloseTimeout: 2 * time.Second,
-	}
-	if k, ok := f.Given.Config["projectApiKey"].(string); ok {
-		cfg.ProjectAPIKey = k
-	}
-	if h, ok := f.Given.Config["host"].(string); ok {
-		cfg.Endpoint = h
-	}
-	if hosts, ok := f.Given.Config["allowedHosts"].([]any); ok {
-		for _, h := range hosts {
-			if s, ok := h.(string); ok {
-				cfg.AllowedHosts = append(cfg.AllowedHosts, s)
+	config := f.Given.Config
+	host, hasHost := config["host"].(string)
+
+	var adapter domain.BackendAdapter
+	if hasHost {
+		// Host-allowlist-testing fixtures (life-init-fail-configuration,
+		// life-init-success, sec-endpoint-ssrf-allowlist) route through the
+		// remote adapter: go's Runtime.Config carries no host/allowed-hosts
+		// concept of its own (unlike node's FireweaveRuntimeConfig) — only
+		// infrastructure/adapters/remote's own Initialize validates a host.
+		apiKey, _ := config["projectApiKey"].(string)
+		cfg := remote.Config{APIURL: host, APIKey: apiKey}
+		if hosts, ok := config["allowedHosts"].([]any); ok {
+			for _, h := range hosts {
+				if s, ok := h.(string); ok {
+					cfg.AllowedHosts = append(cfg.AllowedHosts, s)
+				}
 			}
 		}
+		adapter = remote.New(cfg)
+	} else {
+		adapter = inmemoryFrom(f.Given.Flags)
 	}
-	adapter := phadapter.New(cfg)
-	client := fireweave.NewClient(fireweave.NewRuntime(adapter, fireweave.Config{}))
-	provider := fwof.NewProvider(client)
+
+	runtime := fireweave.NewRuntime(adapter, fireweave.Config{})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	initErr := runtime.Initialize(ctx)
 	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = provider.ShutdownWithContext(ctx)
+		ctx2, cancel2 := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel2()
+		_ = runtime.Shutdown(ctx2)
 	}()
 
-	err := of.SetNamedProviderAndWait(nextDomain(f.ID), provider)
-
 	actual := map[string]any{
-		"providerState": stateName(client.Runtime().State()),
+		"providerState": stateName(runtime.State()),
 		"errorCode":     nil,
 		"errorMessage":  nil,
 	}
-	if err != nil {
-		var initErr *of.ProviderInitError
-		if ok := asProviderInitError(err, &initErr); ok {
-			actual["errorCode"] = string(initErr.ErrorCode)
-			actual["errorMessage"] = initErr.Message
+	if initErr != nil {
+		var fwErr *fireweave.Error
+		if errors.As(initErr, &fwErr) {
+			actual["errorCode"] = codeForKind(fwErr.Kind, fwErr.TargetingKeyMissing)
+			actual["errorMessage"] = fwErr.Message
+			if _, wantKind := f.Expect["errorKind"]; wantKind {
+				actual["errorKind"] = string(fwErr.Kind)
+			}
 		} else {
-			actual["errorCode"] = string(of.GeneralCode)
-			actual["errorMessage"] = "initialization failed"
+			actual["errorCode"] = "GENERAL"
+			actual["errorMessage"] = initErr.Error()
 		}
 	}
-	if _, wantKind := f.Expect["errorKind"]; wantKind {
-		if fwErr := client.Runtime().InitError(); fwErr != nil {
-			actual["errorKind"] = string(fwErr.Kind)
-		}
-	}
-	return actual, "provider initialized against injected fake Transport (test-server stub not exercised)", nil
+	return actual, "", nil
 }
 
 func executeShutdown(f Fixture) (map[string]any, string, error) {
-	s, note, err := setupSession(f, f.Given, f.Given.Flags, f.Given.ProviderState)
+	s, err := setupSession(f.Given, f.Given.Flags, f.Given.ProviderState)
 	if err != nil {
-		return nil, note, err
+		return nil, "", err
 	}
-	defer s.close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	shutdownErr := s.provider.ShutdownWithContext(ctx)
+	shutdownErr := s.client.Runtime().Shutdown(ctx)
 
 	actual := map[string]any{
 		"providerState": stateName(s.client.Runtime().State()),
@@ -585,50 +804,56 @@ func executeShutdown(f Fixture) (map[string]any, string, error) {
 		"errorMessage":  nil,
 	}
 	if shutdownErr != nil {
-		actual["errorCode"] = string(kindToCode(coerceKind(shutdownErr), false))
+		actual["errorCode"] = errCodeOrNil(shutdownErr)
 		actual["errorMessage"] = shutdownErr.Error()
 	}
-	return actual, note, nil
+	return actual, "", nil
 }
 
 func executeReplaceProvider(f Fixture) (map[string]any, string, error) {
-	s, note, err := setupSession(f, f.Given, f.Given.Flags, f.Given.ProviderState)
-	if err != nil {
-		return nil, note, err
-	}
-	defer s.close()
-
 	if f.Given.Replacement == nil || f.When.ThenEvaluate == nil {
-		return nil, note, fmt.Errorf("replaceProvider fixture missing replacement/thenEvaluate")
+		return nil, "", fmt.Errorf("replaceProvider fixture missing replacement/thenEvaluate")
 	}
-	replacementClient := fireweave.NewClient(fireweave.NewRuntime(inmemoryFrom(f.Given.Replacement.Flags), fireweave.Config{}))
-	replacement := fwof.NewProvider(replacementClient)
-	if err := of.SetNamedProviderAndWait(s.domain, replacement); err != nil {
-		return nil, note, fmt.Errorf("replacement registration: %w", err)
-	}
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = replacement.ShutdownWithContext(ctx)
-	}()
 
-	actual := evaluateThrough(s, *f.When.ThenEvaluate)
-	actual["providerState"] = stateName(replacementClient.Runtime().State())
-	return actual, note, nil
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	runtimeA := fireweave.NewRuntime(inmemoryFrom(f.Given.Flags), fireweave.Config{})
+	if err := runtimeA.Initialize(ctx); err != nil {
+		return nil, "", fmt.Errorf("old provider init: %w", err)
+	}
+	if err := runtimeA.Shutdown(ctx); err != nil {
+		return nil, "", fmt.Errorf("old provider shutdown: %w", err)
+	}
+
+	adapterB := inmemoryFrom(f.Given.Replacement.Flags)
+	runtimeB := fireweave.NewRuntime(adapterB, fireweave.Config{})
+	if err := runtimeB.Initialize(ctx); err != nil {
+		return nil, "", fmt.Errorf("replacement init: %w", err)
+	}
+	defer func() { _ = runtimeB.Shutdown(ctx) }()
+	clientB := fireweave.NewClient(runtimeB)
+
+	then := *f.When.ThenEvaluate
+	evalCtx := contextFrom(then.InvocationContext)
+	actual := evaluateThrough(&session{client: clientB, adapter: adapterB}, then, evalCtx)
+	actual["providerState"] = stateName(runtimeB.State())
+	return actual, "", nil
 }
 
-// --- extensions ---
+// --- extensions (only invokeCapability reaches here; see
+// cutOperationNamespace/v1OutOfScopeNamespace) ---
 
-func executeExtension(f Fixture) (map[string]any, string, error) {
+func executeInvokeCapability(f Fixture) (map[string]any, string, error) {
 	adapter := inmemoryFrom(f.Given.Flags)
 	client := fireweave.NewClient(fireweave.NewRuntime(adapter, runtimeConfigFrom(f.Given)))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Lifecycle arrangement (ruling 17 gating fixtures): NOT_READY leaves
-	// the runtime uninitialized, CLOSED initializes then shuts down,
-	// READY/STALE (default) initialize.
 	state := f.Given.ProviderState
+	if state == "" {
+		state = "READY"
+	}
 	switch state {
 	case "NOT_READY":
 		// leave uninitialized
@@ -639,209 +864,35 @@ func executeExtension(f Fixture) (map[string]any, string, error) {
 		if err := client.Runtime().Shutdown(ctx); err != nil {
 			return nil, "", fmt.Errorf("extension pre-close shutdown: %w", err)
 		}
-	default: // READY, STALE, ""
+	default: // READY, STALE
 		if err := client.Runtime().Initialize(ctx); err != nil {
 			return nil, "", fmt.Errorf("extension init: %w", err)
 		}
-		if state == "STALE" {
-			client.Runtime().MarkStale()
-		}
 		defer func() { _ = client.Runtime().Shutdown(ctx) }()
-
-		// Seed release context and status (READY-gated operations).
-		if f.Given.ReleaseContext != nil {
-			rc := releaseContextFrom(f.Given.ReleaseContext)
-			if err := client.Releases().SetContext(ctx, rc); err != nil {
-				return nil, "", fmt.Errorf("seed release context: %w", err)
-			}
-			if f.Given.ReleaseStatus == "in_progress" {
-				if err := client.Releases().Start(ctx, rc.RolloutID); err != nil {
-					return nil, "", fmt.Errorf("seed release status: %w", err)
-				}
-			}
-		}
-		// Seed the exposure queue.
-		for _, e := range f.Given.ExposureQueue {
-			if _, err := client.Exposures().Record(ctx, exposureFrom(e)); err != nil {
-				return nil, "", fmt.Errorf("seed exposure: %w", err)
-			}
-		}
 	}
 
-	switch f.When.Operation {
-	case "getCapabilities":
-		// Ruling 18: always the structured spec/capabilities.schema.json
-		// matrix, never a flat capability-string list.
-		matrix, err := toJSONMap(client.Capabilities().Get())
-		if err != nil {
-			return nil, "", fmt.Errorf("encode capabilities: %w", err)
-		}
-		return map[string]any{"capabilities": matrix, "errorCode": nil}, "", nil
-
-	case "recordExposure":
-		res, err := client.Exposures().Record(ctx, exposureFrom(f.When.Exposure))
-		actual := map[string]any{"ok": err == nil, "queued": res.Queued, "errorCode": errCodeOrNil(err)}
-		if res.Deduped {
-			actual["deduped"] = true
-		}
-		return actual, "", nil
-
-	case "flushExposures":
-		flushed, err := client.Exposures().Flush(ctx)
-		return map[string]any{
-			"ok": err == nil, "flushed": flushed,
-			"queued": client.Exposures().Pending(), "errorCode": errCodeOrNil(err),
-		}, "", nil
-
-	case "setContext":
-		rc := releaseContextFrom(f.When.Release)
-		err := client.Releases().SetContext(ctx, rc)
-		actual := map[string]any{"ok": err == nil, "errorCode": errCodeOrNil(err)}
-		if got, ok := client.Releases().Context(); ok {
-			stamps := make([]any, len(got.StampIDs))
-			for i, s := range got.StampIDs {
-				stamps[i] = s
-			}
-			actual["releaseContext"] = map[string]any{
-				"rolloutId": got.RolloutID, "changeId": got.ChangeID, "stampIds": stamps,
-			}
-		}
-		return actual, "", nil
-
-	case "start", "complete", "fail":
-		rolloutID, _ := f.When.Release["rolloutId"].(string)
-		var err error
-		switch f.When.Operation {
-		case "start":
-			err = client.Releases().Start(ctx, rolloutID)
-		case "complete":
-			err = client.Releases().Complete(ctx, rolloutID)
-		case "fail":
-			reason, _ := f.When.Release["reason"].(string)
-			err = client.Releases().Fail(ctx, rolloutID, reason)
-		}
-		actual := map[string]any{
-			"ok":        err == nil,
-			"status":    string(client.Releases().Status()),
-			"errorCode": errCodeOrNil(err),
-		}
-		if f.When.Operation == "fail" {
-			actual["reason"] = client.Releases().FailReason()
-		}
-		return actual, "", nil
-
-	case "emitSignal":
-		err := emitSignal(ctx, client, f.When.Signal)
-		actual := map[string]any{"ok": err == nil, "accepted": err == nil, "errorCode": errCodeOrNil(err)}
-		var fwErr *fireweave.Error
-		if err != nil && asFireweave(err, &fwErr) {
-			actual["errorMessage"] = fwErr.Message
-			actual["errorKind"] = string(fwErr.Kind)
-			actual["degraded"] = isDegradedKind(fwErr.Kind)
-		}
-		if recorded := client.Signals().Recorded(); len(recorded) > 0 {
-			actual["__recordedMessage"] = recorded[len(recorded)-1].Message
-		}
-		return actual, "", nil
-
-	case "invokeCapability":
-		err := client.Capabilities().Invoke(ctx, f.When.Capability, f.When.Args)
-		actual := map[string]any{"ok": err == nil, "errorCode": errCodeOrNil(err)}
-		var fwErr *fireweave.Error
-		if err != nil && asFireweave(err, &fwErr) {
-			actual["errorMessage"] = fwErr.Message
-			actual["errorKind"] = string(fwErr.Kind)
-			actual["degraded"] = isDegradedKind(fwErr.Kind)
-		}
-		return actual, "", nil
+	fwErr := client.InvokeCapability(f.When.Capability, f.When.Args)
+	actual := map[string]any{"ok": fwErr == nil}
+	if fwErr == nil {
+		actual["errorCode"] = nil
+	} else {
+		actual["errorCode"] = codeForKind(fwErr.Kind, fwErr.TargetingKeyMissing)
+		actual["errorMessage"] = fwErr.Message
+		actual["errorKind"] = string(fwErr.Kind)
+		actual["degraded"] = isDegradedKind(fwErr.Kind)
 	}
-	return nil, "", fmt.Errorf("unsupported extension operation %q", f.When.Operation)
-}
-
-func emitSignal(ctx context.Context, client *fireweave.Client, sig map[string]any) error {
-	kind, _ := sig["kind"].(string)
-	name, _ := sig["name"].(string)
-	switch kind {
-	case "health":
-		status, _ := sig["status"].(string)
-		rollout, _ := sig["rolloutId"].(string)
-		return client.Signals().RecordHealth(ctx, fireweave.HealthSignal{Name: name, Status: status, RolloutID: rollout})
-	case "error":
-		errKind, _ := sig["errorKind"].(string)
-		msg, _ := sig["message"].(string)
-		rollout, _ := sig["rolloutId"].(string)
-		return client.Signals().RecordError(ctx, fireweave.ErrorSignal{Name: name, ErrorKind: fireweave.ErrorKind(errKind), Message: msg, RolloutID: rollout})
-	case "metric":
-		rollout, _ := sig["rolloutId"].(string)
-		stamp, _ := sig["stampId"].(string)
-		return client.Signals().RecordMetric(ctx, fireweave.MetricSignal{Name: name, Value: numberToFloat(sig["value"]), RolloutID: rollout, StampID: stamp})
-	case "outcome":
-		status, _ := sig["status"].(string)
-		rollout, _ := sig["rolloutId"].(string)
-		change, _ := sig["changeId"].(string)
-		return client.Signals().RecordOutcome(ctx, fireweave.OutcomeSignal{Name: name, Status: status, RolloutID: rollout, ChangeID: change})
-	default:
-		return fireweave.NewError(fireweave.KindConfiguration, "unknown signal kind", nil)
-	}
+	return actual, "", nil
 }
 
 // isDegradedKind reports whether an extension error kind is a ruling-17
-// graceful degradation (structured result instead of a throw).
+// graceful degradation (structured result instead of a throw/panic).
 func isDegradedKind(kind fireweave.ErrorKind) bool {
 	return kind == fireweave.KindUnsupportedCapability || kind == fireweave.KindAlreadyClosed
 }
 
-func asProviderInitError(err error, target **of.ProviderInitError) bool {
-	return errors.As(err, target)
-}
-
-func asFireweave(err error, target **fireweave.Error) bool {
-	return errors.As(err, target)
-}
-
 // --- small conversions ---
 
-// toJSONMap round-trips a struct through JSON into a generic map, keeping
-// numbers as json.Number so the comparator's canonical form is exact.
-func toJSONMap(v any) (map[string]any, error) {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	dec := json.NewDecoder(bytes.NewReader(b))
-	dec.UseNumber()
-	var out map[string]any
-	if err := dec.Decode(&out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func releaseContextFrom(m map[string]any) fireweave.ReleaseContext {
-	rc := fireweave.ReleaseContext{}
-	rc.RolloutID, _ = m["rolloutId"].(string)
-	rc.ChangeID, _ = m["changeId"].(string)
-	if stamps, ok := m["stampIds"].([]any); ok {
-		for _, s := range stamps {
-			if str, ok := s.(string); ok {
-				rc.StampIDs = append(rc.StampIDs, str)
-			}
-		}
-	}
-	return rc
-}
-
-func exposureFrom(m map[string]any) fireweave.Exposure {
-	e := fireweave.Exposure{}
-	e.TargetingKey, _ = m["targetingKey"].(string)
-	e.FlagKey, _ = m["flagKey"].(string)
-	e.Variant, _ = m["variant"].(string)
-	e.RolloutID, _ = m["rolloutId"].(string)
-	e.Value = m["value"]
-	return e
-}
-
-func contextToJSON(c fireweave.EvaluationContext) map[string]any {
+func contextToJSON(c domain.EvaluationContext) map[string]any {
 	out := map[string]any{"targetingKey": c.TargetingKey}
 	attrs := map[string]any{}
 	for k, v := range c.Attributes {
@@ -874,34 +925,44 @@ func stateName(s fireweave.State) string {
 	return string(s)
 }
 
-func kindToCode(kind fireweave.ErrorKind, targetingKeyMissing bool) of.ErrorCode {
+// codeForKind maps a Fireweave error kind to its OpenFeature-vocabulary wire
+// code (spec/errors.schema.json). go's public SDK carries no OpenFeature
+// bridge in v1 (ADR-0010) — these strings exist only for the conformance
+// report / contracts/errors.json parity, not as an SDK export.
+func codeForKind(kind fireweave.ErrorKind, targetingKeyMissing bool) string {
 	switch kind {
 	case fireweave.KindNotReady, fireweave.KindAlreadyClosed:
-		return of.ProviderNotReadyCode
+		return "PROVIDER_NOT_READY"
 	case fireweave.KindFlagNotFound:
-		return of.FlagNotFoundCode
+		return "FLAG_NOT_FOUND"
 	case fireweave.KindTypeMismatch:
-		return of.TypeMismatchCode
+		return "TYPE_MISMATCH"
 	case fireweave.KindInvalidContext:
 		if targetingKeyMissing {
-			return of.TargetingKeyMissingCode
+			return "TARGETING_KEY_MISSING"
 		}
-		return of.InvalidContextCode
+		return "INVALID_CONTEXT"
 	case fireweave.KindMalformedResponse:
-		return of.ParseErrorCode
+		return "PARSE_ERROR"
 	case fireweave.KindConfiguration:
-		return of.ProviderFatalCode
+		return "PROVIDER_FATAL"
 	default:
-		return of.GeneralCode
+		return "GENERAL"
 	}
 }
 
-func coerceKind(err error) fireweave.ErrorKind {
-	var fwErr *fireweave.Error
-	if asFireweave(err, &fwErr) {
-		return fwErr.Kind
+func decisionErrorCode(d domain.Decision) any {
+	if d.Error == nil {
+		return nil
 	}
-	return fireweave.KindInternal
+	return codeForKind(d.Error.Kind, d.Error.TargetingKeyMissing)
+}
+
+func decisionErrorMessage(d domain.Decision) any {
+	if d.Error == nil {
+		return nil
+	}
+	return d.Error.Message
 }
 
 func errCodeOrNil(err error) any {
@@ -909,10 +970,10 @@ func errCodeOrNil(err error) any {
 		return nil
 	}
 	var fwErr *fireweave.Error
-	if asFireweave(err, &fwErr) {
-		return string(kindToCode(fwErr.Kind, fwErr.TargetingKeyMissing))
+	if errors.As(err, &fwErr) {
+		return codeForKind(fwErr.Kind, fwErr.TargetingKeyMissing)
 	}
-	return string(of.GeneralCode)
+	return "GENERAL"
 }
 
 func nilIfEmpty(s string) any {
@@ -922,28 +983,34 @@ func nilIfEmpty(s string) any {
 	return s
 }
 
-func numberToInt(v any) int64 {
+// numberLikeToInt reads an integer out of the subset of encoding/json's
+// decoded numeric shapes this package needs (fixture.go decodes with
+// UseNumber, so these are always json.Number in practice; the other cases
+// guard against a future decoder change).
+func numberLikeToInt(v any) int {
 	switch t := v.(type) {
-	case json.Number:
+	case interface{ Int64() (int64, error) }: // json.Number
 		i, _ := t.Int64()
-		return i
+		return int(i)
 	case int64:
-		return t
+		return int(t)
 	case float64:
-		return int64(t)
+		return int(t)
 	}
 	return 0
 }
 
-func numberToFloat(v any) float64 {
+func numberToFloat(v any) any {
 	switch t := v.(type) {
-	case json.Number:
+	case interface{ Float64() (float64, error) }: // json.Number
 		f, _ := t.Float64()
 		return f
 	case float64:
 		return t
 	case int64:
 		return float64(t)
+	case int:
+		return float64(t)
 	}
-	return 0
+	return v
 }

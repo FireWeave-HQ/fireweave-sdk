@@ -92,7 +92,7 @@ Working names (company-open where noted):
 |---|---|---|
 | Node | `@fireweaveai/sdk` | Peer: `@openfeature/server-sdk` (only). Zero runtime dependencies. Runs on Node / Bun / Deno — [ADR-0008](adr/0008-multi-runtime-support.md). |
 | Python | `fireweave` | Extra: `fireweave[posthog]` pulls `posthog`. OF: `openfeature-sdk>=0.10,<0.11`. |
-| Go | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go` | Module in `sdks/go`. |
+| Go | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2` | Module in `sdks/go`. |
 | Java | `ai.fireweave:sdk` | GroupId **`ai.fireweave`** (Central verification open). PostHog via `com.posthog:posthog-server`. |
 
 Layout (implementation agents; not created by Agent D):

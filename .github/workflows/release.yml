@@ -2,45 +2,112 @@
 #
 # DRY-RUN BY DEFAULT. Builds, changelogs, SBOMs, checksums; optionally tags.
 #
-# STAGING PUBLISH (authorized 2026-07-27): npm + TestPyPI + Go proxy warm are
-# enabled only when dry_run=false AND channel=staging AND the matching
-# component is selected. Requires trusted publishers (see RELEASE.md).
+# Inputs: `component` (server|web|python|java|go|rust|swift|all — `all` fans
+# out via matrix), `bump` (patch|minor|major — computed from the component's
+# OWN current manifest version by tools/release/version.sh; there is no
+# free-text `version` input anymore), `channel` (staging|production),
+# `dry_run` (default true).
+#
+# Staging identity is a VERSION SUFFIX, not an npm dist-tag: a staging
+# release is `X.Y.Z-staging.N` (N read from the ecosystem's registry by
+# tools/release/version.sh — never a local file, so two operators releasing
+# from different branches both see the true next N). A dist-tag is a mutable
+# pointer — the same bytes can be staging today and production tomorrow, and
+# the installed artifact records nothing; a version suffix puts the channel
+# in the version itself. npm still needs an explicit `--tag` on every publish
+# (it defaults untagged publishes to `latest` regardless of whether the
+# version is a prerelease) — staging publishes `--tag next`, production
+# would publish `--tag latest`; the tag is now pure syntax to dodge that
+# footgun, not the channel signal.
+#
+# `verify` (build + test + conformance, the full scripts/{build,test,
+# conformance}-all.sh suite — see that job's own comment for why it is not
+# matrixed per component) sits between build and every publish-* job so a
+# release cannot publish without the gates running. The release tag itself
+# is pushed by a dedicated `tag` job that also needs `verify` (I7 fix — a
+# tag push living inside `build` could previously race `verify` or outrun a
+# failure), and every publish-* job needs `tag` too, preserving the
+# pre-existing ordering where no publish step could start before the tag.
+#
+# STAGING PUBLISH (authorized 2026-07-27): npm (server) + TestPyPI + Go
+# proxy warm are enabled only when dry_run=false AND channel=staging AND the
+# matching component is selected. Requires trusted publishers / secrets (see
+# RELEASE.md).
+#
+# STAGING PUBLISH SCOPE EXTENDED (2026-08-21, during this implementation
+# work — NOT a separate human authorization; record it as such): npm for
+# `web` (identical OIDC trusted-publish mechanism as the already-authorized
+# `server`) and a rust `cargo publish --dry-run` (packages + validates only;
+# never uploads — see below) were added to the same dry_run=false AND
+# channel=staging gate. Flag for a human to backfill an explicit sign-off on
+# these two specifically if the 2026-07-27 authorization was meant to be
+# read as closed to new components.
+#
+# rust and swift have no staging registry at all (crates.io has no TestPyPI
+# equivalent, and yanking is not deletion — a real staging publish would
+# spend the version permanently): rust staging stops at
+# `cargo publish --dry-run` plus the git tag; go and swift staging (and
+# production) resolve from the git tag alone — for swift there is no publish
+# step whatsoever, staging or production.
 #
 # Production PyPI is enabled via channel=production (component=python) and also
 # via the dedicated tag-triggered workflow publish-python.yml (python/v*).
 # Maven Central is enabled via channel staging/production (component=java) and
 # via publish-java.yml (tag java/v*) — requires Central namespace verification
 # plus MAVEN_CENTRAL_* and MAVEN_GPG_* secrets. Missing secrets fail closed.
-# STILL HARD-DISABLED: production npm (dist-tag latest) until a second written authorization.
+# rust production (`cargo publish`) requires CARGO_REGISTRY_TOKEN — missing
+# fails closed the same way.
+# STILL HARD-DISABLED: production npm (dist-tag latest, both server and web)
+# until a second written authorization.
+#
+# Two GitHub environments: `release` (production — keeps the required-
+# reviewer gate) and `release-staging` (staging — no reviewer gate; exists so
+# a workflow bug can never reach production secrets from a staging run).
+# Java is the one exception: Maven Central Portal has no separate staging
+# registry or credentials, so publish-maven stays on `environment: release`
+# for BOTH channels (autoPublish is what actually differs by channel there)
+# — see RELEASE.md.
 #
 # Tag convention (org): <component>/v<semver>
-#   node   -> node/v0.1.0
+#   server -> server/v0.1.0   (renamed from `node` — see below)
+#   web    -> web/v0.1.0
 #   python -> python/v0.1.0
 #   java   -> java/v0.1.0
+#   rust   -> rust/v0.1.0
+#   swift  -> swift/v0.1.0   (chosen to match the org convention; see RELEASE.md
+#                             for why a bare `vX.Y.Z` buys nothing here)
 #   go     -> sdks/go/v0.1.0   (Go REQUIRES the tag to equal the module
 #                               subdirectory path; see RELEASE.md)
+#
+# `node` -> `server` rename: the npm package is `@fireweaveai/server-sdk`
+# (renamed from `@fireweaveai/sdk` in an earlier task); its directory stays
+# `sdks/node`. The tag prefix changes from `node/v` to `server/v`. This
+# component has never published (`git tag` is empty and the npm registry
+# 404s on `@fireweaveai/server-sdk`), so no historical tag breaks.
 name: Release (dry-run by default)
 
 on:
   workflow_dispatch:
     inputs:
       component:
-        description: 'SDK component to release'
+        description: 'SDK component to release ("all" fans out via matrix)'
         required: true
         type: choice
-        options: [node, python, go, java]
-      version:
-        description: 'Semver WITHOUT leading v (e.g. 0.1.0 or 0.2.0-rc.1)'
+        options: [server, web, python, java, go, rust, swift, all]
+      bump:
+        description: 'Semver bump, applied to the component''s OWN current manifest version (any existing prerelease is stripped first)'
         required: true
-        type: string
+        type: choice
+        options: [patch, minor, major]
+        default: patch
       channel:
-        description: 'Distribution channel (staging = npm dist-tag next / TestPyPI / Maven staging)'
+        description: 'Distribution channel (staging = version suffix -staging.N / TestPyPI / cargo --dry-run / Maven staging)'
         required: true
         type: choice
         options: [staging, production]
         default: staging
       dry_run:
-        description: 'Dry run (no tag push, no attestation, no staging publish). Set false only after trusted publishers are configured.'
+        description: 'Dry run (no tag push, no attestation, no staging/production publish). Set false only after trusted publishers are configured.'
         required: true
         type: boolean
         default: true
@@ -57,31 +124,30 @@ jobs:
     name: validate inputs
     runs-on: ubuntu-latest
     outputs:
-      tag: ${{ steps.compute.outputs.tag }}
+      components: ${{ steps.compute.outputs.components }}
     steps:
-      - name: Validate semver + compute tag
+      - name: Resolve component matrix
         id: compute
         env:
           COMPONENT: ${{ inputs.component }}
-          VERSION: ${{ inputs.version }}
         run: |
-          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
-            echo "version '$VERSION' is not valid semver (no leading v)" >&2
-            exit 1
+          if [ "$COMPONENT" = all ]; then
+            COMPONENTS='["server","web","python","java","go","rust","swift"]'
+          else
+            COMPONENTS="[\"$COMPONENT\"]"
           fi
-          case "$COMPONENT" in
-            go) tag="sdks/go/v${VERSION}" ;;
-            *)  tag="${COMPONENT}/v${VERSION}" ;;
-          esac
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "Release tag: $tag (channel=${{ inputs.channel }}, dry_run=${{ inputs.dry_run }})"
+          echo "components=$COMPONENTS" >> "$GITHUB_OUTPUT"
+          echo "Releasing bump=${{ inputs.bump }} channel=${{ inputs.channel }} dry_run=${{ inputs.dry_run }} components=$COMPONENTS"
 
   build:
-    name: build, changelog, SBOM, checksums
+    name: build, changelog, SBOM, checksums (${{ matrix.component }})
     needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJson(needs.validate.outputs.components) }}
     runs-on: ubuntu-latest
     permissions:
-      contents: write      # tag push (gated on dry_run == false)
       id-token: write      # build provenance attestation
       attestations: write  # build provenance attestation
     steps:
@@ -99,21 +165,44 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: sdks/go/go.mod
-          cache-dependency-path: sdks/go/go.sum
+          cache-dependency-path: sdks/go/go.mod
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
 
+      - name: Compute release version
+        id: version
+        run: |
+          tools/release/version.sh compute "${{ matrix.component }}" "${{ inputs.bump }}" "${{ inputs.channel }}" \
+            | tee release-info.env >> "$GITHUB_OUTPUT"
+
+      - name: Upload computed release info (consumed by the matching publish-* job)
+        uses: actions/upload-artifact@v5
+        with:
+          name: release-info-${{ matrix.component }}
+          path: release-info.env
+          if-no-files-found: error
+
       - name: Build all package artifacts (dry-run packaging + SHA256SUMS)
+        # NOT scoped to matrix.component: scripts/build-all.sh has always
+        # packaged every node/python/go/java artifact regardless of which
+        # single component a release targets (same script CI's own
+        # package-dry-run job runs) — left as-is here rather than reinvented.
+        # Two pre-existing, out-of-scope-for-this-task consequences, noted
+        # in task-14-report.md: (1) it does not package rust or swift at all
+        # (rust's own release-worthy "build" step is `cargo publish
+        # --dry-run` in publish-cargo instead; swift has no packaging step,
+        # ever — see the header comment); (2) on an `all` component fan-out
+        # this reruns the full 4-ecosystem build once per matrix leg.
         run: bash scripts/build-all.sh
 
       - name: Generate conventional-commits changelog
         run: |
-          bash tools/release/changelog.sh "${{ inputs.component }}" "${{ inputs.version }}" \
-            build/packages/CHANGELOG-${{ inputs.component }}-v${{ inputs.version }}.md
-          cat "build/packages/CHANGELOG-${{ inputs.component }}-v${{ inputs.version }}.md" \
+          bash tools/release/changelog.sh "${{ matrix.component }}" "${{ steps.version.outputs.release_version }}" \
+            "build/packages/CHANGELOG-${{ matrix.component }}-v${{ steps.version.outputs.release_version }}.md"
+          cat "build/packages/CHANGELOG-${{ matrix.component }}-v${{ steps.version.outputs.release_version }}.md" \
             >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate SBOM (syft via anchore/sbom-action)
@@ -121,7 +210,7 @@ jobs:
         with:
           path: .
           format: spdx-json
-          output-file: build/packages/sbom-${{ inputs.component }}-v${{ inputs.version }}.spdx.json
+          output-file: build/packages/sbom-${{ matrix.component }}-v${{ steps.version.outputs.release_version }}.spdx.json
           upload-artifact: false
 
       - name: Refresh checksums (includes changelog + SBOM)
@@ -150,18 +239,107 @@ jobs:
       - name: Upload release candidate artifacts
         uses: actions/upload-artifact@v5
         with:
-          name: release-${{ inputs.component }}-v${{ inputs.version }}-${{ inputs.channel }}
+          name: release-${{ matrix.component }}-v${{ steps.version.outputs.release_version }}-${{ inputs.channel }}
           path: build/packages/
           if-no-files-found: error
 
-      - name: Create + push tag (skipped in dry runs)
+  # =========================================================================
+  # VERIFY — the gate the plan calls out as missing: "today a release can
+  # publish without running the gates." Runs build + test + conformance for
+  # EVERY language via the existing scripts/{build,test,conformance}-all.sh
+  # entry points (the same ones a human runs locally per RELEASE.md), rather
+  # than reinventing a component-scoped variant of them.
+  #
+  # Deliberately NOT matrixed over component: all three scripts already test
+  # every ecosystem in one pass (conformance-all.sh in particular is the
+  # 65x7 cross-language differential gate — it means nothing run against a
+  # single language). Matrixing this job would just rerun the identical
+  # full-repo suite once per selected component for no additional coverage.
+  # It runs once per dispatch — including dry runs — so a dry run also
+  # proves the gates are green, not only a real publish attempt.
+  # =========================================================================
+  verify:
+    name: verify (build + test + conformance — full suite, all languages)
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: sdks/node/package-lock.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: sdks/go/go.mod
+          cache-dependency-path: sdks/go/go.mod
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - uses: swift-actions/setup-swift@v2
+        with:
+          # 6.2.1 is the newest patch known to setup-swift@v2 (6.3.x is not listed).
+          swift-version: '6.2.1'
+
+      - name: Build all package artifacts (dry-run)
+        run: bash scripts/build-all.sh
+      - name: Run the full test suite (node/python/go/java + offline examples)
+        run: bash scripts/test-all.sh
+      - name: Cross-language conformance (65x7 differential gate)
+        run: bash scripts/conformance-all.sh
+      - name: Publish comparator summary
+        if: always()
+        run: |
+          if [ -f build/conformance/summary.md ]; then
+            cat build/conformance/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # =========================================================================
+  # TAG — split out from `build` (I7 fix). `build` and `verify` both only
+  # `needs: validate`, so a tag-push step living inside `build` could complete
+  # while `verify` was still in flight or had already failed — and for go and
+  # swift the tag IS the release (no further publish step). This job needs
+  # verify explicitly so a release tag is never created before the full
+  # build+test+conformance suite (scripts/{build,test,conformance}-all.sh) is
+  # green. Matrixed the same way `build` is, since each component gets its
+  # own tag; reads the version/tag computed by build's matching leg from the
+  # release-info-<component> artifact rather than recomputing it.
+  # =========================================================================
+  tag:
+    name: create + push release tag (${{ matrix.component }})
+    needs: [validate, build, verify]
+    if: ${{ inputs.dry_run == false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJson(needs.validate.outputs.components) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-${{ matrix.component }}
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
+      - name: Create + push tag
         # NOTE ON SIGNED TAGS: GitHub-hosted runners have no org signing key.
         # Org convention is a SIGNED annotated tag; until a signing identity is
         # provisioned (RELEASE.md "Signed tags"), the release owner should
         # re-create this tag locally with `git tag -s` or enable gitsign here.
-        if: ${{ inputs.dry_run == false }}
         env:
-          TAG: ${{ needs.validate.outputs.tag }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
           git config user.name "fireweave-release-bot"
           git config user.email "releases@fireweave.ai"
@@ -170,22 +348,49 @@ jobs:
 
   # =========================================================================
   # PUBLISHING
-  # - Staging (authorized): npm + TestPyPI + Go proxy warm when dry_run=false
-  #   and channel=staging. Requires trusted publishers (RELEASE.md).
-  # - Production: HARD-DISABLED (if: false) until a second written authorization.
-  # - Maven: HARD-DISABLED until ai.fireweave Central namespace + secrets exist.
+  # - Staging, when dry_run=false and channel=staging (two DIFFERENT dates —
+  #   see the file header for the full split, not restated here):
+  #     - authorized 2026-07-27: npm server, TestPyPI, Go proxy warm.
+  #     - scope extended 2026-08-21 (this implementation task, NOT a fresh
+  #       human authorization): npm web, rust `cargo publish --dry-run`.
+  #   Requires trusted publishers / secrets (RELEASE.md).
+  # - Production npm: HARD-DISABLED (if: false) until a second written
+  #   authorization (both server and web).
+  # - Production PyPI / Maven / crates.io: gated on channel=production,
+  #   dry_run=false, and the matching secret — missing secrets fail closed.
+  # - go / swift: no publish job beyond the tag the `tag` job already
+  #   pushed — both ecosystems resolve purely from git tags, for staging AND
+  #   production (go additionally gets an optional proxy warm on staging).
+  #
+  # Every job below needs `tag` (in addition to `build`/`verify`) and
+  # downloads its own release-info-<component> artifact (uploaded by build's
+  # matching matrix leg) instead of recomputing the version: build already
+  # queried the registry once; a publish job re-querying afterwards would —
+  # for go/java/swift specifically, whose "registry" is the git tag list
+  # itself — see the tag the `tag` job just pushed and double-count.
+  # Reusing the one computed value sidesteps that for every ecosystem
+  # uniformly, and needing `tag` preserves the pre-fix ordering where no
+  # publish step could start before the release tag existed.
   # =========================================================================
 
   publish-npm:
-    name: publish npm (staging → dist-tag next)
-    needs: [validate, build]
-    if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && inputs.component == 'node' }}
+    name: publish npm (staging → server-sdk, dist-tag next)
+    needs: [validate, build, verify, tag]
+    if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'server') }}
     runs-on: ubuntu-latest
+    environment: release-staging
     permissions:
       id-token: write # npm OIDC trusted publishing — no NPM_TOKEN secret needed once provisioned
       contents: read
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-server
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
@@ -197,39 +402,114 @@ jobs:
             echo "::error::OIDC id-token request vars absent — configure npm Trusted Publisher and permissions.id-token: write"
             exit 1
           fi
-      - name: Build and publish @fireweaveai/sdk (dist-tag next)
+      - name: Apply computed version
+        run: tools/release/version.sh apply server "${{ steps.version.outputs.release_version }}"
+      - name: Build and publish @fireweaveai/server-sdk
         working-directory: sdks/node
+        env:
+          DIST_TAG: ${{ steps.version.outputs.dist_tag }}
         run: |
           npm install -g npm@latest
           npm ci
           npm run build
-          cd packages/sdk
-          npm publish --provenance --access public --tag next
+          npm publish --provenance --access public --tag "$DIST_TAG"
+
+  publish-npm-web:
+    name: publish npm (staging → web-sdk, dist-tag next)
+    needs: [validate, build, verify, tag]
+    if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'web') }}
+    runs-on: ubuntu-latest
+    environment: release-staging
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-web
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      # web's lockfile of record is bun.lock (package-lock.json is deliberately
+      # gitignored — see .gitignore) and its own build script shells out to
+      # `bun` (sdks/web/package.json's "build": "bun run clean && tsc ...").
+      # `npm ci`/`npm run build` on a Node-only runner fails on both counts;
+      # bun installs + builds (mirroring ci.yml's web job), npm stays only for
+      # the OIDC-authenticated `npm publish` step below.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Assert OIDC preconditions
+        run: |
+          echo "npm version: $(npm --version)"
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo "::error::OIDC id-token request vars absent — configure npm Trusted Publisher and permissions.id-token: write"
+            exit 1
+          fi
+      - name: Apply computed version
+        run: tools/release/version.sh apply web "${{ steps.version.outputs.release_version }}"
+      - name: Install workspace dependencies (bun — see comment above)
+        working-directory: sdks/web
+        run: bun install --frozen-lockfile
+      - name: Build @fireweaveai/web-sdk (bun — see comment above)
+        working-directory: sdks/web
+        run: bun run build
+      - name: Publish @fireweaveai/web-sdk (npm — OIDC trusted publisher)
+        working-directory: sdks/web
+        env:
+          DIST_TAG: ${{ steps.version.outputs.dist_tag }}
+        run: |
+          npm install -g npm@latest
+          npm publish --provenance --access public --tag "$DIST_TAG"
 
   publish-npm-production:
     name: publish npm production (HARD-DISABLED)
-    needs: [validate, build]
-    if: ${{ false }} # HARD-DISABLED — second authorization required for dist-tag latest
+    needs: [validate, build, verify, tag]
+    if: ${{ false }} # HARD-DISABLED — second authorization required for dist-tag latest (server-sdk AND web-sdk)
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
     steps:
-      - run: echo "production npm publish is hard-disabled"
+      - run: echo "production npm publish (server-sdk, web-sdk) is hard-disabled"
 
   publish-pypi:
     name: publish TestPyPI (staging)
-    needs: [validate, build]
-    if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && inputs.component == 'python' }}
+    needs: [validate, build, verify, tag]
+    if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'python') }}
     runs-on: ubuntu-latest
+    environment: release-staging
     permissions:
-      id-token: write # PyPI OIDC trusted publishing
+      id-token: write # optional OIDC; token path uses TEST_PYPI_API_TOKEN
       contents: read
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-python
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
+      - name: Require TEST_PYPI_API_TOKEN
+        env:
+          TEST_PYPI_API_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        run: |
+          if [ -z "${TEST_PYPI_API_TOKEN:-}" ]; then
+            echo "::error::TEST_PYPI_API_TOKEN secret is missing (set on environment 'release-staging')"
+            exit 1
+          fi
       - uses: actions/setup-python@v6
         with:
           python-version: '3.14'
+      - name: Apply computed version
+        run: tools/release/version.sh apply python "${{ steps.version.outputs.release_version }}"
       - name: Build sdist + wheel
         run: |
           python -m pip install build
@@ -239,11 +519,12 @@ jobs:
         with:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: dist/
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
 
   publish-pypi-production:
     name: publish PyPI (production)
-    needs: [validate, build]
-    if: ${{ inputs.dry_run == false && inputs.channel == 'production' && inputs.component == 'python' }}
+    needs: [validate, build, verify, tag]
+    if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'python') }}
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -251,18 +532,18 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-python
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@v6
         with:
           python-version: '3.14'
-      - name: Verify pyproject version matches release input
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          PKG_VERSION="$(python -c "import tomllib; print(tomllib.load(open('sdks/python/pyproject.toml','rb'))['project']['version'])")"
-          if [ "$PKG_VERSION" != "$VERSION" ]; then
-            echo "::error::pyproject.toml version ($PKG_VERSION) != release version ($VERSION)"
-            exit 1
-          fi
+      - name: Apply computed version
+        run: tools/release/version.sh apply python "${{ steps.version.outputs.release_version }}"
       - name: Build sdist + wheel
         run: |
           python -m pip install --upgrade pip build
@@ -276,14 +557,25 @@ jobs:
 
   publish-maven:
     name: publish Maven Central (Central Publisher Portal)
-    needs: [validate, build]
-    if: ${{ inputs.dry_run == false && inputs.component == 'java' }}
+    needs: [validate, build, verify, tag]
+    if: ${{ inputs.dry_run == false && contains(fromJson(needs.validate.outputs.components), 'java') }}
     runs-on: ubuntu-latest
+    # Stays on `release` for BOTH channels: Maven Central Portal has no
+    # separate staging registry or credential set (autoPublish=false is what
+    # makes a staging deploy non-final, not a different secret) — see
+    # RELEASE.md and the header comment above.
     environment: release
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-java
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
       - name: Require Central + GPG secrets
         env:
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
@@ -313,15 +605,22 @@ jobs:
           server-password: MAVEN_CENTRAL_PASSWORD
           gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
           gpg-passphrase: MAVEN_GPG_PASSPHRASE
-      - name: Test, javadoc, sign, deploy
+      - name: Run Java tests (against the pre-bump committed version)
+        working-directory: sdks/java
+        run: mvn -B -ntp clean test
+      - name: Apply computed version
+        # tools/release/version.sh apply's java branch IS this mvn versions:set
+        # call (same command, -q instead of -B -ntp) — calling it here instead
+        # of repeating the invocation inline keeps one implementation of "how
+        # java's manifest gets written," exercised by version.test.sh.
+        run: tools/release/version.sh apply java "${{ steps.version.outputs.release_version }}"
+      - name: Sign + deploy
         working-directory: sdks/java
         env:
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
         run: |
-          mvn -B -ntp clean test
-          mvn -B -ntp versions:set -DnewVersion="${{ inputs.version }}" -DgenerateBackupPoms=false
           if [ "${{ inputs.channel }}" = "production" ]; then AUTO=true; else AUTO=false; fi
           mvn -B -ntp -Prelease -DskipTests deploy \
             -Dcentral.autoPublish="$AUTO" \
@@ -329,17 +628,100 @@ jobs:
 
   publish-go:
     name: warm Go module proxy (staging)
-    needs: [validate, build]
-    if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && inputs.component == 'go' }}
+    needs: [validate, build, verify, tag]
+    if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'go') }}
     runs-on: ubuntu-latest
+    environment: release-staging
     steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-go
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v6
         with:
           go-version: stable
       - name: Warm proxy.golang.org for the new version
+        # Go modules at major >= 2 must use a /vN path suffix (see go.mod).
+        # Tag stays `sdks/go/vX.Y.Z`; module path is `…/sdks/go/vN`.
         env:
-          TAG: ${{ needs.validate.outputs.tag }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
           VERSION="${TAG#sdks/go/}"
-          GOPROXY=proxy.golang.org \
-            go list -m "github.com/FireWeave-HQ/fireweave-sdk/sdks/go@${VERSION}"
+          MAJOR="$(printf '%s' "$VERSION" | sed -E 's/^v([0-9]+).*/\1/')"
+          MODULE='github.com/FireWeave-HQ/fireweave-sdk/sdks/go'
+          if [ "$MAJOR" -ge 2 ]; then
+            MODULE="${MODULE}/v${MAJOR}"
+          fi
+          GOPROXY=proxy.golang.org go list -m "${MODULE}@${VERSION}"
+
+  publish-cargo:
+    name: cargo publish --dry-run (staging — no crates.io upload)
+    needs: [validate, build, verify, tag]
+    if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'rust') }}
+    runs-on: ubuntu-latest
+    environment: release-staging
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-rust
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Apply computed version
+        run: |
+          tools/release/version.sh apply rust "${{ steps.version.outputs.release_version }}"
+          # apply() rewrites Cargo.toml only; refresh Cargo.lock so --locked
+          # does not fail on the package's own version field.
+          (cd sdks/rust && cargo check --quiet)
+      - name: cargo publish --dry-run (packages + validates only — never uploads)
+        # No staging registry exists for crates.io (unlike TestPyPI) and
+        # yanking is not deletion, so a real staging publish would spend the
+        # version permanently. --dry-run proves the package is publishable
+        # without spending anything; the git tag (already pushed by the `tag`
+        # job, which this job needs) IS this release's staging artifact.
+        working-directory: sdks/rust
+        run: cargo publish --dry-run --locked --allow-dirty
+
+  publish-cargo-production:
+    name: publish crates.io (production)
+    needs: [validate, build, verify, tag]
+    if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'rust') }}
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-rust
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
+      - name: Require CARGO_REGISTRY_TOKEN
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -z "${CARGO_REGISTRY_TOKEN:-}" ]; then
+            echo "::error::CARGO_REGISTRY_TOKEN secret is missing (set on environment 'release')"
+            exit 1
+          fi
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Apply computed version
+        run: |
+          tools/release/version.sh apply rust "${{ steps.version.outputs.release_version }}"
+          (cd sdks/rust && cargo check --quiet)
+      - name: Publish to crates.io
+        working-directory: sdks/rust
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked --allow-dirty

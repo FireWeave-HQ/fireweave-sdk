@@ -7,19 +7,40 @@
   <parent>
     <groupId>ai.fireweave</groupId>
     <artifactId>fireweave-java-parent</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>2.2.0-SNAPSHOT</version>
   </parent>
 
   <artifactId>fireweave-testing</artifactId>
   <name>Fireweave testing (in-memory adapter + conformance runner)</name>
   <description>
-    Deterministic InMemoryAdapter (fixture-driven, fault simulation) and the conformance runner
-    executing contracts/ fixtures through the real OpenFeature client.
+    Deterministic InMemoryAdapter (fixture-driven, fault simulation) and the conformance
+    runner executing contracts/ fixtures through the real v1 control-points surface
+    (FireweaveClient.controlPoints — no OpenFeature bridge, retired by ADR-0010).
   </description>
   <url>https://github.com/FireWeave-HQ/fireweave-sdk</url>
 
   <properties>
     <automatic.module.name>ai.fireweave.testing</automatic.module.name>
+    <!-- Conformance harness only — never publish this artifact (it drags
+         jackson-databind into ai.fireweave:* coordinates for no consumer
+         benefit).
+
+         NOT maven.deploy.skip: central-publishing-maven-plugin:0.11.0 is
+         declared `<extensions>true</extensions>` in the parent pom, which
+         makes its DeployLifecycleParticipant active. That participant
+         unconditionally clears this module's implicit maven-deploy-plugin
+         execution and injects its own `publish` goal on the deploy phase
+         instead — so maven.deploy.skip has no consumer left to read it
+         (verified: the string appears nowhere in the plugin's classes, and
+         a module-level maven.deploy.skip=true left `central.skipPublishing`
+         resolving to `false` here — the deploy still would have run).
+
+         The plugin's own — and only — skip switch is `skipPublishing`,
+         bound to ${central.skipPublishing}. The `release` profile sets it
+         to false parent-wide (sdks/java/pom.xml); this module-level
+         property shadows that for fireweave-testing specifically, per
+         normal Maven child-property-overrides-parent resolution. -->
+    <central.skipPublishing>true</central.skipPublishing>
   </properties>
 
   <dependencies>
@@ -29,29 +50,12 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>ai.fireweave</groupId>
-      <artifactId>fireweave-openfeature</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>dev.openfeature</groupId>
-      <artifactId>sdk</artifactId>
-    </dependency>
-    <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <!-- Test-only: fault-suite conformance over the real HTTP test-server stub through the
-         PostHogClientApi seam (HttpFaultConformanceTest). Never a compile-scope dependency. -->
-    <dependency>
-      <groupId>ai.fireweave</groupId>
-      <artifactId>fireweave-adapter-posthog</artifactId>
-      <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

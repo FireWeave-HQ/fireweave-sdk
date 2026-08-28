@@ -2,7 +2,7 @@
   "name": "fireweave-example-node",
   "private": true,
   "version": "0.1.0",
-  "description": "Minimal Fireweave SDK example — runs offline against the in-memory adapter by default; pass --remote with FW_API_URL + FW_PROJECT_API_KEY to talk to fw-server (or the local test-server stub).",
+  "description": "Minimal Fireweave SDK example — runs offline (mode: 'local') by default; pass --remote with FW_API_URL + FW_PROJECT_API_KEY to talk to fw-server (or the local test-server stub).",
   "type": "module",
   "engines": {
     "node": ">=20.20"
@@ -14,7 +14,6 @@
     "start:deno": "deno run --allow-net --allow-env --allow-read index.mjs"
   },
   "dependencies": {
-    "@fireweaveai/sdk": "file:../../sdks/node/packages/sdk",
-    "@openfeature/server-sdk": "1.22.0"
+    "@fireweaveai/server-sdk": "file:../../sdks/node"
   }
 }

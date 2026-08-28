@@ -1,5 +1,15 @@
 package ai.fireweave.sdk;
 
+import ai.fireweave.sdk.application.EvaluationOptions;
+import ai.fireweave.sdk.application.EvaluationRequest;
+import ai.fireweave.sdk.application.FireweaveConfig;
+import ai.fireweave.sdk.domain.Decision;
+import ai.fireweave.sdk.domain.EvaluationContext;
+import ai.fireweave.sdk.domain.FireweaveException;
+import ai.fireweave.sdk.domain.FlagType;
+import ai.fireweave.sdk.domain.JsonValue;
+import ai.fireweave.sdk.domain.Reasons;
+import ai.fireweave.sdk.infrastructure.adapters.FireweaveRemoteAdapter;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -95,5 +105,44 @@ final class FireweaveRemoteAdapterTest {
         FireweaveRemoteAdapter adapter = new FireweaveRemoteAdapter();
         assertThrows(FireweaveException.class, () ->
                 adapter.initialize(FireweaveConfig.builder().build()));
+    }
+
+    /**
+     * task-10b review-round finding: a wire payload that arrives as a raw JSON string
+     * (spec/remote-evaluate.schema.json's payload field is unconstrained {@code jsonValue})
+     * must pass through verbatim — {@code payload.toCanonicalJson()} would double-encode a
+     * string-kind value. Uses its own server (rather than the shared {@code @BeforeEach} one,
+     * whose fixed response carries no payload field) so the response can carry one.
+     */
+    @Test
+    void includePayloadPassesThroughRawStringVerbatim() throws Exception {
+        HttpServer payloadServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        payloadServer.createContext("/v1/flags/evaluate", exchange -> {
+            byte[] resp = ("{\"decisions\":[{\"flagKey\":\"checkout-v2\",\"value\":true,"
+                    + "\"reason\":\"TARGETING_MATCH\",\"found\":true,"
+                    + "\"payload\":\"{\\\"already\\\":\\\"serialized\\\"}\"}]}").getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, resp.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(resp);
+            }
+        });
+        payloadServer.setExecutor(Executors.newCachedThreadPool());
+        payloadServer.start();
+        try {
+            String url = "http://127.0.0.1:" + payloadServer.getAddress().getPort();
+            FireweaveRemoteAdapter adapter = new FireweaveRemoteAdapter();
+            adapter.initialize(FireweaveConfig.builder().host(url).projectApiKey("project-api-key_test").build());
+
+            Decision d = adapter.evaluate(new EvaluationRequest(
+                    "checkout-v2", FlagType.BOOLEAN, JsonValue.of(false),
+                    EvaluationContext.builder().targetingKey("user-1").build(),
+                    EvaluationOptions.withIncludePayload(true)));
+
+            assertEquals("{\"already\":\"serialized\"}", d.flagMetadata().get("fireweave.payload"));
+            adapter.shutdown();
+        } finally {
+            payloadServer.stop(0);
+        }
     }
 }

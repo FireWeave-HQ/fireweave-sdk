@@ -40,12 +40,15 @@
   },
   "compatibility": {
     "node": "skipped-with-documented-limitation",
-    "python": "pass",
-    "go": "pass",
-    "java": "pass"
+    "python": "skipped-with-documented-limitation",
+    "go": "skipped-with-documented-limitation",
+    "java": "skipped-with-documented-limitation"
   },
   "limitations": {
-    "node": "Node OpenFeature exposes a single number resolver; int vs float discrimination is not available at the provider boundary."
+    "node": "Node OpenFeature exposes a single number resolver; int vs float discrimination is not available at the provider boundary.",
+    "python": "v1's FlagType has exactly four members (boolean/string/number/object), no integer/float split (conformance/surface/control-points.surface.json: 'number, NOT integer') — the same simplification node's own limitation describes, applied uniformly by the v1 cut.",
+    "go": "v1's FlagType has exactly four members (boolean/string/number/object), no integer/float split (conformance/surface/control-points.surface.json: 'number, NOT integer') — the same simplification node's own limitation describes, applied uniformly by the v1 cut.",
+    "java": "v1's FlagType has exactly four members (boolean/string/number/object), no integer/float split (conformance/surface/control-points.surface.json: 'number, NOT integer') — the same simplification node's own limitation describes, applied uniformly by the v1 cut."
   },
   "schemaVersion": 1,
   "id": "eval-numeric-coercion-int-float",

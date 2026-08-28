@@ -2,24 +2,58 @@
  * Fireweave Node conformance runner (contracts/harness.md).
  *
  * Loads all contracts/{evaluation,context,lifecycle,faults,security,extensions}
- * fixtures, provisions `given`, invokes `when` through the real OpenFeature
- * client + FireweaveProvider, normalizes actual output, diffs against `expect`,
- * and writes compatibility-report.node.json. Exits non-zero on any fail.
+ * fixtures, provisions `given`, invokes `when` through the real v1 control-point
+ * surface (`FireweaveClient.controlPoints`, NOT OpenFeature — the OpenFeature
+ * provider was retired by ADR-0010; see contracts/harness.md "Shared pipeline"),
+ * normalizes actual output, diffs against `expect`, and writes the compatibility
+ * report. Exits non-zero on any fail.
+ *
+ * Usage: tsx test/conformance/run.ts [--out PATH]
+ *   --out PATH   Where to write the report (resolved relative to cwd if not
+ *                absolute). Default: test/conformance/compatibility-report.node.json
+ *                — a gitignored scratch file, NOT a committed artifact (task-10
+ *                review round 2: a committed default would let a stale report
+ *                from a prior run silently masquerade as fresh if this runner
+ *                ever crashed before reaching its write). scripts/conformance-all.sh
+ *                always passes an explicit --out into its own ephemeral
+ *                build/conformance/ directory, matching how python/go/java are
+ *                already invoked there.
  *
  * Backends:
- *  - evaluation/context/lifecycle/security/extensions → InMemoryAdapter from given.flags
+ *  - evaluation/context/lifecycle/security → InMemoryAdapter from given.flags,
+ *    driving FireweaveRuntime + FireweaveClient directly (the raw construction
+ *    path, same as conformance/surface/'s own surface test — NOT
+ *    `initFireweave({mode:'local'})`: that entry point's local adapter
+ *    (FireweaveLocalAdapter) only accepts a `Record<string, boolean>` override
+ *    map with no variant/metadata/condition support, so it cannot carry the
+ *    rich InMemoryFlagDefinition fixtures rely on. `initFireweave` itself is
+ *    exercised end-to-end by test/unit/init-fireweave.test.ts, part of
+ *    `npm run verify` via `npm run test`).
  *  - faults (HTTP semantics) → FireweaveRemoteAdapter against the test-server's
  *    Fireweave-native route (POST /v1/flags/evaluate), fault scope 'evaluate'
- *    (fault-stale-cache runs on the InMemoryAdapter: cache staleness is
- *    provisioned directly per given.flags.fromCache + providerState STALE)
+ *    (fault-stale-cache runs on the InMemoryAdapter instead: cache staleness
+ *    is provisioned directly per given.flags.fromCache + providerState
+ *    STALE). Constructed directly (FireweaveRemoteAdapter + FireweaveRuntime),
+ *    not via `initFireweave({mode:'remote'})`: fault-timeout needs a
+ *    fixture-supplied `requestTimeoutMs`, a knob `initFireweave`'s remote
+ *    options do not expose. This is still the pipeline's "remote mode ...
+ *    exercising the remote adapter" leg — real HTTP against test-server;
+ *    `initFireweave` itself (both modes) is unit-tested end-to-end by
+ *    test/unit/init-fireweave.test.ts, part of `npm run verify` via
+ *    `npm run test`.
+ *  - extensions → 13 of 14 fixtures target namespaces cut from the v1 surface
+ *    (releases/exposures/signals/capabilities), classified data-driven from
+ *    `when.operation` (see CUT_OPERATION_NAMESPACE below and
+ *    contracts/harness.md "v1-scope rule"); those are reported
+ *    `skipped-v1-out-of-scope`, never executed. Only
+ *    ext-unsupported-capability-degrade exercises real v1 surface
+ *    (`FireweaveClient.invokeCapability`) and runs for real.
  */
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { OpenFeature } from '@openfeature/server-sdk';
 import {
   FireweaveClient,
-  FireweaveProvider,
   FireweaveRemoteAdapter,
   FireweaveRuntime,
   InMemoryAdapter,
@@ -33,7 +67,7 @@ import {
   type InMemoryFlagDefinition,
   type JsonValue,
   type LifecycleState,
-} from '@fireweaveai/sdk';
+} from '@fireweaveai/server-sdk';
 // The test-server stub is plain JS by design (test-server/implementation/PLAN.md).
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore -- no type declarations for the stub
@@ -57,9 +91,6 @@ interface Fixture {
     domains?: Record<string, { providerState?: string; flags?: Record<string, InMemoryFlagDefinition> }>;
     replacement?: { flags?: Record<string, InMemoryFlagDefinition> };
     extensions?: Record<string, boolean>;
-    releaseContext?: Record<string, JsonValue>;
-    releaseStatus?: string;
-    exposureQueue?: Array<Record<string, JsonValue>>;
   };
   when: Record<string, JsonValue> & { operation: string };
   expect: Record<string, JsonValue>;
@@ -74,16 +105,69 @@ interface Fixture {
   limitations: Record<string, string>;
 }
 
+type ReportStatus = 'pass' | 'fail' | 'skipped-with-documented-limitation' | 'skipped-v1-out-of-scope';
+
 interface ReportRow {
   fixtureId: string;
   suite: string;
   language: 'node';
-  status: 'pass' | 'fail' | 'skipped-with-documented-limitation';
+  status: ReportStatus;
   limitation: string | null;
   message: string | null;
 }
 
 type ActualOutput = Record<string, unknown>;
+
+// ---------------------------------------------------------------------------
+// v1-scope classification (contracts/harness.md "Extension fixtures — v1
+// scope rule", ruling 2), DATA-DRIVEN from `when.operation` — not a
+// hand-maintained fixture-ID list. contracts/README.md's "Operations" table
+// names exactly which operation belongs to which namespace; every one of
+// those namespaces (releases/exposures/signals/capabilities) is cut in v1
+// (ADR-0010) except `invokeCapability`, which stays on the client precisely
+// to dispatch (and degrade) capability calls. A fixture is
+// `skipped-v1-out-of-scope` when EVERY operation it dispatches — the single
+// top-level `when.operation`, or, for a multi-case fixture, every
+// `cases[].when.operation` — maps to a cut namespace below.
+//
+// This derives the exact same 13-out/1-real split the old hand-maintained
+// ID list encoded (verified by re-running the full suite after this change:
+// counts unchanged — see task-10-report.md's fix-report addendum), including
+// the one fixture worth reading individually rather than trusting the name:
+// ext-lifecycle-gating's description ("lifecycle-gated... ruling 17") reads
+// like the invokeCapability lifecycle-gate exception this rule carves out,
+// but all three of its cases dispatch `emitSignal` (signals, cut), including
+// a "ready-delivered-to-sink" case expecting `ok:true` — an outcome
+// invokeCapability can never produce, since v1's SUPPORTED_CAPABILITIES is
+// frozen empty and the unsupported-capability check runs before the
+// lifecycle gate in every state. The operation-based rule classifies it
+// correctly without needing that reasoning spelled out in a lookup table.
+const CUT_OPERATION_NAMESPACE: Record<string, string> = {
+  setContext: 'releases',
+  start: 'releases',
+  complete: 'releases',
+  fail: 'releases',
+  recordExposure: 'exposures',
+  flushExposures: 'exposures',
+  emitSignal: 'signals',
+  getCapabilities: 'capabilities',
+  // invokeCapability is deliberately absent: it is v1 surface, not cut.
+};
+
+/**
+ * Returns the cut namespace name when every operation this fixture
+ * dispatches targets one, or undefined when the fixture genuinely exercises
+ * v1 surface (today: only ext-unsupported-capability-degrade).
+ */
+function v1OutOfScopeNamespace(fixture: Fixture): string | undefined {
+  const operations =
+    fixture.cases !== undefined ? fixture.cases.map((c) => c.when.operation) : [fixture.when.operation];
+  const namespaces = operations.map((op) => CUT_OPERATION_NAMESPACE[op]);
+  if (namespaces.every((ns): ns is string => ns !== undefined)) {
+    return namespaces[0];
+  }
+  return undefined;
+}
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -101,12 +185,12 @@ function loadFixtures(): Fixture[] {
 }
 
 /**
- * Fixture context → OpenFeature context. The canonical {targetingKey, attributes}
+ * Fixture context → Fireweave context. The canonical {targetingKey, attributes}
  * bag shape is passed through untouched: the SDK understands it natively, and
  * flattening would let attributes.targetingKey collide with the real targeting
  * key (ctx-reserved-keys-rejected).
  */
-function toOFContext(ctx: Record<string, JsonValue> | undefined): Record<string, JsonValue> {
+function toContext(ctx: Record<string, JsonValue> | undefined): Record<string, JsonValue> {
   if (ctx === undefined) return {};
   return ctx;
 }
@@ -296,53 +380,47 @@ async function provisionState(runtime: FireweaveRuntime, providerState: string |
   }
 }
 
-let domainCounter = 0;
-const uniqueDomain = (id: string): string => `${id}-${(domainCounter += 1)}`;
+const toExpectedType = (flagType: string): 'boolean' | 'string' | 'number' | 'object' => {
+  if (flagType === 'integer' || flagType === 'float') return 'number';
+  return flagType as 'boolean' | 'string' | 'object';
+};
 
-async function evaluateThroughOpenFeature(
-  domain: string,
-  provider: FireweaveProvider,
-  when: { flagKey: string; flagType: string; defaultValue: JsonValue; context: Record<string, JsonValue> },
+/**
+ * Invoke a control point through the real v1 client surface
+ * (`FireweaveClient.controlPoints.evaluate` — the general form the
+ * `get<Type>Details` sugar methods delegate to; used directly here rather
+ * than the sugar so `when.options` — currently only `includePayload`,
+ * exercised by eval-payload-attached — has somewhere to go, since the sugar
+ * methods only take `(key, default, context?)`, no options) and map the
+ * returned {@link Decision} back onto the fixture's wire shape
+ * (`flagMetadata`, not `metadata` — the fixture-facing name predates the
+ * Decision type's own field rename and stays fixed here rather than in the
+ * SDK).
+ */
+async function evaluateThroughClient(
+  client: FireweaveClient,
+  when: {
+    flagKey: string;
+    flagType: string;
+    defaultValue: JsonValue;
+    context: Record<string, JsonValue>;
+    options?: { includePayload?: boolean };
+  },
 ): Promise<ActualOutput> {
-  await OpenFeature.setProviderAndWait(domain, provider);
-  const client = OpenFeature.getClient(domain);
-  const ofContext = when.context;
-  let details: {
-    value: JsonValue;
-    variant?: string;
-    reason?: string;
-    errorCode?: string;
-    errorMessage?: string;
-    flagMetadata?: Record<string, unknown>;
-  };
-  switch (when.flagType) {
-    case 'boolean':
-      details = await client.getBooleanDetails(when.flagKey, when.defaultValue as boolean, ofContext);
-      break;
-    case 'string':
-      details = await client.getStringDetails(when.flagKey, when.defaultValue as string, ofContext);
-      break;
-    case 'integer':
-    case 'float':
-      details = await client.getNumberDetails(when.flagKey, when.defaultValue as number, ofContext);
-      break;
-    case 'object':
-      details = (await client.getObjectDetails(
-        when.flagKey,
-        when.defaultValue as Record<string, JsonValue>,
-        ofContext,
-      )) as typeof details;
-      break;
-    default:
-      throw new Error(`unsupported flagType ${when.flagType}`);
-  }
+  const decision: Decision = await client.controlPoints.evaluate(
+    when.flagKey,
+    toExpectedType(when.flagType),
+    when.defaultValue,
+    when.context,
+    when.options,
+  );
   return {
-    value: details.value,
-    variant: details.variant ?? null,
-    reason: details.reason ?? null,
-    errorCode: details.errorCode ?? null,
-    errorMessage: details.errorMessage ?? null,
-    flagMetadata: details.flagMetadata ?? {},
+    value: decision.value,
+    variant: decision.variant ?? null,
+    reason: decision.reason ?? null,
+    errorCode: decision.errorCode ?? null,
+    errorMessage: decision.errorMessage ?? null,
+    flagMetadata: decision.metadata ?? {},
   };
 }
 
@@ -353,7 +431,9 @@ async function runEvaluateFixture(fixture: Fixture): Promise<ActualOutput> {
   const given = fixture.given;
   const when = fixture.when;
 
-  // Multi-domain lifecycle fixture support.
+  // Multi-domain lifecycle fixture support: two independent runtimes/clients
+  // (no OpenFeature domain multiplexing to reach for post-ADR-0010 — each
+  // "domain" is just its own FireweaveClient).
   if (given.domains !== undefined) {
     const requestedDomain = when['domain'] as string;
     let output: ActualOutput = {};
@@ -361,17 +441,14 @@ async function runEvaluateFixture(fixture: Fixture): Promise<ActualOutput> {
       const adapter = new InMemoryAdapter({ flags: domainGiven.flags ?? {} });
       const runtime = new FireweaveRuntime(adapter);
       await provisionState(runtime, domainGiven.providerState);
-      const provider = new FireweaveProvider(runtime);
-      const domain = uniqueDomain(`${fixture.id}-${domainName}`);
+      const client = new FireweaveClient(runtime);
       if (domainName === requestedDomain) {
-        output = await evaluateThroughOpenFeature(domain, provider, {
+        output = await evaluateThroughClient(client, {
           flagKey: when['flagKey'] as string,
           flagType: when['flagType'] as string,
           defaultValue: when['defaultValue'] as JsonValue,
-          context: toOFContext(when['invocationContext'] as Record<string, JsonValue> | undefined),
+          context: toContext(when['invocationContext'] as Record<string, JsonValue> | undefined),
         });
-      } else {
-        await OpenFeature.setProviderAndWait(domain, provider);
       }
     }
     return output;
@@ -403,17 +480,16 @@ async function runEvaluateFixture(fixture: Fixture): Promise<ActualOutput> {
     await provisionState(runtime, given.providerState);
   }
 
-  const provider = new FireweaveProvider(runtime, {
-    includePayload: (when['options'] as { includePayload?: boolean } | undefined)?.includePayload === true,
-  });
-
+  const client = new FireweaveClient(runtime);
   const invocationContext = when['invocationContext'] as Record<string, JsonValue> | undefined;
-  const callerContext = toOFContext(invocationContext);
-  const output = await evaluateThroughOpenFeature(uniqueDomain(fixture.id), provider, {
+  const callerContext = toContext(invocationContext);
+  const options = when['options'] as { includePayload?: boolean } | undefined;
+  const output = await evaluateThroughClient(client, {
     flagKey: when['flagKey'] as string,
     flagType: when['flagType'] as string,
     defaultValue: when['defaultValue'] as JsonValue,
     context: callerContext,
+    ...(options !== undefined ? { options } : {}),
   });
 
   if (fixture.expect['contextSnapshotAfter'] !== undefined) {
@@ -449,14 +525,13 @@ async function runLifecycleOpFixture(fixture: Fixture): Promise<ActualOutput> {
   const operation = when.operation;
 
   if (operation === 'replaceProvider') {
-    const domain = uniqueDomain(fixture.id);
     const runtimeA = new FireweaveRuntime(new InMemoryAdapter({ flags: given.flags ?? {} }));
     await runtimeA.initialize();
-    await OpenFeature.setProviderAndWait(domain, new FireweaveProvider(runtimeA));
+    await runtimeA.shutdown(); // old provider retired before the replacement takes over
 
     const runtimeB = new FireweaveRuntime(new InMemoryAdapter({ flags: given.replacement?.flags ?? {} }));
     await runtimeB.initialize();
-    await OpenFeature.setProviderAndWait(domain, new FireweaveProvider(runtimeB));
+    const client = new FireweaveClient(runtimeB);
 
     const thenEvaluate = when['thenEvaluate'] as {
       flagKey: string;
@@ -464,19 +539,19 @@ async function runLifecycleOpFixture(fixture: Fixture): Promise<ActualOutput> {
       defaultValue: JsonValue;
       invocationContext?: Record<string, JsonValue>;
     };
-    const client = OpenFeature.getClient(domain);
-    const details = await client.getBooleanDetails(
-      thenEvaluate.flagKey,
-      thenEvaluate.defaultValue as boolean,
-      toOFContext(thenEvaluate.invocationContext),
-    );
+    const decision = await evaluateThroughClient(client, {
+      flagKey: thenEvaluate.flagKey,
+      flagType: thenEvaluate.flagType,
+      defaultValue: thenEvaluate.defaultValue,
+      context: toContext(thenEvaluate.invocationContext),
+    });
     return {
       providerState: lifecycleToFixtureState(runtimeB.getState()),
-      value: details.value,
-      variant: details.variant ?? null,
-      reason: details.reason ?? null,
-      errorCode: details.errorCode ?? null,
-      errorMessage: details.errorMessage ?? null,
+      value: decision['value'],
+      variant: decision['variant'],
+      reason: decision['reason'],
+      errorCode: decision['errorCode'],
+      errorMessage: decision['errorMessage'],
     };
   }
 
@@ -527,6 +602,12 @@ async function runLifecycleOpFixture(fixture: Fixture): Promise<ActualOutput> {
   throw new Error(`unsupported lifecycle operation ${operation}`);
 }
 
+/**
+ * Only `ext-unsupported-capability-degrade` reaches this function (the one
+ * extensions fixture classified as v1-runnable — see
+ * CUT_OPERATION_NAMESPACE/v1OutOfScopeNamespace above). It exercises
+ * `FireweaveClient.invokeCapability`, present and un-cut in v1.
+ */
 async function runExtensionFixture(fixture: Fixture): Promise<ActualOutput> {
   const given = fixture.given;
   const when = fixture.when;
@@ -535,98 +616,17 @@ async function runExtensionFixture(fixture: Fixture): Promise<ActualOutput> {
   await provisionState(runtime, given.providerState ?? 'READY');
   const client = new FireweaveClient(runtime);
 
-  if (given.releaseContext !== undefined) {
-    client.releases.seed(
-      given.releaseContext as unknown as Parameters<typeof client.releases.seed>[0],
-      (given.releaseStatus as Parameters<typeof client.releases.seed>[1] | undefined) ?? 'set',
-    );
+  if (when.operation !== 'invokeCapability') {
+    throw new Error(`unsupported v1 extension operation ${when.operation} (should have been classified skipped-v1-out-of-scope)`);
   }
-  if (given.exposureQueue !== undefined) {
-    client.exposures.seed(given.exposureQueue as unknown as Parameters<typeof client.exposures.seed>[0]);
-  }
-
-  const withErrorFields = (result: {
-    ok: boolean;
-    errorKind?: string;
-    errorCode?: string;
-    errorMessage?: string;
-    degraded?: boolean;
-  }): ActualOutput => ({
+  const result = client.invokeCapability(when['capability'] as string, when['args'] as Record<string, JsonValue>);
+  return {
     ok: result.ok,
     errorCode: result.ok ? null : (result.errorCode ?? null),
     errorMessage: result.ok ? null : (result.errorMessage ?? null),
     errorKind: result.ok ? null : (result.errorKind ?? null),
     ...(result.degraded === true ? { degraded: true } : {}),
-  });
-
-  switch (when.operation) {
-    case 'getCapabilities': {
-      // Ruling 18: the structured static/runtime matrix, never a flat list.
-      const matrix = client.capabilities.get();
-      const failures: string[] = [];
-      if (typeof matrix.static?.language !== 'string') failures.push('static.language missing');
-      if (typeof matrix.static?.openFeature?.specFloor !== 'string') failures.push('static.openFeature.specFloor missing');
-      if (typeof matrix.runtime?.backend !== 'string') failures.push('runtime.backend missing');
-      if (typeof matrix.runtime?.lifecycle !== 'string') failures.push('runtime.lifecycle missing');
-      if (failures.length > 0) {
-        throw new Error(`capabilities matrix shape invalid: ${failures.join(', ')}`);
-      }
-      return { capabilities: matrix as unknown as JsonValue, errorCode: null };
-    }
-    case 'invokeCapability': {
-      const result = client.invokeCapability(when['capability'] as string, when['args'] as Record<string, JsonValue>);
-      return withErrorFields(result);
-    }
-    case 'setContext': {
-      const result = client.releases.setContext(when['release'] as unknown as Parameters<typeof client.releases.setContext>[0]);
-      return { ...withErrorFields(result), releaseContext: result.releaseContext ?? null };
-    }
-    case 'start':
-    case 'complete':
-    case 'fail': {
-      const args = when['release'] as { rolloutId?: string; reason?: string };
-      const result =
-        when.operation === 'start'
-          ? client.releases.start(args)
-          : when.operation === 'complete'
-            ? client.releases.complete(args)
-            : client.releases.fail(args);
-      return {
-        ...withErrorFields(result),
-        status: result.status ?? null,
-        ...(result.reason !== undefined ? { reason: result.reason } : {}),
-      };
-    }
-    case 'recordExposure': {
-      const result = client.exposures.record(when['exposure'] as unknown as Parameters<typeof client.exposures.record>[0]);
-      return {
-        ...withErrorFields(result),
-        queued: result.queued ?? null,
-        ...(result.deduped === true ? { deduped: true } : {}),
-      };
-    }
-    case 'flushExposures': {
-      const result = await client.exposures.flush();
-      return {
-        ...withErrorFields(result),
-        flushed: result.flushed ?? null,
-        queued: client.exposures.queuedCount(),
-      };
-    }
-    case 'emitSignal': {
-      const signal = when['signal'] as unknown as Parameters<typeof client.signals.record>[0];
-      const result = client.signals.record(signal);
-      const recorded = client.signals.getRecorded();
-      const last = recorded[recorded.length - 1];
-      return {
-        ...withErrorFields(result),
-        accepted: result.accepted ?? false,
-        recordedMessage: last?.message ?? '',
-      };
-    }
-    default:
-      throw new Error(`unsupported extension operation ${when.operation}`);
-  }
+  };
 }
 
 async function runFaultFixture(fixture: Fixture): Promise<ActualOutput> {
@@ -703,12 +703,12 @@ async function runFaultFixture(fixture: Fixture): Promise<ActualOutput> {
     });
     const runtime = new FireweaveRuntime(adapter, { projectApiKey, host });
     await runtime.initialize();
-    const provider = new FireweaveProvider(runtime);
-    const output = await evaluateThroughOpenFeature(uniqueDomain(fixture.id), provider, {
+    const client = new FireweaveClient(runtime);
+    const output = await evaluateThroughClient(client, {
       flagKey: when['flagKey'] as string,
       flagType: when['flagType'] as string,
       defaultValue: when['defaultValue'] as JsonValue,
-      context: toOFContext(when['invocationContext'] as Record<string, JsonValue> | undefined),
+      context: toContext(when['invocationContext'] as Record<string, JsonValue> | undefined),
     });
     await runtime.shutdown();
     return output;
@@ -719,6 +719,23 @@ async function runFaultFixture(fixture: Fixture): Promise<ActualOutput> {
 
 // ---------------------------------------------------------------------------
 // main
+
+/**
+ * `--out PATH` (task-10 review round 2, finding 1): lets
+ * scripts/conformance-all.sh redirect the report straight into its own
+ * ephemeral build/conformance/ directory instead of relying on this file's
+ * gitignored default — the same shape python's `--out`/go's `-out` already
+ * take. Absent, falls back to the gitignored default path next to this file.
+ */
+function parseOutPath(): string {
+  const args = process.argv.slice(2);
+  const idx = args.indexOf('--out');
+  const value = idx !== -1 ? args[idx + 1] : undefined;
+  if (idx !== -1 && value === undefined) {
+    throw new Error('--out requires a path argument');
+  }
+  return value !== undefined ? resolve(value) : join(HERE, 'compatibility-report.node.json');
+}
 
 /** Run one fully-resolved when/expect pair; returns comparator failures. */
 async function executeOne(fixture: Fixture): Promise<string[]> {
@@ -736,17 +753,42 @@ async function executeOne(fixture: Fixture): Promise<string[]> {
   } else {
     actual = await runExtensionFixture(fixture);
   }
-  // getCapabilities exception (harness.md): expect.capabilities compares as a
-  // subset of the structured matrix; all other keys stay strict.
-  const subsetKeys = fixture.when.operation === 'getCapabilities' ? ['capabilities'] : [];
+  const subsetKeys: string[] = [];
   return diff(fixture.expect, actual, subsetKeys);
 }
 
 async function main(): Promise<void> {
+  // Parsed first, before running a single fixture, so a malformed `--out`
+  // invocation fails fast rather than after paying for the whole suite.
+  const reportPath = parseOutPath();
   const fixtures = loadFixtures();
   const rows: ReportRow[] = [];
 
+  let v1OutOfScopeCount = 0;
+  let v1RunnableCount = 0;
+
   for (const fixture of fixtures) {
+    // v1-scope rule (contracts/harness.md): extensions fixtures that target a
+    // cut namespace are reported skipped-v1-out-of-scope and never executed,
+    // regardless of the fixture's own declared compatibility (frozen "pass",
+    // authored pre-cut). See CUT_OPERATION_NAMESPACE above.
+    if (fixture.suite === 'extensions') {
+      const namespace = v1OutOfScopeNamespace(fixture);
+      if (namespace !== undefined) {
+        v1OutOfScopeCount += 1;
+        rows.push({
+          fixtureId: fixture.id,
+          suite: fixture.suite,
+          language: 'node',
+          status: 'skipped-v1-out-of-scope',
+          limitation: `targets the ${namespace} namespace, cut from the v1 control-points surface (ADR-0010)`,
+          message: null,
+        });
+        continue;
+      }
+      v1RunnableCount += 1;
+    }
+
     const declared = fixture.compatibility['node'];
     if (declared === 'skipped-with-documented-limitation') {
       rows.push({
@@ -794,10 +836,23 @@ async function main(): Promise<void> {
     rows.push({ fixtureId: fixture.id, suite: fixture.suite, language: 'node', status, limitation: null, message });
   }
 
+  // Sanity assertion (review finding 2): the data-driven v1-scope
+  // classification above must derive the exact same 13-out/1-real split the
+  // hand-maintained fixture-ID list used to encode. If contracts/extensions/
+  // ever gains or loses a fixture, or a fixture's operation set changes,
+  // this fails loudly instead of silently drifting.
+  if (v1OutOfScopeCount !== 13 || v1RunnableCount !== 1) {
+    throw new Error(
+      `v1-scope classification drifted: expected 13 skipped-v1-out-of-scope + 1 runnable ` +
+        `extensions fixture, got ${v1OutOfScopeCount} + ${v1RunnableCount}`,
+    );
+  }
+
   const summary = {
     pass: rows.filter((r) => r.status === 'pass').length,
     fail: rows.filter((r) => r.status === 'fail').length,
     'skipped-with-documented-limitation': rows.filter((r) => r.status === 'skipped-with-documented-limitation').length,
+    'skipped-v1-out-of-scope': rows.filter((r) => r.status === 'skipped-v1-out-of-scope').length,
   };
   const report = {
     schemaVersion: 1,
@@ -807,7 +862,6 @@ async function main(): Promise<void> {
     results: rows,
     summary,
   };
-  const reportPath = join(HERE, 'compatibility-report.node.json');
   writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
 
   for (const row of rows) {
@@ -815,10 +869,12 @@ async function main(): Promise<void> {
     console.log(`${mark}  ${row.fixtureId}${row.message !== null ? `  — ${row.message}` : ''}`);
   }
   console.log(
-    `\n${summary.pass} passed, ${summary.fail} failed, ${summary['skipped-with-documented-limitation']} skipped-with-documented-limitation (report: ${reportPath})`,
+    `\n${summary.pass} passed, ${summary.fail} failed, ` +
+      `${summary['skipped-with-documented-limitation']} skipped-with-documented-limitation, ` +
+      `${summary['skipped-v1-out-of-scope']} skipped-v1-out-of-scope ` +
+      `(report: ${reportPath})`,
   );
 
-  await OpenFeature.close();
   process.exit(summary.fail > 0 ? 1 : 0);
 }
 
