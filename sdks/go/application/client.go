@@ -3,7 +3,7 @@ package application
 import (
 	"context"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
 )
 
 // EvaluateOptions is the reserved fifth argument of

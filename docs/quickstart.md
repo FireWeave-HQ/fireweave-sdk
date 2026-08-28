@@ -144,13 +144,13 @@ Run the full example: `.venv/bin/python examples/python/service.py`.
 
 ## Go (1.25)
 
-**Install (from repo checkout).** The module path is `github.com/FireWeave-HQ/fireweave-sdk/sdks/go`; until the repository is public on that path, use a `replace` directive:
+**Install (from repo checkout).** The module path is `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2` (major ≥ 2 requires the `/v2` suffix); until you consume a published tag, use a `replace` directive:
 
 ```bash
 git clone https://github.com/FireWeave-HQ/fireweave-sdk
 # in your app's go.mod:
-#   require github.com/FireWeave-HQ/fireweave-sdk/sdks/go v0.0.0
-#   replace github.com/FireWeave-HQ/fireweave-sdk/sdks/go => ../fireweave-sdk/sdks/go
+#   require github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2 v2.0.0
+#   replace github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2 => ../fireweave-sdk/sdks/go
 ```
 
 **Evaluate and shut down:**

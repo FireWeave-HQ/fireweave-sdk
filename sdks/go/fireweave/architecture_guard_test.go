@@ -106,8 +106,8 @@ func parseImports(t *testing.T, dir string) map[string][]fileImport {
 }
 
 const (
-	applicationImportPrefix    = "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/application"
-	infrastructureImportPrefix = "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/infrastructure"
+	applicationImportPrefix    = "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/application"
+	infrastructureImportPrefix = "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/infrastructure"
 	// compositionRootFile is the one file under application/ permitted to
 	// import infrastructure/adapters/* (mirrors node's application/mode.ts
 	// / java's application/Fireweave.java).

@@ -44,6 +44,8 @@ assert_eq "strip: drops -staging.N" "1.4.0" "$(semver_strip_prerelease "1.4.0-st
 assert_eq "strip: drops -SNAPSHOT" "0.1.0" "$(semver_strip_prerelease "0.1.0-SNAPSHOT")"
 assert_eq "strip: drops build metadata" "1.4.0" "$(semver_strip_prerelease "1.4.0+build5")"
 assert_eq "strip: drops prerelease AND build metadata" "1.4.0" "$(semver_strip_prerelease "1.4.0-rc.1+build5")"
+assert_eq "strip: drops PEP 440 alpha (python staging)" "1.4.0" "$(semver_strip_prerelease "1.4.0a3")"
+assert_eq "strip: drops PEP 440 .devN" "1.4.0" "$(semver_strip_prerelease "1.4.0.dev7")"
 
 # -------------------------------------------------------------------- semver_bump
 assert_eq "bump patch" "1.4.1" "$(semver_bump "1.4.0" patch)"
@@ -76,6 +78,20 @@ assert_eq "max_staging_n: 0 when nothing matches the base" \
   "0" "$(printf '%s' "$existing" | max_staging_n "9.9.9")"
 assert_eq "max_staging_n: 0 on empty registry (first-ever staging release)" \
   "0" "$(printf '' | max_staging_n "1.4.0")"
+
+# ------------------------------------------------------ PEP 440 alpha (python)
+assert_eq "extract pep440 alpha: matching base+N" "3" "$(extract_pep440_alpha_n "1.4.0a3" "1.4.0")"
+assert_eq "extract pep440 alpha: double-digit N" "12" "$(extract_pep440_alpha_n "1.4.0a12" "1.4.0")"
+assert_fail "extract pep440 alpha: non-matching base" extract_pep440_alpha_n "1.4.0a3" "1.5.0"
+assert_fail "extract pep440 alpha: plain version" extract_pep440_alpha_n "1.4.0" "1.4.0"
+assert_fail "extract pep440 alpha: -staging form is not alpha" extract_pep440_alpha_n "1.4.0-staging.3" "1.4.0"
+alphas="$(printf '1.4.0\n1.4.0a1\n1.4.0a3\n1.4.0a2\n2.0.0a9\n')"
+assert_eq "max_pep440_alpha_n: picks the highest N for the matching base" \
+  "3" "$(printf '%s' "$alphas" | max_pep440_alpha_n "1.4.0")"
+assert_eq "max_pep440_alpha_n: 0 when nothing matches" \
+  "0" "$(printf '%s' "$alphas" | max_pep440_alpha_n "9.9.9")"
+assert_eq "max_pep440_alpha_n: 0 on empty registry" \
+  "0" "$(printf '' | max_pep440_alpha_n "1.4.0")"
 
 # -------------------------------------------------------------- highest_plain_version
 tags="$(printf '0.1.0\n0.2.0\n0.10.0\n0.2.0-staging.1\nnot-a-version\n')"
@@ -112,6 +128,25 @@ assert_eq "stubbed e2e: release_version" "2.1.1-staging.3" "$(get release_versio
 assert_eq "stubbed e2e: tag" "server/v2.1.1-staging.3" "$(get tag)"
 assert_eq "stubbed e2e: npm dist-tag stays 'next' for staging (never latest)" "next" "$(get dist_tag)"
 
+# Python staging must emit PEP 440 `XaN`, not `-staging.N`.
+registry_versions() { printf '0.1.0\n0.1.1a1\n0.1.1a2\n'; }
+scratch_py="$(mktemp -d)"
+mkdir -p "$scratch_py/sdks/python"
+cat > "$scratch_py/sdks/python/pyproject.toml" <<'EOF'
+[project]
+name = "fireweave"
+version = "0.1.0"
+EOF
+out_py="$(cmd_compute python patch staging --manifest-root "$scratch_py")"
+get_py() { printf '%s\n' "$out_py" | sed -n "s/^$1=//p"; }
+assert_eq "stubbed e2e python: bumped_version" "0.1.1" "$(get_py bumped_version)"
+assert_eq "stubbed e2e python: staging_n continues past a1/a2" "3" "$(get_py staging_n)"
+assert_eq "stubbed e2e python: release_version is PEP 440 alpha" "0.1.1a3" "$(get_py release_version)"
+assert_eq "stubbed e2e python: tag" "python/v0.1.1a3" "$(get_py tag)"
+rm -rf "$scratch_py"
+# Restore the server stub for any later assertions that might call compute.
+registry_versions() { printf '2.1.0\n2.1.1-staging.1\n2.1.1-staging.2\n'; }
+
 out_prod="$(cmd_compute server patch production --manifest-root "$scratch")"
 assert_eq "stubbed e2e: production has no staging suffix" "2.1.1" "$(printf '%s\n' "$out_prod" | sed -n 's/^release_version=//p')"
 assert_eq "stubbed e2e: production dist-tag is latest" "latest" "$(printf '%s\n' "$out_prod" | sed -n 's/^dist_tag=//p')"
@@ -142,11 +177,11 @@ assert_eq "apply: server package.json written" '"2.1.1-staging.3"' "$(node -e 'c
 cmd_apply web "2.1.1" --manifest-root "$scratch2"
 assert_eq "apply: web package.json written" '"2.1.1"' "$(node -e 'console.log(JSON.stringify(require(process.argv[1]).version))' "$scratch2/sdks/web/package.json")"
 
-cmd_apply python "0.1.1-staging.1" --manifest-root "$scratch2"
-assert_eq "apply: pyproject.toml written" "0.1.1-staging.1" "$(python3 -c 'import tomllib; print(tomllib.load(open("'"$scratch2"'/sdks/python/pyproject.toml","rb"))["project"]["version"])')"
+cmd_apply python "0.1.2a1" --manifest-root "$scratch2"
+assert_eq "apply: pyproject.toml written (PEP 440 alpha)" "0.1.2a1" "$(sed -nE 's/^version = \"([^\"]+)\".*/\1/p' "$scratch2/sdks/python/pyproject.toml" | head -n1)"
 
 cmd_apply rust "0.1.1" --manifest-root "$scratch2"
-assert_eq "apply: Cargo.toml written" "0.1.1" "$(python3 -c 'import tomllib; print(tomllib.load(open("'"$scratch2"'/sdks/rust/Cargo.toml","rb"))["package"]["version"])')"
+assert_eq "apply: Cargo.toml written" "0.1.1" "$(sed -nE 's/^version = \"([^\"]+)\".*/\1/p' "$scratch2/sdks/rust/Cargo.toml" | head -n1)"
 
 # java: write_manifest shells out to `mvn versions:set` (same command
 # publish-maven now calls this way instead of repeating it inline — see

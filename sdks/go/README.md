@@ -1,6 +1,6 @@
 # Fireweave Go SDK
 
-Go module: `github.com/FireWeave-HQ/fireweave-sdk/sdks/go` (Go 1.25).
+Go module: `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2` (Go 1.25).
 
 Exactly two v1 capabilities (spec/control-points.md "Scope of v1"): control
 points (`Client.ControlPoints()`, the nine methods) and target registration
@@ -73,7 +73,7 @@ architecture guard tests in `fireweave/architecture_guard_test.go`.
 ## Modes (spec/modes.md)
 
 ```go
-import "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/fireweave"
+import "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fireweave"
 
 // Local (offline, in-process seed map; may be empty):
 client, err := fireweave.Init(fireweave.Options{

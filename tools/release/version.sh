@@ -16,9 +16,14 @@
 # — which carry no version field; the git tag IS the version record — the
 # highest existing plain `<prefix>/vX.Y.Z` tag, defaulting to 0.0.0 when none
 # exists), strips any prerelease/build metadata, applies <bump>, and — for
-# channel=staging — appends a `-staging.N` suffix whose N is the next unused
-# iteration for that base version. It prints `key=value` lines to stdout
-# (GITHUB_OUTPUT-compatible; see the block below) and never writes anything.
+# channel=staging — appends a staging iteration whose N is the next unused
+# for that base version:
+#   - most ecosystems: `X.Y.Z-staging.N` (npm / Cargo / git-tag consumers)
+#   - python only:     `X.Y.ZaN` (PEP 440; `-staging.N` is rejected by
+#                      packaging/setuptools and cannot be uploaded to
+#                      TestPyPI/PyPI)
+# It prints `key=value` lines to stdout (GITHUB_OUTPUT-compatible; see the
+# block below) and never writes anything.
 #
 # `apply` takes an ALREADY-COMPUTED release version (typically `compute`'s
 # own `release_version` output, downloaded from wherever `compute` ran) and
@@ -114,11 +119,18 @@ require_known_component() {
 # Pure semver helpers (no I/O — exercised directly by version.test.sh)
 # --------------------------------------------------------------------------
 
-# Strip any prerelease AND build-metadata segment: "1.4.0-staging.3+x" -> "1.4.0"
+# Strip any prerelease AND build-metadata segment:
+#   "1.4.0-staging.3+x" -> "1.4.0"
+#   "1.4.0a3" / "1.4.0b1" / "1.4.0rc2" -> "1.4.0"  (PEP 440; python staging)
+#   "1.4.0.dev1" / "1.4.0.post1" -> "1.4.0"
 semver_strip_prerelease() {
   local v="$1"
   v="${v%%+*}"
   v="${v%%-*}"
+  # .devN / .postN sit after the X.Y.Z core with a literal dot.
+  v="$(printf '%s' "$v" | sed -E 's/\.(dev|post)[0-9]+.*$//')"
+  # aN / bN / rcN / cN / alphaN / betaN / previewN glued to the core.
+  v="$(printf '%s' "$v" | sed -E 's/(a|b|c|rc|alpha|beta|preview)[0-9]+.*$//')"
   printf '%s\n' "$v"
 }
 
@@ -168,6 +180,35 @@ max_staging_n() {
   while IFS= read -r line || [ -n "$line" ]; do
     [ -z "$line" ] && continue
     if n="$(extract_staging_n "$line" "$base" 2>/dev/null)"; then
+      if [ "$n" -gt "$max" ]; then max="$n"; fi
+    fi
+  done
+  printf '%s\n' "$max"
+}
+
+# "1.4.0a3" "1.4.0" -> "3" (PEP 440 alpha used for python staging).
+# Exit 1 with no stdout when $1 is not "<base>a<digits>".
+extract_pep440_alpha_n() {
+  local v="$1" base="$2" rest
+  case "$v" in
+    "${base}a"*)
+      rest="${v#"${base}"a}"
+      rest="${rest%%+*}"
+      case "$rest" in
+        ''|*[!0-9]*) return 1 ;;
+      esac
+      printf '%s\n' "$rest"
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+# Same as max_staging_n but for PEP 440 "<base>aN" (python TestPyPI/PyPI).
+max_pep440_alpha_n() {
+  local base="$1" max=0 n line
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ -z "$line" ] && continue
+    if n="$(extract_pep440_alpha_n "$line" "$base" 2>/dev/null)"; then
       if [ "$n" -gt "$max" ]; then max="$n"; fi
     fi
   done
@@ -339,11 +380,18 @@ read_current_version() {
     server|web)
       node -e 'console.log(require(process.argv[1]).version)' "$manifest"
       ;;
-    python)
-      python3 -c 'import tomllib,sys; print(tomllib.load(open(sys.argv[1],"rb"))["project"]["version"])' "$manifest"
-      ;;
-    rust)
-      python3 -c 'import tomllib,sys; print(tomllib.load(open(sys.argv[1],"rb"))["package"]["version"])' "$manifest"
+    python|rust)
+      # tomllib is 3.11+; CI uses modern Python. Offline/macOS 3.9 falls back
+      # to a single-line match so compute still works without a backport.
+      if python3 -c 'import tomllib' 2>/dev/null; then
+        if [ "$component" = python ]; then
+          python3 -c 'import tomllib,sys; print(tomllib.load(open(sys.argv[1],"rb"))["project"]["version"])' "$manifest"
+        else
+          python3 -c 'import tomllib,sys; print(tomllib.load(open(sys.argv[1],"rb"))["package"]["version"])' "$manifest"
+        fi
+      else
+        sed -nE 's/^version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "$manifest" | head -n1
+      fi
       ;;
     java)
       python3 - "$manifest" <<'PY'
@@ -432,8 +480,16 @@ cmd_compute() {
   if [ "$channel" = staging ]; then
     local existing
     existing="$(registry_versions "$component" "$channel")"
-    staging_n=$(( $(printf '%s' "$existing" | max_staging_n "$bumped_version") + 1 ))
-    release_version="${bumped_version}-staging.${staging_n}"
+    # Python must use PEP 440 (`XaN`); `-staging.N` fails packaging and
+    # cannot be uploaded to TestPyPI/PyPI. Other ecosystems keep the
+    # shared `-staging.N` form.
+    if [ "$component" = python ]; then
+      staging_n=$(( $(printf '%s' "$existing" | max_pep440_alpha_n "$bumped_version") + 1 ))
+      release_version="${bumped_version}a${staging_n}"
+    else
+      staging_n=$(( $(printf '%s' "$existing" | max_staging_n "$bumped_version") + 1 ))
+      release_version="${bumped_version}-staging.${staging_n}"
+    fi
   else
     release_version="$bumped_version"
   fi

@@ -18,7 +18,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/fireweave"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fireweave"
 )
 
 func main() {

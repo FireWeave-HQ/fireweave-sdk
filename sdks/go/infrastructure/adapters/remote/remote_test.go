@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/domain"
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/infrastructure/adapters/remote"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/infrastructure/adapters/remote"
 )
 
 func TestRemoteEvaluate(t *testing.T) {

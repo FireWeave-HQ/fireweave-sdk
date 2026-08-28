@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/internal/conformance"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/internal/conformance"
 )
 
 func contractsDir(t *testing.T) string {

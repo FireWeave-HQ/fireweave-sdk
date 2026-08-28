@@ -10,7 +10,7 @@
 // so:
 //
 //   - existing import paths for callers of this module stay
-//     `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/fireweave` — no
+//     `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fireweave` — no
 //     consumer-facing churn from the internal relayering;
 //   - the layering itself stays real and mechanically enforced (a separate
 //     Go package per directory is Go's only way to express "domain must not
@@ -29,8 +29,8 @@
 package fireweave
 
 import (
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/application"
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/application"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
 )
 
 // --- domain: error taxonomy ---

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
 )
 
 // State is the runtime lifecycle state.

@@ -154,7 +154,7 @@ signing into the workflow.
 | server (npm) | npmjs.com | `@fireweaveai/server-sdk` | Publish via **OIDC trusted publishing** (no long-lived `NPM_TOKEN`). |
 | web (npm) | npmjs.com | `@fireweaveai/web-sdk` | Publish via **OIDC trusted publishing**. |
 | Python | pypi.org | `fireweave` | Publish via **`PYPI_API_TOKEN`** GitHub secret (environment `release`) with `pypa/gh-action-pypi-publish`. Preferred auto path: push tag `python/v<semver>` → `publish-python.yml`. Staging goes to **TestPyPI** via `TEST_PYPI_API_TOKEN` (environment `release-staging`). |
-| Go | proxy.golang.org | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go` | No registry credentials — "publishing" is pushing the `sdks/go/v*` tag on the public repo; the proxy picks it up. |
+| Go | proxy.golang.org | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2` | No registry credentials — "publishing" is pushing the `sdks/go/v*` tag on the public repo; the proxy picks it up. **Major ≥ 2 requires the `/v2` module-path suffix** (Go modules rule); the git tag prefix stays `sdks/go/`. |
 | Java | Maven Central | groupId `ai.fireweave` | **Pending namespace verification** on the Central portal (DNS TXT proof for `fireweave.ai`). Workflows are release-ready and fail closed without secrets. Do not claim a coordinate is published until Central confirms. |
 | Rust | crates.io | `fireweave` | Publish via **`CARGO_REGISTRY_TOKEN`** GitHub secret (environment `release`). No staging registry exists — see "Pre-release channels". |
 | Swift | — | — | No package registry is used; consumption is git-tag-only, and (see "Tag convention") not currently resolvable as a direct SwiftPM dependency against this repo at all. |
@@ -177,7 +177,7 @@ that tag is now pure syntax, not the channel signal:
 | Ecosystem | `channel: staging` | Promotion to production |
 | --- | --- | --- |
 | npm (server, web) | publish `X.Y.Z-staging.N`, `--tag next` (`npm install @fireweaveai/server-sdk@next`) | fresh `channel: production` run computes the plain `X.Y.Z`, published `--tag latest` |
-| PyPI | upload `X.Y.Z-staging.N` to **TestPyPI** (`test.pypi.org`) | push tag `python/vX.Y.Z` (preferred) or re-run `release.yml` with `channel: production` |
+| PyPI | upload `X.Y.ZaN` to **TestPyPI** (`test.pypi.org`) — PEP 440 alpha; `-staging.N` is not a valid packaging version | push tag `python/vX.Y.Z` (preferred) or re-run `release.yml` with `channel: production` |
 | Maven | deploy the **plain** `X.Y.Z` to the Central portal (`autoPublish=false` on staging — no separate staging registry or credentials exist, so there is no version-collision risk to guard against the way there is for the others). Validate in the portal, then release. | `autoPublish=true` on production / tag `java/v*` |
 | crates.io (rust) | **no publish at all** — `cargo publish --dry-run` proves `X.Y.Z-staging.N` packages cleanly, plus the git tag. crates.io has no TestPyPI equivalent, and yanking is not deletion, so an actual staging upload would spend the version permanently. | fresh `channel: production` run computes the plain `X.Y.Z` and runs `cargo publish` for real (`CARGO_REGISTRY_TOKEN`) |
 | Go | tag `sdks/go/vX.Y.Z-staging.N` (`go get` will not auto-select a prerelease tag); optional proxy warm | tag the final `sdks/go/vX.Y.Z` |
