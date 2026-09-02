@@ -361,13 +361,17 @@ remote_tag_versions() {
 # component's registry (staging: wherever a staging publish would actually
 # land; production: the real registry) — the sole input to max_staging_n().
 #
-# No staging registry exists for rust, and none exists at all for go/java/
-# swift (Maven Central Portal shares one credential set across channels;
-# go/swift have no package registry, only git tags — see RELEASE.md). For
-# those four, the "registry" queried here is `git ls-remote` against origin:
-# a live network round-trip against the shared remote, not a local file, and
-# — for go specifically — MORE authoritative than proxy.golang.org (which is
-# itself just a cache over these same tags and can lag).
+# No staging registry exists for rust or dart (crates.io / pub.dev have no
+# TestPyPI equivalent; a real staging upload would spend the version), and
+# none exists at all for go/java/swift (Maven Central Portal shares one
+# credential set across channels; go/swift have no package registry, only
+# git tags — see RELEASE.md). For go/java/swift the "registry" queried here
+# is always `git ls-remote` against origin. For dart on channel=staging the
+# same applies — the git tag IS the staging artifact — so staging-N must be
+# read from tags, not pub.dev (which never receives -staging.N uploads).
+# Production dart still reads pub.dev. Live network round-trip against the
+# shared remote, not a local file; for go specifically this is MORE
+# authoritative than proxy.golang.org (itself just a cache over these tags).
 registry_versions() {
   local component="$1" channel="$2"
   case "$component" in
@@ -385,7 +389,11 @@ registry_versions() {
       crates_versions fireweave
       ;;
     dart)
-      pub_versions fireweave
+      if [ "$channel" = staging ]; then
+        remote_tag_versions "$(component_tag_prefix "$component")"
+      else
+        pub_versions fireweave
+      fi
       ;;
     go|java|swift)
       remote_tag_versions "$(component_tag_prefix "$component")"

@@ -768,10 +768,16 @@ jobs:
         # permanently. --dry-run proves the package is publishable without
         # spending anything; the git tag (already pushed by the `tag` job,
         # which this job needs) IS this release's staging artifact.
+        #
+        # --ignore-warnings is required the same way cargo's --allow-dirty
+        # is: `version.sh apply` rewrites pubspec.yaml in the workspace
+        # (dirty tree), and package CHANGELOG.md does not list every
+        # -staging.N. Those are warnings; without --ignore-warnings dart
+        # pub exits 65. (--force cannot be combined with --dry-run.)
         working-directory: sdks/dart
         run: |
           dart pub get
-          dart pub publish --dry-run
+          dart pub publish --dry-run --ignore-warnings
 
   publish-pub-production:
     name: publish pub.dev (production)
