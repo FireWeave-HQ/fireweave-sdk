@@ -4,10 +4,12 @@
 #                              gitleaks-action requires an org license key,
 #                              the CLI does not)
 #   - dependency review      : PRs only — diff-based vuln + license gate
-#   - vulnerability scanning : osv-scanner over node/go/python/java/rust/web
-#                              (swift has no lockfile-based ecosystem osv-scanner
-#                              understands; go/java carry no third-party deps
-#                              to flag but are scanned for completeness)
+#   - vulnerability scanning : osv-scanner over node/go/python/java/rust/web/
+#                              dart (swift has no lockfile-based ecosystem
+#                              osv-scanner understands; go/java/dart carry no
+#                              third-party runtime deps to flag but are scanned
+#                              for completeness — dart's pubspec.lock is
+#                              generated in-job, it is not committed)
 #   - license checks         : per-ecosystem allowlist (OSI-compatible,
 #                              permissive); copyleft fails the job so it is
 #                              explicitly flagged for human review
@@ -113,6 +115,12 @@ jobs:
           python -m pip install --quiet -e './sdks/python[dev]'
           python -m pip freeze --exclude-editable > /tmp/requirements-osv.txt
           cat /tmp/requirements-osv.txt
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - name: Resolve the dart dev-dependency set (pubspec.lock is not committed)
+        working-directory: sdks/dart
+        run: dart pub get
       - name: Scan all ecosystems
         run: |
           osv-scanner scan source \
@@ -123,7 +131,8 @@ jobs:
             --lockfile 'requirements.txt:/tmp/requirements-osv.txt' \
             --lockfile sdks/java/pom.xml \
             --lockfile sdks/rust/Cargo.lock \
-            --lockfile sdks/web/bun.lock
+            --lockfile sdks/web/bun.lock \
+            --lockfile sdks/dart/pubspec.lock
 
   licenses:
     name: license allowlist (flag copyleft)

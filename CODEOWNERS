@@ -32,6 +32,7 @@
 /examples/java/             @FireWeave-HQ/sdk-java
 /sdks/rust/                 @FireWeave-HQ/sdk-rust
 /sdks/swift/                @FireWeave-HQ/sdk-swift
+/sdks/dart/              @FireWeave-HQ/sdk-dart
 
 # Canonical contract: schema + fixtures + protocol stub. Changes are
 # orchestrated-review-only (see CONTRIBUTING.md).

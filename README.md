@@ -5,8 +5,9 @@ delivery: define **control points** in your code and **register** who you are ta
 two v1 capabilities ([spec/control-points.md](spec/control-points.md) "Scope of v1") — nothing
 else is in scope, and no SDK exposes an OpenFeature provider.
 
-Available for **Node.js, web (browser), Python, Go, Java, Rust, and Swift**. The Node package
-runs on **Node, Bun, and Deno**.
+Available for **Node.js, web (browser), Python, Go, Java, Rust, Swift, and Dart**. The Node
+package runs on **Node, Bun, and Deno**; the Dart package runs in **Flutter apps on Android, iOS,
+macOS, Windows, Linux, and web**, on the Dart VM, and compiled to JavaScript or WebAssembly.
 
 ```
 Control points  evaluate boolean / string / number / object decisions, never throw
@@ -47,7 +48,16 @@ cd sdks/java && mvn install
 </dependency>
 ```
 
-Python, Go, Rust, and web — not yet published; see each SDK's own README
+Dart / Flutter (`fireweave` on pub.dev, **not published yet** — every Dart platform; synchronous
+reads, safe inside `build()`; see [`sdks/dart/README.md`](sdks/dart/README.md)):
+
+```yaml
+dependencies:
+  fireweave:
+    path: ../fireweave-sdk/sdks/dart   # until `dart pub add fireweave` / `flutter pub add fireweave` resolves
+```
+
+Python, Go, Rust, Swift, and web — not yet published; see each SDK's own README
 (`sdks/<lang>/README.md`) for the checkout-install path.
 
 ## Quickstart
@@ -162,7 +172,7 @@ meantime.
 ## Repository layout
 
 ```
-sdks/node|web|python|go|java|rust|swift   Language SDKs (each with its own tests + conformance harness)
+sdks/node|web|python|go|java|rust|swift|dart   Language SDKs (each with its own tests + conformance harness)
 examples/<lang>                           Runnable examples (offline by default)
 spec/                                     Canonical JSON Schemas (v0.1.0) — source of truth
 contracts/                                Cross-language conformance fixtures + error taxonomy
@@ -170,7 +180,7 @@ test-server/                              Deterministic protocol stub (Node, zer
 docs/                                     User docs, architecture, ADRs
 ```
 
-Conformance: the same 65 fixtures run against all seven languages via
+Conformance: the same 65 fixtures run against all eight languages via
 `scripts/conformance-all.sh` — see [docs/compatibility.md](docs/compatibility.md) for the current
 per-language pass/skip detail.
 
