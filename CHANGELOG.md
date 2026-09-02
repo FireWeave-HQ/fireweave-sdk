@@ -12,6 +12,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 >
 > Read the *Breaking* section with that in mind: those changes ship in a **minor**, which semver would normally reserve for a major. A consumer pinned `^2.0.0` will pick 2.1.0 up automatically and, if they import `@fireweaveai/sdk/posthog`, will fail to build. This is a deliberate choice made while 2.0.0 has no known consumers — if that stops being true, the removals need a major.
 
+### Dart SDK `fireweave` (pub.dev) 2.2.0 — 2026-09-02
+
+New package (`sdks/dart`), per [ADR-0011](docs/adr/0011-dart-control-points.md), which retires
+the *Dart surface* row of [ADR-0004](docs/adr/0004-server-first.md)'s future-work table. One
+package for **Flutter on Android, iOS, macOS, Windows, Linux, and web**, the **Dart VM**, and Dart
+compiled to **JavaScript or WebAssembly**. Version is in lockstep with the other SDK manifests.
+**Not published**; pub.dev automated publishing must be provisioned first (`.github/RELEASE.md`).
+
+#### Added
+
+- **`initFireweave(InitFireweaveOptions.remote(…))` / `InitFireweaveOptions.local(…)`** — the
+  single entry point. `mode` is fixed by the options type constructed, credentials are explicit
+  arguments, and the SDK reads no environment (`spec/modes.md`).
+- **Nine synchronous `controlPoints` methods** over a prefetched decision cache (web/Swift shape,
+  not node's): reads are safe inside a widget's `build()`. A boot that misses the 5 s ceiling
+  enters `STALE` and serves defaults with reason `STALE`, distinguishable from a rollout at 0%.
+- **`registerTarget` / `identify`** — `/v1/targets/register`; in local mode recorded in-process
+  and traced with a `[fireweave:local]` line to an injectable sink (`print` by default, so it
+  reaches the Flutter console).
+- **`FireweaveRemoteAdapter`, `FireweaveLocalAdapter`, `InMemoryAdapter`** — the same three
+  adapters every other SDK ships. The remote transport is chosen per platform by conditional
+  import from SDK libraries alone: `dart:io` on the VM and Flutter mobile/desktop, the browser's
+  `fetch` through `dart:js_interop` on the web (valid under `dart compile wasm` too). Injectable
+  through the `HttpTransport` port.
+- **Conformance**: a real runner (`conformance/run_conformance.dart`) over the shared 65
+  fixtures with Swift's disposition (37 pass, 15 documented limitations, 13 v1-out-of-scope),
+  pinned by a `dart test` wrapper; `tools/conformance/compare.mjs` aggregates 65 × 8;
+  `conformance/surface/control-points.surface.json` gains a `dart` cell.
+- **Release**: component `dart`, tag `dart/vX.Y.Z`, manifest `sdks/dart/pubspec.yaml`
+  (`tools/release/version.sh`); staging = `dart pub publish --dry-run` + tag (pub.dev has no
+  staging registry), production = pub.dev automated publishing (OIDC) under `environment: release`.
+- **CI**: `dart` job (Dart 3.8 floor + stable: format, analyze, VM tests, Chrome tests, JS and
+  WASM compiles of the example, conformance, publish dry-run); `differential` and release
+  `verify` jobs set up Dart; osv-scan covers a generated `pubspec.lock`.
+
+#### Zero dependencies, no Flutter SDK dependency
+
+`pubspec.yaml` has no `dependencies:` block and never imports `package:flutter`, so the same
+package runs in a Flutter app and on the Dart VM, and CI needs only the Dart toolchain. Pinned by
+`test/architecture_guard_test.dart`; `test/portability_guard_test.dart` confines `dart:io` to the
+io transport and `dart:js_interop` to the web transport, bans the retired `dart:html`/`dart:js`
+and the pub `web`/`http` packages, bans environment reads, and bans vendor SDKs and vendor key
+shapes.
+
 ### Web SDK `@fireweaveai/web-sdk` 2.1.0 — 2026-08-09
 
 New package. Browser control-point evaluation, per [ADR-0009](docs/adr/0009-browser-control-points.md), which supersedes the *Browser package* row of [ADR-0004](docs/adr/0004-server-first.md)'s future-work table.

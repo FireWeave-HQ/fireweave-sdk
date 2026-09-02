@@ -18,7 +18,7 @@
  *      (in fixture or report)                                     -> FAIL
  *   6. Duplicate fixture ids / missing compatibility entries      -> FAIL
  *
- * The matrix is 65 fixtures x 7 languages (contracts/harness.md ruling 3):
+ * The matrix is 65 fixtures x 8 languages (contracts/harness.md ruling 3):
  *   - node / python / go / java: loaded from --report <lang>=<path>, each
  *     one of the four SDK conformance runners actually executed, graded
  *     against contracts/README.md's frozen per-fixture
@@ -54,11 +54,18 @@
  *     of rust finding 5). 37 + 15 = 52 in-scope, + 13 skipped-v1-out-of-scope
  *     = 65. See REAL_NO_BASELINE_LANGUAGES below and task-13-report.md's
  *     item-8 disposition for the full reasoning.
+ *   - dart (ADR-0011): loaded from --report dart=<path>, the SAME
+ *     real-no-baseline tier as rust/swift — a real conformance runner
+ *     (sdks/dart/conformance/run_conformance.dart) executes the fixtures
+ *     its architecture can represent. It shares swift's prefetch-then-
+ *     synchronous-cache-read architecture AND swift's disposition exactly:
+ *     37 pass + 15 skipped-with-documented-limitation (the same 6 context +
+ *     8 faults + 1 int/float fixtures) + 13 skipped-v1-out-of-scope = 65.
  * contracts/README.md's field-rules table requires compatibility.<lang> only
  * for node/python/go/java; web carries no per-fixture declaration and no
- * real runner; rust/swift have real runners but (being newer than the
- * frozen fixture set) also carry no per-fixture declaration. Rule 2 and the
- * "missing compatibility.<lang>" fixture check apply only to
+ * real runner; rust/swift/dart have real runners but (being newer than
+ * the frozen fixture set) also carry no per-fixture declaration. Rule 2 and
+ * the "missing compatibility.<lang>" fixture check apply only to
  * node/python/go/java.
  *
  * Extensions v1-scope carve-out (contracts/harness.md ruling 2): 13 of the
@@ -81,7 +88,8 @@
  *     --contracts contracts \
  *     --report node=path.json --report python=path.json \
  *     --report go=path.json --report java=path.json \
- *     --report rust=path.json \
+ *     --report rust=path.json --report swift=path.json \
+ *     --report dart=path.json \
  *     --out build/conformance/compatibility-report.json \
  *     [--markdown build/conformance/summary.md] \
  *     [--web-report sdks/web/test/conformance/compatibility-report.web.json]
@@ -148,7 +156,13 @@ const DECLARED_LANGUAGES = ['node', 'python', 'go', 'java'];
 // in-memory rich-matching adapter to even attempt this with) — running the
 // shared 65 where they transfer and reporting honest per-fixture statuses
 // is the more informative, still-honest choice.
-const REAL_NO_BASELINE_LANGUAGES = ['rust', 'swift'];
+//
+// dart (ADR-0011) joins the same tier for the same reason: it shares
+// swift's architecture (prefetch async, evaluate() a pure synchronous cache
+// read, local mode supported, rich in-memory matching) and reports the
+// identical 37 + 15 + 13 = 65 decomposition from its own real runner
+// (sdks/dart/conformance/run_conformance.dart).
+const REAL_NO_BASELINE_LANGUAGES = ['rust', 'swift', 'dart'];
 // Languages whose --report is required and loaded (the two tiers above,
 // combined) — everything else below is a language-shaped loop variable,
 // not a new concept.
@@ -158,8 +172,9 @@ const REPORT_LANGUAGES = [...DECLARED_LANGUAGES, ...REAL_NO_BASELINE_LANGUAGES];
 // for all 65 by this tool itself. Web only, as of Task 13 — see the
 // REAL_NO_BASELINE_LANGUAGES comment above for why swift is NOT here.
 const SYNTHESIZED_LANGUAGES = ['web'];
-// Display/output order (unchanged from before rust/swift had real runners).
-const LANGUAGES = ['node', 'python', 'go', 'java', 'web', 'rust', 'swift'];
+// Display/output order (unchanged from before rust/swift had real runners;
+// dart appended as the eighth column).
+const LANGUAGES = ['node', 'python', 'go', 'java', 'web', 'rust', 'swift', 'dart'];
 const SUITES = ['evaluation', 'context', 'lifecycle', 'faults', 'security', 'extensions'];
 const STATUSES = new Set([
   'pass',
@@ -370,8 +385,9 @@ function webRow(fixture) {
  * above) and remains the correct status for a FUTURE language with no SDK
  * yet. No language is currently synthesized this way (SYNTHESIZED_LANGUAGES
  * is web-only), so there is no live caller for a `notImplementedRow`-shaped
- * function today; re-add one, keyed the same way `webRow` is, if an 8th
- * language lands in this repo before its SDK does.
+ * function today; re-add one, keyed the same way `webRow` is, if a 9th
+ * language lands in this repo before its SDK does (the 8th, dart,
+ * arrived with its runner — ADR-0011).
  */
 
 // ---------- comparison ----------

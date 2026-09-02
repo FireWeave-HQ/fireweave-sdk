@@ -16,6 +16,8 @@
 #            baseline-gated via tools/lint/check-python.sh
 #   go     : gofmt -l + go vet
 #   java   : none beyond javac (no checkstyle config exists)
+#   dart   : dart format --set-exit-if-changed + dart analyze --fatal-infos
+#            (package:lints/recommended — the Dart team's default set)
 name: CI
 
 on:
@@ -350,8 +352,66 @@ jobs:
       # runner "exit non-zero on any fail" is expected on any real
       # divergence, not a crash signal — matching go/java/rust's per-language
       # job comment. The differential job (scripts/conformance-all.sh) is
-      # where that report is aggregated against the honest 65x7 cross-
+      # where that report is aggregated against the honest 65x8 cross-
       # language gate.
+
+  # ---------------------------------------------------------------- dart
+  # The Dart package (ADR-0011): Flutter on every platform, the Dart VM, and
+  # Dart compiled to JavaScript/WebAssembly. Pure Dart with no `flutter` SDK
+  # dependency, so the Dart toolchain alone runs the whole suite — the
+  # Flutter toolchain is deliberately NOT installed here: it would add
+  # ~1 GB per job to assert a property no code path depends on (the package
+  # never imports `package:flutter`; test/architecture_guard_test.dart pins
+  # that).
+  #
+  # Two test legs: the VM (`dart test`, io transport) and Chrome
+  # (`dart test -p chrome`, the whole runtime under dart2js plus the `fetch`
+  # transport — ubuntu-latest ships Chrome). Every test file runs on both legs
+  # except the four `@TestOn('vm')` files that read the filesystem and the
+  # one `@TestOn('browser')` file. The example is then compiled for JS and
+  # WASM, which proves the conditional-import seam resolves to the web
+  # transport on both web compilers without a browser at all.
+  dart:
+    name: dart (Dart ${{ matrix.dart }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dart: ['3.8.3', 'stable'] # pubspec.yaml sdk floor (^3.8.0) + latest stable
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: ${{ matrix.dart }}
+      - name: Resolve dev dependencies (pubspec.lock is not committed — resolved per matrix leg)
+        working-directory: sdks/dart
+        run: dart pub get
+      - name: dart format check
+        working-directory: sdks/dart
+        run: dart format --output=none --set-exit-if-changed .
+      - name: dart analyze (package:lints/recommended + strict mode; infos are fatal)
+        working-directory: sdks/dart
+        run: dart analyze --fatal-infos
+      - name: dart test — VM leg (unit + architecture/surface/portability guards + the 65-fixture gate)
+        working-directory: sdks/dart
+        run: dart test
+      - name: dart test — Chrome leg (runtime under dart2js + the fetch transport)
+        working-directory: sdks/dart
+        run: dart test -p chrome
+      - name: Compile the example for JavaScript and WebAssembly (web transport seam, no browser)
+        working-directory: sdks/dart
+        run: |
+          dart compile js -o /tmp/fireweave_example.js example/fireweave_example.dart
+          dart compile wasm -o /tmp/fireweave_example.wasm example/fireweave_example.dart
+      - name: Conformance runner (per-version sanity; differential job is the gate)
+        working-directory: sdks/dart
+        run: dart run conformance/run_conformance.dart --contracts ../../contracts --out /tmp/compatibility-report.dart.json
+      - name: Package validation dry run (never publishes)
+        working-directory: sdks/dart
+        run: dart pub publish --dry-run
+      # Same note as rust/swift: the runner's non-zero exit on a real
+      # divergence fails this job by itself; the differential job is where
+      # the report is aggregated against the honest 65x8 gate.
 
   # -------------------------------------------- cross-language differential
   differential:
@@ -383,6 +443,9 @@ jobs:
         with:
           # 6.2.1 is the newest patch known to setup-swift@v2 (6.3.x is not listed).
           swift-version: '6.2.1'
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
       - name: tools/release/version.sh unit tests (pure semver + staging-N logic)
         # Chosen job: this is the one job in ci.yml with node, python, AND
         # java/mvn all set up already (needed for the 65x7 conformance run
@@ -392,7 +455,7 @@ jobs:
         # no continue-on-error) — a regression in the bump/strip/staging-N
         # logic fails this job, not just the local dry run.
         run: bash tools/release/version.test.sh
-      - name: Run all six conformance runners + comparator
+      - name: Run all seven conformance runners + comparator
         run: bash scripts/conformance-all.sh
       - name: Publish comparator summary
         if: always()

@@ -1,0 +1,6 @@
+# The fixture conformance runner reads ../../contracts (repo tooling, not part
+# of the published package).
+conformance/
+# Resolved dev-dependency lock: not committed (Dart package convention) and
+# never published.
+pubspec.lock

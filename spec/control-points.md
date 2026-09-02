@@ -17,8 +17,8 @@ are out of v1. An SDK MUST NOT expose them, and MUST NOT expose an OpenFeature p
 ## The namespace
 
 Every SDK exposes the surface under a namespace named `controlPoints`, cased for the
-language: `controlPoints` (TS, Java, Swift), `control_points` (Python, Rust), `ControlPoints`
-(Go).
+language: `controlPoints` (TS, Java, Swift, Dart), `control_points` (Python, Rust),
+`ControlPoints` (Go).
 
 `flags` MAY be retained as a deprecated alias pointing at the same object, per ADR-0007. It
 MUST NOT be the documented name and MUST NOT appear in examples.

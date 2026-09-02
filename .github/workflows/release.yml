@@ -2,8 +2,8 @@
 #
 # DRY-RUN BY DEFAULT. Builds, changelogs, SBOMs, checksums; optionally tags.
 #
-# Inputs: `component` (server|web|python|java|go|rust|swift|all — `all` fans
-# out via matrix), `bump` (patch|minor|major — computed from the component's
+# Inputs: `component` (server|web|python|java|go|rust|swift|dart|all —
+# `all` fans out via matrix), `bump` (patch|minor|major — computed from the component's
 # OWN current manifest version by tools/release/version.sh; there is no
 # free-text `version` input anymore), `channel` (staging|production),
 # `dry_run` (default true).
@@ -50,6 +50,16 @@
 # production) resolve from the git tag alone — for swift there is no publish
 # step whatsoever, staging or production.
 #
+# dart (ADR-0011, added 2026-09-02 during the dart-sdk implementation
+# work — NOT a separate human authorization; flag for a human to confirm)
+# takes rust's shape exactly: pub.dev has no staging registry either and a
+# published version can only be retracted, never deleted, so staging stops
+# at `dart pub publish --dry-run` plus the git tag. Production publishes to
+# pub.dev via pub.dev's own OIDC "automated publishing" (id-token: write,
+# environment `release`) — there is no token secret; pub.dev rejects the
+# publish until automated publishing is enabled for the package on pub.dev,
+# so this fails closed by construction.
+#
 # Production PyPI is enabled via channel=production (component=python) and also
 # via the dedicated tag-triggered workflow publish-python.yml (python/v*).
 # Maven Central is enabled via channel staging/production (component=java) and
@@ -76,6 +86,8 @@
 #   rust   -> rust/v0.1.0
 #   swift  -> swift/v0.1.0   (chosen to match the org convention; see RELEASE.md
 #                             for why a bare `vX.Y.Z` buys nothing here)
+#   dart   -> dart/v0.1.0    (org convention; pub.dev resolves by version,
+#                             never by git tag, so the prefix is free)
 #   go     -> sdks/go/v0.1.0   (Go REQUIRES the tag to equal the module
 #                               subdirectory path; see RELEASE.md)
 #
@@ -93,7 +105,7 @@ on:
         description: 'SDK component to release ("all" fans out via matrix)'
         required: true
         type: choice
-        options: [server, web, python, java, go, rust, swift, all]
+        options: [server, web, python, java, go, rust, swift, dart, all]
       bump:
         description: 'Semver bump, applied to the component''s OWN current manifest version (any existing prerelease is stripped first)'
         required: true
@@ -132,7 +144,7 @@ jobs:
           COMPONENT: ${{ inputs.component }}
         run: |
           if [ "$COMPONENT" = all ]; then
-            COMPONENTS='["server","web","python","java","go","rust","swift"]'
+            COMPONENTS='["server","web","python","java","go","rust","swift","dart"]'
           else
             COMPONENTS="[\"$COMPONENT\"]"
           fi
@@ -288,12 +300,15 @@ jobs:
         with:
           # 6.2.1 is the newest patch known to setup-swift@v2 (6.3.x is not listed).
           swift-version: '6.2.1'
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
 
       - name: Build all package artifacts (dry-run)
         run: bash scripts/build-all.sh
       - name: Run the full test suite (node/python/go/java + offline examples)
         run: bash scripts/test-all.sh
-      - name: Cross-language conformance (65x7 differential gate)
+      - name: Cross-language conformance (65x8 differential gate)
         run: bash scripts/conformance-all.sh
       - name: Publish comparator summary
         if: always()
@@ -725,3 +740,74 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: cargo publish --locked --allow-dirty
+
+  publish-pub:
+    name: dart pub publish --dry-run (staging — no pub.dev upload)
+    needs: [validate, build, verify, tag]
+    if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'dart') }}
+    runs-on: ubuntu-latest
+    environment: release-staging
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-dart
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - name: Apply computed version
+        run: tools/release/version.sh apply dart "${{ steps.version.outputs.release_version }}"
+      - name: dart pub publish --dry-run (validates only — never uploads)
+        # No staging registry exists for pub.dev (same situation as
+        # crates.io) and a published version can only be retracted, never
+        # deleted, so a real staging publish would spend the version
+        # permanently. --dry-run proves the package is publishable without
+        # spending anything; the git tag (already pushed by the `tag` job,
+        # which this job needs) IS this release's staging artifact.
+        working-directory: sdks/dart
+        run: |
+          dart pub get
+          dart pub publish --dry-run
+
+  publish-pub-production:
+    name: publish pub.dev (production)
+    needs: [validate, build, verify, tag]
+    if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'dart') }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write # pub.dev automated publishing (OIDC) — no long-lived token; setup-dart exchanges it
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-dart
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - name: Assert OIDC preconditions
+        # pub.dev automated publishing must be enabled for `fireweave` on
+        # pub.dev (RELEASE.md provisioning) with this repository, this
+        # workflow file, and the `release` environment — otherwise the
+        # publish below is rejected by pub.dev. Fails closed either way.
+        run: |
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo "::error::OIDC id-token request vars absent — enable pub.dev automated publishing and permissions.id-token: write"
+            exit 1
+          fi
+      - name: Apply computed version
+        run: tools/release/version.sh apply dart "${{ steps.version.outputs.release_version }}"
+      - name: Publish to pub.dev
+        working-directory: sdks/dart
+        run: |
+          dart pub get
+          dart pub publish --force

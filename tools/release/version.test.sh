@@ -106,6 +106,8 @@ assert_eq "manifest: swift is tag-only (empty)" "" "$(component_manifest swift)"
 assert_eq "tag prefix: go forced exception" "sdks/go" "$(component_tag_prefix go)"
 assert_eq "tag prefix: server uses its own name (not node)" "server" "$(component_tag_prefix server)"
 assert_eq "tag prefix: swift matches org convention" "swift" "$(component_tag_prefix swift)"
+assert_eq "manifest: dart" "sdks/dart/pubspec.yaml" "$(component_manifest dart)"
+assert_eq "tag prefix: dart matches org convention" "dart" "$(component_tag_prefix dart)"
 assert_fail "unknown component is rejected" component_manifest bogus
 
 # ---------------------------------------------- end-to-end compute(), network stubbed
@@ -144,6 +146,30 @@ assert_eq "stubbed e2e python: staging_n continues past a1/a2" "3" "$(get_py sta
 assert_eq "stubbed e2e python: release_version is PEP 440 alpha" "0.1.1a3" "$(get_py release_version)"
 assert_eq "stubbed e2e python: tag" "python/v0.1.1a3" "$(get_py tag)"
 rm -rf "$scratch_py"
+
+# Dart keeps the shared `-staging.N` form (pub.dev accepts semver
+# prereleases); its "registry" is pub.dev's own package listing, read
+# through the same stubbed seam. The pubspec version line is read by sed,
+# never a YAML parser.
+registry_versions() { printf '2.2.0\n2.2.1-staging.1\n'; }
+scratch_fl="$(mktemp -d)"
+mkdir -p "$scratch_fl/sdks/dart"
+cat > "$scratch_fl/sdks/dart/pubspec.yaml" <<'EOF'
+name: fireweave
+description: test
+version: 2.2.0 # trailing comment must not leak into the version
+environment:
+  sdk: ^3.8.0
+EOF
+out_fl="$(cmd_compute dart patch staging --manifest-root "$scratch_fl")"
+get_fl() { printf '%s\n' "$out_fl" | sed -n "s/^$1=//p"; }
+assert_eq "stubbed e2e dart: current_version read from pubspec" "2.2.0" "$(get_fl current_version)"
+assert_eq "stubbed e2e dart: bumped_version" "2.2.1" "$(get_fl bumped_version)"
+assert_eq "stubbed e2e dart: staging_n continues past .1" "2" "$(get_fl staging_n)"
+assert_eq "stubbed e2e dart: release_version" "2.2.1-staging.2" "$(get_fl release_version)"
+assert_eq "stubbed e2e dart: tag" "dart/v2.2.1-staging.2" "$(get_fl tag)"
+assert_eq "stubbed e2e dart: no npm dist-tag" "n/a" "$(get_fl dist_tag)"
+rm -rf "$scratch_fl"
 # Restore the server stub for any later assertions that might call compute.
 registry_versions() { printf '2.1.0\n2.1.1-staging.1\n2.1.1-staging.2\n'; }
 
@@ -182,6 +208,17 @@ assert_eq "apply: pyproject.toml written (PEP 440 alpha)" "0.1.2a1" "$(sed -nE '
 
 cmd_apply rust "0.1.1" --manifest-root "$scratch2"
 assert_eq "apply: Cargo.toml written" "0.1.1" "$(sed -nE 's/^version = \"([^\"]+)\".*/\1/p' "$scratch2/sdks/rust/Cargo.toml" | head -n1)"
+
+mkdir -p "$scratch2/sdks/dart"
+cat > "$scratch2/sdks/dart/pubspec.yaml" <<'EOF'
+name: fireweave
+version: 2.2.0
+environment:
+  sdk: ^3.8.0
+EOF
+cmd_apply dart "2.2.1-staging.2" --manifest-root "$scratch2"
+assert_eq "apply: pubspec.yaml written" "2.2.1-staging.2" "$(sed -nE 's/^version:[[:space:]]*(.*)$/\1/p' "$scratch2/sdks/dart/pubspec.yaml" | head -n1)"
+assert_eq "apply: pubspec.yaml keeps its other keys" "name: fireweave" "$(head -n1 "$scratch2/sdks/dart/pubspec.yaml")"
 
 # java: write_manifest shells out to `mvn versions:set` (same command
 # publish-maven now calls this way instead of repeating it inline — see

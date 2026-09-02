@@ -5,7 +5,7 @@
 #   tools/release/version.sh compute <component> <bump> <channel> [--manifest-root DIR]
 #   tools/release/version.sh apply   <component> <release-version> [--manifest-root DIR]
 #
-#   component : server | web | python | java | go | rust | swift
+#   component : server | web | python | java | go | rust | swift | dart
 #   bump      : patch | minor | major        (compute only)
 #   channel   : staging | production          (compute only)
 #   --manifest-root DIR : resolve/write manifests under DIR instead of the
@@ -64,7 +64,7 @@ Usage:
   version.sh compute <component> <bump> <channel> [--manifest-root DIR]
   version.sh apply   <component> <release-version> [--manifest-root DIR]
 
-  component : server | web | python | java | go | rust | swift
+  component : server | web | python | java | go | rust | swift | dart
   bump      : patch | minor | major
   channel   : staging | production
 EOF
@@ -83,6 +83,7 @@ component_manifest() {
     python) printf 'sdks/python/pyproject.toml\n' ;;
     java)   printf 'sdks/java/pom.xml\n' ;;
     rust)   printf 'sdks/rust/Cargo.toml\n' ;;
+    dart) printf 'sdks/dart/pubspec.yaml\n' ;;
     go|swift) printf '\n' ;;
     *) return 1 ;;
   esac
@@ -90,12 +91,12 @@ component_manifest() {
 
 # Tag prefix: org convention is <component>/v<semver>, with go's forced
 # exception (module in subdirectory sdks/go must be tagged sdks/go/v<semver>
-# for `go get` to resolve it — see RELEASE.md). server/web/python/java/rust
-# have never published, so the rename/additions break no historical tag.
+# for `go get` to resolve it — see RELEASE.md). server/web/python/java/rust/
+# dart have never published, so the rename/additions break no historical tag.
 component_tag_prefix() {
   case "$1" in
     go) printf 'sdks/go\n' ;;
-    server|web|python|java|rust|swift) printf '%s\n' "$1" ;;
+    server|web|python|java|rust|swift|dart) printf '%s\n' "$1" ;;
     *) return 1 ;;
   esac
 }
@@ -110,8 +111,8 @@ component_npm_package() {
 
 require_known_component() {
   case "$1" in
-    server|web|python|java|go|rust|swift) ;;
-    *) echo "version.sh: unknown component '$1' (server|web|python|java|go|rust|swift)" >&2; exit 2 ;;
+    server|web|python|java|go|rust|swift|dart) ;;
+    *) echo "version.sh: unknown component '$1' (server|web|python|java|go|rust|swift|dart)" >&2; exit 2 ;;
   esac
 }
 
@@ -326,6 +327,25 @@ for v in d.get("versions", []):
 '
 }
 
+# <pub package name> -> newline list of every version published on pub.dev
+# (staging and production alike: pub.dev has no staging registry, and a
+# published version can only be retracted, never deleted — see RELEASE.md
+# "Pre-release channels"). A 404 means the package has never been published.
+pub_versions() {
+  local name="$1" body
+  body="$(http_get_json "https://pub.dev/api/packages/${name}")"
+  [ -z "$body" ] && return 0
+  printf '%s' "$body" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+for v in d.get("versions", []):
+    print(v.get("version", ""))
+'
+}
+
 # <tag prefix, e.g. "java" or "sdks/go"> -> newline list of every "X.Y.Z" (or
 # "X.Y.Z-staging.N") segment following "<prefix>/v" among tags on the ORIGIN
 # remote (a live network query, not the local tag cache — see the module
@@ -363,6 +383,9 @@ registry_versions() {
       ;;
     rust)
       crates_versions fireweave
+      ;;
+    dart)
+      pub_versions fireweave
       ;;
     go|java|swift)
       remote_tag_versions "$(component_tag_prefix "$component")"
@@ -403,7 +426,26 @@ el = root.find("m:version", ns)
 print((el.text or "").strip() if el is not None else "")
 PY
       ;;
+    dart)
+      # pubspec.yaml's top-level `version:` line. No YAML parser is assumed
+      # (PyYAML is not in the base toolchain); the line is a bare scalar by
+      # construction, and write_pubspec_version() keeps it that way.
+      sed -nE 's/^version:[[:space:]]*([^[:space:]#]+).*/\1/p' "$manifest" | head -n1
+      ;;
   esac
+}
+
+write_pubspec_version() {
+  local manifest="$1" version="$2"
+  python3 - "$manifest" "$version" <<'PY'
+import re, sys
+path, version = sys.argv[1], sys.argv[2]
+text = open(path, "r", encoding="utf-8").read()
+new_text, n = re.subn(r'(?m)^version:[ \t]*\S.*$', f'version: {version}', text, count=1)
+if n != 1:
+    sys.exit(f"version.sh: expected exactly one top-level `version:` line in {path}, found {n}")
+open(path, "w", encoding="utf-8").write(new_text)
+PY
 }
 
 write_toml_version() {
@@ -430,6 +472,9 @@ write_manifest() {
       ;;
     java)
       mvn -q -f "$manifest" versions:set -DnewVersion="$version" -DgenerateBackupPoms=false
+      ;;
+    dart)
+      write_pubspec_version "$manifest" "$version"
       ;;
   esac
 }

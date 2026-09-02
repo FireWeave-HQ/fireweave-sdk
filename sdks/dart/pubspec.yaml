@@ -1,0 +1,47 @@
+name: fireweave
+description: Fireweave SDK for Flutter (Android, iOS, macOS, Windows, Linux, web) and Dart servers. Control points and target registration; synchronous reads over a prefetched cache.
+version: 2.2.0
+# pub.dev resolves README links relative to `repository`, so it points at the
+# package's own subdirectory of the monorepo (the tree URL form pub.dev
+# documents for monorepos); `homepage` is the repository root.
+repository: https://github.com/FireWeave-HQ/fireweave-sdk/tree/master/sdks/dart
+homepage: https://github.com/FireWeave-HQ/fireweave-sdk
+issue_tracker: https://github.com/FireWeave-HQ/fireweave-sdk/issues
+topics:
+  - feature-flags
+  - control-points
+  - progressive-delivery
+  - fireweave
+  - flutter
+
+# Floor: Dart 3.8 (bundled with Flutter >= 3.32). CI tests this floor and the
+# latest stable (.github/workflows/ci.yml, dart job).
+environment:
+  sdk: ^3.8.0
+
+# Every platform Dart runs on. pub.dev derives the "Dart" and "Flutter" SDK
+# tags from the absence of a `flutter` dependency (both apply); the platform
+# tags come from this block. The HTTP transport is chosen per platform by
+# conditional import from SDK libraries alone — `dart:io` on the VM (servers,
+# CLIs) and on Flutter mobile/desktop, `dart:js_interop` (`fetch`) on the
+# web — see lib/src/infrastructure/transport/default_http_transport.dart.
+platforms:
+  android:
+  ios:
+  linux:
+  macos:
+  web:
+  windows:
+
+# Dependency budget: LITERALLY ZERO runtime dependencies — there is no
+# `dependencies:` block at all. `dart:io` / `dart:js_interop` supply the HTTP
+# client and `dart:convert` the JSON codec, all part of the Dart SDK (not pub
+# packages), exactly like Swift's Foundation-only ruling and Rust's std. No
+# `flutter` SDK dependency either: the package runs unchanged in a Flutter
+# app and on the Dart VM, and CI needs only the Dart toolchain. Asserted by
+# test/architecture_guard_test.dart, which parses this file rather than
+# trusting this comment.
+
+dev_dependencies:
+  lints: '>=5.0.0 <7.0.0'
+  test: ^1.25.0
