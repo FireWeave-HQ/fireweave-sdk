@@ -81,4 +81,4 @@ Browser evaluation arrives from origins fw-server cannot enumerate, so the contr
 
 - **Positive:** the browser surface gets the same OpenFeature-standard, vendor-neutral, auditable treatment as the server; the harness's `web` surface stops depending on a proprietary provider for control-point evaluation; the secret-key boundary that motivated ADR-0004 is now enforced by guard tests rather than by scope.
 - **Negative:** a second package to version, publish, and keep in conformance; a second architecture-shaped test suite; and a real security dependency on key scoping that did not previously block anything.
-- **Neutral:** ADR-0004 stands as written for everything else it decided. Mobile, edge, and Dart remain out of scope; this ADR retires exactly one row of its future-work table.
+- **Neutral:** ADR-0004 stands as written for everything else it decided. Mobile, edge, and Dart remain out of scope; this ADR retires exactly one row of its future-work table. *(Dart has since been brought into scope by [ADR-0011](0011-dart-control-points.md), which reuses this ADR's prefetch-plus-synchronous-read seam for Flutter.)*
