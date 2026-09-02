@@ -3,9 +3,9 @@
 All notable changes to the `fireweave` Dart package. The repository-wide changelog
 (`../../CHANGELOG.md`) carries the cross-language view.
 
-## 0.0.0
+## 2.2.0
 
-Pre-release baseline for staging/publish pipeline validation. Control-point
+Initial package aligned with the other Fireweave SDK manifests. Control-point
 evaluation and target registration (spec v0.1.0) — the two v1 capabilities —
 with synchronous reads over a prefetched cache
 ([ADR-0011](../../docs/adr/0011-dart-control-points.md)). One package for Flutter on
