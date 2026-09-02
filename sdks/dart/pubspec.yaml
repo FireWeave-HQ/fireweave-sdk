@@ -1,6 +1,6 @@
 name: fireweave
 description: Fireweave SDK for Flutter (Android, iOS, macOS, Windows, Linux, web) and Dart servers. Control points and target registration; synchronous reads over a prefetched cache.
-version: 2.2.0
+version: 0.0.0
 # pub.dev resolves README links relative to `repository`, so it points at the
 # package's own subdirectory of the monorepo (the tree URL form pub.dev
 # documents for monorepos); `homepage` is the repository root.
