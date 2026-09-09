@@ -370,6 +370,47 @@ registry_versions() {
   esac
 }
 
+# <component> <computed production version> -> nothing, or exit 3.
+#
+# A production release must be a version nobody has seen. `compute` bumps from
+# the COMMITTED manifest, and no publish job writes the applied version back to
+# the repo — so a second production run with the same `bump` recomputes exactly
+# the same number. Unchecked, that surfaces late and expensively: the `tag` job
+# dies pushing a ref that already exists, AFTER `verify` has spent the full
+# cross-language suite, and (for a component whose publish precedes nothing
+# else) potentially after a registry has already taken the artifact.
+#
+# Both sources are consulted because either alone can be stale in the direction
+# that matters. The registry holds artifacts with no tag; the tag list holds
+# releases whose publish job was skipped or failed — which is not hypothetical:
+# `server/v2.3.0` and `web/v2.3.0` existed for a day against an npm registry
+# that had neither, because the production publish job was a disabled stub.
+#
+# Failure semantics follow the helpers this shares with the staging path:
+# npm/PyPI/crates.io distinguish "404, never published" (empty, fine) from a
+# network or auth failure (non-zero, which `set -e` turns into an abort here).
+# `remote_tag_versions` is the exception — it swallows `git ls-remote` errors —
+# so a total network outage degrades to registry-only checking rather than a
+# false all-clear.
+assert_production_version_free() {
+  local component="$1" version="$2" prefix published tagged
+
+  published="$(registry_versions "$component" production)"
+  if printf '%s\n' "$published" | grep -Fxq "$version"; then
+    echo "version.sh: $component $version is already published to its registry." >&2
+    echo "version.sh: a production version is spent once — bump again (or release a different component)." >&2
+    exit 3
+  fi
+
+  prefix="$(component_tag_prefix "$component")"
+  tagged="$(remote_tag_versions "$prefix")"
+  if printf '%s\n' "$tagged" | grep -Fxq "$version"; then
+    echo "version.sh: tag ${prefix}/v${version} already exists on origin." >&2
+    echo "version.sh: if nothing was published under it, delete it (git push origin :refs/tags/${prefix}/v${version}) and re-run; otherwise bump again." >&2
+    exit 3
+  fi
+}
+
 # --------------------------------------------------------------------------
 # Manifest read / write
 # --------------------------------------------------------------------------
@@ -492,6 +533,7 @@ cmd_compute() {
     fi
   else
     release_version="$bumped_version"
+    assert_production_version_free "$component" "$release_version"
   fi
 
   case "$component" in

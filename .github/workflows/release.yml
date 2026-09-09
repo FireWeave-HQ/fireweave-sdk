@@ -774,6 +774,47 @@ jobs:
           fi
           GOPROXY=proxy.golang.org go list -m "${MODULE}@${VERSION}"
 
+  # Go production had NO job at all — the tag was the whole release, and
+  # nothing ever asked the proxy whether that tag actually resolved. It is not
+  # a hypothetical gap: `sdks/go/v2.2.0` was tagged from a revision whose
+  # go.mod still lacked the `/v2` suffix, so the proxy rejects it
+  # ("invalid version: … has non-.../v2 module path") and the release is
+  # unusable. This job warms the proxy exactly as staging does — and because
+  # `go list -m` FAILS on an unresolvable module, warming doubles as the
+  # verification that would have caught v2.2.0 the day it shipped.
+  publish-go-production:
+    name: verify + warm Go module proxy (production)
+    needs: [validate, build, verify, tag]
+    if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'go') }}
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-go
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - name: Resolve the released module through proxy.golang.org
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          VERSION="${TAG#sdks/go/}"
+          MAJOR="$(printf '%s' "$VERSION" | sed -E 's/^v([0-9]+).*/\1/')"
+          MODULE='github.com/FireWeave-HQ/fireweave-sdk/sdks/go'
+          if [ "$MAJOR" -ge 2 ]; then
+            MODULE="${MODULE}/v${MAJOR}"
+          fi
+          echo "Resolving ${MODULE}@${VERSION}"
+          if ! GOPROXY=proxy.golang.org go list -m "${MODULE}@${VERSION}"; then
+            echo "::error::${MODULE}@${VERSION} does not resolve. The most common cause is a go.mod module path that disagrees with the tag's major version — a Go release is only real once the proxy can serve it."
+            exit 1
+          fi
+
   publish-cargo:
     name: cargo publish --dry-run (staging — no crates.io upload)
     needs: [validate, build, verify, tag]

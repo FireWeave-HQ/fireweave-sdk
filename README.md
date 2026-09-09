@@ -18,12 +18,37 @@ analytics or flag backend fw-server forwards to is fw-server's concern — no th
 key, or hostname ever enters your process ([ADR-0005](docs/adr/0005-fireweave-proxy-backend.md),
 [ADR-0006](docs/adr/0006-node-drops-direct-posthog-adapter.md)).
 
-> **Status: pre-release.** Node package `2.1.0`; spec `0.1.0`. Configure trusted publishers before the first non-dry-run release ([publish-readiness](docs/orchestration/publish-readiness.md)). **License:** [MIT](LICENSE).
+> **Status: pre-release.** Spec `0.1.0`. Release channels and per-SDK publish
+> state are documented in [RELEASE.md](.github/RELEASE.md). **License:** [MIT](LICENSE).
 
 ## Install
 
+Publish state differs per language — install what is released, build the rest
+from a checkout. Staging builds carry the channel in the version itself
+(`X.Y.Z-staging.N`, or a PEP 440 alpha for Python), so `npm ls` / `pip show`
+always tell the truth about what you have.
+
+**Python** — released on PyPI:
+
 ```bash
-npm install @fireweaveai/server-sdk   # or: bun add …
+pip install fireweave
+```
+
+**Java** — released on Maven Central at `0.1.0`; the 2.x line is not published yet:
+
+```xml
+<dependency>
+  <groupId>ai.fireweave</groupId>
+  <artifactId>fireweave-sdk</artifactId>
+  <version>0.1.0</version>
+</dependency>
+```
+
+**Node / web** — staging builds only, under the `next` dist-tag:
+
+```bash
+npm install @fireweaveai/server-sdk@next   # or: bun add …
+npm install @fireweaveai/web-sdk@next
 ```
 
 ```ts
@@ -31,24 +56,18 @@ npm install @fireweaveai/server-sdk   # or: bun add …
 import { initFireweave } from 'npm:@fireweaveai/server-sdk';
 ```
 
-Not yet published — until then, install from a checkout: `cd sdks/node && npm install && npm run build`.
-
-Java (`ai.fireweave:*`, **not on Maven Central yet**):
+**Go** — resolved from the module proxy, with the `/v2` path suffix Go requires
+at major ≥ 2:
 
 ```bash
-cd sdks/java && mvn install
+go get github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2
 ```
 
-```xml
-<dependency>
-  <groupId>ai.fireweave</groupId>
-  <artifactId>fireweave-sdk</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
-</dependency>
-```
+`sdks/go/v2.2.0` does not resolve and never did — it was tagged from a revision
+whose `go.mod` still declared the unsuffixed module path. Pin `v2.3.0` or later.
 
-Python, Go, Rust, and web — not yet published; see each SDK's own README
-(`sdks/<lang>/README.md`) for the checkout-install path.
+**Rust, Swift, Dart** — not published to any registry yet. Build from a
+checkout; see each SDK's own README (`sdks/<lang>/README.md`).
 
 ## Quickstart
 
