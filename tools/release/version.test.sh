@@ -28,9 +28,12 @@ assert_eq() { # <label> <expected> <actual>
 }
 
 assert_fail() { # <label> <command...> — asserts the command exits non-zero
+  # Run in a SUBSHELL: version.sh is sourced, so a guard that aborts with
+  # `exit` (not `return`) would otherwise take this test script down with it,
+  # reporting success by simply never reaching the summary.
   local label="$1"
   shift
-  if "$@" >/dev/null 2>&1; then
+  if ( "$@" ) >/dev/null 2>&1; then
     FAIL=$((FAIL + 1))
     printf 'FAIL: %s (expected non-zero exit, got 0)\n' "$label" >&2
   else
@@ -147,9 +150,47 @@ rm -rf "$scratch_py"
 # Restore the server stub for any later assertions that might call compute.
 registry_versions() { printf '2.1.0\n2.1.1-staging.1\n2.1.1-staging.2\n'; }
 
+# The production path additionally consults the tag list; stub that too so the
+# suite keeps its zero-network-calls promise (no `git ls-remote` from a test).
+remote_tag_versions() { printf '2.1.0\n2.1.1-staging.1\n2.1.1-staging.2\n'; }
+
 out_prod="$(cmd_compute server patch production --manifest-root "$scratch")"
 assert_eq "stubbed e2e: production has no staging suffix" "2.1.1" "$(printf '%s\n' "$out_prod" | sed -n 's/^release_version=//p')"
 assert_eq "stubbed e2e: production dist-tag is latest" "latest" "$(printf '%s\n' "$out_prod" | sed -n 's/^dist_tag=//p')"
+
+# ---------------------------------------------- production collision guard
+# `compute` bumps from the committed manifest and nothing writes the applied
+# version back, so a repeat production run recomputes the same number. The
+# guard has to catch that from EITHER source: an artifact on the registry, or
+# a tag on origin whose publish never landed (the server/web v2.3.0 case).
+
+# (a) already on the registry -> refuse.
+registry_versions() { printf '2.1.0\n2.1.1\n'; }
+remote_tag_versions() { printf '2.1.0\n'; }
+assert_fail "production refuses a version already on the registry" \
+  cmd_compute server patch production --manifest-root "$scratch"
+
+# (b) registry clean, but the tag exists -> still refuse. This is the orphan
+#     tag left behind when a publish job is skipped or fails.
+registry_versions() { printf '2.1.0\n'; }
+remote_tag_versions() { printf '2.1.0\n2.1.1\n'; }
+assert_fail "production refuses a version already tagged on origin" \
+  cmd_compute server patch production --manifest-root "$scratch"
+
+# (c) free on both -> proceeds.
+registry_versions() { printf '2.1.0\n2.1.1-staging.4\n'; }
+remote_tag_versions() { printf '2.1.0\n2.1.1-staging.4\n'; }
+out_free="$(cmd_compute server patch production --manifest-root "$scratch")"
+assert_eq "production proceeds when the version is free on both sources" \
+  "2.1.1" "$(printf '%s\n' "$out_free" | sed -n 's/^release_version=//p')"
+
+# (d) the guard is production-only — staging iterates N past collisions by
+#     design and must not be blocked by a base version already published.
+registry_versions() { printf '2.1.0\n2.1.1\n'; }
+remote_tag_versions() { printf '2.1.0\n2.1.1\n'; }
+out_stg="$(cmd_compute server patch staging --manifest-root "$scratch")"
+assert_eq "staging is unaffected by an already-published base version" \
+  "2.1.1-staging.1" "$(printf '%s\n' "$out_stg" | sed -n 's/^release_version=//p')"
 
 rm -rf "$scratch"
 

@@ -21,8 +21,16 @@ only; no crates.io upload — see "Pre-release channels"), under the same
 - tag push `python/v<semver>` → [`.github/workflows/publish-python.yml`](workflows/publish-python.yml)
 - or `release.yml` with `component=python`, `channel=production`, `dry_run=false`
 
-**Production npm** (`latest`, both packages) remains hard-disabled
-(`if: false`) until a second written authorization. **Maven Central** is
+**Production npm** (`latest`, both `@fireweaveai/server-sdk` and
+`@fireweaveai/web-sdk`) is **enabled** as of 2026-09-09 — that date is the
+"second written authorization" the previous hard-disable was waiting on.
+`release.yml` with `channel=production`, `dry_run=false` and the matching
+component runs `publish-npm-server-production` / `publish-npm-web-production`
+on environment `release`, publishing `--tag latest` via the same OIDC trusted
+publisher staging already uses. **The npm Trusted Publisher for each package
+must permit the `release` environment**: every successful OIDC publish to date
+ran under `release-staging`, so a publisher config pinned to that environment
+name will reject the production jobs. **Maven Central** is
 wired through [`publish-java.yml`](workflows/publish-java.yml) (tag
 `java/v*`) and `release.yml` (`component=java`) using the Central Publisher
 Portal plugin. The first upload still requires namespace verification for
@@ -191,7 +199,7 @@ believed they were hitting TestPyPI:
 
 | Environment | Used by | Secrets | Required reviewers |
 | --- | --- | --- | --- |
-| `release` | `publish-pypi-production`, `publish-maven` (BOTH channels — see below), `publish-cargo-production` | `PYPI_API_TOKEN`, `MAVEN_CENTRAL_USERNAME`/`_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`/`_PASSPHRASE`, `CARGO_REGISTRY_TOKEN` | **Yes** — this is the gate that must stay a human approval |
+| `release` | `publish-npm-server-production`, `publish-npm-web-production`, `publish-pypi-production`, `publish-maven` (BOTH channels — see below), `publish-cargo-production` | `PYPI_API_TOKEN`, `MAVEN_CENTRAL_USERNAME`/`_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`/`_PASSPHRASE`, `CARGO_REGISTRY_TOKEN` (the two npm jobs need no secret — OIDC) | **Yes** — this is the gate that must stay a human approval |
 | `release-staging` | `publish-npm`, `publish-npm-web`, `publish-pypi`, `publish-go`, `publish-cargo` | `TEST_PYPI_API_TOKEN` (npm/go/cargo-dry-run need no secret — OIDC or none) | No |
 
 **Java is the one exception**: Maven Central Portal has no separate staging
@@ -235,6 +243,11 @@ silently skips or falls back to an unauthenticated attempt.
    `@fireweaveai/server-sdk` and `@fireweaveai/web-sdk`. No token secret
    needed. First-ever publish of a new package may require a one-time
    granular token with 2FA.
+   **Environment field**: staging jobs run on `release-staging` and production
+   jobs on `release`, so each publisher must either leave the environment
+   constraint EMPTY (allowing both) or have two entries. A publisher pinned to
+   `release-staging` alone will reject `publish-npm-*-production` at the OIDC
+   exchange, before any bytes are uploaded.
 2. **PyPI + TestPyPI**: reserve / create the project name `fireweave`; add
    **trusted publishers** (OIDC — no token secret) on both indexes, OR use
    the token secrets above (this repo's workflows accept either):
