@@ -57,8 +57,12 @@
 # plus MAVEN_CENTRAL_* and MAVEN_GPG_* secrets. Missing secrets fail closed.
 # rust production (`cargo publish`) requires CARGO_REGISTRY_TOKEN — missing
 # fails closed the same way.
-# STILL HARD-DISABLED: production npm (dist-tag latest, both server and web)
-# until a second written authorization.
+# Production npm (dist-tag latest, both server and web) was HARD-DISABLED
+# pending "a second written authorization"; that authorization was given
+# 2026-09-09 and the two stub-free jobs (publish-npm-server-production,
+# publish-npm-web-production) now run on channel=production, environment
+# `release`. The npm Trusted Publisher for each package must permit that
+# environment — see RELEASE.md.
 #
 # Two GitHub environments: `release` (production — keeps the required-
 # reviewer gate) and `release-staging` (staging — no reviewer gate; exists so
@@ -354,8 +358,8 @@ jobs:
   #     - scope extended 2026-08-21 (this implementation task, NOT a fresh
   #       human authorization): npm web, rust `cargo publish --dry-run`.
   #   Requires trusted publishers / secrets (RELEASE.md).
-  # - Production npm: HARD-DISABLED (if: false) until a second written
-  #   authorization (both server and web).
+  # - Production npm: ENABLED 2026-09-09 (the second written authorization),
+  #   both server and web, dist-tag `latest`, environment `release`.
   # - Production PyPI / Maven / crates.io: gated on channel=production,
   #   dry_run=false, and the matching secret — missing secrets fail closed.
   # - go / swift: no publish job beyond the tag the `tag` job already
@@ -468,16 +472,129 @@ jobs:
           npm install -g npm@latest
           npm publish --provenance --access public --tag "$DIST_TAG"
 
-  publish-npm-production:
-    name: publish npm production (HARD-DISABLED)
+  # Production npm — authorized 2026-09-09 (the "second written authorization"
+  # the previous HARD-DISABLED stub was waiting on). Two jobs rather than one:
+  # server and web are independently selectable components, and the web build
+  # needs bun (see publish-npm-web's comment) while server does not.
+  #
+  # `dist_tag` comes from version.sh compute, which already resolves to
+  # `latest` for channel=production and `next` for staging (version.sh:497-501)
+  # — the tag is never hardcoded here, so the two channels cannot drift.
+  #
+  # environment: release — same gate as every other production publish job, so
+  # adding required reviewers to that environment covers npm too. NOTE: the npm
+  # Trusted Publisher for each package must permit this environment; every
+  # successful OIDC publish so far ran under `release-staging`, so a TP pinned
+  # to that name will reject these jobs (RELEASE.md "Company-side provisioning").
+  publish-npm-server-production:
+    name: publish npm production (server-sdk, dist-tag latest)
     needs: [validate, build, verify, tag]
-    if: ${{ false }} # HARD-DISABLED — second authorization required for dist-tag latest (server-sdk AND web-sdk)
+    if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'server') }}
     runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write # npm OIDC trusted publishing — no NPM_TOKEN secret
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-server
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - name: Assert OIDC preconditions
+        run: |
+          echo "npm version: $(npm --version)"
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo "::error::OIDC id-token request vars absent — configure npm Trusted Publisher and permissions.id-token: write"
+            exit 1
+          fi
+      - name: Assert production dist-tag
+        # Belt-and-braces against a future compute() change silently shipping a
+        # production build under `next`: `latest` is what makes this a release.
+        env:
+          DIST_TAG: ${{ steps.version.outputs.dist_tag }}
+        run: |
+          if [ "$DIST_TAG" != "latest" ]; then
+            echo "::error::production publish computed dist_tag='$DIST_TAG' (expected 'latest')"
+            exit 1
+          fi
+      - name: Apply computed version
+        run: tools/release/version.sh apply server "${{ steps.version.outputs.release_version }}"
+      - name: Build and publish @fireweaveai/server-sdk
+        working-directory: sdks/node
+        env:
+          DIST_TAG: ${{ steps.version.outputs.dist_tag }}
+        run: |
+          npm install -g npm@latest
+          npm ci
+          npm run build
+          npm publish --provenance --access public --tag "$DIST_TAG"
+
+  publish-npm-web-production:
+    name: publish npm production (web-sdk, dist-tag latest)
+    needs: [validate, build, verify, tag]
+    if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'web') }}
+    runs-on: ubuntu-latest
+    environment: release
     permissions:
       id-token: write
       contents: read
     steps:
-      - run: echo "production npm publish (server-sdk, web-sdk) is hard-disabled"
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-web
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      # Same bun requirement as the staging web job: web's lockfile of record
+      # is bun.lock (package-lock.json is gitignored) and its build script
+      # shells out to `bun`. npm stays only for the OIDC-authenticated publish.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Assert OIDC preconditions
+        run: |
+          echo "npm version: $(npm --version)"
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo "::error::OIDC id-token request vars absent — configure npm Trusted Publisher and permissions.id-token: write"
+            exit 1
+          fi
+      - name: Assert production dist-tag
+        env:
+          DIST_TAG: ${{ steps.version.outputs.dist_tag }}
+        run: |
+          if [ "$DIST_TAG" != "latest" ]; then
+            echo "::error::production publish computed dist_tag='$DIST_TAG' (expected 'latest')"
+            exit 1
+          fi
+      - name: Apply computed version
+        run: tools/release/version.sh apply web "${{ steps.version.outputs.release_version }}"
+      - name: Install workspace dependencies (bun — see comment above)
+        working-directory: sdks/web
+        run: bun install --frozen-lockfile
+      - name: Build @fireweaveai/web-sdk (bun — see comment above)
+        working-directory: sdks/web
+        run: bun run build
+      - name: Publish @fireweaveai/web-sdk (npm — OIDC trusted publisher)
+        working-directory: sdks/web
+        env:
+          DIST_TAG: ${{ steps.version.outputs.dist_tag }}
+        run: |
+          npm install -g npm@latest
+          npm publish --provenance --access public --tag "$DIST_TAG"
 
   publish-pypi:
     name: publish TestPyPI (staging)
