@@ -6,31 +6,14 @@ capabilities (spec/control-points.md "Scope of v1"): control-point evaluation
 exposures, signals, capabilities discovery, guardrails, and an OpenFeature provider are out of
 v1 scope and are not exposed.
 
-**These artifacts are not on Maven Central yet.** Coordinates below are the intended public
-GAV; install from a repository checkout until a Central publication is confirmed.
-
-## Coordinates (unpublished)
-
-| groupId | artifactId | version |
-| --- | --- | --- |
-| `ai.fireweave` | `fireweave-sdk` | `0.1.0-SNAPSHOT` |
-
-The reactor also builds `fireweave-testing` (the conformance harness) — it is
-`maven.deploy.skip=true` and is never published; see *Build / test / demo* below.
+## Install
 
 ```xml
 <dependency>
   <groupId>ai.fireweave</groupId>
   <artifactId>fireweave-sdk</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>2.3.0</version>
 </dependency>
-```
-
-Install from this repo:
-
-```bash
-cd sdks/java
-mvn install
 ```
 
 Supported Java: **11+** (CI: Temurin 11 and 25). Do not raise the floor without a documented reason.
@@ -40,7 +23,7 @@ Supported Java: **11+** (CI: Temurin 11 and 25). Do not raise the floor without 
 | Module | Contents |
 | --- | --- |
 | `fireweave-sdk` | `Fireweave.init` (the entry point), `FireweaveRuntime`, `FireweaveClient` (`controlPoints()`/`flags()`, `registerTarget`), `FireweaveRemoteAdapter`, `FireweaveLocalAdapter`, canonical types — layered into `ai.fireweave.sdk.{domain,application,infrastructure}`. Zero runtime dependencies. |
-| `fireweave-testing` | `InMemoryAdapter` and the conformance runner (never published — `maven.deploy.skip=true`). |
+| `fireweave-testing` | `InMemoryAdapter` and the conformance runner (not published — `central.skipPublishing=true`). |
 
 ## Direct client (control points)
 
@@ -100,11 +83,6 @@ FireweaveConfig config = FireweaveConfig.builder()
     .build();
 FireweaveRuntime runtime = new FireweaveRuntime(config, new FireweaveRemoteAdapter());
 runtime.initialize();
-
-client.registerTarget("user_42", RegisterTargetOptions.builder()
-    .kind(TargetKind.USER)
-    .property("plan", JsonValue.of("pro"))
-    .build()); // never throws; check result.ok()
 ```
 
 Auth: `Authorization: Bearer <FW_PROJECT_API_KEY>`. Endpoints: `POST /v1/flags/evaluate`, `/v1/targets/register`.
@@ -160,5 +138,4 @@ The 15 PascalCase kinds live in `ErrorKind`. Evaluation never throws; `registerT
 
 ## Deviations & blockers
 
-1. **`ai.fireweave` Maven Central namespace** is not verified. Publication workflows fail closed without secrets. Do not treat the GAV as published.
-2. **Long-clamp:** the integer resolver is 32-bit `int`. Fixture `eval-int-beyond-safe-integer` is skipped-with-documented-limitation.
+1. **Long-clamp:** Java's default Long-via-double path cannot losslessly represent integers beyond 2^53-1, so fixture `eval-int-beyond-safe-integer` is skipped-with-documented-limitation.

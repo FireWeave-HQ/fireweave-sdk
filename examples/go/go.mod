@@ -4,5 +4,4 @@ go 1.25.13
 
 require github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2 v2.0.0
 
-// The SDK module is not published yet; resolve it from the sibling path.
 replace github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2 => ../../sdks/go

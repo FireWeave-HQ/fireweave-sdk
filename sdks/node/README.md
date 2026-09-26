@@ -110,122 +110,12 @@ The SDK reads no environment variables (spec/modes.md) — every option is an ex
 | --- | --- | --- |
 | `apiUrl` | `remote` | fw-server base URL (required) |
 | `apiKey` | `remote` | Fireweave project key (`project-api-key_…`) (required) |
-| `allowedHosts` | `remote` | SSRF allowlist override; defaults to the `apiUrl` host plus loopback |
+| `allowedHosts` | `remote` | SSRF allowlist override |
 | `local.controlPoints` | `local` | seeded boolean overrides; a present key resolves `STATIC`, an absent key misses to the caller's default with reason `DEFAULT` |
-
-## Upgrading from v2.0 to 2.1
-
-**Only one change is mandatory.** If you imported the direct vendor adapter, swap it. Everything else from v2 still works, so most of this section exists to tell you what you *don't* have to do.
-
-### Does this affect me?
-
-```bash
-# Mandatory to fix (any hit ⇒ migration required)
-rg -n "@fireweaveai/server-sdk/posthog|PostHogAdapter"
-rg -n '"posthog-node"' package.json
-
-# Configuration that moves
-rg -n "POSTHOG_HOST|POSTHOG_API_KEY|POSTHOG_PROJECT_API_KEY"
-```
-
-No hits? Bump the version; you are done.
-
-### 1. Swap the adapter (required)
-
-```ts
-// before
-import { PostHogAdapter } from '@fireweaveai/server-sdk/posthog';
-const adapter = new PostHogAdapter({
-  projectApiKey: process.env.POSTHOG_API_KEY,
-  host: process.env.POSTHOG_HOST,
-  featureFlagsRequestTimeoutMs: 3000,
-});
-
-// after
-import { initFireweave } from '@fireweaveai/server-sdk';
-const fireweave = await initFireweave({
-  mode: 'remote',
-  apiUrl: process.env.FW_API_URL!,
-  apiKey: process.env.FW_PROJECT_API_KEY!,
-});
-```
-
-| v2 option | 2.1 |
-| --- | --- |
-| `projectApiKey` (`phc_…`) | `apiKey` (`project-api-key_…`) |
-| `host` | `apiUrl` |
-| `featureFlagsRequestTimeoutMs` | `requestTimeoutMs` (adapter-level; `initFireweave` does not expose it directly — use *Lower-level construction* above if you need it) |
-| `shutdownTimeoutMs`, `allowedHosts` | unchanged |
-| `secretApiKey`, `onlyEvaluateLocally`, `featureFlagsPollingInterval`, `waitForLocalDefinitions`, `client` | **no equivalent** — see §4 |
-
-Then:
-
-- Remove `posthog-node` from `package.json` — **unless** you use it for your own analytics capture. Check with `rg "posthog-node"` first.
-- Update deployment config, secret stores, and CI: `POSTHOG_HOST` → `FW_API_URL`, `POSTHOG_API_KEY` → `FW_PROJECT_API_KEY`. **The new key is a Fireweave project key, not a re-labelled vendor key** — it has to be issued from your Fireweave project.
-
-### 2. What you do *not* have to change
-
-| v2 | Status in 2.1 |
-| --- | --- |
-| `client.flags.evaluate` / `getBooleanValue` / … | works — the same object as `client.controlPoints` |
-| `new InMemoryAdapter({ flags })` | unchanged |
-| `Decision.flagKey`, `flagMetadata` | unchanged |
-| `FlagValueType`, `InMemoryFlagDefinition`, `ExpectedFlagType` | unchanged |
-| every other v2 export | unchanged |
-
-`client.flags === client.controlPoints` — a getter returning the same instance, not a copy. It is
-marked `@deprecated` in JSDoc and **is not scheduled for removal in the 2.x line**; retiring it
-would need its own major and its own ADR. Renaming your call sites is cosmetic and can be
-deferred indefinitely. Accessing `client.flags` is silent at runtime — no log line, no env gate —
-because the SDK reads no environment variables regardless (spec/modes.md); the deprecation is
-conveyed by JSDoc only.
-
-### 3. Two type-level narrowings
-
-`'posthog'` is no longer a member of `BackendAdapter['name']` or `Capabilities['runtime']['backend']`.
-
-- A custom adapter declaring `name: 'posthog'` → use `'other'`.
-- An exhaustive `switch` on `backend` with a `case 'posthog'` → that arm is unreachable; remove it.
-
-Both are rare, and `tsc` points straight at them.
-
-### 4. Local evaluation is gone
-
-v2's vendor adapter could evaluate in-process from polled definitions with a secret key. 2.1 has no equivalent: caching is fw-server's concern, and both shipped adapters report `localEvaluation: false`.
-
-If in-process evaluation is load-bearing for you — an air-gapped service, or a latency floor below one network hop — **stay on v2 for now and tell us**. The interface seam (`AdapterRuntimeFeatures.localEvaluation` / `localOnly`, `AdapterResolution.fromCache`, the `STALE` reason) is deliberately preserved for a future Fireweave-native cache ([ADR-0006](../../docs/adr/0006-node-drops-direct-posthog-adapter.md)).
-
-### 5. Worth re-checking
-
-1. **`DEFAULT_ALLOWED_HOSTS` changed contents** while keeping its name. It now lists Fireweave hosts, not vendor hosts. Code doing `allowedHosts: [...DEFAULT_ALLOWED_HOSTS, 'mine.example']` keeps compiling and silently stops permitting the old endpoints. That is intended — verify it matches your deployment.
-2. **Move durable attributes to `registerTarget`.** Attributes you resend on every evaluation can be registered once per login. Per-request attributes still override stored properties, so the two compose — this is an optimization, not a cutover. Note that `registerTarget` returns `{ ok }` rather than throwing (it sits in sign-in paths); log `ok: false`, because a silently unregistered target is exactly how targeting rules end up matching nobody.
-
-### 6. Verify
-
-```bash
-npm install @fireweaveai/server-sdk@latest
-npx tsc --noEmit                                  # catches §3
-<your test command>
-rg -n "@fireweaveai/server-sdk/posthog|PostHogAdapter"   # expect no hits
-```
-
-At runtime, a boolean read against a known-on control point should resolve `true` with reason
-`TARGETING_MATCH`/`SPLIT`/`STATIC` (never `ERROR`); if it resolves the default with reason
-`ERROR`, the remote adapter was never wired in correctly — check `apiUrl`/`apiKey`.
-
-### Rollback
-
-```bash
-npm install @fireweaveai/server-sdk@2   # re-add posthog-node if you removed it
-```
-
-Revert the adapter swap and the env vars. No data migration is involved, so rollback is code and config only.
-
----
 
 ## Renaming `flags` → `controlPoints` safely
 
-If you do decide to adopt the new name, scope the edit. `flags` is an ordinary word: your repo very likely contains feature-flag code, config keys, DB columns, and `flags` variables that have nothing to do with this SDK.
+`client.flags` is a deprecated alias of `client.controlPoints` — identical, permanent, and not scheduled for removal, so renaming is optional. To adopt the new name, scope the edit. `flags` is an ordinary word: your repo very likely contains feature-flag code, config keys, DB columns, and `flags` variables that have nothing to do with this SDK.
 
 **Rename only `.flags` accesses whose receiver is provably a `FireweaveClient`** — traceable to a `new FireweaveClient(...)`/`initFireweave(...)` call, an imported binding assigned from one, or a parameter annotated `FireweaveClient`.
 
@@ -234,8 +124,7 @@ Never rename:
 | Looks similar | Why it stays |
 | --- | --- |
 | `new InMemoryAdapter({ flags: … })` | SDK option key, unchanged |
-| `flagKey`, `flagMetadata`, `FlagValueType`, `InMemoryFlagDefinition` | SDK API, unchanged |
-| `features.flags` in the capability matrix | still `true`; removing it fails conformance |
+| `flagKey`, `FlagValueType`, `InMemoryFlagDefinition` | SDK API, unchanged |
 | your own `flags` variables, `featureFlags`, CLI `--flags`, `flags` columns | not this SDK |
 | another vendor's SDK (`ldClient.variation`, flagd, Unleash) | not this SDK |
 
@@ -256,7 +145,7 @@ deno run --allow-read scripts/smoke-runtimes.mjs
 
 ## Documentation
 
-Full docs live in [`docs/`](../../docs/): [quickstart](../../docs/quickstart.md) · [remote adapter](../../docs/remote.md) · [runtimes](../../docs/runtimes.md) · [testing](../../docs/testing.md) · [migration](../../docs/migration.md) · [troubleshooting](../../docs/troubleshooting.md) · [ADRs](../../docs/adr/).
+Full docs live in [`docs/`](../../docs/): [remote adapter](../../docs/remote.md) · [runtimes](../../docs/runtimes.md) · [testing](../../docs/testing.md) · [troubleshooting](../../docs/troubleshooting.md) · [ADRs](../../docs/adr/).
 
 ## License
 

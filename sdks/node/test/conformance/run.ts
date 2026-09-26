@@ -68,7 +68,7 @@ import {
   type JsonValue,
   type LifecycleState,
 } from '@fireweaveai/server-sdk';
-// The test-server stub is plain JS by design (test-server/implementation/PLAN.md).
+// The test-server stub is plain JS by design.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore -- no type declarations for the stub
 import { startTestServer } from '../../../../test-server/implementation/server.mjs';
@@ -239,7 +239,7 @@ function deepEqual(a: unknown, b: unknown): boolean {
 const META_EXPECT_KEYS = new Set(['errorMessageMustNotContain', 'recordedMessageMustNotContain']);
 
 /**
- * Subset match (harness.md, getCapabilities exception): every declared key
+ * Subset match: every declared key
  * must match exactly; undeclared keys in `actual` are permitted.
  */
 function subsetMatch(expected: unknown, actual: unknown): boolean {

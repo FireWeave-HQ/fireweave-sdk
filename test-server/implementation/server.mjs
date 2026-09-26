@@ -1,8 +1,8 @@
 /**
- * Fireweave deterministic protocol stub (test-server/README.md,
- * implementation/PLAN.md). Loopback-only Node HTTP server; no dependencies.
+ * Fireweave deterministic protocol stub. Loopback-only Node HTTP server; no
+ * dependencies.
  *
- * PostHog-protocol endpoints (advanced / PostHogAdapter):
+ * PostHog-protocol endpoints (advanced):
  *   POST /flags/?v=2 (and /flags?v=2)      — flags v2 evaluation body
  *   GET  /flags/definitions?token=...      — local-eval definitions (Bearer auth)
  *   POST /batch/ (and /batch)              — event capture, stored in memory

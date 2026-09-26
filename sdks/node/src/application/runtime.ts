@@ -80,7 +80,7 @@ export interface EvaluateOptions {
 
 function validateConfig(config: FireweaveRuntimeConfig): void {
   if (config.host !== undefined) {
-    // Allowlist is ON by default (release-blockers H-1): undefined/empty
+    // Allowlist is ON by default: undefined/empty
     // allowedHosts falls back to the canonical Fireweave + loopback list.
     assertHostAllowed(config.host, config.allowedHosts);
   }

@@ -71,7 +71,7 @@ export interface AdapterRuntimeFeatures {
 }
 
 /**
- * Backend adapter boundary (docs/architecture.md §layers). Adapters translate
+ * Backend adapter boundary. Adapters translate
  * canonical requests to vendor protocols; they never see OpenFeature types.
  */
 export interface BackendAdapter {

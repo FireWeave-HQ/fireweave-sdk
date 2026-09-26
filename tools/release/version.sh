@@ -44,7 +44,7 @@
 # removes the race entirely, for every ecosystem, not just the ones where it
 # would otherwise bite.
 #
-# Two mandated behaviors (IMPLEMENTATION-PLAN.md Phase 7 / task-14 brief):
+# Two mandated behaviors:
 #   - any existing prerelease is stripped BEFORE bumping (1.4.0-staging.3 +
 #     patch = 1.4.1, never 1.4.0-staging.4) — strip_prerelease() + semver_bump().
 #   - the staging iteration N is read from the ecosystem's registry, not a

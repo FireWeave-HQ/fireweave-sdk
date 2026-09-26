@@ -89,7 +89,7 @@ jobs:
             fi
           done
           if [ "$missing" -ne 0 ]; then
-            echo "::error::Maven Central publication is blocked until namespace verification and secrets are provisioned. See docs/java-parity-plan.md and .github/RELEASE.md."
+            echo "::error::Maven Central publication is blocked until secrets are provisioned. See .github/RELEASE.md."
             exit 1
           fi
 
@@ -178,5 +178,5 @@ jobs:
       - name: List published coordinates
         run: |
           echo "Published (or staged) ai.fireweave:fireweave-sdk:${{ steps.ver.outputs.version }}"
-          echo "Also: fireweave-java-parent (parent POM; fireweave-testing is maven.deploy.skip=true — conformance harness only, never published)"
+          echo "Also: fireweave-java-parent (parent POM; fireweave-testing is central.skipPublishing=true — conformance harness only, not published)"
           echo "Portal: https://central.sonatype.com/publishing"

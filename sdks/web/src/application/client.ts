@@ -12,9 +12,7 @@
  *
  * One divergence from the server SDK, and it is intentional: `controlPoints.*`
  * is SYNCHRONOUS here and promise-returning on the server. That follows from
- * the OpenFeature web contract — browser reads happen in render paths — and
- * is recorded in docs/compatibility.md as a surface difference rather than a
- * gap.
+ * the OpenFeature web contract — browser reads happen in render paths.
  */
 import { FireweaveError } from '../domain/errors.js';
 import type { ContextInput } from '../domain/context.js';

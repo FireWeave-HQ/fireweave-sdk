@@ -2,7 +2,7 @@
 
 - **Status:** Normative for SDK v1
 - **Applies to:** every language SDK in `sdks/`
-- **Validated by:** `conformance/surface/` (surface parity) and `conformance/fixtures/` (behaviour)
+- **Validated by:** `conformance/surface/` (surface parity)
 
 A **control point** is a named decision the product can change without a deploy. This
 document fixes the surface every SDK exposes for reading one. It says nothing about how a

@@ -99,11 +99,7 @@ python -m venv .venv && .venv/bin/pip install -e '.[dev]'
 .venv/bin/pytest    # unit tests
 ```
 
-`conformance/runner.py` (the `contracts/`-fixture harness) still targets the
-pre-v1 surface and is not run by `pytest` today (`tests/test_conformance.py`
-skips it) — its rewrite for the v1 control-points surface is separate,
-cross-language follow-up work. `conformance/surface/control-points.surface.json`
-is the parity gate this package satisfies.
+`conformance/surface/control-points.surface.json` is the parity gate this package satisfies.
 
 ## License
 

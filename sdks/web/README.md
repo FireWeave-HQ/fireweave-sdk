@@ -4,7 +4,7 @@ Fireweave control points for the browser ([ADR-0009](../../docs/adr/0009-browser
 **control points** and **target registration**, the two v1 capabilities
 ([spec/control-points.md](../../spec/control-points.md) "Scope of v1"; spec v0.1.0).
 
-- **Remote-only and secret-free by construction.** No local evaluation, no vendor SDK dependency, no environment reads, and vendor/secret key shapes are rejected at the door.
+- **Secret-free by construction.** No vendor SDK dependency, no environment reads, and vendor/secret key shapes are rejected at the door.
 - **Reads are synchronous** — `controlPoints.getBooleanValue(...)` returns a value directly, no `await`, safe inside a render path. `initFireweave` prefetches a decision cache once per context; reads afterward are a pure in-memory lookup.
 - **Bun is the toolchain.** Tested on Bun only — this package ships no server entry point, reads no environment, and imports no runtime built-ins, so Node/Deno are not target runtimes for it.
 
@@ -84,7 +84,7 @@ The SDK reads no environment variables — every option is an explicit argument 
 | --- | --- | --- |
 | `apiUrl` | `remote` | fw-server base URL (required) |
 | `apiKey` | `remote` | Fireweave **project** key — public by construction, never a secret (required) |
-| `allowedHosts` | `remote` | SSRF allowlist override; defaults to the `apiUrl` host plus loopback |
+| `allowedHosts` | `remote` | SSRF allowlist override |
 | `context` | both | initial evaluation context (e.g. an anonymous `targetingKey`) to prefetch under |
 | `local.controlPoints` | `local` | seeded boolean overrides; a present key resolves `STATIC`, an absent key misses to the caller's default with reason `DEFAULT` |
 

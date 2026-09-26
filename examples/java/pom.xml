@@ -11,7 +11,7 @@
 
   <name>Fireweave Java example (reactor)</name>
   <description>
-    Runnable Fireweave Java SDK demo. Builds the unpublished SDK modules from this
+    Runnable Fireweave Java SDK demo. Builds the SDK modules from this
     repository via the Maven reactor (no Maven Central, no prior `mvn install`).
     Not a published artifact.
 

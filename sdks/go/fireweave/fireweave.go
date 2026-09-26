@@ -4,7 +4,7 @@
 // validators), application/ (the runtime engine and Client surface), and
 // infrastructure/adapters/{inmemory,local,remote} (the BackendAdapter
 // implementations) — mirroring node's domain/application/infrastructure
-// split (docs/architecture.md §layers) and the same split ratified for
+// split and the same split ratified for
 // java (sdks/java, Task 8). This package re-exports the public surface
 // those layers assemble into, via type aliases and thin wrapper functions,
 // so:

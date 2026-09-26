@@ -17,9 +17,12 @@ body:
       multiple: true
       options:
         - Node
+        - Web
         - Python
         - Go
         - Java
+        - Rust
+        - Swift
         - spec / contracts / test-server
     validations:
       required: true
@@ -27,8 +30,7 @@ body:
     id: version
     attributes:
       label: SDK version / commit
-      description: Packages are unpublished, so a git commit SHA is best.
-      placeholder: "0.1.0 @ 3c4e004"
+      placeholder: "2.3.0"
     validations:
       required: true
   - type: dropdown
@@ -37,9 +39,8 @@ body:
       label: Adapter and mode
       options:
         - InMemoryAdapter
-        - PostHog — remote evaluation (phc_ key)
-        - PostHog — local evaluation (phs_/phx_ key)
-        - PostHog — local-only mode
+        - "Remote mode — fw-server (mode: 'remote')"
+        - "Local mode — seeded map, no network (mode: 'local')"
         - test-server stub
         - Other / not adapter-related
     validations:
@@ -48,7 +49,7 @@ body:
     id: runtime
     attributes:
       label: Runtime versions
-      placeholder: "Node 20.20 / Python 3.12 / Go 1.25 / Temurin 21; OpenFeature SDK version"
+      placeholder: "Node 20.20 / Python 3.12 / Go 1.25 / Temurin 21"
   - type: textarea
     id: what-happened
     attributes:
@@ -64,9 +65,8 @@ body:
     attributes:
       label: Minimal reproduction
       description: |
-        Ideally a snippet against the `InMemoryAdapter` or the `test-server/` stub, so no
-        PostHog account is needed to reproduce (see docs/testing.md). Failing test cases
-        get fixed fastest.
+        Ideally a snippet against the `InMemoryAdapter` or the `test-server/` stub
+        (see docs/testing.md). Failing test cases get fixed fastest.
       render: shell
     validations:
       required: true

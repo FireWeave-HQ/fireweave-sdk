@@ -1,5 +1,5 @@
 # Fireweave SDK code ownership.
-# Team handles are placeholders pending org setup (ADR-0001 package-naming caveat applies).
+# Team handles are placeholders pending org setup.
 # GitHub semantics: for overlapping paths, the LAST matching rule wins, so
 # broad rules come first and specific carve-outs come after.
 
@@ -13,10 +13,8 @@
 
 # Architecture decisions require spec owners + maintainers (override /docs/).
 /docs/adr/                  @FireWeave-HQ/sdk-spec @FireWeave-HQ/sdk-maintainers
-/docs/architecture.md       @FireWeave-HQ/sdk-spec @FireWeave-HQ/sdk-maintainers
 
 # Security & privacy docs (override /docs/).
-/docs/security/             @FireWeave-HQ/sdk-security
 /docs/privacy.md            @FireWeave-HQ/sdk-security
 /SECURITY.md                @FireWeave-HQ/sdk-security
 

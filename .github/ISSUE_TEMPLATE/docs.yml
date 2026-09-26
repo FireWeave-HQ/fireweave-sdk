@@ -7,8 +7,7 @@ body:
     id: location
     attributes:
       label: Which document?
-      description: Path and section, e.g. `docs/posthog.md` → "Per-language initialization".
-      placeholder: docs/quickstart.md
+      description: Path and section.
     validations:
       required: true
   - type: dropdown
@@ -29,8 +28,6 @@ body:
       label: What's wrong, and what should it say?
       description: |
         For "incorrect": show the doc's claim and the actual behavior (snippet + output).
-        Doc snippets are validated against the real SDKs, so a mismatch is a real bug either
-        in the docs or in the code — we want to know which.
     validations:
       required: true
   - type: checkboxes

@@ -1,6 +1,6 @@
 # Security Policy
 
-This file covers **how to report vulnerabilities**. The project's threat model, redaction rules, and security design documentation live in [`docs/security/`](docs/security/).
+This file covers **how to report vulnerabilities**.
 
 ## Reporting a vulnerability
 
@@ -23,15 +23,13 @@ Include: affected language SDK(s) and commit/version, a description of the issue
 
 In scope:
 
-- The four language SDKs (`sdks/`), including secret handling and redaction (`phc_`/`phs_`/`phx_` keys, bearer tokens), SSRF/host-allowlist enforcement, context-bounds enforcement, and the never-throw evaluation contract.
+- The language SDKs (`sdks/`), including secret handling and redaction (`phc_`/`phs_`/`phx_` keys, bearer tokens), SSRF/host-allowlist enforcement, context-bounds enforcement, and the never-throw evaluation contract.
 - The conformance/test infrastructure (`test-server/`, `contracts/`) insofar as it could compromise consumers.
 
 Out of scope:
 
-- PostHog's own services and SDKs (report to [PostHog](https://posthog.com/security)).
 - Vulnerabilities requiring a malicious dependency or compromised build environment, unless this repository pins/validates incorrectly.
-- Use of secret keys (`phs_`/`phx_`) in browsers or other untrusted runtimes — this is explicitly unsupported (ADR-0004; local evaluation is server-only).
 
 ## Handling secrets in reports and fixtures
 
-Never include real project or personal API keys anywhere in this repository. Test fixtures use obviously fake keys (`phc_example`, `phc_EXAMPLE…`). Error-message redaction rules are specified in [`contracts/errors.md`](contracts/errors.md).
+Never include real project or personal API keys anywhere in this repository. Test fixtures use obviously fake keys. Error-message redaction rules are specified in [`contracts/errors.md`](contracts/errors.md).

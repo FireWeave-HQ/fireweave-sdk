@@ -7,8 +7,9 @@
 # hard-disabled everywhere; see release.yml + RELEASE.md).
 #
 # Runtime policy (ADR-0008): the Node SDK is published as a runtime-agnostic
-# ESM package and gated on Node, Bun, and Deno. Node and Bun run the full suite;
-# Deno runs a typecheck plus the cross-runtime smoke (see the deno job comment).
+# ESM package and gated on Node, Bun, and Deno. Node runs the full suite; Bun
+# runs the cross-runtime smoke (see the bun job comment); Deno runs a typecheck
+# plus the cross-runtime smoke (see the deno job comment).
 #
 # Lint policy (matches the code as written — no invented configs):
 #   node   : tsc --noEmit only (no eslint/prettier config exists)
@@ -103,8 +104,8 @@ jobs:
         run: bun scripts/smoke-runtimes.mjs
 
   # ---------------------------------------------------------------- deno
-  # Deno lacks the Node globals `Buffer` and `process` outside npm compatibility
-  # mode, which is why src/ uses TextEncoder and src/env.ts#readEnv instead.
+  # Deno lacks the Node global `Buffer` outside npm compatibility mode, which is
+  # why src/ uses TextEncoder instead.
   #
   # The SDK is zero-dependency (no bare npm specifiers anywhere in dist/), so
   # both the typecheck below and the smoke script's deep RELATIVE imports need

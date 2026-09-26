@@ -12,8 +12,7 @@ Authorization: Bearer <Fireweave project/runtime key>
 Also accepted: `x-api-key: <key>`.
 
 **Current key:** `project-api-key_…` (`FW_PROJECT_API_KEY`), same family as deploy-beacon attest.
-MVP fw-server verifies with existing attest permissions (`attest:write`). Expanded scopes
-(`flags:evaluate`, `events:write`) or a dedicated `fw_runtime_…` prefix are TBD on the platform.
+MVP fw-server verifies with existing attest permissions (`attest:write`).
 
 Never send PostHog `phc_` / `phs_` / `phx_` keys on this path.
 

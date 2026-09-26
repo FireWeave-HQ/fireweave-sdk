@@ -1,6 +1,6 @@
 # Fireweave SDK Conformance Contracts
 
-Canonical cross-language fixtures, error taxonomy, and harness contract for the Fireweave polyglot OpenFeature providers (`sdks/{node,python,go,java}`).
+Canonical cross-language fixtures, error taxonomy, and harness contract.
 
 Language agents **consume** this tree; they must not edit it. Spec schemas live in `spec/` (Agent D) and are the **source of truth**; fixtures conform to spec. Context bounds were ratified by orchestrator arbitration (Phase 2 exit) — see the ratified limits table below.
 
@@ -10,7 +10,7 @@ Language agents **consume** this tree; they must not edit it. Spec schemas live 
 contracts/
   README.md                 # this file
   errors.md / errors.json   # Fireweave error taxonomy ↔ OpenFeature codes
-  harness.md                # per-language runners, comparator, OF Gherkin slot-in
+  harness.md                # per-language runners, comparator
   evaluation/               # typed evaluation success & failure (14 fixtures)
   context/                  # targeting key, merge, identity, bounds (14 fixtures)
   lifecycle/                # init / shutdown / replace / domains (9 fixtures)
@@ -183,12 +183,10 @@ Silent skip of a `pass` fixture is forbidden. Skips require the documented-limit
 1. Discover `contracts/<suite>/*.json` (exclude `README` / non-JSON).
 2. For each fixture, set up the in-memory / test-server backend from `given` (flags, state, fault mode).
 3. Apply context layers in OpenFeature merge order: **global → transaction → client → invocation** (transaction optional; fixtures omit unless testing it).
-4. Invoke `when.operation` through the **real** OpenFeature client + Fireweave provider (not a mock of the provider).
+4. Invoke `when.operation` through the SDK under test's **real** runtime + client (`controlPoints.evaluate` / `invokeCapability`, or runtime `initialize` / `shutdown` for lifecycle fixtures) — not a mock of the client. See [`harness.md`](./harness.md).
 5. Capture evaluation details / lifecycle outcome / extension result.
 6. Normalize per rules above; compare to `expect`.
 7. Emit one row per `(fixture.id, language)` into the compatibility report.
-
-Go harnesses must flatten context the same way the Go OF SDK does before asserting provider-boundary fixtures; evaluation fixtures assert **client-visible** details (post-SDK), so flattening is an implementation detail.
 
 ## Compatibility-report format
 
@@ -214,7 +212,7 @@ Harnesses write (or CI aggregates) a report:
       "suite": "evaluation",
       "language": "node",
       "status": "skipped-with-documented-limitation",
-      "limitation": "Node OpenFeature exposes a single number resolver; integers beyond 2^53-1 are not lossless.",
+      "limitation": "Node single number resolver and Java default Long-via-double path cannot losslessly represent integers beyond 2^53-1; Fireweave documents int reliability within Number.MAX_SAFE_INTEGER cross-language.",
       "message": null
     }
   ],
@@ -252,5 +250,3 @@ Oversized / over-deep inputs must yield `InvalidContext` (OF `INVALID_CONTEXT`) 
 
 - Error taxonomy: [`errors.md`](./errors.md) / [`errors.json`](./errors.json)
 - Harness runners: [`harness.md`](./harness.md)
-- Local PostHog protocol stub: [`../test-server/README.md`](../test-server/README.md)
-- Phase 1 decisions: [`../docs/orchestration/decision-brief.md`](../docs/orchestration/decision-brief.md)

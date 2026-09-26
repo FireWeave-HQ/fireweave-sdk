@@ -7,7 +7,7 @@
 // domain imports nothing from application/ or infrastructure/ — it is pure
 // computation (no I/O, no ambient state), so it is reachable and testable
 // offline, mirroring node's domain/ and java's ai.fireweave.sdk.domain
-// package (docs/architecture.md §layers; the layering guard in the
+// package (the layering guard in the
 // fireweave facade package enforces this mechanically).
 package domain
 

@@ -1,6 +1,5 @@
 /**
- * Layering guard (Phase 1.4, IMPLEMENTATION-PLAN.md "Relayer to `domain/` ·
- * `application/` · `infrastructure/`"):
+ * Layering guard:
  *
  *  - the SDK stays dependency-free — `package.json`'s `dependencies` never
  *    grows beyond zero entries (peerDependencies/devDependencies are a
