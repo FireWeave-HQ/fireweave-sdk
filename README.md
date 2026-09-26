@@ -1,75 +1,32 @@
-# Fireweave SDK
+<a href="https://app.fireweave.ai">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/banner-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset=".github/assets/banner-light.png">
+    <img alt="Fireweave — agents write the code. We watch every rollout, under control." src=".github/assets/banner-light.png" width="100%">
+  </picture>
+</a>
 
-**The AI Release Engineer SDK.** Server-side (and browser) release safety for progressive
-delivery: define **control points** in your code and **register** who you are targeting. Exactly
-two v1 capabilities ([spec/control-points.md](spec/control-points.md) "Scope of v1") — nothing
-else is in scope, and no SDK exposes an OpenFeature provider.
+<p align="center">
+  <a href="https://www.npmjs.com/package/@fireweaveai/server-sdk"><img alt="node" src="https://img.shields.io/npm/v/@fireweaveai/server-sdk?label=node&logo=nodedotjs&style=flat&labelColor=0E0E10&color=ED5502&logoColor=white"></a>
+  <a href="https://www.npmjs.com/package/@fireweaveai/web-sdk"><img alt="web" src="https://img.shields.io/npm/v/@fireweaveai/web-sdk?label=web&logo=javascript&style=flat&labelColor=0E0E10&color=ED5502&logoColor=white"></a>
+  <a href="https://pypi.org/project/fireweave/"><img alt="python" src="https://img.shields.io/pypi/v/fireweave?label=python&logo=python&style=flat&labelColor=0E0E10&color=ED5502&logoColor=white"></a>
+  <a href="https://pkg.go.dev/github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2"><img alt="go" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fproxy.golang.org%2Fgithub.com%2F%21fire%21weave-%21h%21q%2Ffireweave-sdk%2Fsdks%2Fgo%2Fv2%2F%40latest&query=%24.Version&label=go&logo=go&style=flat&labelColor=0E0E10&color=ED5502&logoColor=white"></a>
+  <a href="https://central.sonatype.com/artifact/ai.fireweave/fireweave-sdk"><img alt="java" src="https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Frepo1.maven.org%2Fmaven2%2Fai%2Ffireweave%2Ffireweave-sdk%2Fmaven-metadata.xml&label=java&logo=openjdk&style=flat&labelColor=0E0E10&color=ED5502&logoColor=white"></a>
+  <a href="https://crates.io/crates/fireweave"><img alt="rust" src="https://img.shields.io/crates/v/fireweave?label=rust&logo=rust&style=flat&labelColor=0E0E10&color=ED5502&logoColor=white"></a>
+  <a href="sdks/swift"><img alt="swift" src="https://img.shields.io/badge/swift-from%20source-ED5502?logo=swift&style=flat&labelColor=0E0E10&logoColor=white"></a>
+</p>
 
-Available for **Node.js, web (browser), Python, Go, Java, Rust, and Swift**. The Node package
-runs on **Node, Bun, and Deno**.
+**Fireweave is the AI release engineer for teams shipping with coding agents.** Every change rolls out behind a control point, one step at a time, with guardrails watching real users — and if something breaks, Fireweave pauses or rolls it back before most users ever see it. It's the only way to ship as fast as your agents write code, without the fear of breaking production.
 
-```
-Control points  evaluate boolean / string / number / object decisions, never throw
-Targets         register durable targeting properties once, at login
-```
+## Quick start
 
-Applications authenticate with a **Fireweave project key** and talk to **fw-server**. Which
-analytics or flag backend fw-server forwards to is fw-server's concern — no third-party SDK,
-key, or hostname ever enters your process ([ADR-0005](docs/adr/0005-fireweave-proxy-backend.md),
-[ADR-0006](docs/adr/0006-node-drops-direct-posthog-adapter.md)).
-
-> **Status: pre-release.** Spec `0.1.0`. Release channels and per-SDK publish
-> state are documented in [RELEASE.md](.github/RELEASE.md). **License:** [MIT](LICENSE).
-
-## Install
-
-Publish state differs per language — install what is released, build the rest
-from a checkout. Staging builds carry the channel in the version itself
-(`X.Y.Z-staging.N`, or a PEP 440 alpha for Python), so `npm ls` / `pip show`
-always tell the truth about what you have.
-
-**Python** — released on PyPI:
+<details>
+<summary><b>Node.js</b> · Bun · Deno</summary>
 
 ```bash
-pip install fireweave
+npm install @fireweaveai/server-sdk
+# bun add @fireweaveai/server-sdk  ·  deno add npm:@fireweaveai/server-sdk
 ```
-
-**Java** — released on Maven Central at `0.1.0`; the 2.x line is not published yet:
-
-```xml
-<dependency>
-  <groupId>ai.fireweave</groupId>
-  <artifactId>fireweave-sdk</artifactId>
-  <version>0.1.0</version>
-</dependency>
-```
-
-**Node / web** — staging builds only, under the `next` dist-tag:
-
-```bash
-npm install @fireweaveai/server-sdk@next   # or: bun add …
-npm install @fireweaveai/web-sdk@next
-```
-
-```ts
-// Deno needs no install step
-import { initFireweave } from 'npm:@fireweaveai/server-sdk';
-```
-
-**Go** — resolved from the module proxy, with the `/v2` path suffix Go requires
-at major ≥ 2:
-
-```bash
-go get github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2
-```
-
-`sdks/go/v2.2.0` does not resolve and never did — it was tagged from a revision
-whose `go.mod` still declared the unsuffixed module path. Pin `v2.3.0` or later.
-
-**Rust, Swift, Dart** — not published to any registry yet. Build from a
-checkout; see each SDK's own README (`sdks/<lang>/README.md`).
-
-## Quickstart
 
 ```ts
 import { initFireweave } from '@fireweaveai/server-sdk';
@@ -80,123 +37,244 @@ const fireweave = await initFireweave({
   apiKey: process.env.FW_PROJECT_API_KEY!,
 });
 
-// Once per login: the durable facts your targeting rules match on.
-await fireweave.registerTarget('user_42', {
-  kind: 'user',
-  properties: { plan: 'pro', region: 'eu-west', betaOptIn: true },
-});
+// Once per user: the facts your targeting rules match on.
+await fireweave.registerTarget('user_42', { kind: 'user', properties: { plan: 'pro' } });
 
 // Per request: evaluate a control point.
 const enabled = await fireweave.controlPoints.getBooleanValue('new-checkout', false, {
   targetingKey: 'user_42',
 });
+console.log('new-checkout:', enabled);
 
 await fireweave.shutdown();
 ```
 
-`registerTarget` never throws — it sits in sign-in paths, and a targeting call must not break a
-login. It returns `{ ok }` so a careful caller can log a failure, because a silently unregistered
-target is exactly how targeting rules end up matching nobody.
+</details>
 
-Full walkthroughs, including Python, Go, Java, Rust, and Swift: **[docs/quickstart.md](docs/quickstart.md)**. Runnable examples: **[`examples/`](examples/)** (offline by default).
+<details>
+<summary><b>Web</b> (browser)</summary>
 
-## Configuration
-
-Every SDK reads no environment variables — credentials and options are explicit arguments to the
-single entry point (`initFireweave` / `init_fireweave` / `Fireweave.init` / `fireweave.Init`).
-
-| Option | Description |
-| --- | --- |
-| `apiUrl` | fw-server base URL (required for remote mode) |
-| `apiKey` | Fireweave project key (`project-api-key_…`) (required for remote mode) |
-| `allowedHosts` | SSRF allowlist override; defaults to the configured host plus loopback |
-
-`https` is required for anything that leaves the machine; plain `http` is permitted on loopback only, for the local test stub.
-
-## Testing
-
-`InMemoryAdapter` gives deterministic, offline evaluation with no network and no backend:
+```bash
+npm install @fireweaveai/web-sdk
+```
 
 ```ts
-import { FireweaveClient, FireweaveRuntime, InMemoryAdapter } from '@fireweaveai/server-sdk';
+import { initFireweave } from '@fireweaveai/web-sdk';
 
-const runtime = new FireweaveRuntime(new InMemoryAdapter({
-  flags: {
-    'new-checkout': { type: 'boolean', enabled: true, value: true, variant: 'on' },
-    'checkout-theme': {
-      type: 'string', enabled: true, value: 'midnight', variant: 'midnight',
-      matchAttribute: { cohort: 'beta' },     // only the beta cohort matches
-    },
-  },
-}));
-const fireweave = new FireweaveClient(runtime);
-await fireweave.initialize();
+const fireweave = await initFireweave({
+  mode: 'remote',
+  apiUrl: 'https://app-server.fireweave.ai',
+  apiKey: 'YOUR_PROJECT_API_KEY',
+});
+
+// Register the user, then fetch their decisions.
+await fireweave.identify('user_42', { kind: 'user', properties: { plan: 'pro' } });
+
+// Reads are synchronous: safe inside a render path.
+const enabled = fireweave.controlPoints.getBooleanValue('new-checkout', false);
+console.log('new-checkout:', enabled);
+
+await fireweave.shutdown();
 ```
 
-Or the offline mode built into `initFireweave` (`{ mode: 'local', local: { controlPoints: { 'new-checkout': true } } }`) — no adapter construction required.
+</details>
 
-Patterns and the protocol test stub: **[docs/testing.md](docs/testing.md)**.
+<details>
+<summary><b>Python</b></summary>
 
-## Runtimes
-
-| Runtime | Minimum | CI |
-| --- | --- | --- |
-| Node.js | 20.20 | full suite on 20 and 24 |
-| Bun | 1.2 | full suite on 1.2 and latest |
-| Deno | 2.0 | typecheck + cross-runtime smoke on `v2.x` and canary |
-
-Zero runtime dependencies, no Node built-ins, no Node globals. Details and the coverage boundary: **[docs/runtimes.md](docs/runtimes.md)**.
-
-## Upgrading from v2
-
-Only one thing is mandatory: if you imported `PostHogAdapter` from `@fireweaveai/server-sdk/posthog`, switch to `FireweaveRemoteAdapter` (or `initFireweave({ mode: 'remote', ... })`). Everything else keeps working — `client.flags` still exists and is identical to `client.controlPoints`, and no type or option was renamed.
-
-Step-by-step, including what *not* to change and how to scope a `flags` → `controlPoints` rename safely: **[the Node module README](sdks/node/README.md#upgrading-from-v20-to-21)**. Cross-language migration notes: [docs/migration.md](docs/migration.md).
-
-## Documentation
-
-| Doc | Contents |
-| --- | --- |
-| [docs/quickstart.md](docs/quickstart.md) | Five-minute path per language |
-| [docs/remote.md](docs/remote.md) | The backend adapter, wire protocol, local stub |
-| [docs/runtimes.md](docs/runtimes.md) | Node / Bun / Deno support and what makes it portable |
-| [docs/testing.md](docs/testing.md) | `InMemoryAdapter` patterns and the protocol test server |
-| [docs/extensions.md](docs/extensions.md) | Pre-v1 release lifecycle / exposures / signals surface (pending rewrite — see note below) |
-| [docs/openfeature.md](docs/openfeature.md) | Pre-v1 OpenFeature provider docs (pending rewrite — no SDK exposes an OpenFeature provider in v1) |
-| [docs/identity.md](docs/identity.md) | Targeting keys, anonymous strategy, groups |
-| [docs/concepts.md](docs/concepts.md) | Decision model, reasons, error taxonomy |
-| [docs/lifecycle.md](docs/lifecycle.md) | Init, readiness, shutdown, after-shutdown behavior |
-| [docs/migration.md](docs/migration.md) | From v2; from a direct vendor SDK |
-| [docs/troubleshooting.md](docs/troubleshooting.md) | Common failure modes and what they mean |
-| [docs/compatibility.md](docs/compatibility.md) | Per-language version and feature matrix, known gaps |
-| [docs/versioning.md](docs/versioning.md) | Semver policy, spec version, deprecation policy |
-| [docs/architecture.md](docs/architecture.md) | Layers, lifecycle, data model, ADR index |
-| [docs/privacy.md](docs/privacy.md) | What the SDK sends, and when |
-
-Some pages under `docs/` still describe pre-v1 capabilities (OpenFeature providers, release
-lifecycle, exposures, signals) pending a dedicated rewrite pass — treat `spec/control-points.md`
-and each SDK's own README (`sdks/<lang>/README.md`) as the current source of truth in the
-meantime.
-
-## Repository layout
-
-```
-sdks/node|web|python|go|java|rust|swift   Language SDKs (each with its own tests + conformance harness)
-examples/<lang>                           Runnable examples (offline by default)
-spec/                                     Canonical JSON Schemas (v0.1.0) — source of truth
-contracts/                                Cross-language conformance fixtures + error taxonomy
-test-server/                              Deterministic protocol stub (Node, zero-dep)
-docs/                                     User docs, architecture, ADRs
+```bash
+pip install fireweave
 ```
 
-Conformance: the same 65 fixtures run against all seven languages via
-`scripts/conformance-all.sh` — see [docs/compatibility.md](docs/compatibility.md) for the current
-per-language pass/skip detail.
+```python
+import os
 
-## Contributing
+from fireweave import EvaluationContext, RegisterTargetOptions, init_fireweave
 
-Contributions are accepted under the **Developer Certificate of Origin** (sign-off, not a CLA) — see [CONTRIBUTING.md](CONTRIBUTING.md), the [Code of Conduct](CODE_OF_CONDUCT.md), and [GOVERNANCE.md](GOVERNANCE.md). Vulnerability reports: [SECURITY.md](SECURITY.md).
+client = init_fireweave(
+    mode="remote",
+    api_url=os.environ["FW_API_URL"],
+    api_key=os.environ["FW_PROJECT_API_KEY"],
+)
 
-## License
+# Once per sign-in: the durable facts your targeting rules match on.
+client.register_target(
+    "user_42", RegisterTargetOptions(kind="user", properties={"plan": "pro"})
+)
 
-[MIT](LICENSE) — ratification of the license choice is pending a company decision; do not redistribute packages built from this repository until the license is ratified and publication is authorized.
+# Per request.
+enabled = client.control_points.get_boolean_value(
+    "new-checkout", False, EvaluationContext("user_42")
+)
+print("new-checkout:", enabled)
+
+client.shutdown()
+```
+
+</details>
+
+<details>
+<summary><b>Go</b></summary>
+
+```bash
+go get github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2
+```
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fireweave"
+)
+
+func main() {
+	client, err := fireweave.Init(fireweave.Options{
+		Mode:   fireweave.ModeRemote,
+		APIURL: os.Getenv("FW_API_URL"),
+		APIKey: os.Getenv("FW_PROJECT_API_KEY"),
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer client.Runtime().Shutdown(context.Background())
+
+	// Once per login: the durable facts your targeting rules match on.
+	client.RegisterTarget("user_42", &fireweave.RegisterTargetOptions{
+		Kind:       fireweave.TargetKindUser,
+		Properties: map[string]any{"plan": "pro"},
+	})
+
+	// Per request: evaluate a control point.
+	user := fireweave.NewEvaluationContext("user_42", nil)
+	enabled := client.ControlPoints().GetBooleanValue("new-checkout", false, &user)
+	fmt.Println("new-checkout:", enabled)
+}
+```
+
+</details>
+
+<details>
+<summary><b>Java</b></summary>
+
+```xml
+<dependency>
+  <groupId>ai.fireweave</groupId>
+  <artifactId>fireweave-sdk</artifactId>
+  <version>2.3.0</version>
+</dependency>
+```
+
+```java
+import ai.fireweave.sdk.application.Fireweave;
+import ai.fireweave.sdk.application.FireweaveClient;
+import ai.fireweave.sdk.application.InitOptions;
+import ai.fireweave.sdk.application.RegisterTargetOptions;
+import ai.fireweave.sdk.domain.EvaluationContext;
+import ai.fireweave.sdk.domain.JsonValue;
+import ai.fireweave.sdk.domain.TargetKind;
+
+public class Quickstart {
+    public static void main(String[] args) {
+        // remote(apiKey, apiUrl): the SDK never reads env vars itself
+        InitOptions options = InitOptions.remote(
+                System.getenv("FW_PROJECT_API_KEY"), System.getenv("FW_API_URL"));
+
+        try (FireweaveClient client = Fireweave.init(options)) {
+            client.registerTarget("user_42", RegisterTargetOptions.builder()
+                    .kind(TargetKind.USER)
+                    .property("plan", JsonValue.of("pro"))
+                    .build());
+
+            boolean enabled = client.controlPoints().getBooleanValue("new-checkout", false,
+                    EvaluationContext.builder().targetingKey("user_42").build());
+            System.out.println("new-checkout = " + enabled);
+        }
+    }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Rust</b></summary>
+
+```bash
+cargo add fireweave
+```
+
+```rust
+use fireweave::{
+    init_fireweave, EvaluationContext, InitOptions, RegisterTargetOptions, TargetKind,
+};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = init_fireweave(InitOptions::remote(
+        std::env::var("FW_PROJECT_API_KEY")?,
+        std::env::var("FW_API_URL")?,
+    ))?;
+
+    // Once per login: the facts your targeting rules match on.
+    let target = RegisterTargetOptions {
+        kind: Some(TargetKind::User),
+        properties: Some([("plan".into(), "pro".into())].into_iter().collect()),
+        ..Default::default()
+    };
+    client.register_target("user_42", Some(&target));
+
+    let ctx = EvaluationContext::new().with_targeting_key("user_42");
+    let enabled = client
+        .control_points
+        .get_boolean_value("new-checkout", false, Some(&ctx));
+    println!("new-checkout: {enabled}");
+
+    client.shutdown();
+    Ok(())
+}
+```
+
+</details>
+
+<details>
+<summary><b>Swift</b> · iOS · macOS</summary>
+
+```bash
+# Not on a registry yet: clone next to your package
+git clone --branch swift/v2.2.0 https://github.com/FireWeave-HQ/fireweave-sdk
+```
+
+```swift
+// Package.swift (swift-tools-version: 6.0)
+platforms: [.macOS(.v13), .iOS(.v16)],
+dependencies: [.package(path: "../fireweave-sdk/sdks/swift")],
+// in your target
+dependencies: [.product(name: "Fireweave", package: "swift")]
+```
+
+```swift
+import Fireweave
+import Foundation
+
+let env = ProcessInfo.processInfo.environment
+let fireweave = try await initFireweave(.remote(InitFireweaveRemoteOptions(
+    apiKey: env["FW_PROJECT_API_KEY"] ?? "",
+    apiUrl: env["FW_API_URL"] ?? ""
+)))
+
+// Once per login: register the target, then prefetch its decisions.
+_ = await fireweave.identify("user_42", options: RegisterTargetOptions(
+    kind: .user, properties: ["plan": "pro"]
+))
+
+// Reads are synchronous lookups in that prefetched cache.
+let enabled = fireweave.controlPoints.getBooleanValue("new-checkout", default: false)
+print("new-checkout: \(enabled)")
+
+await fireweave.shutdown()
+```
+
+</details>
