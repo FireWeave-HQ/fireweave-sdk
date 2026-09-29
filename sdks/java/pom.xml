@@ -61,7 +61,7 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <maven.compiler.release>11</maven.compiler.release>
     <junit.version>5.10.2</junit.version>
-    <jackson.version>2.18.9</jackson.version>
+    <jackson.version>2.18.10</jackson.version>
     <!-- Reproducible builds (Maven 3.8.2+). Override from CI with a commit timestamp. -->
     <project.build.outputTimestamp>2026-08-15T00:00:00Z</project.build.outputTimestamp>
     <!-- Sign/publish are opt-in: `mvn -Prelease deploy` after credentials are configured. -->
