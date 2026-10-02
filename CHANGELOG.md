@@ -20,6 +20,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `tools/release/version.sh apply web` stamps the web `src/start/build-info.ts` too.
 - The core entrypoint and `initFireweave` are unchanged and still read no environment.
 
+### Added — Python `fireweave` start profile ([ADR-0011](docs/adr/0011-start-profile.md), proposed)
+
+- New subpackage `fireweave.start` (`start`, `fw`, `define_flags`). Keyword-only options `flags`, `mode`, `environment`, `url`, `key`, `instance_id`, `env`, `log`, with the same env fallbacks, mode rule and key checks as the server SDK. Legacy `FW_PROJECT_API_KEY`, `FW_API_URL` and `FW_ATTEST_URL` are read with a one-time warning.
+- The default endpoint follows the installed package's version: a PEP 440 prerelease (staging builds are `X.Y.ZaN`) calls staging, anything else production.
+- A read before `start()` starts from the environment at once; the first explicit `start()` replaces that start once, with a warning. The client is rebuilt in a forked child.
+- The core package and `init_fireweave` are unchanged and still read no environment.
+
+### Added — Go start profile, package `fw` ([ADR-0011](docs/adr/0011-start-profile.md), proposed)
+
+- New package `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fw`: `Start(Options)`, `MustStart`, `DefineFlags`, `ControlPoints()`, `For`, `Identify`, `InstanceKey`, `Status`, `Client`, `Shutdown`. Options `Flags`, `Mode`, `Environment`, `URL`, `Key`, `InstanceID`, `Env`, `Log`, with the same env fallbacks, mode rule and key checks as the server SDK.
+- The default endpoint follows the SDK module version in the binary's build info: `vX.Y.Z-staging.N` calls staging, anything else (including a local checkout) production.
+- `Client()` is one permanent `*fireweave.Client` for the process, so a pointer captured before `Start` keeps working.
+- The core packages are unchanged apart from re-exporting `fireweave.ValidateControlPointKey`, and still read no environment.
+
 ### Fixed
 
 - `FireweaveRemoteAdapter.shutdown()` clears its timeout timer, so a clean shutdown no longer holds the process open for up to `shutdownTimeoutMs`.

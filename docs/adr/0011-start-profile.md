@@ -1,8 +1,8 @@
 # ADR-0011: A start profile for one-line setup, layered on an unchanged core
 
-- **Status:** Proposed (node and web implemented on `feat/server-sdk-start-profile`; needs the cross-language sign-off GOVERNANCE.md requires before other SDKs follow)
+- **Status:** Proposed (node, web, Python and Go implemented on `feat/server-sdk-start-profile`; needs the cross-language sign-off GOVERNANCE.md requires before other SDKs follow)
 - **Date:** 2026-10-02
-- **Scope:** `@fireweaveai/server-sdk` (Node, Bun, Deno) and `@fireweaveai/web-sdk` (browsers). Other SDKs adopt the same rules later.
+- **Scope:** `@fireweaveai/server-sdk` (Node, Bun, Deno), `@fireweaveai/web-sdk` (browsers), Python `fireweave.start` and Go `.../sdks/go/v2/fw`. Java, Rust, Swift and Dart adopt the same rules later.
 - **Related:** spec/modes.md (core reads no env, mode never inferred), spec/control-points.md (no invented targeting key), ADR-0008 (multi-runtime support), ADR-0009 (browser control points)
 
 ## Context and Problem Statement
@@ -30,9 +30,12 @@ The start profile, and only it, may:
    `APP_ENV`, `NODE_ENV`) of `development`, `dev`, `local` or `test` means `local`; anything
    else is a `Configuration` error at start. This keeps spec/modes.md's reason intact: a
    missing credential in production fails loudly and never becomes silent local evaluation.
-3. **Default the endpoint from its own release channel.** `tools/release/version.sh apply
-   server` stamps `src/start/build-info.ts`; a `-staging.N` build defaults to
+3. **Default the endpoint from its own release channel.** A staging build defaults to
    `https://staging-app-server.fireweave.ai`, any other to `https://app-server.fireweave.ai`.
+   The TypeScript SDKs read a stamp `tools/release/version.sh apply server|web` writes into
+   `src/start/build-info.ts` (`-staging.N`). Python and Go need no stamp: Python reads the
+   installed distribution's version (staging builds are PEP 440 `X.Y.ZaN`), and Go reads the
+   module version from the binary's build info (`vX.Y.Z-staging.N`).
    `url` / `FIREWEAVE_URL` override it, and the host allowlist follows the URL actually used.
 4. **Check the key family** before any request: browser keys (`fw_public_`), analytics
    vendor keys, and org or CLI tokens are rejected at start, naming the source, never the value.
@@ -57,7 +60,7 @@ Reads on `fw` never throw, matching spec/control-points.md: a failed start serve
   `start/` on the public API only.
 - Explicit `mode` makes "a human typed it" literal for apps that set it. Inference remains for
   apps that do not, bounded by the fail-closed rule above.
-- Cloudflare Workers and the other languages are out of this first step.
+- Cloudflare Workers, Java, Rust, Swift and Dart are out of this step.
 
 ## The web start profile
 
@@ -83,3 +86,20 @@ follow from where it runs:
 
 Deferred from the web plan: a top-level-await boot redirect with build-target raising, CSP
 detection, and a real-bundler integration matrix (Vite 5–8 with Playwright).
+
+## Python and Go
+
+Both follow the server rules above, with idiomatic surfaces (`fireweave.start.start(flags=...)`,
+`fw.Start(fw.Options{Flags: ...})`). Their `start()` is synchronous and does no network I/O, so a
+read before it cannot be deferred to a later turn the way Node defers it:
+
+- **Python** starts from the environment on that first read, and the first explicit `start()`
+  replaces that provisional start once, with a warning. After `os.fork()` the child rebuilds its
+  client from the stored config.
+- **Go** starts from the environment on that first read, once; a later `Start` with a different
+  configuration is an error, as in Node. `fw.Client()` is one permanent client for the process,
+  so a pointer captured at package init keeps working across `Start` and `Shutdown`.
+
+Deferred core fixes from the build plan (they change core behaviour, so they are separate work):
+Python's input guards, no-redirect transport and extended redaction; Go's remote-adapter
+Close/Resolve race (GO-1), extended redaction (GO-RD) and the lower `go` directive (GO-FL).
