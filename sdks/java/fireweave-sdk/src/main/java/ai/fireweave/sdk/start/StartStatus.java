@@ -1,0 +1,107 @@
+package ai.fireweave.sdk.start;
+
+import ai.fireweave.sdk.domain.Mode;
+
+/**
+ * What the start profile decided ({@link Fw#status()}). It never contains the key, so it is safe
+ * to log. Immutable.
+ */
+public final class StartStatus {
+
+    private final StartState state;
+    private final Mode mode;
+    private final String modeSource;
+    private final SdkChannel channel;
+    private final String sdkVersion;
+    private final String host;
+    private final String endpointSource;
+    private final String keySource;
+    private final String environment;
+    private final int flagCount;
+    private final String error;
+
+    StartStatus(StartState state, Mode mode, String modeSource, SdkChannel channel, String sdkVersion,
+                String host, String endpointSource, String keySource, String environment, int flagCount,
+                String error) {
+        this.state = state;
+        this.mode = mode;
+        this.modeSource = modeSource;
+        this.channel = channel;
+        this.sdkVersion = sdkVersion;
+        this.host = host;
+        this.endpointSource = endpointSource;
+        this.keySource = keySource;
+        this.environment = environment;
+        this.flagCount = flagCount;
+        this.error = error;
+    }
+
+    public StartState state() {
+        return state;
+    }
+
+    /** The mode a start resolved, or null before one did. */
+    public Mode mode() {
+        return mode;
+    }
+
+    /** Why that mode: {@code option}, {@code key} or {@code environment}; null before a start. */
+    public String modeSource() {
+        return modeSource;
+    }
+
+    public SdkChannel channel() {
+        return channel;
+    }
+
+    public String sdkVersion() {
+        return sdkVersion;
+    }
+
+    /** The fw-server host name only (remote mode), never a path or a credential; null otherwise. */
+    public String host() {
+        return host;
+    }
+
+    /**
+     * Where the endpoint came from: {@code StartOptions.url}, a variable name, or
+     * {@code SDK channel (…)}; null in local mode.
+     */
+    public String endpointSource() {
+        return endpointSource;
+    }
+
+    /** {@code StartOptions.key} or the variable the key came from; {@code none} in local mode. */
+    public String keySource() {
+        return keySource;
+    }
+
+    /** The environment name, when it chose the mode; null otherwise. */
+    public String environment() {
+        return environment;
+    }
+
+    public int flagCount() {
+        return flagCount;
+    }
+
+    /** Why start failed, when it did (already redacted); null otherwise. */
+    public String error() {
+        return error;
+    }
+
+    @Override
+    public String toString() {
+        return "StartStatus{state=" + state
+                + ", mode=" + mode
+                + ", modeSource=" + modeSource
+                + ", channel=" + channel
+                + ", sdkVersion=" + sdkVersion
+                + ", host=" + host
+                + ", endpointSource=" + endpointSource
+                + ", keySource=" + keySource
+                + ", environment=" + environment
+                + ", flagCount=" + flagCount
+                + ", error=" + error + "}";
+    }
+}

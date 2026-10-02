@@ -25,6 +25,31 @@
     <exec.skip>true</exec.skip>
   </properties>
 
+  <build>
+    <!--
+      The start profile reads this SDK's own version at runtime to choose its default fw-server
+      endpoint (docs/adr/0011-start-profile.md, rule 3: a -staging.N build calls staging).
+      Filtering is enabled for that ONE resource only, so ${...} in any other resource stays
+      literal.
+    -->
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>true</filtering>
+        <includes>
+          <include>ai/fireweave/sdk/start/build.properties</include>
+        </includes>
+      </resource>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>false</filtering>
+        <excludes>
+          <exclude>ai/fireweave/sdk/start/build.properties</exclude>
+        </excludes>
+      </resource>
+    </resources>
+  </build>
+
   <dependencies>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
