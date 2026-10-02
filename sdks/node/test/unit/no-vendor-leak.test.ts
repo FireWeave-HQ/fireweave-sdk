@@ -63,7 +63,7 @@ test('the published build declares no runtime dependency at all', () => {
   );
   assert.deepEqual(
     Object.keys(manifest.exports ?? {}),
-    ['.'],
-    'the entrypoint is the only export subpath',
+    ['.', './start', './register'],
+    'the core entrypoint plus the start profile (docs/adr/0011-start-profile.md) are the only export subpaths',
   );
 });

@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added — `@fireweaveai/server-sdk` start profile ([ADR-0011](docs/adr/0011-start-profile.md), proposed)
+
+- New subpaths `@fireweaveai/server-sdk/start` (`start`, `fw`, `defineFlags`) and `@fireweaveai/server-sdk/register`. One import, one secret (`FIREWEAVE_KEY`) and an optional flags object replace the generated per-repo harness.
+- Options with env fallbacks: `mode` (override), `environment` (custom env name for inference), `url` (default from the SDK's release channel), `key`, `instanceId`, `flags`. Legacy `FW_PROJECT_API_KEY`, `FW_API_URL` and `FW_ATTEST_URL` are still read with a one-time warning.
+- `tools/release/version.sh apply server` stamps `src/start/build-info.ts` so a build knows its channel.
+- The core entrypoint and `initFireweave` are unchanged and still read no environment.
+
+### Fixed
+
+- `FireweaveRemoteAdapter.shutdown()` clears its timeout timer, so a clean shutdown no longer holds the process open for up to `shutdownTimeoutMs`.
+
 **Registry status.** `@fireweaveai/sdk` is on npm at **0.1.0** (2026-08-03) and **2.0.0** (2026-08-05), with `latest` pointing at 2.0.0. **2.1.0 is not published yet**, so an unpinned `npm install @fireweaveai/sdk` still resolves to 2.0.0 — the API that carries the direct PostHog adapter and the `./posthog` subpath. The Python, Go, and Java packages remain unpublished.
 
 > **Version note.** The work below was drafted as `3.0.0` and `3.1.0` and is released as a single **2.1.0** instead. Neither 3.x version reached a registry, so no published version is being renumbered.

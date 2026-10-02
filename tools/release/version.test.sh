@@ -214,6 +214,10 @@ EOF
 
 cmd_apply server "2.1.1-staging.3" --manifest-root "$scratch2"
 assert_eq "apply: server package.json written" '"2.1.1-staging.3"' "$(node -e 'console.log(JSON.stringify(require(process.argv[1]).version))' "$scratch2/sdks/node/package.json")"
+assert_eq "apply: server build-info version stamped" "export const SDK_VERSION = '2.1.1-staging.3';" "$(grep '^export const SDK_VERSION' "$scratch2/sdks/node/src/start/build-info.ts")"
+assert_eq "apply: staging version stamps the staging channel" "export const SDK_CHANNEL: 'staging' | 'production' = 'staging';" "$(grep '^export const SDK_CHANNEL' "$scratch2/sdks/node/src/start/build-info.ts")"
+cmd_apply server "2.1.1" --manifest-root "$scratch2"
+assert_eq "apply: production version stamps the production channel" "export const SDK_CHANNEL: 'staging' | 'production' = 'production';" "$(grep '^export const SDK_CHANNEL' "$scratch2/sdks/node/src/start/build-info.ts")"
 
 cmd_apply web "2.1.1" --manifest-root "$scratch2"
 assert_eq "apply: web package.json written" '"2.1.1"' "$(node -e 'console.log(JSON.stringify(require(process.argv[1]).version))' "$scratch2/sdks/web/package.json")"
