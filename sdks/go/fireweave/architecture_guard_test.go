@@ -1,10 +1,14 @@
 package fireweave
 
 import (
+	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -238,5 +242,235 @@ func TestFacadeHoldsOnlyReExportsNoImplementation(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(root, "infrastructure", "adapters", sub)); err != nil {
 			t.Errorf("expected sdks/go/infrastructure/adapters/%s to exist: %v", sub, err)
 		}
+	}
+}
+
+// --- start profile (package fw, docs/adr/0011-start-profile.md) ---
+//
+// The start profile is the one sanctioned reader of the environment and the
+// host name. These guards keep that exception from spreading:
+//
+//   - the core (domain/, application/, infrastructure/, fireweave/) still
+//     reads no environment variable and no host name, and nothing outside
+//     the start profile's seam file fw/env.go does (one documented
+//     exemption: the conformance runner's optional stub URL);
+//   - fw/ is built only on this facade package and the standard library,
+//     never on application/, domain/ or infrastructure/ directly;
+//   - no package outside fw/ imports fw/, so the core never depends on the
+//     profile layered over it.
+
+const (
+	modulePrefix        = "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2"
+	facadeImportPath    = modulePrefix + "/fireweave"
+	startProfileImport  = modulePrefix + "/fw"
+	startProfileDir     = "fw"
+	startProfileEnvSeam = "fw/env.go"
+)
+
+// envReadingCalls are the standard-library calls that read the process
+// environment or the host name.
+var envReadingCalls = map[string]map[string]bool{
+	"os":      {"Getenv": true, "LookupEnv": true, "Environ": true, "ExpandEnv": true, "Hostname": true},
+	"syscall": {"Getenv": true, "Environ": true},
+}
+
+// envReadExemptions lists every file outside the seam allowed to read the
+// environment, the calls it may use, and why. An entry that no longer
+// covers a read fails TestEnvReadExemptionsAreNotStale.
+var envReadExemptions = map[string]struct {
+	calls  map[string]bool
+	reason string
+}{
+	"internal/conformance/faults.go": {
+		calls:  map[string]bool{"os.Getenv": true},
+		reason: "the conformance runner's optional FIREWEAVE_TEST_SERVER_URL stub switch; test tooling under internal/, never imported by an app",
+	},
+}
+
+type goSource struct {
+	rel  string // slash-separated, relative to sdks/go
+	file *ast.File
+}
+
+// walkGoSources parses every .go file under sdks/go (skipping testdata),
+// test files only when includeTests is set.
+func walkGoSources(t *testing.T, includeTests bool) []goSource {
+	t.Helper()
+	root := sdkGoRoot(t)
+	fset := token.NewFileSet()
+	var out []goSource
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == "testdata" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(p, ".go") || (!includeTests && strings.HasSuffix(p, "_test.go")) {
+			return nil
+		}
+		f, perr := parser.ParseFile(fset, p, nil, parser.SkipObjectResolution)
+		if perr != nil {
+			return perr
+		}
+		rel, rerr := filepath.Rel(root, p)
+		if rerr != nil {
+			return rerr
+		}
+		out = append(out, goSource{rel: filepath.ToSlash(rel), file: f})
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk %s: %v", root, err)
+	}
+	if len(out) == 0 {
+		t.Fatal("expected .go files under sdks/go")
+	}
+	return out
+}
+
+// envReads returns every env/host-name read in f as "pkg.Call", plus any
+// dot import of os or syscall (which would hide such a call).
+func envReads(f *ast.File) []string {
+	local := map[string]string{} // name in this file -> "os" | "syscall"
+	var reads []string
+	for _, imp := range f.Imports {
+		p, err := strconv.Unquote(imp.Path.Value)
+		if err != nil || envReadingCalls[p] == nil {
+			continue
+		}
+		name := path.Base(p)
+		if imp.Name != nil {
+			name = imp.Name.Name
+		}
+		if name == "." {
+			reads = append(reads, p+" dot-import")
+			continue
+		}
+		local[name] = p
+	}
+	ast.Inspect(f, func(n ast.Node) bool {
+		sel, ok := n.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		id, ok := sel.X.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		if pkg, ok := local[id.Name]; ok && envReadingCalls[pkg][sel.Sel.Name] {
+			reads = append(reads, pkg+"."+sel.Sel.Name)
+		}
+		return true
+	})
+	return reads
+}
+
+func TestOnlyTheStartProfileSeamReadsTheEnvironment(t *testing.T) {
+	var offenders []string
+	for _, src := range walkGoSources(t, false) {
+		if src.rel == startProfileEnvSeam {
+			continue
+		}
+		exempt := envReadExemptions[src.rel]
+		for _, read := range envReads(src.file) {
+			if !exempt.calls[read] {
+				offenders = append(offenders, src.rel+": "+read)
+			}
+		}
+	}
+	sort.Strings(offenders)
+	if len(offenders) != 0 {
+		t.Errorf("only %s may read the environment or the host name (the core reads none, spec/modes.md; the start profile reads through one seam, ADR-0011): %v", startProfileEnvSeam, offenders)
+	}
+}
+
+// The seam and every exemption must still be load-bearing: a carve-out for a
+// read that no longer exists is how a guard rots.
+func TestEnvReadExemptionsAreNotStale(t *testing.T) {
+	sources := map[string]*ast.File{}
+	for _, src := range walkGoSources(t, false) {
+		sources[src.rel] = src.file
+	}
+	seam, ok := sources[startProfileEnvSeam]
+	if !ok {
+		t.Fatalf("%s must exist: it is the start profile's env seam", startProfileEnvSeam)
+	}
+	seamReads := map[string]bool{}
+	for _, r := range envReads(seam) {
+		seamReads[r] = true
+	}
+	for _, want := range []string{"os.LookupEnv", "os.Hostname"} {
+		if !seamReads[want] {
+			t.Errorf("%s no longer calls %s; update the guard with the seam", startProfileEnvSeam, want)
+		}
+	}
+	for file, exemption := range envReadExemptions {
+		f, ok := sources[file]
+		if !ok {
+			t.Errorf("exempt file %s no longer exists; remove its exemption", file)
+			continue
+		}
+		used := false
+		for _, r := range envReads(f) {
+			if exemption.calls[r] {
+				used = true
+			}
+		}
+		if !used {
+			t.Errorf("exempt file %s no longer reads the environment; remove its exemption (%s)", file, exemption.reason)
+		}
+	}
+}
+
+func isStdlibImport(p string) bool {
+	first, _, _ := strings.Cut(p, "/")
+	return !strings.Contains(first, ".")
+}
+
+// fw/ (tests included) may import only the public facade and the standard
+// library: the start profile is a layer over the public API, like node's
+// src/start/ over its package index.
+func TestStartProfileImportsOnlyTheFacadeAndTheStandardLibrary(t *testing.T) {
+	var offenders []string
+	seen := false
+	for _, src := range walkGoSources(t, true) {
+		if !strings.HasPrefix(src.rel, startProfileDir+"/") {
+			continue
+		}
+		seen = true
+		for _, imp := range src.file.Imports {
+			p, _ := strconv.Unquote(imp.Path.Value)
+			if p != facadeImportPath && !isStdlibImport(p) {
+				offenders = append(offenders, src.rel+" imports "+p)
+			}
+		}
+	}
+	if !seen {
+		t.Fatalf("expected the start profile under sdks/go/%s", startProfileDir)
+	}
+	if len(offenders) != 0 {
+		t.Errorf("fw/ may import only %s and the standard library: %v", facadeImportPath, offenders)
+	}
+}
+
+func TestNoPackageOutsideTheStartProfileImportsIt(t *testing.T) {
+	var offenders []string
+	for _, src := range walkGoSources(t, true) {
+		if strings.HasPrefix(src.rel, startProfileDir+"/") {
+			continue
+		}
+		for _, imp := range src.file.Imports {
+			p, _ := strconv.Unquote(imp.Path.Value)
+			if p == startProfileImport || strings.HasPrefix(p, startProfileImport+"/") {
+				offenders = append(offenders, src.rel+" imports "+p)
+			}
+		}
+	}
+	if len(offenders) != 0 {
+		t.Errorf("the core must not depend on the start profile layered over it: %v", offenders)
 	}
 }
