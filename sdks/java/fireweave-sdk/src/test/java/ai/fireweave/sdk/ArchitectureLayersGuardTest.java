@@ -61,6 +61,11 @@ class ArchitectureLayersGuardTest {
         return moduleRoot().resolve("src/main/java/ai/fireweave/sdk/application");
     }
 
+    /** The start profile (docs/adr/0011-start-profile.md); its own rules are in StartConfinementGuardTest. */
+    private static Path startDir() {
+        return moduleRoot().resolve("src/main/java/ai/fireweave/sdk/start");
+    }
+
     /** Sanctioned composition root (mirrors node's mode.ts / python's mode.py). */
     private static final String APPLICATION_COMPOSITION_ROOT = "Fireweave.java";
 
@@ -170,7 +175,9 @@ class ArchitectureLayersGuardTest {
     @Test
     void noWildcardImportsInDomainOrApplication() throws Exception {
         List<String> offenders = new ArrayList<>();
-        for (Path dir : List.of(domainDir(), applicationDir())) {
+        // start/ too: StartConfinementGuardTest matches its imports precisely, which a wildcard
+        // would defeat the same way.
+        for (Path dir : List.of(domainDir(), applicationDir(), startDir())) {
             for (Path file : javaFiles(dir)) {
                 String text = new String(Files.readAllBytes(file));
                 if (hasWildcardImport(text)) {
@@ -179,7 +186,7 @@ class ArchitectureLayersGuardTest {
             }
         }
         assertEquals(List.of(), offenders,
-                "wildcard imports are forbidden in domain/ and application/ — they defeat this guard's "
+                "wildcard imports are forbidden in domain/, application/ and start/ — they defeat these guards' "
                         + "precise import-target matching: " + offenders);
     }
 
@@ -229,7 +236,11 @@ class ArchitectureLayersGuardTest {
     void noTopLevelDeviationsExactlyThreeLayerPackages() throws Exception {
         // A fourth top-level package under ai.fireweave.sdk would be a layer in disguise
         // (mirrors the fw-server "no-top-level-deviations" idiom, ported to this module's
-        // three-layer shape).
+        // three-layer shape). The ONE sanctioned exception is start/, the opt-in start profile
+        // layered over the core's public API (docs/adr/0011-start-profile.md, the same carve-out
+        // as node's src/start/ and Go's fw/). It is not a layer: StartConfinementGuardTest keeps
+        // it on application/ + domain/ only and keeps every core package from importing it. Any
+        // other new package still fails here.
         Path srcRoot = moduleRoot().resolve("src/main/java/ai/fireweave/sdk");
         List<String> topLevelDirs;
         try (Stream<Path> entries = Files.list(srcRoot)) {
@@ -238,7 +249,7 @@ class ArchitectureLayersGuardTest {
                     .sorted()
                     .collect(Collectors.toList());
         }
-        assertEquals(List.of("application", "domain", "infrastructure"), topLevelDirs);
+        assertEquals(List.of("application", "domain", "infrastructure", "start"), topLevelDirs);
         // No stray .java files directly in the root package either (everything relayered).
         List<Path> looseFiles;
         try (Stream<Path> entries = Files.list(srcRoot)) {

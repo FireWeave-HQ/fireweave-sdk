@@ -128,3 +128,42 @@ test('application/ (outside mode.ts, the composition root) does not import infra
     `application/ (outside ${APPLICATION_COMPOSITION_ROOT}) must not import infrastructure/ beyond the allowlist: ${offenders.join('; ')}`,
   );
 });
+
+/**
+ * The start profile (docs/adr/0011-start-profile.md) sits on top of the core:
+ * it may import only the public barrel ('../index.js') and its own files, so
+ * it can never reach past the API every other app uses. The core, in turn,
+ * never imports the start layer, so the spec-pure entrypoint stays env-free.
+ */
+const startDir = join(packageRoot, 'src', 'start');
+const srcDir = join(packageRoot, 'src');
+/** Doc comments in start/ carry usage examples with imports; scan code only. */
+const codeOnly = (text: string): string => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+test('start/ imports only the public barrel and its own files', () => {
+  const files = walk(startDir).filter((f) => f.endsWith('.ts'));
+  assert.ok(files.length > 0, 'expected source files under src/start');
+  const offenders: string[] = [];
+  for (const file of files) {
+    for (const specifier of importSpecifiers(codeOnly(readFileSync(file, 'utf8')))) {
+      if (specifier !== '../index.js' && !/^\.\/[\w-]+\.js$/.test(specifier)) {
+        offenders.push(`${relative(startDir, file)} imports '${specifier}'`);
+      }
+    }
+  }
+  assert.deepEqual(offenders, [], `start/ must build on the public API only: ${offenders.join('; ')}`);
+});
+
+test('the core never imports the start layer', () => {
+  const coreFiles = ['domain', 'application', 'infrastructure']
+    .flatMap((dir) => walk(join(srcDir, dir)))
+    .concat([join(srcDir, 'index.ts')])
+    .filter((f) => f.endsWith('.ts'));
+  const offenders: string[] = [];
+  for (const file of coreFiles) {
+    for (const specifier of importSpecifiers(codeOnly(readFileSync(file, 'utf8')))) {
+      if (/(^|\/)start\//.test(specifier)) offenders.push(`${relative(srcDir, file)} imports '${specifier}'`);
+    }
+  }
+  assert.deepEqual(offenders, [], `the core must not depend on the start profile: ${offenders.join('; ')}`);
+});

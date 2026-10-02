@@ -214,9 +214,17 @@ EOF
 
 cmd_apply server "2.1.1-staging.3" --manifest-root "$scratch2"
 assert_eq "apply: server package.json written" '"2.1.1-staging.3"' "$(node -e 'console.log(JSON.stringify(require(process.argv[1]).version))' "$scratch2/sdks/node/package.json")"
+assert_eq "apply: server build-info version stamped" "export const SDK_VERSION = '2.1.1-staging.3';" "$(grep '^export const SDK_VERSION' "$scratch2/sdks/node/src/start/build-info.ts")"
+assert_eq "apply: staging version stamps the staging channel" "export const SDK_CHANNEL: 'staging' | 'production' = 'staging';" "$(grep '^export const SDK_CHANNEL' "$scratch2/sdks/node/src/start/build-info.ts")"
+cmd_apply server "2.1.1" --manifest-root "$scratch2"
+assert_eq "apply: production version stamps the production channel" "export const SDK_CHANNEL: 'staging' | 'production' = 'production';" "$(grep '^export const SDK_CHANNEL' "$scratch2/sdks/node/src/start/build-info.ts")"
 
 cmd_apply web "2.1.1" --manifest-root "$scratch2"
 assert_eq "apply: web package.json written" '"2.1.1"' "$(node -e 'console.log(JSON.stringify(require(process.argv[1]).version))' "$scratch2/sdks/web/package.json")"
+assert_eq "apply: web build-info version stamped" "export const SDK_VERSION = '2.1.1';" "$(grep '^export const SDK_VERSION' "$scratch2/sdks/web/src/start/build-info.ts")"
+assert_eq "apply: web production version stamps the production channel" "export const SDK_CHANNEL: 'staging' | 'production' = 'production';" "$(grep '^export const SDK_CHANNEL' "$scratch2/sdks/web/src/start/build-info.ts")"
+cmd_apply web "2.1.1-staging.2" --manifest-root "$scratch2"
+assert_eq "apply: web staging version stamps the staging channel" "export const SDK_CHANNEL: 'staging' | 'production' = 'staging';" "$(grep '^export const SDK_CHANNEL' "$scratch2/sdks/web/src/start/build-info.ts")"
 
 cmd_apply python "0.1.2a1" --manifest-root "$scratch2"
 assert_eq "apply: pyproject.toml written (PEP 440 alpha)" "0.1.2a1" "$(sed -nE 's/^version = \"([^\"]+)\".*/\1/p' "$scratch2/sdks/python/pyproject.toml" | head -n1)"

@@ -6,6 +6,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added — `@fireweaveai/server-sdk` start profile ([ADR-0011](docs/adr/0011-start-profile.md), proposed)
+
+- New subpaths `@fireweaveai/server-sdk/start` (`start`, `fw`, `defineFlags`) and `@fireweaveai/server-sdk/register`. One import, one secret (`FIREWEAVE_KEY`) and an optional flags object replace the generated per-repo harness.
+- Options with env fallbacks: `mode` (override), `environment` (custom env name for inference), `url` (default from the SDK's release channel), `key`, `instanceId`, `flags`. Legacy `FW_PROJECT_API_KEY`, `FW_API_URL` and `FW_ATTEST_URL` are still read with a one-time warning.
+- `tools/release/version.sh apply server` stamps `src/start/build-info.ts` so a build knows its channel.
+- The core entrypoint and `initFireweave` are unchanged and still read no environment.
+
+### Added — `@fireweaveai/web-sdk` start profile ([ADR-0011](docs/adr/0011-start-profile.md), proposed)
+
+- New subpath `@fireweaveai/web-sdk/start` (`start`, `fw`, `defineFlags`): the browser start profile with the same options as the server one (`flags`, `mode`, `environment`, `url`, `key`) plus `persistence` and `deviceId`. `fw` adds `identify`, `reset`, `deviceId`, `setPersistence`, `forget`, `ready`, `status` and `subscribe`.
+- New Node build entries `@fireweaveai/web-sdk/vite` (the `fireweave()` plugin) and `@fireweaveai/web-sdk/define` (`fireweaveDefine`, `assertFireweaveBuild`). They read `FIREWEAVE_BROWSER_KEY`, `FIREWEAVE_URL` and `FIREWEAVE_ENV` at build time, fail the build on a bad configuration, and fail a Vite client build that contains a server key. `vite` is an optional peer dependency.
+- `tools/release/version.sh apply web` stamps the web `src/start/build-info.ts` too.
+- The core entrypoint and `initFireweave` are unchanged and still read no environment.
+
+### Added — Python `fireweave` start profile ([ADR-0011](docs/adr/0011-start-profile.md), proposed)
+
+- New subpackage `fireweave.start` (`start`, `fw`, `define_flags`). Keyword-only options `flags`, `mode`, `environment`, `url`, `key`, `instance_id`, `env`, `log`, with the same env fallbacks, mode rule and key checks as the server SDK. Legacy `FW_PROJECT_API_KEY`, `FW_API_URL` and `FW_ATTEST_URL` are read with a one-time warning.
+- The default endpoint follows the installed package's version: a PEP 440 prerelease (staging builds are `X.Y.ZaN`) calls staging, anything else production.
+- A read before `start()` starts from the environment at once; the first explicit `start()` replaces that start once, with a warning. The client is rebuilt in a forked child.
+- The core package and `init_fireweave` are unchanged and still read no environment.
+
+### Added — Go start profile, package `fw` ([ADR-0011](docs/adr/0011-start-profile.md), proposed)
+
+- New package `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fw`: `Start(Options)`, `MustStart`, `DefineFlags`, `ControlPoints()`, `For`, `Identify`, `InstanceKey`, `Status`, `Client`, `Shutdown`. Options `Flags`, `Mode`, `Environment`, `URL`, `Key`, `InstanceID`, `Env`, `Log`, with the same env fallbacks, mode rule and key checks as the server SDK.
+- The default endpoint follows the SDK module version in the binary's build info: `vX.Y.Z-staging.N` calls staging, anything else (including a local checkout) production.
+- `Client()` is one permanent `*fireweave.Client` for the process, so a pointer captured before `Start` keeps working.
+- The core packages are unchanged apart from re-exporting `fireweave.ValidateControlPointKey`, and still read no environment.
+
+### Added — Java start profile, package `ai.fireweave.sdk.start` ([ADR-0011](docs/adr/0011-start-profile.md), proposed)
+
+- `Fw.start(StartOptions)`, `Fw.defineFlags`, `Fw.controlPoints()`, `Fw.identify`, `Fw.instanceKey`, `Fw.status`, `Fw.client`, `Fw.shutdown`. `StartOptions.builder()` takes `flags`, `mode`, `environment`, `url`, `key`, `instanceId`, `env` and `log`, with the same env fallbacks, mode rule and key checks as the server SDK.
+- The default endpoint follows this artifact's version, read from a Maven-filtered `build.properties`: `X.Y.Z-staging.N` calls staging, anything else production.
+- `Fw.client()` is one permanent `FireweaveClient` for the JVM, so a reference captured before `start` keeps working.
+- The core packages are unchanged and still read no environment. The architecture guard now allows the `start` package as the one sanctioned addition beside the three layers.
+
+### Added — Rust start profile, module `fireweave::start` ([ADR-0011](docs/adr/0011-start-profile.md), proposed)
+
+- `start(StartOptions)`, `define_flags`, `control_points()`, `identify`, `instance_key`, `status`, `client`, `shutdown`. `StartOptions` fields `flags`, `mode`, `environment`, `url`, `key`, `instance_id`, `env` and `log`, with the same env fallbacks, mode rule and key checks as the server SDK. No new dependencies.
+- The default endpoint follows the crate version compiled into the app (`CARGO_PKG_VERSION`): `X.Y.Z-staging.N` calls staging, anything else production.
+- `client()` is one permanent `FireweaveClient` for the process.
+- The core is unchanged apart from `pub mod start;`, and still reads no environment.
+
+### Fixed
+
+- `FireweaveRemoteAdapter.shutdown()` clears its timeout timer, so a clean shutdown no longer holds the process open for up to `shutdownTimeoutMs`.
+
 **Registry status.** `@fireweaveai/sdk` is on npm at **0.1.0** (2026-08-03) and **2.0.0** (2026-08-05), with `latest` pointing at 2.0.0. **2.1.0 is not published yet**, so an unpinned `npm install @fireweaveai/sdk` still resolves to 2.0.0 — the API that carries the direct PostHog adapter and the `./posthog` subpath. The Python, Go, and Java packages remain unpublished.
 
 > **Version note.** The work below was drafted as `3.0.0` and `3.1.0` and is released as a single **2.1.0** instead. Neither 3.x version reached a registry, so no published version is being renumbered.

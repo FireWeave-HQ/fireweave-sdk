@@ -133,6 +133,12 @@ var (
 	DefaultLimits        = domain.DefaultLimits
 )
 
+// ValidateControlPointKey is the read-path key rule (non-empty, <=256
+// characters, no control characters), exported as node exports
+// validateControlPointKey, so the start profile (package fw) checks a flags
+// map with the core's own rule instead of a copy of it.
+var ValidateControlPointKey = domain.ValidateControlPointKey
+
 // --- domain: mode / target kind ---
 
 type (

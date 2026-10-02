@@ -331,14 +331,21 @@ export class FireweaveRemoteAdapter implements BackendAdapter {
   async shutdown(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    // The race timer is cleared once the flush wins; left armed, it held the
+    // process open for up to shutdownTimeoutMs after a clean shutdown.
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const timeout = this.options.shutdownTimeoutMs ?? DEFAULT_ADAPTER_SHUTDOWN_TIMEOUT_MS;
       await Promise.race([
         this.flush(),
-        new Promise<void>((resolve) => setTimeout(resolve, timeout)),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, timeout);
+        }),
       ]);
     } catch {
       // never throw from shutdown
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
     }
     this.ready = false;
   }

@@ -18,6 +18,89 @@ v1 scope and are not exposed.
 
 Supported Java: **11+** (CI: Temurin 11 and 25). Do not raise the floor without a documented reason.
 
+## Quick start (one line: the start profile)
+
+Most apps need only this ([ADR-0011](../../docs/adr/0011-start-profile.md)). Package
+`ai.fireweave.sdk.start` (in the same `fireweave-sdk` artifact) is an opt-in layer over the
+unchanged core: one flags class, one call in `main`, then reads from anywhere.
+
+```java
+// FireweaveFlags.java: every control point the app reads, with its local value
+import ai.fireweave.sdk.start.Flag;
+import ai.fireweave.sdk.start.Flags;
+import ai.fireweave.sdk.start.Fw;
+
+public final class FireweaveFlags {
+    public static final Flags FLAGS = Fw.defineFlags(Map.of(
+            "new-checkout", Flag.local(true, "new checkout flow"))); // served only in local mode
+}
+```
+
+```java
+// main(): first thing, after the app's own config loading
+public static void main(String[] args) {
+    Fw.start(StartOptions.builder().flags(FireweaveFlags.FLAGS).build());
+    serve();
+}
+```
+
+```java
+// any call site: the core's nine read methods, unchanged
+// @fireweave-controlpoint new-checkout
+if (Fw.controlPoints().getBooleanValue("new-checkout", false,
+        EvaluationContext.builder().targetingKey(user.id()).build())) { /* … */ }
+Fw.identify(user.id(), Map.of("plan", user.plan()));                        // at sign-in
+Fw.controlPoints().getBooleanValue("nightly-reindex", false,
+        EvaluationContext.builder().targetingKey(Fw.instanceKey()).build()); // server as subject
+```
+
+Deployed environments set one variable, `FIREWEAVE_KEY` (the project key, `project-api-key_…`).
+Local development needs nothing when `FIREWEAVE_ENV` (or `APP_ENV`) is `development`, `dev`,
+`local` or `test`.
+
+### Options and overrides
+
+Every value resolves as: `StartOptions` field, then env var, then legacy name (warns once, read
+for all of 2.x), then default. Empty and whitespace-only values count as unset.
+
+| Option | Env var | Default | What it does |
+| --- | --- | --- | --- |
+| `flags` | — | none | Local values per control point (`Fw.defineFlags`, keys checked with the core's key rule). Ignored in remote mode. |
+| `mode` | — | inferred | `Mode.REMOTE` or `Mode.LOCAL`. Overrides inference. Remote without a key is a start error; local ignores a key (one warning). |
+| `environment` | `FIREWEAVE_ENV`, `APP_ENV` | — | Environment name used for inference when there is no key and no `mode`. Pass your own, e.g. a deploy-stage setting. `NODE_ENV` and `FW_ENV` are not read. |
+| `url` | `FIREWEAVE_URL` (legacy `FW_API_URL`, `FW_ATTEST_URL`) | from the SDK build | A `-staging.N` artifact calls `staging-app-server.fireweave.ai`; any other version (including `-SNAPSHOT`) calls `app-server.fireweave.ai`. Set it for a self-hosted or local fw-server: https is required except on localhost, credentials, a query or a fragment are refused, and the allowlist becomes that host plus loopback. |
+| `key` | `FIREWEAVE_KEY` (legacy `FW_PROJECT_API_KEY`) | — | Project key. Pass it to read from your own secret store. Browser keys, analytics vendor keys and org/CLI tokens are rejected at start, naming the source, never the value. |
+| `instanceId` | `FIREWEAVE_INSTANCE_ID` | `inst_` + hash of the host name | Value of `Fw.instanceKey()`: the same FNV-1a hash node and Go use, so one host gives one key in every SDK. Nothing is written to disk. Set it when replicas share a host name. |
+| `env` | — | the process | `Function<String, String>` (or a `Map`) read instead of `System.getenv`: tests, or Spring's `env::getProperty`. Return null for unset; apply no defaults. |
+| `log` | — | `System.getLogger("ai.fireweave")` | `Consumer<String>` for `[fireweave]` lines: warnings, the local-mode line and the local `registerTarget` trace. The default logs warnings at WARNING and the rest at INFO. |
+
+The channel comes from the artifact itself: Maven filters `ai/fireweave/sdk/start/build.properties`
+with the project version at build time. `Fw.sdkVersion()` and `Fw.sdkChannel()` report it
+(`(devel)` and production when the resource was never filtered).
+
+**Mode rule.** `mode` wins. Otherwise: a key means remote. No key and a development environment
+name means local. Anything else (including no environment name at all) is a `Configuration`
+`FireweaveException` from `Fw.start` naming `FIREWEAVE_KEY`, so a deploy that forgot its key fails
+instead of silently serving defaults.
+
+**Reads never throw.** If start failed, reads return your default (`*Details` return an `ERROR`
+decision carrying the start error). `Fw.start` is synchronous and does no network I/O; a second
+call with the same configuration is a no-op, and a different one throws a `Configuration` error
+naming the fields that differ. A read before `Fw.start` starts FireWeave from the environment
+alone (once, on that read), so call `Fw.start` first in `main`. `Fw.client()` is one
+`FireweaveClient` for the life of the process, safe to capture before `Fw.start` and to inject;
+shut down with `Fw.shutdown()` (never `client().close()`), after which reads serve defaults until
+a new `Fw.start`. No JVM shutdown hook is registered: servlet apps call `Fw.shutdown()` in
+`contextDestroyed`.
+
+**Debugging.** `Fw.status()` reports the state, mode and why (`option`, `key` or `environment`),
+channel, SDK version, fw-server host, endpoint source, key source, environment name, flag count
+and the start error. It never contains the key, so it is safe to log:
+
+```java
+logger.info("fireweave: " + Fw.status());
+```
+
 ## Modules
 
 | Module | Contents |
@@ -120,7 +203,9 @@ Remote demo: `mvn -q compile exec:java -Dexec.args="--remote"` (defaults to the 
 - **`FireweaveRuntime`** — fully thread-safe. Lifecycle transitions are serialized; `evaluate` / `registerTarget` never throw to callers.
 - **`FireweaveClient`** — fully thread-safe. `controlPoints()` is a stateless facade over the runtime.
 - Configuration and contexts are deeply immutable.
-- **No static global clients.**
+- **No static global clients** in the core. The opt-in start profile (`ai.fireweave.sdk.start`) is
+  the one exception: it holds one process-wide client, with transitions serialized and lock-free
+  reads once started.
 
 ## Error model
 

@@ -18,6 +18,18 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./start": {
+      "types": "./dist/start/index.d.ts",
+      "default": "./dist/start/index.js"
+    },
+    "./vite": {
+      "types": "./dist/build/node/vite.d.ts",
+      "default": "./dist/build/node/vite.js"
+    },
+    "./define": {
+      "types": "./dist/build/node/define.d.ts",
+      "default": "./dist/build/node/define.js"
     }
   },
   "files": [
@@ -25,11 +37,19 @@
   ],
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.json",
-    "typecheck": "bun run build && tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
+    "build": "bun run clean && tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "typecheck": "bun run build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit && tsc -p test/tsconfig.json --noEmit",
     "test": "bun run build && bun test test/unit",
     "conformance": "bun run build && bun test/conformance/run.ts",
     "verify": "bun run typecheck && bun run test && bun run conformance"
+  },
+  "peerDependencies": {
+    "vite": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^20.11.2",

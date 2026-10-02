@@ -51,15 +51,49 @@ test('no source file uses the Node-only Buffer global', () => {
   );
 });
 
-test('no source file reads process.env — the SDK reads no environment variables', () => {
+/**
+ * The start profile (docs/adr/0011-start-profile.md) is the one sanctioned
+ * reader of the environment and the host name. It does so through two files
+ * and nowhere else; the core stays exactly as before (no env, no runtime
+ * globals at all).
+ */
+const START_SEAMS: Readonly<Record<string, string>> = Object.freeze({
+  'start/env.ts': 'the only environment reader (Deno.env / process.env)',
+  'start/instance.ts': 'the host-name lookup behind fw.instanceKey()',
+});
+const RUNTIME_GLOBAL = /\b(?:process|Deno)\s*\??\.|\.\s*(?:process|Deno)\b|getBuiltinModule/;
+
+test('no source file reads process.env — the core reads no environment variables', () => {
   const offenders = sources()
+    .filter(({ path }) => START_SEAMS[path] === undefined)
     .filter(({ text }) => /\bprocess\s*\.\s*env\b/.test(stripComments(text)))
     .map(({ path }) => path);
   assert.deepEqual(
     offenders,
     [],
-    `spec/modes.md: the SDK reads no environment variables (unscoped): ${offenders.join(', ')}`,
+    `spec/modes.md: the core reads no environment variables; only ${Object.keys(START_SEAMS).join(', ')} may: ${offenders.join(', ')}`,
   );
+});
+
+test('outside the start seams, no source file touches the process or Deno globals', () => {
+  const offenders = sources()
+    .filter(({ path }) => START_SEAMS[path] === undefined)
+    .filter(({ text }) => RUNTIME_GLOBAL.test(stripComments(text)))
+    .map(({ path }) => path);
+  assert.deepEqual(
+    offenders,
+    [],
+    `runtime globals are confined to ${Object.keys(START_SEAMS).join(', ')}: ${offenders.join(', ')}`,
+  );
+});
+
+test('the start seams exist, so this guard cannot pass vacuously', () => {
+  const paths = new Set(sources().map(({ path }) => path));
+  for (const seam of Object.keys(START_SEAMS)) {
+    assert.ok(paths.has(seam), `expected ${seam} (${START_SEAMS[seam]})`);
+  }
+  const env = sources().find(({ path }) => path === 'start/env.ts');
+  assert.ok(env !== undefined && RUNTIME_GLOBAL.test(stripComments(env.text)), 'start/env.ts should be the one env reader');
 });
 
 test('no source file imports a node: builtin', () => {

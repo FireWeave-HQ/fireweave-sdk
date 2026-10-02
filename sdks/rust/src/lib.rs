@@ -32,12 +32,16 @@
 //! client.shutdown();
 //! ```
 //!
-//! There are no hidden global clients: everything is constructed
-//! explicitly and injectable for tests.
+//! There are no hidden global clients in the core: everything is
+//! constructed explicitly and injectable for tests. The opt-in
+//! [`start`] module (the start profile, `docs/adr/0011-start-profile.md`)
+//! is the one exception: it reads `FIREWEAVE_*` variables and keeps one
+//! client per process, layered over this unchanged core.
 
 pub mod application;
 pub mod domain;
 pub mod infrastructure;
+pub mod start;
 
 /// Package version (`Cargo.toml`'s `[package].version`).
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

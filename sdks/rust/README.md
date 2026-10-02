@@ -7,11 +7,116 @@ registration, the two v1 capabilities (spec/control-points.md "Scope of v1").
   else in `[dependencies]` — a single dependency-budget guard test asserts it
   (`tests/architecture_guard.rs`).
 - **Blocking, synchronous.** Like the Python SDK — no async runtime.
-- **The SDK reads no environment variables** — every option is an explicit
-  field on `InitOptions` (spec/modes.md).
+- **The core reads no environment variables** — every option is an explicit
+  field on `InitOptions` (spec/modes.md). The opt-in start profile
+  (`fireweave::start`, below) is the one documented exception.
 - **No vendor SDK, key, or hostname in your process.** Applications hold a
   Fireweave project key and talk to fw-server; which backend fw-server
   forwards to is fw-server's concern.
+
+## Quick start (one line: the start profile)
+
+Most apps need only this ([ADR-0011](../../docs/adr/0011-start-profile.md)). The
+`fireweave::start` module is an opt-in layer over the unchanged core: one flags file, one
+call in `main`, then reads from anywhere. It adds no dependency.
+
+```rust
+// src/fireweave_flags.rs: every control point the app reads, with its local value
+use fireweave::start::{define_flags, Flag, Flags};
+
+pub fn flags() -> Flags {
+    define_flags([
+        ("new-checkout", Flag::local(true).describe("new checkout flow")), // served only in local mode
+    ])
+}
+```
+
+```rust
+// src/main.rs: first thing in main, after the app's own config loading (and any .env loader)
+use fireweave::start::StartOptions;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    fireweave::start::start(StartOptions { flags: fireweave_flags::flags(), ..Default::default() })?;
+    serve();
+    fireweave::start::shutdown();
+    Ok(())
+}
+```
+
+```rust
+// any call site: the core's nine read methods, unchanged
+use fireweave::EvaluationContext;
+
+let ctx = EvaluationContext::new().with_targeting_key(&user.id);
+// @fireweave-controlpoint new-checkout
+if fireweave::start::control_points().get_boolean_value("new-checkout", false, Some(&ctx)) { /* … */ }
+
+let _ = fireweave::start::identify(&user.id, [("plan", user.plan.as_str())]); // at sign-in
+
+let me = EvaluationContext::new().with_targeting_key(fireweave::start::instance_key());
+fireweave::start::control_points().get_boolean_value("nightly-reindex", false, Some(&me)); // server as subject
+```
+
+Deployed environments set one variable, `FIREWEAVE_KEY` (the project key, `project-api-key_…`).
+Local development needs nothing when `FIREWEAVE_ENV` (or `APP_ENV`) is `development`, `dev`,
+`local` or `test`. Rust does not load `.env` files: call your loader (e.g. `dotenvy`) before
+`start`, or set the variable for `cargo run`/`cargo test` only in `.cargo/config.toml` at the
+workspace root (the deployed binary never sees it, and a real env var overrides it):
+
+```toml
+[env]
+FIREWEAVE_ENV = "development"
+```
+
+### Options and overrides
+
+Every value resolves as: `StartOptions` field, then env var, then legacy name (warns once), then
+default. Empty and whitespace-only values count as unset.
+
+| Option | Env var | Default | What it does |
+| --- | --- | --- | --- |
+| `flags` | — | none | Local values per control point (`define_flags`). Ignored in remote mode. |
+| `mode` | — | inferred | `Some(Mode::Remote)` or `Some(Mode::Local)`. Overrides inference. Remote without a key is a start error; local ignores a key (one warning). |
+| `environment` | `FIREWEAVE_ENV`, `APP_ENV` | — | Environment name used for inference when there is no key and no `mode`. Pass your own, e.g. a deploy-stage setting. `NODE_ENV` and `FW_ENV` are not read, and debug builds are never treated as development. |
+| `url` | `FIREWEAVE_URL` (legacy `FW_API_URL`, `FW_ATTEST_URL`) | from the crate version | A `-staging.N` crate version calls `staging-app-server.fireweave.ai`; any other calls `app-server.fireweave.ai`. Set it for a self-hosted or local fw-server: https is required except on localhost, and the allowlist becomes that host plus loopback. |
+| `key` | `FIREWEAVE_KEY` (legacy `FW_PROJECT_API_KEY`) | — | Project key. Pass it to read from your own secret store. Browser keys, analytics vendor keys and org/CLI tokens are rejected at start, naming the source, never the value. |
+| `instance_id` | `FIREWEAVE_INSTANCE_ID` | `inst_` + hash of the host name | Value of `instance_key()`, the same key every FireWeave SDK derives on that host. Nothing is written to disk. Set it when replicas share a host name. |
+| `env` | — | the process | `Arc<dyn Fn(&str) -> Option<String>>` read instead of the process environment (tests, apps with their own config source); `env_map([...])` builds one from pairs. Return `None` for unset; apply no defaults. |
+| `log` | — | standard error | `Arc<dyn Fn(&str)>` receiving `[fireweave]` lines (warnings, the local-mode line, the local `register_target` trace). Route it into your logger. |
+
+The channel comes from the crate version Cargo compiled into your build:
+`fireweave::start::sdk_version()` and `sdk_channel()` report it.
+
+The host name is read with std only (Rust has no `gethostname` without a dependency):
+`/proc/sys/kernel/hostname`, then `HOSTNAME`, `COMPUTERNAME`, `/etc/hostname`. Where none exists
+(macOS without an exported `HOSTNAME`), `instance_key()` is random for the process, with one
+warning: set `FIREWEAVE_INSTANCE_ID` there.
+
+**Mode rule.** `mode` wins. Otherwise: a key means remote. No key and a development environment
+name means local. Anything else (including no environment name at all) is a `Configuration`
+`FireweaveError` from `start` naming `FIREWEAVE_KEY`, so a deploy that forgot its key fails
+instead of silently serving defaults.
+
+**Reads never fail.** If start failed, reads return your default (`*_details` return an `ERROR`
+decision carrying the start error). `start` is synchronous and does no network I/O; a second
+call with the same configuration is a no-op, and a different one returns a `Configuration`
+error. A read before `start` starts FireWeave from the environment alone (once, on that read),
+so call `start` first in `main`. `fireweave::start::client()` is one `&'static FireweaveClient`
+for the life of the process, safe to take before `start` and to inject; shut down with
+`fireweave::start::shutdown()` (never `client().shutdown()`), after which reads serve defaults
+until a new `start`.
+
+**Async.** Remote reads and `identify` are blocking HTTP calls (3 s timeout; `identify` retries
+once). Inside an async handler, run them in `tokio::task::spawn_blocking` (or actix's
+`web::block`) and fall back to the default on a join error.
+
+**Debugging.** `fireweave::start::status()` reports the state, mode and why (`option`, `key` or
+`environment`), channel, SDK version, host, endpoint source, key source, environment name, flag
+count and the start error. It never contains the key, so it is safe to log:
+
+```rust
+eprintln!("fireweave: {:?}", fireweave::start::status());
+```
 
 ## Quick start (production path)
 

@@ -19,7 +19,73 @@ npm install @fireweaveai/server-sdk   # or: bun add …
 import { initFireweave } from 'npm:@fireweaveai/server-sdk';
 ```
 
-## Quick start (production path)
+## Quick start (one line: the start profile)
+
+Most apps need only this ([ADR-0011](../../docs/adr/0011-start-profile.md)). Two small files and one import:
+
+```ts
+// src/fireweave/flags.ts: every control point the app reads, with its local value
+import { defineFlags } from '@fireweaveai/server-sdk/start';
+
+export const flags = defineFlags({
+  'new-checkout': { local: true }, // served only in local mode
+});
+```
+
+```ts
+// src/fireweave/start.ts
+import { start } from '@fireweaveai/server-sdk/start';
+import { flags } from './flags';
+
+start({ flags });
+```
+
+```ts
+// src/main.ts: must be the FIRST import
+import './fireweave/start';
+```
+
+```ts
+// any call site
+import { fw } from '@fireweaveai/server-sdk/start';
+
+// @fireweave-controlpoint new-checkout
+if (await fw.controlPoints.getBooleanValue('new-checkout', false, { targetingKey: user.id })) { /* … */ }
+await fw.identify(user.id, { plan: user.plan });                                   // at sign-in
+await fw.controlPoints.getBooleanValue('nightly-reindex', false, { targetingKey: fw.instanceKey() }); // server as subject
+```
+
+Deployed environments set one variable, `FIREWEAVE_KEY` (the project key, `project-api-key_…`).
+Local development needs nothing when `NODE_ENV` (or `APP_ENV` / `FIREWEAVE_ENV`) is
+`development`, `dev`, `local` or `test`.
+
+### Options and overrides
+
+Every value resolves as: `start()` option, then env var, then legacy name (warns once), then default.
+
+| Option | Env var | Default | What it does |
+| --- | --- | --- | --- |
+| `flags` | — | `{}` | Local values per control point. Ignored in remote mode. |
+| `mode` | — | inferred | `'remote'` or `'local'`. Overrides inference. `'remote'` without a key is a start error; `'local'` ignores a key. |
+| `environment` | `FIREWEAVE_ENV`, `APP_ENV`, `NODE_ENV` | — | Environment name used for inference when there is no key and no `mode`. Pass your own, e.g. `environment: process.env.DEPLOY_STAGE`. |
+| `url` | `FIREWEAVE_URL` (legacy `FW_API_URL`, `FW_ATTEST_URL`) | from the SDK build | A `-staging.N` build calls `staging-app-server.fireweave.ai`; any other calls `app-server.fireweave.ai`. Set it for a self-hosted or local fw-server. |
+| `key` | `FIREWEAVE_KEY` (legacy `FW_PROJECT_API_KEY`) | — | Project key. Pass it to read from your own secret store. Browser keys and vendor keys are rejected at start. |
+| `instanceId` | `FIREWEAVE_INSTANCE_ID` | hash of the host name | Value of `fw.instanceKey()`. Nothing is written to disk. |
+| `env` | — | the process | Read values from this object instead of the environment. |
+| `log` | — | console | Where `[fireweave]` lines go. |
+
+**Mode rule.** `mode` wins. Otherwise: a key means remote. No key and a development
+environment name means local. Anything else (including no environment name at all) throws
+at `start()`, naming the variable, so a deploy that forgot its key fails instead of silently
+serving defaults.
+
+**Reads never throw.** If start fails, reads return your default (`*Details` return an `ERROR`
+decision). `fw.status()` reports the mode, channel, host and key source, never the key.
+`start()` is idempotent; a second call with a different config throws. Zero-config apps can use
+`import '@fireweaveai/server-sdk/register'` (or `node --import`, `bun --preload`) instead of
+`src/fireweave/start.ts`.
+
+## Quick start (production path, core API)
 
 ```ts
 import { initFireweave } from '@fireweaveai/server-sdk';
