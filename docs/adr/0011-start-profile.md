@@ -1,9 +1,9 @@
 # ADR-0011: A start profile for one-line setup, layered on an unchanged core
 
-- **Status:** Proposed (node implemented on `feat/server-sdk-start-profile`; needs the cross-language sign-off GOVERNANCE.md requires before other SDKs follow)
+- **Status:** Proposed (node and web implemented on `feat/server-sdk-start-profile`; needs the cross-language sign-off GOVERNANCE.md requires before other SDKs follow)
 - **Date:** 2026-10-02
-- **Scope:** `@fireweaveai/server-sdk` first (Node, Bun, Deno). Other SDKs adopt the same rules later.
-- **Related:** spec/modes.md (core reads no env, mode never inferred), spec/control-points.md (no invented targeting key), ADR-0008 (multi-runtime support)
+- **Scope:** `@fireweaveai/server-sdk` (Node, Bun, Deno) and `@fireweaveai/web-sdk` (browsers). Other SDKs adopt the same rules later.
+- **Related:** spec/modes.md (core reads no env, mode never inferred), spec/control-points.md (no invented targeting key), ADR-0008 (multi-runtime support), ADR-0009 (browser control points)
 
 ## Context and Problem Statement
 
@@ -57,4 +57,29 @@ Reads on `fw` never throw, matching spec/control-points.md: a failed start serve
   `start/` on the public API only.
 - Explicit `mode` makes "a human typed it" literal for apps that set it. Inference remains for
   apps that do not, bounded by the fail-closed rule above.
-- Cloudflare Workers, the web SDK and the other languages are out of this first step.
+- Cloudflare Workers and the other languages are out of this first step.
+
+## The web start profile
+
+`@fireweaveai/web-sdk/start` applies the same rules in the browser, with four differences that
+follow from where it runs:
+
+1. **The browser reads no environment** (ADR-0009 rule 3 still holds for shipped code). The key,
+   endpoint and environment name are read at **build** time by `@fireweaveai/web-sdk/vite`
+   (the `fireweave()` plugin) or `@fireweaveai/web-sdk/define`, which run in Node, apply the same
+   policy module the browser uses (`src/start/policy.ts`), and inject the inputs as
+   `__FIREWEAVE_WEB_CONFIG__`. Explicit `start()` options still win. A build never infers local
+   mode from Vite's `--mode`; only the dev server and Vitest do.
+2. **Only browser keys** (`fw_public_…`) are accepted. A server key fails the build with a revoke
+   instruction, and the Vite plugin fails a client build whose output contains one.
+3. **Nothing throws.** A browser that fails to start must still render, so `start()` never throws
+   or rejects: a fault logs once, sets the state to `FAILED` with a `problem`, and reads serve
+   defaults. The build is where faults fail loudly.
+4. **Identity is the browser's**, not the host's: a persisted `dev_<uuid>` device id (the
+   scaffolded harness's key, so migrated apps keep their buckets), `identify`/`reset` for
+   sign-in and sign-out, and `persistence`/`setPersistence`/`forget` for consent. There is no
+   `instanceKey()`. Remote mode without a DOM (SSR) does nothing, so no identity is shared across
+   requests.
+
+Deferred from the web plan: a top-level-await boot redirect with build-target raising, CSP
+detection, and a real-bundler integration matrix (Vite 5–8 with Playwright).

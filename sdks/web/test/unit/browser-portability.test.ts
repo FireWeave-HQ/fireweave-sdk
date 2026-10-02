@@ -103,3 +103,19 @@ test('secret key prefixes appear only where they are REJECTED', () => {
     .map(({ path }) => path);
   assert.deepEqual(offenders, [], 'Only hosts.ts may mention vendor key prefixes, to reject them.');
 });
+
+test('the injected build config is read only behind a typeof guard', () => {
+  // A bare read throws ReferenceError in any app built without the plugin.
+  const guarded = "typeof __FIREWEAVE_WEB_CONFIG__ !== 'undefined' ? __FIREWEAVE_WEB_CONFIG__ : undefined";
+  const offenders = sources()
+    .map(({ path, text }) => {
+      const stripped = stripComments(text)
+        .split(guarded)
+        .join('')
+        .replace(/declare const __FIREWEAVE_WEB_CONFIG__: unknown;/g, '')
+        .replace(/'__FIREWEAVE_WEB_CONFIG__'/g, ''); // the name as data (names.ts)
+      return /\b__FIREWEAVE_WEB_CONFIG__\b/.test(stripped) ? path : undefined;
+    })
+    .filter((p): p is string => p !== undefined);
+  assert.deepEqual(offenders, [], 'Read __FIREWEAVE_WEB_CONFIG__ only through the typeof guard in start/state.ts.');
+});

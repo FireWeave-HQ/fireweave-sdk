@@ -13,6 +13,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `tools/release/version.sh apply server` stamps `src/start/build-info.ts` so a build knows its channel.
 - The core entrypoint and `initFireweave` are unchanged and still read no environment.
 
+### Added — `@fireweaveai/web-sdk` start profile ([ADR-0011](docs/adr/0011-start-profile.md), proposed)
+
+- New subpath `@fireweaveai/web-sdk/start` (`start`, `fw`, `defineFlags`): the browser start profile with the same options as the server one (`flags`, `mode`, `environment`, `url`, `key`) plus `persistence` and `deviceId`. `fw` adds `identify`, `reset`, `deviceId`, `setPersistence`, `forget`, `ready`, `status` and `subscribe`.
+- New Node build entries `@fireweaveai/web-sdk/vite` (the `fireweave()` plugin) and `@fireweaveai/web-sdk/define` (`fireweaveDefine`, `assertFireweaveBuild`). They read `FIREWEAVE_BROWSER_KEY`, `FIREWEAVE_URL` and `FIREWEAVE_ENV` at build time, fail the build on a bad configuration, and fail a Vite client build that contains a server key. `vite` is an optional peer dependency.
+- `tools/release/version.sh apply web` stamps the web `src/start/build-info.ts` too.
+- The core entrypoint and `initFireweave` are unchanged and still read no environment.
+
 ### Fixed
 
 - `FireweaveRemoteAdapter.shutdown()` clears its timeout timer, so a clean shutdown no longer holds the process open for up to `shutdownTimeoutMs`.
