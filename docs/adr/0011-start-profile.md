@@ -1,8 +1,8 @@
 # ADR-0011: A start profile for one-line setup, layered on an unchanged core
 
-- **Status:** Proposed (node, web, Python and Go implemented on `feat/server-sdk-start-profile`; needs the cross-language sign-off GOVERNANCE.md requires before other SDKs follow)
+- **Status:** Proposed (node, web, Python, Go, Java and Rust implemented on `feat/server-sdk-start-profile`; needs the cross-language sign-off GOVERNANCE.md requires before other SDKs follow)
 - **Date:** 2026-10-02
-- **Scope:** `@fireweaveai/server-sdk` (Node, Bun, Deno), `@fireweaveai/web-sdk` (browsers), Python `fireweave.start` and Go `.../sdks/go/v2/fw`. Java, Rust, Swift and Dart adopt the same rules later.
+- **Scope:** `@fireweaveai/server-sdk` (Node, Bun, Deno), `@fireweaveai/web-sdk` (browsers), Python `fireweave.start`, Go `.../sdks/go/v2/fw`, Java `ai.fireweave.sdk.start` and Rust `fireweave::start`. Swift and Dart adopt the same rules later.
 - **Related:** spec/modes.md (core reads no env, mode never inferred), spec/control-points.md (no invented targeting key), ADR-0008 (multi-runtime support), ADR-0009 (browser control points)
 
 ## Context and Problem Statement
@@ -33,9 +33,11 @@ The start profile, and only it, may:
 3. **Default the endpoint from its own release channel.** A staging build defaults to
    `https://staging-app-server.fireweave.ai`, any other to `https://app-server.fireweave.ai`.
    The TypeScript SDKs read a stamp `tools/release/version.sh apply server|web` writes into
-   `src/start/build-info.ts` (`-staging.N`). Python and Go need no stamp: Python reads the
-   installed distribution's version (staging builds are PEP 440 `X.Y.ZaN`), and Go reads the
-   module version from the binary's build info (`vX.Y.Z-staging.N`).
+   `src/start/build-info.ts` (`-staging.N`). The others need no stamp: Python reads the
+   installed distribution's version (staging builds are PEP 440 `X.Y.ZaN`), Go reads the
+   module version from the binary's build info (`vX.Y.Z-staging.N`), Java reads a
+   Maven-filtered `build.properties` (`${project.version}`), and Rust compiles in
+   `CARGO_PKG_VERSION`.
    `url` / `FIREWEAVE_URL` override it, and the host allowlist follows the URL actually used.
 4. **Check the key family** before any request: browser keys (`fw_public_`), analytics
    vendor keys, and org or CLI tokens are rejected at start, naming the source, never the value.
@@ -60,7 +62,7 @@ Reads on `fw` never throw, matching spec/control-points.md: a failed start serve
   `start/` on the public API only.
 - Explicit `mode` makes "a human typed it" literal for apps that set it. Inference remains for
   apps that do not, bounded by the fail-closed rule above.
-- Cloudflare Workers, Java, Rust, Swift and Dart are out of this step.
+- Cloudflare Workers, Swift and Dart are out of this step.
 
 ## The web start profile
 
@@ -103,3 +105,20 @@ read before it cannot be deferred to a later turn the way Node defers it:
 Deferred core fixes from the build plan (they change core behaviour, so they are separate work):
 Python's input guards, no-redirect transport and extended redaction; Go's remote-adapter
 Close/Resolve race (GO-1), extended redaction (GO-RD) and the lower `go` directive (GO-FL).
+
+## Java and Rust
+
+Both follow Go's shape: `start` is synchronous and does no network I/O, a read before it starts
+from the environment once on that read, a different second start is an error, and one permanent
+client per process (`Fw.client()`, `fireweave::start::client()`) sits on a forwarding adapter so
+a reference captured before `start` keeps working. The instance key uses the same FNV-1a-64 hash
+of the host name as Node and Go, so one host gives one key in every SDK.
+
+Java adds `start` as a fourth top-level package beside `application`, `domain` and
+`infrastructure`. The architecture guard (`ArchitectureLayersGuardTest`) pins that list, and this
+ADR is the decision that admits `start` to it; `StartConfinementGuardTest` keeps it on the public
+`application` and `domain` types and keeps every core package from importing it.
+
+Deferred: Java's `Fw.verify()` credential probe and Spring profile support; Rust's MSRV correction
+(the locked `ureq` 3 graph already needs Rust 1.85, so CI's 1.75 job fails on `master` too) and
+remote diagnostics; redaction learning `FIREWEAVE_KEY` in both cores.

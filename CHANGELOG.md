@@ -34,6 +34,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `Client()` is one permanent `*fireweave.Client` for the process, so a pointer captured before `Start` keeps working.
 - The core packages are unchanged apart from re-exporting `fireweave.ValidateControlPointKey`, and still read no environment.
 
+### Added — Java start profile, package `ai.fireweave.sdk.start` ([ADR-0011](docs/adr/0011-start-profile.md), proposed)
+
+- `Fw.start(StartOptions)`, `Fw.defineFlags`, `Fw.controlPoints()`, `Fw.identify`, `Fw.instanceKey`, `Fw.status`, `Fw.client`, `Fw.shutdown`. `StartOptions.builder()` takes `flags`, `mode`, `environment`, `url`, `key`, `instanceId`, `env` and `log`, with the same env fallbacks, mode rule and key checks as the server SDK.
+- The default endpoint follows this artifact's version, read from a Maven-filtered `build.properties`: `X.Y.Z-staging.N` calls staging, anything else production.
+- `Fw.client()` is one permanent `FireweaveClient` for the JVM, so a reference captured before `start` keeps working.
+- The core packages are unchanged and still read no environment. The architecture guard now allows the `start` package as the one sanctioned addition beside the three layers.
+
+### Added — Rust start profile, module `fireweave::start` ([ADR-0011](docs/adr/0011-start-profile.md), proposed)
+
+- `start(StartOptions)`, `define_flags`, `control_points()`, `identify`, `instance_key`, `status`, `client`, `shutdown`. `StartOptions` fields `flags`, `mode`, `environment`, `url`, `key`, `instance_id`, `env` and `log`, with the same env fallbacks, mode rule and key checks as the server SDK. No new dependencies.
+- The default endpoint follows the crate version compiled into the app (`CARGO_PKG_VERSION`): `X.Y.Z-staging.N` calls staging, anything else production.
+- `client()` is one permanent `FireweaveClient` for the process.
+- The core is unchanged apart from `pub mod start;`, and still reads no environment.
+
 ### Fixed
 
 - `FireweaveRemoteAdapter.shutdown()` clears its timeout timer, so a clean shutdown no longer holds the process open for up to `shutdownTimeoutMs`.
