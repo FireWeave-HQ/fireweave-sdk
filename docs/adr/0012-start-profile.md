@@ -1,9 +1,9 @@
 # ADR-0012: A start profile for one-line setup, layered on an unchanged core
 
-- **Status:** Proposed (node, web, Python, Go, Java and Rust implemented on `feat/server-sdk-start-profile`; needs the cross-language sign-off GOVERNANCE.md requires before other SDKs follow)
+- **Status:** Proposed (all eight SDKs implemented on `feat/server-sdk-start-profile`, Swift not yet compiled; needs the cross-language sign-off GOVERNANCE.md requires before other SDKs follow)
 - **Date:** 2026-10-02
-- **Scope:** `@fireweaveai/server-sdk` (Node, Bun, Deno), `@fireweaveai/web-sdk` (browsers), Python `fireweave.start`, Go `.../sdks/go/v2/fw`, Java `ai.fireweave.sdk.start` and Rust `fireweave::start`. Swift and Dart adopt the same rules later.
-- **Related:** spec/modes.md (core reads no env, mode never inferred), spec/control-points.md (no invented targeting key), ADR-0008 (multi-runtime support), ADR-0009 (browser control points)
+- **Scope:** `@fireweaveai/server-sdk` (Node, Bun, Deno), `@fireweaveai/web-sdk` (browsers), Python `fireweave.start`, Go `.../sdks/go/v2/fw`, Java `ai.fireweave.sdk.start`, Rust `fireweave::start`, Dart `package:fireweave/client.dart` and `server.dart`, and Swift `FireweaveStart`.
+- **Related:** spec/modes.md (core reads no env, mode never inferred), spec/control-points.md (no invented targeting key), ADR-0008 (multi-runtime support), ADR-0009 (browser control points), ADR-0011 (Dart control points)
 
 ## Context and Problem Statement
 
@@ -62,7 +62,7 @@ Reads on `fw` never throw, matching spec/control-points.md: a failed start serve
   `start/` on the public API only.
 - Explicit `mode` makes "a human typed it" literal for apps that set it. Inference remains for
   apps that do not, bounded by the fail-closed rule above.
-- Cloudflare Workers, Swift and Dart are out of this step.
+- Cloudflare Workers are out of this step.
 
 ## The web start profile
 
@@ -122,3 +122,27 @@ ADR is the decision that admits `start` to it; `StartConfinementGuardTest` keeps
 Deferred: Java's `Fw.verify()` credential probe and Spring profile support; Rust's MSRV correction
 (the locked `ureq` 3 graph already needs Rust 1.85, so CI's 1.75 job fails on `master` too) and
 remote diagnostics; redaction learning `FIREWEAVE_KEY` in both cores.
+
+## Dart and Swift
+
+Both ship a **client** profile and a **server** profile, because both run in apps and on servers.
+
+- **Client profiles** (Flutter and Dart web; iOS and macOS apps) follow the web profile: browser
+  keys only, a device id for anonymous visitors, `identify`/`reset`, and configuration fixed at
+  build time — Dart compile-time defines (`--dart-define`, read only as `const` literals, because a
+  non-const read is empty under AOT and throws under dart2js) and Swift Info.plist values. They read
+  no process environment. A Swift debug build with no key and no environment name counts as
+  development through `FireweaveStart`'s own debug define; a release build fails closed.
+- **Server profiles** follow the server rules above: project keys, `FIREWEAVE_*` from the process
+  environment, legacy names with a warning, and `instanceKey`.
+- **Channel.** Neither can read its own package version at runtime, so `tools/release/version.sh
+  apply dart|swift` stamps a build-info file like the TypeScript SDKs. Swift has no manifest and
+  releases by tag alone, so a Swift release must commit the stamp before tagging.
+- **Lifecycle.** Dart has no side-effect imports or top-level await, so the line is
+  `await Fireweave.start(...)`, and the singleton is per isolate. The Dart client never throws, like
+  web; the Dart server and Swift `startFireweave` throw configuration errors before any I/O.
+
+Deferred: the `fireweave_flutter` companion (persisted device id, build-mode environment, refresh
+on resume); Swift's core fixes SW-8 (redaction) and SW-9 (last-good on a failed refresh), its
+refresh scheduler, privacy manifest and distribution (a root `Package.swift` mirror). The Swift
+start profile has not yet been compiled.

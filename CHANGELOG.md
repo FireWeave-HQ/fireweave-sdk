@@ -48,6 +48,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `client()` is one permanent `FireweaveClient` for the process.
 - The core is unchanged apart from `pub mod start;`, and still reads no environment.
 
+### Added — Dart start profile, `package:fireweave/client.dart` and `server.dart` ([ADR-0012](docs/adr/0012-start-profile.md), proposed)
+
+- `await Fireweave.start(flags: …)` and a per-isolate `fw` in two profiles. The client profile (Flutter, Dart web) takes a browser key from options or the compile-time defines `FIREWEAVE_BROWSER_KEY`, `FIREWEAVE_URL` and `FIREWEAVE_ENV`, never throws (a fault sets `failed` with a `problem`), and offers `identify`, `reset`, `deviceId` and a `DeviceIdStore` persistence hook. The server profile (Dart VM) reads `FIREWEAVE_*` from the process environment, takes project keys, throws a `Configuration` error on a fault, and offers `instanceKey`.
+- The default endpoint follows `lib/src/start/build_info.dart`, which `version.sh apply dart` now stamps: `-staging.N` calls staging.
+- The start layer owns and closes its own `dart:io` transport and logs each remote error kind once. No new dependencies; the core is unchanged.
+
+### Added — Swift start profile, product `FireweaveStart` ([ADR-0012](docs/adr/0012-start-profile.md), proposed)
+
+- `startFireweave(flags: …)` (synchronous, throws a configuration error before any I/O) and a process-wide `fw`. The app profile reads Info.plist `FIREWEAVE_BROWSER_KEY`, `FIREWEAVE_URL` and `FIREWEAVE_ENV`, takes browser keys only, and keeps a `dev_<UUID>` device id in UserDefaults (`persistence`, `setPersistence`, `forget` for consent). The server profile reads `FIREWEAVE_*` from the environment and takes project keys.
+- The default endpoint follows `Sources/FireweaveStart/BuildInfo.swift`, which `version.sh apply swift` now writes.
+- **Not yet compiled or tested**: written without a Swift toolchain; Swift testing is set up separately.
+
 ### Fixed
 
 - `FireweaveRemoteAdapter.shutdown()` clears its timeout timer, so a clean shutdown no longer holds the process open for up to `shutdownTimeoutMs`.
