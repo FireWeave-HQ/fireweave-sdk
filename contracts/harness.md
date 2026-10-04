@@ -9,9 +9,9 @@ compares results, and reports into the cross-language compatibility matrix.
    methods / `invokeCapability`) matches fixture `expect` across Node, Python, Go, Java, Rust,
    and Swift.
 2. Fail CI on silent divergence (see [`README.md`](./README.md)).
-3. Report every language a fixture could conceivably apply to — 65 fixtures x 7 languages
-   (node, web, python, java, go, rust, swift) — with an honest status for each cell, never a
-   silently-missing one.
+3. Report every language a fixture could conceivably apply to — 65 fixtures x 8 languages
+   (node, web, python, java, go, rust, swift, dart) — with an honest status for each cell,
+   never a silently-missing one.
 
 ## Rewrite note (this document)
 
@@ -71,6 +71,7 @@ Comparator library responsibilities (one per language, same rules):
 | Java | `sdks/java/fireweave-testing` (`ConformanceRunner` + `ConformanceTest`, `mvn test`) | `InMemoryAdapter`, direct `FireweaveRuntime`+`FireweaveClient` | `FireweaveRemoteAdapter` vs an **in-process HTTP stub** (`FixtureHttpStub`, pure JDK `com.sun.net.httpserver`) — same "no `node` in the canonical dockerized `maven:3.9-eclipse-temurin-21` image" constraint as Go, solved with a same-process embedded server instead of a fake transport |
 | Rust | `sdks/rust/conformance/runner.rs` (`conformance` bin: `cargo run --bin conformance`) | `InMemoryAdapter`, direct `FireweaveRuntime`+`FireweaveClient` | `FireweaveRemoteAdapter` vs an **in-process loopback HTTP stub** (`sdks/rust/conformance/fake_server.rs`, std only) — same "no `node` in the canonical dockerized `rust:1-slim` image" constraint as Go and Java |
 | Swift | `sdks/swift/Sources/FireweaveConformance/Runner.swift` (`swift run FireweaveConformance`) | `InMemoryAdapter`, direct `FireweaveRuntime`+`FireweaveClient`; 6 context fixtures driven by invocation-only context are `skipped-with-documented-limitation` | none over HTTP — `evaluate()` is a synchronous cache read with no per-call I/O, so 8 of 9 faults fixtures are `skipped-with-documented-limitation`; `fault-stale-cache` runs on `InMemoryAdapter` |
+| Dart | `sdks/dart/conformance/run_conformance.dart` (+ `test/conformance_test.dart`, `dart test`) — ADR-0011 | `InMemoryAdapter`, direct `FireweaveRuntime`+`FireweaveClient`; prefetch-then-synchronous-read, so the 6 invocation-context-matching context fixtures are `skipped-with-documented-limitation` (swift's disposition) | `fault-stale-cache` only (provisioned directly); the other 8 are `skipped-with-documented-limitation` — `evaluate()` never does I/O |
 
 Node and Python are close enough to a real subprocess `test-server` that they use it directly;
 Go and Java's canonical CI environment cannot, so they substitute a same-language stand-in that
@@ -92,7 +93,7 @@ speaks the identical wire contract (`POST /v1/flags/evaluate`, `{decisions:[...]
    all cases pass. One report row per fixture (case detail in `message`).
 
 The canonical inventory is **65** fixtures; each language's own report must contain 65 cells;
-the cross-language aggregate (`tools/conformance/compare.mjs`) produces **65 x 7**.
+the cross-language aggregate (`tools/conformance/compare.mjs`) produces **65 x 8**.
 
 ### Lifecycle fixtures
 

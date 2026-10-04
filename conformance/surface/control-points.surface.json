@@ -9,6 +9,7 @@
       "web": "controlPoints",
       "java": "controlPoints",
       "swift": "controlPoints",
+      "dart": "controlPoints",
       "python": "control_points",
       "rust": "control_points",
       "go": "ControlPoints"
@@ -44,6 +45,6 @@
   },
   "compatibility": {
     "node": "green", "web": "green", "python": "green", "java": "green",
-    "go": "green", "rust": "green", "swift": "green"
+    "go": "green", "rust": "green", "swift": "green", "dart": "green"
   }
 }

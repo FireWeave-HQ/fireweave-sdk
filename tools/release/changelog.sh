@@ -2,11 +2,11 @@
 # Generate a conventional-commits changelog for one SDK component.
 #
 # Usage: tools/release/changelog.sh <component> <version> [<out-file>]
-#   component: server | web | python | java | go | rust | swift
+#   component: server | web | python | java | go | rust | swift | dart
 #   version:   semver without leading v (e.g. 0.1.0)
 #
 # Range: commits since the last tag matching this component's tag convention
-# (server/v* | web/v* | python/v* | java/v* | rust/v* | swift/v* | sdks/go/v* —
+# (server/v* | web/v* | python/v* | java/v* | rust/v* | swift/v* | dart/v* | sdks/go/v* —
 # Go's tag must equal the module subdirectory path for `go get` resolution),
 # scoped to the paths that ship in the component. Commits are grouped by
 # conventional-commit type; anything unparseable lands under "Other changes"
@@ -26,7 +26,8 @@ case "$COMPONENT" in
   java)   TAG_PREFIX="java/v";    PATHS=("sdks/java" "examples/java") ;;
   rust)   TAG_PREFIX="rust/v";    PATHS=("sdks/rust" "examples/rust") ;;
   swift)  TAG_PREFIX="swift/v";   PATHS=("sdks/swift" "examples/swift") ;;
-  *) echo "changelog: unknown component '$COMPONENT' (server|web|python|java|go|rust|swift)" >&2; exit 2 ;;
+  dart) TAG_PREFIX="dart/v"; PATHS=("sdks/dart" "examples/dart") ;;
+  *) echo "changelog: unknown component '$COMPONENT' (server|web|python|java|go|rust|swift|dart)" >&2; exit 2 ;;
 esac
 # Shared surfaces always included: contract fixtures and spec affect every SDK.
 PATHS+=("contracts" "spec")

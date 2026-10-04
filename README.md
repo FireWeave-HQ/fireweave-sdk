@@ -14,6 +14,7 @@
   <a href="https://central.sonatype.com/artifact/ai.fireweave/fireweave-sdk"><img alt="java" src="https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Frepo1.maven.org%2Fmaven2%2Fai%2Ffireweave%2Ffireweave-sdk%2Fmaven-metadata.xml&label=java&logo=openjdk&style=flat&labelColor=0E0E10&color=ED5502&logoColor=white"></a>
   <a href="https://crates.io/crates/fireweave"><img alt="rust" src="https://img.shields.io/crates/v/fireweave?label=rust&logo=rust&style=flat&labelColor=0E0E10&color=ED5502&logoColor=white"></a>
   <a href="sdks/swift"><img alt="swift" src="https://img.shields.io/badge/swift-from%20source-ED5502?logo=swift&style=flat&labelColor=0E0E10&logoColor=white"></a>
+  <a href="sdks/dart"><img alt="dart" src="https://img.shields.io/badge/dart-from%20source-ED5502?logo=dart&style=flat&labelColor=0E0E10&logoColor=white"></a>
 </p>
 
 **Fireweave is the AI release engineer for teams shipping with coding agents.** Every change rolls out behind a control point, one step at a time, with guardrails watching real users — and if something breaks, Fireweave pauses or rolls it back before most users ever see it. It's the only way to ship as fast as your agents write code, without the fear of breaking production.
@@ -275,6 +276,37 @@ let enabled = fireweave.controlPoints.getBooleanValue("new-checkout", default: f
 print("new-checkout: \(enabled)")
 
 await fireweave.shutdown()
+```
+
+</details>
+
+<details>
+<summary><b>Dart</b> · Flutter (Android, iOS, macOS, Windows, Linux, web) · Dart VM</summary>
+
+```yaml
+# Not on pub.dev yet: clone next to your app and depend on it by path
+dependencies:
+  fireweave:
+    path: ../fireweave-sdk/sdks/dart
+```
+
+```dart
+import 'package:fireweave/fireweave.dart';
+
+final fw = await initFireweave(InitFireweaveOptions.remote(
+  apiKey: 'project-api-key_...',
+  apiUrl: 'https://app-server.fireweave.ai',
+  context: EvaluationContext(targetingKey: deviceId), // prefetch under a stable key
+));
+
+// Once per login: register the target, then prefetch its decisions.
+await fw.identify('user_42',
+    options: const RegisterTargetOptions(properties: {'plan': 'pro'}));
+
+// Inside build(): synchronous, never throws.
+final enabled = fw.controlPoints.getBooleanValue('new-checkout', false);
+
+await fw.shutdown();
 ```
 
 </details>
