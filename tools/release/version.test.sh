@@ -268,6 +268,11 @@ EOF
 cmd_apply dart "2.2.1-staging.2" --manifest-root "$scratch2"
 assert_eq "apply: pubspec.yaml written" "2.2.1-staging.2" "$(sed -nE 's/^version:[[:space:]]*(.*)$/\1/p' "$scratch2/sdks/dart/pubspec.yaml" | head -n1)"
 assert_eq "apply: pubspec.yaml keeps its other keys" "name: fireweave" "$(head -n1 "$scratch2/sdks/dart/pubspec.yaml")"
+assert_eq "apply: dart build_info version stamped" "const String buildSdkVersion = '2.2.1-staging.2';" "$(grep '^const String buildSdkVersion' "$scratch2/sdks/dart/lib/src/start/build_info.dart")"
+assert_eq "apply: dart staging version stamps the staging channel" "const String buildSdkChannel = 'staging';" "$(grep '^const String buildSdkChannel' "$scratch2/sdks/dart/lib/src/start/build_info.dart")"
+cmd_apply swift "2.3.0-staging.4" --manifest-root "$scratch2"
+assert_eq "apply: swift build info version stamped" '  static let sdkVersion = "2.3.0-staging.4"' "$(grep 'static let sdkVersion' "$scratch2/sdks/swift/Sources/FireweaveStart/BuildInfo.swift")"
+assert_eq "apply: swift staging version stamps the staging channel" '  static let sdkChannel = "staging"' "$(grep 'static let sdkChannel' "$scratch2/sdks/swift/Sources/FireweaveStart/BuildInfo.swift")"
 
 # java: write_manifest shells out to `mvn versions:set` (same command
 # publish-maven now calls this way instead of repeating it inline — see
