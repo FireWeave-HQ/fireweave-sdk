@@ -13,8 +13,10 @@ platform, the Dart VM, and Dart compiled to JavaScript or WebAssembly.
   web and Swift SDKs, not the server ones
   ([ADR-0009](../../docs/adr/0009-browser-control-points.md),
   [ADR-0011](../../docs/adr/0011-dart-control-points.md)).
-- **The SDK reads no environment variables** — every option is an explicit argument to
-  `initFireweave` (`spec/modes.md`).
+- **The core reads no environment variables** — every option is an explicit argument to
+  `initFireweave` (`spec/modes.md`). The opt-in start profile below is the one documented
+  exception ([ADR-0012](../../docs/adr/0012-start-profile.md)), confined by guard tests to one
+  define-reading file (client) and one environment-reading file (server).
 - **No vendor SDK, key, or hostname in your app.** Applications hold a Fireweave project key
   and talk to fw-server; which backend fw-server forwards to is fw-server's concern.
 
@@ -44,6 +46,176 @@ dependencies:
   fireweave:
     path: ../fireweave-sdk/sdks/dart
 ```
+
+## Quick start (one line: the start profile)
+
+The start profile ([ADR-0012](../../docs/adr/0012-start-profile.md)) is one awaited call over
+the unchanged core: it resolves the key, the endpoint and the mode by rule, keeps one client
+per isolate, and gives you `fw`. Dart runs no code on import and has no top-level `await`, so
+the one line is `await Fireweave.start(...)` in `main`. `initFireweave` (below) is unchanged.
+
+There are two profiles in this package; pick one per app.
+
+### Flutter and Dart web apps: `package:fireweave/client.dart`
+
+```dart
+// lib/fireweave/flags.dart: every control point the app reads, with its local value
+import 'package:fireweave/client.dart';
+
+final flags = defineFlags({
+  'new-checkout': Flag.local(true, description: 'New checkout flow'),
+});
+
+// lib/main.dart
+import 'package:fireweave/client.dart';
+import 'fireweave/flags.dart';
+
+Future<void> main() async {
+  await Fireweave.start(flags: flags); // before runApp; never throws
+  runApp(const App());
+}
+```
+
+```dart
+// @fireweave-controlpoint new-checkout
+if (fw.controlPoints.getBooleanValue('new-checkout', false)) { /* sync, safe in build() */ }
+
+await fw.identify(user.id, properties: {'plan': user.plan}); // sign-in: register, re-prefetch
+await fw.reset();                      // sign-out: back to the device id
+await fw.reset(rotateDeviceId: true);  // consent withdrawn: a fresh device id
+fw.deviceId;                           // the anonymous key, for analytics joins
+fw.status;                             // mode, why, endpoint, key source, problem; never the key
+fw.changes.listen((state) => ...);     // after start settles, identify, reset, shutdown
+```
+
+The client reads no environment at run time. The key, endpoint and environment name are
+compile-time defines:
+
+```bash
+flutter run --dart-define=FIREWEAVE_ENV=development             # local, no key (debug launch configs only)
+flutter build apk --dart-define-from-file=fireweave.env          # FIREWEAVE_BROWSER_KEY=fw_public_...
+dart compile js -DFIREWEAVE_BROWSER_KEY=fw_public_... web/main.dart
+```
+
+Only browser keys (`fw_public_…`) are accepted: a browser key is public by construction, since
+it ships inside the app. `FIREWEAVE_KEY` is never read as a define; passing it logs a warning
+telling you to remove and revoke it. A change to a define needs a rebuild (a full restart in
+`flutter run`), not a hot reload.
+
+**Nothing throws.** An app that fails to start must still draw its first frame, so a refused
+configuration logs one line, `fw.status.state` becomes `StartState.failed` with a `problem`, and
+every read serves its default. A release build with no key and no development environment name
+therefore runs on defaults; check `fw.status` (or forward `log:` to your crash reporter). This
+package imports nothing from Flutter, so it cannot see the build mode: `flutter run` without a
+key needs `--dart-define=FIREWEAVE_ENV=development`. Never put a development name in a release
+define file.
+
+**Device id.** Without options it is an in-memory `dev_<uuid>` for this run. Pass `deviceId:` to
+use your own anonymous id (used verbatim, not stored), or `deviceIdStore:` to persist one. The
+package has no dependencies, so it ships no store; a Flutter app can back one with
+`shared_preferences`:
+
+```dart
+class PrefsDeviceIdStore implements DeviceIdStore {
+  final _prefs = SharedPreferencesAsync();
+  @override Future<String?> read() => _prefs.getString('fireweave.device-id');
+  @override Future<void> write(String id) => _prefs.setString('fireweave.device-id', id);
+  @override Future<void> delete() => _prefs.remove('fireweave.device-id');
+}
+```
+
+A `fireweave_flutter` companion (persisted id, build-mode environment, rebuild scope, refresh
+on resume) is planned and not part of this package.
+
+### Dart servers, CLIs and executables: `package:fireweave/server.dart`
+
+```dart
+import 'dart:io';
+import 'package:fireweave/server.dart';
+import 'package:my_server/fireweave/flags.dart';
+
+Future<void> main() async {
+  await Fireweave.start(flags: flags); // FIREWEAVE_KEY from the process environment
+  ProcessSignal.sigterm.watch().listen((_) async {
+    await fw.shutdown(); // closes the connection pool so the VM exits at once
+    exit(0);
+  });
+  // serve...
+}
+
+// @fireweave-controlpoint nightly-reindex
+if (fw.controlPoints.getBooleanValue('nightly-reindex', false)) { /* ... */ }
+
+await fw.identify(user.id, properties: {'plan': user.plan}); // registers; reads do not change
+fw.instanceKey; // FIREWEAVE_INSTANCE_ID, else inst_ + a hash of the host name
+```
+
+The key comes from the process environment only, never a define, so it is never baked into an
+executable. `server.dart` refuses to start on the web. Server decisions are prefetched once, at
+start, under `fw.instanceKey` (the server is the subject): a read whose per-call
+`context.targetingKey` differs serves the default with `InvalidContext` and warns once. Per-user
+server reads and periodic refresh are not part of the start profile yet; until then
+`await fw.client?.runtime.refresh()` re-fetches, and `initFireweave` with a per-user context
+covers per-user reads.
+
+### Options and overrides
+
+Each value resolves as: the `Fireweave.start` option, then the client's compile-time define or
+the server's environment variable, then the default. Empty and whitespace-only values count as
+unset.
+
+| Option | Client define | Server environment | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `flags` | — | — | `{}` | `defineFlags({...})`, checked with the core's key rule. Served in local mode only; a local read of a key missing from it gets its default and warns once. |
+| `mode` | — | — | inferred | `Mode.local` or `Mode.remote`; see the mode rule. |
+| `environment` | `FIREWEAVE_ENV` | `FIREWEAVE_ENV`, then `APP_ENV` | — | Only feeds the mode rule. `FW_ENV` is not read. |
+| `url` | `FIREWEAVE_URL` | `FIREWEAVE_URL`, then legacy `FW_API_URL` / `FW_ATTEST_URL` (one warning) | this build's channel | `-staging.N` builds call `https://staging-app-server.fireweave.ai`, others `https://app-server.fireweave.ai`. https only, except `localhost`, `127.0.0.1` and `::1`. An override is the only extra allowed host. |
+| `key` | `FIREWEAVE_BROWSER_KEY` | `FIREWEAVE_KEY`, then legacy `FW_PROJECT_API_KEY` (one warning) | — | Client: browser keys (`fw_public_…`) only; a server key gets a revoke instruction. Server: browser keys, analytics vendor keys and org/CLI tokens are refused. Messages name the source, never the value. |
+| `deviceId` (client) | — | — | in-memory `dev_<uuid>` | App-supplied anonymous id. |
+| `deviceIdStore` (client) | — | — | none | Persists the device id. |
+| `instanceId` (server) | — | `FIREWEAVE_INSTANCE_ID` | `inst_` + FNV-1a-64 of `HOSTNAME` or the host name | The same hash as every other SDK; nothing is written to disk. |
+| `env` (server) | — | — | the process environment | A map read instead, for tests. |
+| `transport` | — | — | the profile's own `dart:io` client, closed by `fw.shutdown()`; `fetch` on the web | Not part of the configuration check. |
+| `log` | — | — | `print` | Where `[fireweave]` lines go. Not part of the configuration check. |
+
+### The mode rule
+
+1. An explicit `mode` wins: `Mode.local` ignores a key (one warning, nothing is sent);
+   `Mode.remote` without a key is a configuration fault.
+2. Otherwise a key means remote.
+3. No key and an environment name of `development`, `dev`, `local` or `test` (trimmed, any case)
+   means local.
+4. Anything else fails closed: the server throws `FireweaveError` (`Configuration`,
+   `PROVIDER_FATAL`) naming `FIREWEAVE_KEY`; the client becomes `failed` naming
+   `FIREWEAVE_BROWSER_KEY`. A missing credential in production never becomes local evaluation.
+
+### One client per isolate
+
+- Dart statics belong to one isolate: call `Fireweave.start` in every isolate that reads
+  (background isolates, `Isolate.run`, each isolate of a `shared: true` server).
+- An identical second start is a no-op. A different one throws on the server; on the client it
+  logs once and keeps the first. Local values are part of the check in local mode only.
+- A read before start returns the default (`NotReady` for the `*Details` forms) and warns once.
+  Reads never throw, before start, after a failed start, or after shutdown.
+- `fw.shutdown()` closes everything; a later start begins fresh. In tests, call
+  `Fireweave.debugResetForTests()` between cases.
+
+### Is FireWeave working? `fw.status`
+
+```dart
+print(fw.status);
+// FireweaveStatus(state: ready, mode: remote, modeSource: key, channel: production,
+//   sdkVersion: 2.2.0, host: app-server.fireweave.ai,
+//   endpointSource: SDK channel (production), keySource: FIREWEAVE_KEY, flagCount: 1)
+```
+
+It never contains the key. `problem` says why decisions are defaults: a configuration fault
+(`missing-key`, `server-key`, `wrong-key-family`, `insecure-url`, `invalid-flags`,
+`start-failed`) or the last fw-server failure (`key-rejected` for 401/403, `rate-limited`,
+`unreachable`, `unexpected-response`, cleared by a later success). Each kind of fw-server
+failure also logs one line per isolate naming the key's source and the host, and
+`lastErrorKind` keeps the kind. A local start logs one `[fireweave:local]` line, so a local boot
+in a production log stands out.
 
 ## Quick start (production path)
 
@@ -133,6 +305,7 @@ nine live on `client.controlPoints`; `client.flags` is an identical, deprecated 
 | `lib/src/infrastructure/adapters/in_memory_adapter.dart` | Deterministic fixture-driven adapter for tests. |
 | `lib/src/infrastructure/hosts.dart` | SSRF allowlist (on by default; https required off-loopback). |
 | `lib/src/infrastructure/transport/` | The `dart:io` and `fetch` transports, selected by conditional import. |
+| `lib/client.dart`, `lib/server.dart`, `lib/src/start/` | The start profile, built only on the public API above. `client_defines.dart` is the only file that reads compile-time defines, `server_env_io.dart` the only one that reads the environment or the host name, and `build_info.dart` is stamped by `tools/release/version.sh apply dart`. |
 
 ## Development
 
@@ -144,6 +317,9 @@ dart test                       # VM leg: unit + guards + the 65-fixture gate
 dart test -p chrome             # browser leg: runtime under dart2js + fetch transport
 dart compile js   -o /tmp/example.js   example/fireweave_example.dart
 dart compile wasm -o /tmp/example.wasm example/fireweave_example.dart
+dart compile js   -DFIREWEAVE_ENV=development -o /tmp/start.js   example/start_client_example.dart
+dart compile wasm -DFIREWEAVE_ENV=development -o /tmp/start.wasm example/start_client_example.dart
+dart compile exe  -DFIREWEAVE_ENV=development -o /tmp/start example/start_client_example.dart && /tmp/start
 dart run conformance/run_conformance.dart --contracts ../../contracts --out /tmp/report.json
 dart pub publish --dry-run
 ```
