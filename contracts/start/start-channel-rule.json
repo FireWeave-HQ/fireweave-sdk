@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "id": "start-channel-rule",
+  "suite": "start",
+  "description": "Release channel from a semver-style version",
+  "rules": [
+    "SP-13"
+  ],
+  "profile": "any",
+  "provisional": true,
+  "cases": [
+    {
+      "name": "release-is-production",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "2.4.0"
+      },
+      "expect": {
+        "channel": "production"
+      }
+    },
+    {
+      "name": "staging-is-staging",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "2.4.0-staging.1"
+      },
+      "expect": {
+        "channel": "staging"
+      }
+    },
+    {
+      "name": "go-tag-staging-is-staging",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "v2.4.0-staging.12"
+      },
+      "expect": {
+        "channel": "staging"
+      }
+    },
+    {
+      "name": "other-prerelease-is-production",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "2.4.0-rc.1"
+      },
+      "expect": {
+        "channel": "production"
+      }
+    },
+    {
+      "name": "snapshot-is-production",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "2.4.0-SNAPSHOT"
+      },
+      "expect": {
+        "channel": "production"
+      }
+    },
+    {
+      "name": "devel-is-production",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "(devel)"
+      },
+      "expect": {
+        "channel": "production"
+      }
+    },
+    {
+      "name": "empty-is-production",
+      "when": {
+        "operation": "channelForVersion",
+        "version": ""
+      },
+      "expect": {
+        "channel": "production"
+      }
+    }
+  ],
+  "compatibility": {
+    "node": "not-applicable",
+    "web": "not-applicable",
+    "python": "not-applicable",
+    "go": "pass",
+    "java": "pass",
+    "rust": "pass",
+    "swift": "pass",
+    "dart": "not-applicable"
+  },
+  "limitations": {
+    "node": "the channel is stamped at release by tools/release/version.sh (covered by tools/release/version.test.sh), not computed at run time",
+    "web": "the channel is stamped at release by tools/release/version.sh (covered by tools/release/version.test.sh), not computed at run time",
+    "python": "python staging versions are PEP 440 pre-releases; see start-channel-rule-pep440",
+    "dart": "the channel is stamped at release by tools/release/version.sh (covered by tools/release/version.test.sh), not computed at run time"
+  }
+}

@@ -3,6 +3,7 @@
 - **Status:** Proposed (all eight SDKs implemented on `feat/server-sdk-start-profile`; needs the cross-language sign-off GOVERNANCE.md requires before other SDKs follow)
 - **Date:** 2026-10-02
 - **Scope:** `@fireweaveai/server-sdk` (Node, Bun, Deno), `@fireweaveai/web-sdk` (browsers), Python `fireweave.start`, Go `.../sdks/go/v2/fw`, Java `ai.fireweave.sdk.start`, Rust `fireweave::start`, Dart `package:fireweave/client.dart` and `server.dart`, and Swift `FireweaveStart`.
+- **Spec and conformance:** `spec/start-profile.md` (normative rules SP-1…SP-26) and `contracts/start/` (the shared suite every SDK runs).
 - **Related:** spec/modes.md (core reads no env, mode never inferred), spec/control-points.md (no invented targeting key), ADR-0008 (multi-runtime support), ADR-0009 (browser control points), ADR-0011 (Dart control points)
 
 ## Context and Problem Statement

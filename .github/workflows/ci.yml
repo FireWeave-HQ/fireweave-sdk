@@ -456,6 +456,10 @@ jobs:
         # no continue-on-error) — a regression in the bump/strip/staging-N
         # logic fails this job, not just the local dry run.
         run: bash tools/release/version.test.sh
+      - name: Validate the start-profile suite (contracts/start, spec/start-profile.md)
+        # Schema and cross-field checks only; each SDK's own test job runs its
+        # start-contracts runner against these fixtures.
+        run: node tools/conformance/compare-start.mjs
       - name: Run all seven conformance runners + comparator
         run: bash scripts/conformance-all.sh
       - name: Publish comparator summary

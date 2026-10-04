@@ -60,6 +60,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The default endpoint follows `Sources/FireweaveStart/BuildInfo.swift`, which `version.sh apply swift` now writes.
 - Written without a local Swift toolchain; its first compile was CI, where the start profile and its tests (168 Swift tests in all) pass on Swift 6.0.3 and 6.2.1, including `swift format lint --strict`. Device and app-store checks are not covered yet.
 
+### Added — start-profile spec and shared conformance suite
+
+- `spec/start-profile.md`: the normative rules (SP-1…SP-26) for the start profile on every SDK — profiles, names, precedence, the fail-closed mode rule, the release-channel endpoint, key families, flags, idempotency, the instance key with FNV-1a test vectors. `spec/modes.md` now scopes "reads no environment" to the core.
+- `contracts/start/`: 14 fixtures (101 cases) with a closed schema, run by each SDK's own tests and validated by `tools/conformance/compare-start.mjs` in CI.
+
 ### Fixed
 
 - `FireweaveRemoteAdapter.shutdown()` clears its timeout timer, so a clean shutdown no longer holds the process open for up to `shutdownTimeoutMs`.

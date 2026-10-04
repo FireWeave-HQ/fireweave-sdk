@@ -2,7 +2,8 @@
 
 - **Status:** Normative for SDK v1
 - **Applies to:** every language SDK in `sdks/`
-- **Related:** `control-points.md`, `remote-protocol.md`
+- **Related:** `control-points.md`, `remote-protocol.md`, `start-profile.md` (the opt-in layer
+  that resolves mode and credentials by rule)
 
 An SDK instance runs in exactly one **mode**, fixed at initialisation. The mode selects the
 adapter; nothing downstream branches on it.
@@ -74,6 +75,11 @@ remote to local passes review and then behaves as neither.
 
 ## Reading credentials
 
-The SDK reads **no environment variables**. Credentials arrive as explicit options. Env
-reading belongs to the harness the caller owns, which is what keeps the SDK bundler-safe and
+The core SDK reads **no environment variables**. Credentials arrive as explicit options. Env
+reading belongs to the layer the caller opts into, which is what keeps the core bundler-safe and
 deterministic under test.
+
+The one sanctioned exception is the opt-in **start profile** (`start-profile.md`, ADR-0012): a
+separate entry point that reads `FIREWEAVE_*` variables (or, in client apps, build-time values)
+and chooses the mode by a fail-closed rule. It calls `initFireweave` with an explicit mode, so
+every rule in this document still holds for the core underneath it.

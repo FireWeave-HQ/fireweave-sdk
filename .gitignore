@@ -72,6 +72,11 @@ sdks/swift/conformance/compatibility-report.swift.json
 sdks/dart/conformance/compatibility-report.dart.json
 sdks/web/test/conformance/compatibility-report.web.json
 
+# The start-profile suite's per-language reports (contracts/start/README.md
+# "Reports"), written by each SDK's start-contracts runner on every test run.
+# Same rationale: a committed snapshot would masquerade as fresh.
+**/compatibility-report.start.*.json
+
 # .superpowers/ holds task briefs + review diffs for this implementation
 # effort (~6 MB) — not project source, never meant to ship. A nested
 # .gitignore at .superpowers/sdd/.gitignore already ignores everything

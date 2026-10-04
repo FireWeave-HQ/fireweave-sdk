@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "id": "start-key-families-server",
+  "suite": "start",
+  "description": "Server key families: project keys in, browser/vendor/org/CLI keys out",
+  "rules": [
+    "SP-16",
+    "SP-17",
+    "SP-26"
+  ],
+  "profile": "server",
+  "provisional": true,
+  "cases": [
+    {
+      "name": "project-key-accepted",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01"
+        }
+      },
+      "expect": {
+        "mode": "remote",
+        "keySource": "FIREWEAVE_KEY"
+      }
+    },
+    {
+      "name": "unknown-shape-accepted",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "custom-key-contracttest01"
+        }
+      },
+      "expect": {
+        "mode": "remote",
+        "keySource": "FIREWEAVE_KEY"
+      }
+    },
+    {
+      "name": "browser-key-rejected",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "fw_public_contracttest01"
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration",
+          "mentions": [
+            "FIREWEAVE_KEY"
+          ],
+          "mustNotMention": [
+            "fw_public_contracttest01"
+          ]
+        }
+      }
+    },
+    {
+      "name": "analytics-vendor-key-rejected",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "phc_contracttest01"
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration",
+          "mentions": [
+            "FIREWEAVE_KEY"
+          ],
+          "mustNotMention": [
+            "phc_contracttest01"
+          ]
+        }
+      }
+    },
+    {
+      "name": "org-token-rejected",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "fw_org_contracttest01"
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration",
+          "mentions": [
+            "FIREWEAVE_KEY"
+          ],
+          "mustNotMention": [
+            "fw_org_contracttest01"
+          ]
+        }
+      }
+    },
+    {
+      "name": "cli-token-rejected",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "cli_at_contracttest01"
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration",
+          "mentions": [
+            "FIREWEAVE_KEY"
+          ],
+          "mustNotMention": [
+            "cli_at_contracttest01"
+          ]
+        }
+      }
+    },
+    {
+      "name": "option-key-rejected-without-echo",
+      "when": {
+        "operation": "resolve",
+        "options": {
+          "key": "fw_public_contracttest01"
+        },
+        "env": {}
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration",
+          "mustNotMention": [
+            "fw_public_contracttest01"
+          ]
+        }
+      }
+    }
+  ],
+  "compatibility": {
+    "node": "pass",
+    "web": "not-applicable",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass",
+    "rust": "pass",
+    "swift": "pass",
+    "dart": "pass"
+  },
+  "limitations": {
+    "web": "server-profile fixture; web has only the client profile"
+  }
+}

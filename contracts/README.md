@@ -17,6 +17,8 @@ contracts/
   faults/                   # transport, auth, quota, cache, offline (9 fixtures)
   security/                 # PII, secrets, SSRF, size/depth reject (5 fixtures)
   extensions/               # releases, exposures, signals, capabilities (14 fixtures)
+  web/                      # web-only suite (ADR-0009), outside the 65
+  start/                    # start-profile suite (spec/start-profile.md, ADR-0012), outside the 65 — see start/README.md
 ```
 
 Canonical fixture inventory: **65** fixtures (Phase 5: 63 + `ctx-fireweave-groups-carveout` + `ext-lifecycle-gating`).

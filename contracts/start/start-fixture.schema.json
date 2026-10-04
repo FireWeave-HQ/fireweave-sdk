@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fireweave.ai/contracts/start/start-fixture.schema.json",
+  "title": "Start-profile conformance fixture",
+  "description": "One rule group of spec/start-profile.md as a set of cases. Closed: unknown fields are rejected so a runner can never silently ignore an input or an expectation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "suite", "description", "rules", "profile", "provisional", "cases", "compatibility", "limitations"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^start-[a-z0-9-]+$" },
+    "suite": { "const": "start" },
+    "description": { "type": "string", "minLength": 1 },
+    "rules": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^SP-[0-9]+$" } },
+    "profile": { "enum": ["server", "client", "any"] },
+    "provisional": { "type": "boolean" },
+    "cases": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/case" } },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node", "web", "python", "go", "java", "rust", "swift", "dart"],
+      "patternProperties": {
+        "^(node|web|python|go|java|rust|swift|dart)$": { "enum": ["pass", "fail", "skipped-with-documented-limitation", "not-applicable"] }
+      }
+    },
+    "limitations": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^(node|web|python|go|java|rust|swift|dart)$": { "type": "string", "minLength": 1 } }
+    }
+  },
+  "$defs": {
+    "language": { "enum": ["node", "web", "python", "go", "java", "rust", "swift", "dart"] },
+    "stringMap": { "type": "object", "additionalProperties": { "type": "string" } },
+    "options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string" },
+        "url": { "type": "string" },
+        "environment": { "type": "string" },
+        "mode": { "type": "string" },
+        "instanceId": { "type": "string" }
+      }
+    },
+    "names": { "type": "array", "items": { "type": "string" } },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "when", "expect"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "appliesTo": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/language" } },
+        "when": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["operation"],
+              "properties": {
+                "operation": { "const": "resolve" },
+                "options": { "$ref": "#/$defs/options" },
+                "env": { "$ref": "#/$defs/stringMap" },
+                "build": { "$ref": "#/$defs/stringMap" },
+                "channel": { "enum": ["production", "staging"] }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["operation", "env", "hostName"],
+              "properties": {
+                "operation": { "const": "instanceKey" },
+                "options": { "$ref": "#/$defs/options" },
+                "env": { "$ref": "#/$defs/stringMap" },
+                "hostName": { "type": ["string", "null"] }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["operation", "flags"],
+              "properties": { "operation": { "const": "defineFlags" }, "flags": { "type": "object" } }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["operation", "version"],
+              "properties": { "operation": { "const": "channelForVersion" }, "version": { "type": "string" } }
+            }
+          ]
+        },
+        "expect": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": { "enum": ["remote", "local"] },
+            "modeSource": { "enum": ["option", "key", "environment"] },
+            "url": { "type": "string" },
+            "urlSource": { "type": "string" },
+            "allowedHosts": { "type": ["array", "null"], "items": { "type": "string" } },
+            "keySource": { "type": "string" },
+            "environment": { "type": "string" },
+            "environmentSource": { "type": "string" },
+            "warnings": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": { "mention": { "$ref": "#/$defs/names" }, "mustNotMention": { "$ref": "#/$defs/names" } }
+            },
+            "error": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind"],
+              "properties": {
+                "kind": { "const": "Configuration" },
+                "mentions": { "$ref": "#/$defs/names" },
+                "mustNotMention": { "$ref": "#/$defs/names" }
+              }
+            },
+            "ok": { "const": true },
+            "value": { "type": "string" },
+            "prefix": { "type": "string" },
+            "channel": { "enum": ["production", "staging"] }
+          }
+        }
+      }
+    }
+  }
+}

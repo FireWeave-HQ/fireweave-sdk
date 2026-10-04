@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "id": "start-flags",
+  "suite": "start",
+  "description": "The flags object: core key rule, boolean local values",
+  "rules": [
+    "SP-18"
+  ],
+  "profile": "any",
+  "provisional": true,
+  "cases": [
+    {
+      "name": "valid-flags",
+      "when": {
+        "operation": "defineFlags",
+        "flags": {
+          "new-checkout": {
+            "local": true,
+            "description": "New checkout"
+          },
+          "old-path": {
+            "local": false
+          }
+        }
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "name": "empty-flags",
+      "when": {
+        "operation": "defineFlags",
+        "flags": {}
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "name": "key-of-256-characters",
+      "when": {
+        "operation": "defineFlags",
+        "flags": {
+          "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk": {
+            "local": true
+          }
+        }
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "name": "empty-key-rejected",
+      "when": {
+        "operation": "defineFlags",
+        "flags": {
+          "": {
+            "local": true
+          }
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration"
+        }
+      }
+    },
+    {
+      "name": "control-character-rejected",
+      "when": {
+        "operation": "defineFlags",
+        "flags": {
+          "bad\u0001key": {
+            "local": true
+          }
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration"
+        }
+      }
+    },
+    {
+      "name": "key-over-256-characters-rejected",
+      "when": {
+        "operation": "defineFlags",
+        "flags": {
+          "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk": {
+            "local": true
+          }
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration"
+        }
+      }
+    }
+  ],
+  "compatibility": {
+    "node": "pass",
+    "web": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass",
+    "rust": "pass",
+    "swift": "pass",
+    "dart": "pass"
+  },
+  "limitations": {}
+}

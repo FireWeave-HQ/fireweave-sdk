@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "id": "start-instance-key",
+  "suite": "start",
+  "description": "instanceKey(): option, FIREWEAVE_INSTANCE_ID, FNV-1a-64 of the host name, random",
+  "rules": [
+    "SP-24",
+    "SP-25"
+  ],
+  "profile": "server",
+  "provisional": true,
+  "cases": [
+    {
+      "name": "option-is-verbatim",
+      "when": {
+        "operation": "instanceKey",
+        "env": {
+          "FIREWEAVE_INSTANCE_ID": "pod-a"
+        },
+        "hostName": "api-pod-1",
+        "options": {
+          "instanceId": "worker-7"
+        }
+      },
+      "expect": {
+        "value": "worker-7"
+      }
+    },
+    {
+      "name": "env-is-verbatim",
+      "when": {
+        "operation": "instanceKey",
+        "env": {
+          "FIREWEAVE_INSTANCE_ID": "pod-a"
+        },
+        "hostName": "api-pod-1"
+      },
+      "expect": {
+        "value": "pod-a"
+      }
+    },
+    {
+      "name": "host-vector-api-pod-1",
+      "when": {
+        "operation": "instanceKey",
+        "env": {},
+        "hostName": "api-pod-1"
+      },
+      "expect": {
+        "value": "inst_8148fc8bb0e952ef"
+      }
+    },
+    {
+      "name": "host-vector-ec2",
+      "when": {
+        "operation": "instanceKey",
+        "env": {},
+        "hostName": "ip-10-0-0-12.ec2.internal"
+      },
+      "expect": {
+        "value": "inst_1e183a27e4e4c211"
+      }
+    },
+    {
+      "name": "host-vector-utf8",
+      "when": {
+        "operation": "instanceKey",
+        "env": {},
+        "hostName": "hôte-ü"
+      },
+      "expect": {
+        "value": "inst_7cf801ffb8f0c725"
+      }
+    },
+    {
+      "name": "blank-env-falls-through-to-host",
+      "when": {
+        "operation": "instanceKey",
+        "env": {
+          "FIREWEAVE_INSTANCE_ID": "   "
+        },
+        "hostName": "api-pod-1"
+      },
+      "expect": {
+        "value": "inst_8148fc8bb0e952ef"
+      }
+    },
+    {
+      "name": "no-host-is-random",
+      "when": {
+        "operation": "instanceKey",
+        "env": {},
+        "hostName": null
+      },
+      "expect": {
+        "prefix": "inst_"
+      }
+    }
+  ],
+  "compatibility": {
+    "node": "pass",
+    "web": "not-applicable",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass",
+    "rust": "pass",
+    "swift": "pass",
+    "dart": "pass"
+  },
+  "limitations": {
+    "web": "server-profile fixture; web has only the client profile"
+  }
+}

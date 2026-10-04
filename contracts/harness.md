@@ -78,6 +78,16 @@ Go and Java's canonical CI environment cannot, so they substitute a same-languag
 speaks the identical wire contract (`POST /v1/flags/evaluate`, `{decisions:[...], quotaLimited}`)
 — this is a packaging-environment difference, not a behavioral one.
 
+### Start-profile suite (`contracts/start/`)
+
+A separate suite for the opt-in start profile (`spec/start-profile.md`, ADR-0012), outside the
+65 like `contracts/web/`. Its fixtures drive each SDK's pure start-profile resolution — mode,
+sources, endpoint, key families, instance key, flags, release channel — with injected
+environment, build values and host name, so no network is involved. Every SDK runs it from its
+own test command and writes `compatibility-report.start.<lang>.json` (gitignored);
+`tools/conformance/compare-start.mjs` validates the fixtures and aggregates reports. Format,
+operations and comparison rules: [`start/README.md`](./start/README.md).
+
 ### Runner obligations
 
 1. Load **all** `contracts/{evaluation,context,lifecycle,faults,security,extensions}/*.json`.

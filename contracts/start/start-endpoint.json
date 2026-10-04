@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "id": "start-endpoint",
+  "suite": "start",
+  "description": "Explicit endpoints: https except loopback, allowlist follows the host",
+  "rules": [
+    "SP-12",
+    "SP-14"
+  ],
+  "profile": "server",
+  "provisional": true,
+  "cases": [
+    {
+      "name": "override-scopes-the-allowlist",
+      "when": {
+        "operation": "resolve",
+        "options": {
+          "url": "https://fw.example.com/"
+        },
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01"
+        }
+      },
+      "expect": {
+        "url": "https://fw.example.com",
+        "allowedHosts": [
+          "fw.example.com",
+          "localhost",
+          "127.0.0.1",
+          "::1"
+        ]
+      }
+    },
+    {
+      "name": "path-prefix-is-kept",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01",
+          "FIREWEAVE_URL": "https://proxy.example.com/fw"
+        }
+      },
+      "expect": {
+        "url": "https://proxy.example.com/fw",
+        "allowedHosts": [
+          "proxy.example.com",
+          "localhost",
+          "127.0.0.1",
+          "::1"
+        ]
+      }
+    },
+    {
+      "name": "http-on-localhost-is-allowed",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01",
+          "FIREWEAVE_URL": "http://localhost:3001"
+        }
+      },
+      "expect": {
+        "url": "http://localhost:3001",
+        "allowedHosts": [
+          "localhost",
+          "127.0.0.1",
+          "::1"
+        ]
+      }
+    },
+    {
+      "name": "http-on-127-0-0-1-is-allowed",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01",
+          "FIREWEAVE_URL": "http://127.0.0.1:8080"
+        }
+      },
+      "expect": {
+        "url": "http://127.0.0.1:8080",
+        "allowedHosts": [
+          "localhost",
+          "127.0.0.1",
+          "::1"
+        ]
+      }
+    },
+    {
+      "name": "http-off-loopback-fails",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01",
+          "FIREWEAVE_URL": "http://fw.example.com"
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration",
+          "mentions": [
+            "FIREWEAVE_URL"
+          ]
+        }
+      }
+    },
+    {
+      "name": "not-a-url-fails",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01",
+          "FIREWEAVE_URL": "not a url"
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration",
+          "mentions": [
+            "FIREWEAVE_URL"
+          ]
+        }
+      }
+    },
+    {
+      "name": "url-is-ignored-in-local-mode",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_ENV": "development",
+          "FIREWEAVE_URL": "http://fw.example.com"
+        }
+      },
+      "expect": {
+        "mode": "local"
+      }
+    }
+  ],
+  "compatibility": {
+    "node": "pass",
+    "web": "not-applicable",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass",
+    "rust": "pass",
+    "swift": "pass",
+    "dart": "pass"
+  },
+  "limitations": {
+    "web": "server-profile fixture; web has only the client profile"
+  }
+}
