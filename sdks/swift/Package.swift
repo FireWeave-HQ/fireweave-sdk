@@ -20,12 +20,29 @@ let package = Package(
     ],
     products: [
         .library(name: "Fireweave", targets: ["Fireweave"]),
+        // The start profile (docs/adr/0012-start-profile.md): one
+        // `startFireweave()` call plus the process-wide `fw` accessor,
+        // layered over the unchanged `Fireweave` core, which it re-exports.
+        .library(name: "FireweaveStart", targets: ["FireweaveStart"]),
     ],
     dependencies: [],
     targets: [
         .target(
             name: "Fireweave",
             dependencies: []
+        ),
+        // Depends on the core target only. It is the only target that reads
+        // the process environment, Info.plist, UserDefaults or the host name
+        // (Tests/FireweaveStartTests/StartGuardTests.swift pins that).
+        // FIREWEAVE_START_DEBUG is this target's own debug flag: the app
+        // profile treats a debug build with no key and no environment name
+        // as development, and a release build fails closed instead.
+        .target(
+            name: "FireweaveStart",
+            dependencies: ["Fireweave"],
+            swiftSettings: [
+                .define("FIREWEAVE_START_DEBUG", .when(configuration: .debug)),
+            ]
         ),
         // Fixture conformance runner (contracts/harness.md) ships as an
         // executable target in the same package so it can use the library's
@@ -40,6 +57,10 @@ let package = Package(
         .testTarget(
             name: "FireweaveTests",
             dependencies: ["Fireweave"]
+        ),
+        .testTarget(
+            name: "FireweaveStartTests",
+            dependencies: ["FireweaveStart"]
         ),
     ]
 )
