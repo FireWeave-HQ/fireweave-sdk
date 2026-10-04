@@ -1,6 +1,6 @@
 # ADR-0012: A start profile for one-line setup, layered on an unchanged core
 
-- **Status:** Proposed (all eight SDKs implemented on `feat/server-sdk-start-profile`, Swift not yet compiled; needs the cross-language sign-off GOVERNANCE.md requires before other SDKs follow)
+- **Status:** Proposed (all eight SDKs implemented on `feat/server-sdk-start-profile`; needs the cross-language sign-off GOVERNANCE.md requires before other SDKs follow)
 - **Date:** 2026-10-02
 - **Scope:** `@fireweaveai/server-sdk` (Node, Bun, Deno), `@fireweaveai/web-sdk` (browsers), Python `fireweave.start`, Go `.../sdks/go/v2/fw`, Java `ai.fireweave.sdk.start`, Rust `fireweave::start`, Dart `package:fireweave/client.dart` and `server.dart`, and Swift `FireweaveStart`.
 - **Related:** spec/modes.md (core reads no env, mode never inferred), spec/control-points.md (no invented targeting key), ADR-0008 (multi-runtime support), ADR-0009 (browser control points), ADR-0011 (Dart control points)
@@ -144,5 +144,6 @@ Both ship a **client** profile and a **server** profile, because both run in app
 
 Deferred: the `fireweave_flutter` companion (persisted device id, build-mode environment, refresh
 on resume); Swift's core fixes SW-8 (redaction) and SW-9 (last-good on a failed refresh), its
-refresh scheduler, privacy manifest and distribution (a root `Package.swift` mirror). The Swift
-start profile has not yet been compiled.
+refresh scheduler, privacy manifest, distribution (a root `Package.swift` mirror) and on-device
+checks. The Swift start profile builds and passes its tests on CI's Linux Swift 6.0.3 and 6.2.1
+legs; it has not run on an Apple device yet.

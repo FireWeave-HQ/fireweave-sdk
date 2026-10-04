@@ -58,7 +58,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `startFireweave(flags: …)` (synchronous, throws a configuration error before any I/O) and a process-wide `fw`. The app profile reads Info.plist `FIREWEAVE_BROWSER_KEY`, `FIREWEAVE_URL` and `FIREWEAVE_ENV`, takes browser keys only, and keeps a `dev_<UUID>` device id in UserDefaults (`persistence`, `setPersistence`, `forget` for consent). The server profile reads `FIREWEAVE_*` from the environment and takes project keys.
 - The default endpoint follows `Sources/FireweaveStart/BuildInfo.swift`, which `version.sh apply swift` now writes.
-- **Not yet compiled or tested**: written without a Swift toolchain; Swift testing is set up separately.
+- Written without a local Swift toolchain; its first compile was CI, where the start profile and its tests (168 Swift tests in all) pass on Swift 6.0.3 and 6.2.1, including `swift format lint --strict`. Device and app-store checks are not covered yet.
 
 ### Fixed
 
