@@ -103,6 +103,43 @@ Future<String> _loadDeviceId(
   return minted;
 }
 
+/// The client profile's resolution, pure: the options, then [defines] (the
+/// compile-time defines), then the defaults, handed to [resolvePolicy].
+/// [channel] stands in for this build's release channel. No I/O, no globals
+/// and no throw; [startClient] is this plus the singleton.
+PolicyResult resolveClientStart({
+  required Map<String, Flag> flags,
+  required Map<String, String> defines,
+  required SdkChannel channel,
+  required String sdkVersion,
+  Mode? mode,
+  String? environment,
+  String? url,
+  String? key,
+}) => resolvePolicy(
+  PolicyInput(
+    profile: StartProfile.client,
+    mode: mode,
+    key: firstOf(<Sourced?>[
+      sourced(key, 'Fireweave.start(key:)'),
+      sourced(defines[browserKeyVariable], browserKeyVariable),
+    ]),
+    url: firstOf(<Sourced?>[
+      sourced(url, 'Fireweave.start(url:)'),
+      sourced(defines[urlVariable], urlVariable),
+    ]),
+    environment: firstOf(<Sourced?>[
+      sourced(environment, 'Fireweave.start(environment:)'),
+      sourced(defines[environmentVariable], environmentVariable),
+    ]),
+    flags: flags,
+    channel: channel,
+    sdkVersion: sdkVersion,
+    environmentChecked:
+        'Fireweave.start(environment:) and the $environmentVariable define',
+  ),
+);
+
 /// Start the client profile. [defines] is the compile-time define map;
 /// tests hand in their own, since defines cannot be set at run time.
 Future<void> startClient({
@@ -142,28 +179,15 @@ Future<void> startClient({
     );
   }
 
-  final policy = resolvePolicy(
-    PolicyInput(
-      profile: StartProfile.client,
-      mode: mode,
-      key: firstOf(<Sourced?>[
-        sourced(key, 'Fireweave.start(key:)'),
-        sourced(defines[browserKeyVariable], browserKeyVariable),
-      ]),
-      url: firstOf(<Sourced?>[
-        sourced(url, 'Fireweave.start(url:)'),
-        sourced(defines[urlVariable], urlVariable),
-      ]),
-      environment: firstOf(<Sourced?>[
-        sourced(environment, 'Fireweave.start(environment:)'),
-        sourced(defines[environmentVariable], environmentVariable),
-      ]),
-      flags: normalized,
-      channel: sdkChannel,
-      sdkVersion: sdkVersion,
-      environmentChecked:
-          'Fireweave.start(environment:) and the $environmentVariable define',
-    ),
+  final policy = resolveClientStart(
+    flags: normalized,
+    mode: mode,
+    environment: environment,
+    url: url,
+    key: key,
+    defines: defines,
+    channel: sdkChannel,
+    sdkVersion: sdkVersion,
   );
   switch (policy) {
     case PolicyFailure(:final reason, :final variable, :final message):

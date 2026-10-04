@@ -80,6 +80,7 @@ mod names;
 mod options;
 mod resolve;
 mod state;
+mod test_hooks;
 
 pub use channel::{channel_for_version, sdk_channel, sdk_version, Channel};
 pub use flags::{define_flags, try_define_flags, Flag, Flags};
@@ -89,3 +90,5 @@ pub use state::reset_for_tests;
 pub use state::{
     client, control_points, identify, instance_key, shutdown, start, status, StartState, Status,
 };
+#[doc(hidden)]
+pub use test_hooks::{derive_instance_key_for_tests, resolve_for_tests, ResolvedForTests};

@@ -41,14 +41,11 @@ final class ServerCore extends StartCore {
   EnvLookup get _read =>
       lookup ?? (name) => _clean(readProcessEnvironment(name));
 
-  String get instanceKey {
-    final read = _read;
-    return (instance ??= deriveInstanceKey(
-      instanceIdOption,
-      read,
-      () => read(hostNameVariable) ?? _clean(readHostName()),
-    )).value;
-  }
+  String get instanceKey => (instance ??= deriveServerInstanceKey(
+    instanceIdOption,
+    _read,
+    readHostName,
+  )).value;
 
   @override
   FireweaveError? checkContext(EvaluationContext? context) {
@@ -79,6 +76,20 @@ final class ServerCore extends StartCore {
 
 /// This isolate's server singleton.
 final ServerCore serverCore = ServerCore();
+
+/// The server profile's instance-key derivation with its sources injected:
+/// [read] stands in for the process environment and [osHostName] for the
+/// operating system's host name (`HOSTNAME` is read first, as node does).
+/// Pure apart from the random fallback.
+({String value, InstanceKeySource source}) deriveServerInstanceKey(
+  String? option,
+  EnvLookup read,
+  String? Function() osHostName,
+) => deriveInstanceKey(
+  option,
+  (name) => _clean(read(name)),
+  () => _clean(read(hostNameVariable)) ?? _clean(osHostName()),
+);
 
 /// First non-empty of: the option, then each name, then each legacy name
 /// (adding one warning naming its replacement to [warnings]).
@@ -115,6 +126,73 @@ Sourced? _pick(
   return null;
 }
 
+/// The server profile's resolution, pure: the options, then [read] (the
+/// process environment's stand-in), then the legacy names, then the
+/// defaults, handed to [resolvePolicy]. [channel] stands in for this build's
+/// release channel. No I/O and no globals; [startServer] is this plus the
+/// singleton.
+PolicyResult resolveServerStart({
+  required Map<String, Flag> flags,
+  required EnvLookup read,
+  required SdkChannel channel,
+  required String sdkVersion,
+  Mode? mode,
+  String? environment,
+  String? url,
+  String? key,
+}) {
+  String? lookup(String name) => _clean(read(name));
+  final keyWarnings = <String>[];
+  final urlWarnings = <String>[];
+  final pickedKey = _pick(
+    key,
+    'Fireweave.start(key:)',
+    const <String>[serverKeyVariable],
+    legacyKeyNames,
+    lookup,
+    keyWarnings,
+    serverKeyVariable,
+  );
+  final pickedUrl = _pick(
+    url,
+    'Fireweave.start(url:)',
+    const <String>[urlVariable],
+    legacyUrlNames,
+    lookup,
+    urlWarnings,
+    urlVariable,
+  );
+  final pickedEnvironment = _pick(
+    environment,
+    'Fireweave.start(environment:)',
+    const <String>[environmentVariable, serverEnvironmentFallback],
+    const <String>[],
+    lookup,
+    <String>[],
+    environmentVariable,
+  );
+  return resolvePolicy(
+    PolicyInput(
+      profile: StartProfile.server,
+      mode: mode,
+      key: pickedKey,
+      url: pickedUrl,
+      environment: pickedEnvironment,
+      flags: flags,
+      channel: channel,
+      sdkVersion: sdkVersion,
+      environmentChecked:
+          'Fireweave.start(environment:), $environmentVariable and '
+          '$serverEnvironmentFallback',
+      retiredEnvironmentSet: lookup(retiredEnvironmentName) != null,
+      // Legacy-name warnings only matter for a value that is used.
+      warnings: mode == Mode.local
+          ? const <String>[]
+          : <String>[...keyWarnings, if (pickedKey != null) ...urlWarnings],
+    ),
+  );
+}
+
 /// Start the server profile.
 Future<void> startServer({
   Map<String, Flag>? flags,
@@ -143,54 +221,15 @@ Future<void> startServer({
       : (name) => _clean(readProcessEnvironment(name));
 
   final normalized = normalizeFlags(flags);
-  final keyWarnings = <String>[];
-  final urlWarnings = <String>[];
-  final pickedKey = _pick(
-    key,
-    'Fireweave.start(key:)',
-    const <String>[serverKeyVariable],
-    legacyKeyNames,
-    read,
-    keyWarnings,
-    serverKeyVariable,
-  );
-  final pickedUrl = _pick(
-    url,
-    'Fireweave.start(url:)',
-    const <String>[urlVariable],
-    legacyUrlNames,
-    read,
-    urlWarnings,
-    urlVariable,
-  );
-  final pickedEnvironment = _pick(
-    environment,
-    'Fireweave.start(environment:)',
-    const <String>[environmentVariable, serverEnvironmentFallback],
-    const <String>[],
-    read,
-    <String>[],
-    environmentVariable,
-  );
-  final policy = resolvePolicy(
-    PolicyInput(
-      profile: StartProfile.server,
-      mode: mode,
-      key: pickedKey,
-      url: pickedUrl,
-      environment: pickedEnvironment,
-      flags: normalized,
-      channel: sdkChannel,
-      sdkVersion: sdkVersion,
-      environmentChecked:
-          'Fireweave.start(environment:), $environmentVariable and '
-          '$serverEnvironmentFallback',
-      retiredEnvironmentSet: read(retiredEnvironmentName) != null,
-      // Legacy-name warnings only matter for a value that is used.
-      warnings: mode == Mode.local
-          ? const <String>[]
-          : <String>[...keyWarnings, if (pickedKey != null) ...urlWarnings],
-    ),
+  final policy = resolveServerStart(
+    flags: normalized,
+    mode: mode,
+    environment: environment,
+    url: url,
+    key: key,
+    read: read,
+    channel: sdkChannel,
+    sdkVersion: sdkVersion,
   );
   final ResolvedStart config;
   switch (policy) {
