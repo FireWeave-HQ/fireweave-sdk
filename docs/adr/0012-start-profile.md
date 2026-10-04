@@ -120,9 +120,8 @@ Java adds `start` as a fourth top-level package beside `application`, `domain` a
 ADR is the decision that admits `start` to it; `StartConfinementGuardTest` keeps it on the public
 `application` and `domain` types and keeps every core package from importing it.
 
-Deferred: Java's `Fw.verify()` credential probe and Spring profile support; Rust's MSRV correction
-(the locked `ureq` 3 graph already needs Rust 1.85, so CI's 1.75 job fails on `master` too) and
-remote diagnostics; redaction learning `FIREWEAVE_KEY` in both cores.
+Deferred: Java's `Fw.verify()` credential probe and Spring profile support; Rust's remote
+diagnostics (its MSRV is now 1.85, matching the locked `ureq` 3 graph); redaction learning `FIREWEAVE_KEY` in both cores.
 
 ## Dart and Swift
 

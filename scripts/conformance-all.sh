@@ -85,7 +85,7 @@ fw_require npm "install Node >= 20"
 fw_require python3 "install Python >= 3.10"
 fw_require go "install Go >= 1.25"
 fw_require mvn "install Maven (JDK 11+ toolchain)"
-fw_require cargo "install Rust >= 1.75 (rustup.rs)"
+fw_require cargo "install Rust >= 1.85 (rustup.rs)"
 fw_require swift "install Swift >= 6.0 (swift.org/install, or swift-actions/setup-swift in CI)"
 fw_require dart "install Dart >= 3.8 (dart.dev/get-dart, or dart-lang/setup-dart in CI)"
 

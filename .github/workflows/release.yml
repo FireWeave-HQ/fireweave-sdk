@@ -142,12 +142,12 @@ jobs:
           COMPONENT: ${{ inputs.component }}
         run: |
           if [ "$COMPONENT" = all ]; then
-            COMPONENTS='["server","web","python","java","go","rust","swift","dart"]'
+            component_list='["server","web","python","java","go","rust","swift","dart"]'
           else
-            COMPONENTS="[\"$COMPONENT\"]"
+            component_list="[\"$COMPONENT\"]"
           fi
-          echo "components=$COMPONENTS" >> "$GITHUB_OUTPUT"
-          echo "Releasing bump=${{ inputs.bump }} channel=${{ inputs.channel }} dry_run=${{ inputs.dry_run }} components=$COMPONENTS"
+          echo "components=$component_list" >> "$GITHUB_OUTPUT"
+          echo "Releasing bump=${{ inputs.bump }} channel=${{ inputs.channel }} dry_run=${{ inputs.dry_run }} components=$component_list"
 
   build:
     name: build, changelog, SBOM, checksums (${{ matrix.component }})
