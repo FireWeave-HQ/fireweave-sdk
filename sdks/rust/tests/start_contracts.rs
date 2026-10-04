@@ -364,7 +364,7 @@ fn run_fixture(fx: &Value) -> FixtureResult {
         let applies = c
             .get("appliesTo")
             .and_then(Value::as_array)
-            .map_or(true, |a| a.iter().any(|l| l.as_str() == Some(LANG)));
+            .is_none_or(|a| a.iter().any(|l| l.as_str() == Some(LANG)));
         if !applies {
             cases.push(json!({ "name": name, "status": "not-applicable" }));
             continue;

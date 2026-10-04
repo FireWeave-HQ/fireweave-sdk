@@ -139,11 +139,12 @@ jobs:
         run: npm run build
       - name: Typecheck the published build under Deno
         working-directory: sdks/node
-        # From a copy outside the package: newer Deno applies sdks/node/tsconfig.json
-        # (rootDir: src) and rejects dist/ files with TS6059.
+        # From a copy outside the package: newer Deno discovers sdks/node/tsconfig.json
+        # from the working directory (rootDir: src) and rejects dist/ files with TS6059.
         run: |
           cp -R dist "$RUNNER_TEMP/fireweave-dist"
-          deno check --no-npm "$RUNNER_TEMP/fireweave-dist/application/client.js" "$RUNNER_TEMP/fireweave-dist/infrastructure/adapters/remote.js"
+          cd "$RUNNER_TEMP/fireweave-dist"
+          deno check --no-npm application/client.js infrastructure/adapters/remote.js
       - name: Cross-runtime smoke (Deno leg, least privilege)
         working-directory: sdks/node
         run: deno run --allow-read scripts/smoke-runtimes.mjs
