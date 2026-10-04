@@ -127,7 +127,7 @@ test('application/ (outside mode.ts, the composition root) does not import infra
 });
 
 /**
- * The start profile (src/start/, ADR-0011) is a layer OVER the core: it may use
+ * The start profile (src/start/, ADR-0012) is a layer OVER the core: it may use
  * the public barrel and its own files only, and the core must never depend on
  * it, so `initFireweave` stays policy-free.
  */

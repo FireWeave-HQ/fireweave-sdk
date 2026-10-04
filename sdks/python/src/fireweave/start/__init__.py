@@ -1,4 +1,4 @@
-"""fireweave.start: FireWeave in one line (docs/adr/0011-start-profile.md).
+"""fireweave.start: FireWeave in one line (docs/adr/0012-start-profile.md).
 
 ::
 

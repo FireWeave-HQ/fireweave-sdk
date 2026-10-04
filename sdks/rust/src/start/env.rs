@@ -2,7 +2,7 @@
 //! host name.
 //!
 //! The core SDK reads no environment variables (`spec/modes.md`). The start
-//! profile is the documented exception (`docs/adr/0011-start-profile.md`),
+//! profile is the documented exception (`docs/adr/0012-start-profile.md`),
 //! and `tests/start_guards.rs` pins every environment read and every
 //! host-name read to this file.
 

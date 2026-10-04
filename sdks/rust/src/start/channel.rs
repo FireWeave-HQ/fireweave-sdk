@@ -1,5 +1,5 @@
 //! The release channel of this crate build. It chooses the default fw-server
-//! endpoint (`docs/adr/0011-start-profile.md`, rule 3).
+//! endpoint (`docs/adr/0012-start-profile.md`, rule 3).
 //!
 //! No stamp file is needed: Cargo compiles `CARGO_PKG_VERSION` into the
 //! consumer's build of this crate, so it is the version the app resolved

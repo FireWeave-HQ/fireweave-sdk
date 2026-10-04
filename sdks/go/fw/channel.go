@@ -7,7 +7,7 @@ import (
 )
 
 // Channel is the release channel this SDK build came from. It chooses the
-// default fw-server endpoint (docs/adr/0011-start-profile.md, rule 3).
+// default fw-server endpoint (docs/adr/0012-start-profile.md, rule 3).
 type Channel string
 
 const (

@@ -130,7 +130,7 @@ test('application/ (outside mode.ts, the composition root) does not import infra
 });
 
 /**
- * The start profile (docs/adr/0011-start-profile.md) sits on top of the core:
+ * The start profile (docs/adr/0012-start-profile.md) sits on top of the core:
  * it may import only the public barrel ('../index.js') and its own files, so
  * it can never reach past the API every other app uses. The core, in turn,
  * never imports the start layer, so the spec-pure entrypoint stays env-free.

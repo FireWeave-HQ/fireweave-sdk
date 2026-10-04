@@ -15,7 +15,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
- * The start profile's static facade: one line in {@code main}, then reads from anywhere (ADR-0011,
+ * The start profile's static facade: one line in {@code main}, then reads from anywhere (ADR-0012,
  * node's {@code fw}, Go's package {@code fw}). Safe to call from any thread, in any order.
  *
  * <pre>{@code

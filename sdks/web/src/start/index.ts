@@ -21,7 +21,7 @@
  * time, or from start() options. This module reads no environment.
  *
  * A layer over the unchanged core: it imports only the public barrel
- * (docs/adr/0011-start-profile.md).
+ * (docs/adr/0012-start-profile.md).
  */
 export { start, resetForTests } from './state.js';
 export type { StartOptions, StartState, StartProblem, FireweaveWebStatus } from './state.js';

@@ -1,5 +1,5 @@
 """Layering and portability guards for the start profile
-(docs/adr/0011-start-profile.md, "Consequences").
+(docs/adr/0012-start-profile.md, "Consequences").
 
  - the core (everything under src/fireweave/ outside start/) never imports
    fireweave.start, and ``import fireweave`` does not load it;

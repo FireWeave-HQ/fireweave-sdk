@@ -16,7 +16,7 @@ registration, the two v1 capabilities (spec/control-points.md "Scope of v1").
 
 ## Quick start (one line: the start profile)
 
-Most apps need only this ([ADR-0011](../../docs/adr/0011-start-profile.md)). The
+Most apps need only this ([ADR-0012](../../docs/adr/0012-start-profile.md)). The
 `fireweave::start` module is an opt-in layer over the unchanged core: one flags file, one
 call in `main`, then reads from anywhere. It adds no dependency.
 

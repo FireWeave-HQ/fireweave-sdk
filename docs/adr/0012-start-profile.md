@@ -1,4 +1,4 @@
-# ADR-0011: A start profile for one-line setup, layered on an unchanged core
+# ADR-0012: A start profile for one-line setup, layered on an unchanged core
 
 - **Status:** Proposed (node, web, Python, Go, Java and Rust implemented on `feat/server-sdk-start-profile`; needs the cross-language sign-off GOVERNANCE.md requires before other SDKs follow)
 - **Date:** 2026-10-02

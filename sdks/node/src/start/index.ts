@@ -1,5 +1,5 @@
 /**
- * @fireweaveai/server-sdk/start: FireWeave in one import (docs/adr/0011-start-profile.md).
+ * @fireweaveai/server-sdk/start: FireWeave in one import (docs/adr/0012-start-profile.md).
  *
  *   // src/fireweave/start.ts  (imported first by your entrypoint)
  *   import { start } from '@fireweaveai/server-sdk/start';

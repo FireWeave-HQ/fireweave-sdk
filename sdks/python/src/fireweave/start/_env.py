@@ -1,7 +1,7 @@
 """The ONLY place the SDK reads the process environment or the host name.
 
 The core SDK reads no environment variables (spec/modes.md). The start
-profile is the documented exception (docs/adr/0011-start-profile.md), and
+profile is the documented exception (docs/adr/0012-start-profile.md), and
 tests/test_start_guards.py pins every ``os.environ`` / ``os.getenv`` read and
 every host-name lookup to this file.
 """

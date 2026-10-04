@@ -4,7 +4,7 @@ package fw
 // host name.
 //
 // The core SDK reads no environment variables (spec/modes.md). The start
-// profile is the documented exception (docs/adr/0011-start-profile.md), and
+// profile is the documented exception (docs/adr/0012-start-profile.md), and
 // fireweave/architecture_guard_test.go pins every env read and the host-name
 // lookup to this file.
 

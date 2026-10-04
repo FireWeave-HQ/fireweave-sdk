@@ -1,6 +1,6 @@
 /**
  * The FireWeave start profile: one-line setup layered over the unchanged core SDK
- * (docs/adr/0011-start-profile.md).
+ * (docs/adr/0012-start-profile.md).
  *
  * <p>The core ({@code ai.fireweave.sdk.domain}, {@code .application}, {@code .infrastructure})
  * reads no environment and never infers a mode. This package is the documented exception: it

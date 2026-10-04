@@ -34,7 +34,7 @@
 //!
 //! There are no hidden global clients in the core: everything is
 //! constructed explicitly and injectable for tests. The opt-in
-//! [`start`] module (the start profile, `docs/adr/0011-start-profile.md`)
+//! [`start`] module (the start profile, `docs/adr/0012-start-profile.md`)
 //! is the one exception: it reads `FIREWEAVE_*` variables and keeps one
 //! client per process, layered over this unchanged core.
 

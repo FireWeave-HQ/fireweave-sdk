@@ -245,7 +245,7 @@ func TestFacadeHoldsOnlyReExportsNoImplementation(t *testing.T) {
 	}
 }
 
-// --- start profile (package fw, docs/adr/0011-start-profile.md) ---
+// --- start profile (package fw, docs/adr/0012-start-profile.md) ---
 //
 // The start profile is the one sanctioned reader of the environment and the
 // host name. These guards keep that exception from spreading:
@@ -384,7 +384,7 @@ func TestOnlyTheStartProfileSeamReadsTheEnvironment(t *testing.T) {
 	}
 	sort.Strings(offenders)
 	if len(offenders) != 0 {
-		t.Errorf("only %s may read the environment or the host name (the core reads none, spec/modes.md; the start profile reads through one seam, ADR-0011): %v", startProfileEnvSeam, offenders)
+		t.Errorf("only %s may read the environment or the host name (the core reads none, spec/modes.md; the start profile reads through one seam, ADR-0012): %v", startProfileEnvSeam, offenders)
 	}
 }
 

@@ -16,7 +16,7 @@ bun add @fireweaveai/web-sdk   # or: npm install @fireweaveai/web-sdk
 
 ## Quick start (one line: the start profile)
 
-The start profile ([ADR-0011](../../docs/adr/0011-start-profile.md)) replaces the generated
+The start profile ([ADR-0012](../../docs/adr/0012-start-profile.md)) replaces the generated
 `fw-harness.ts` / `fw-providers.ts` files with one plugin, one start file and one flags file.
 The core API below (`initFireweave`) is unchanged.
 

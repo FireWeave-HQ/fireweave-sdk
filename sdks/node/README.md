@@ -21,7 +21,7 @@ import { initFireweave } from 'npm:@fireweaveai/server-sdk';
 
 ## Quick start (one line: the start profile)
 
-Most apps need only this ([ADR-0011](../../docs/adr/0011-start-profile.md)). Two small files and one import:
+Most apps need only this ([ADR-0012](../../docs/adr/0012-start-profile.md)). Two small files and one import:
 
 ```ts
 // src/fireweave/flags.ts: every control point the app reads, with its local value

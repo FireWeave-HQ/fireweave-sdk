@@ -2,7 +2,7 @@
  * The ONLY place the SDK reads the process environment.
  *
  * The core SDK reads no environment variables (spec/modes.md). The start
- * profile is the documented exception (docs/adr/0011-start-profile.md), and
+ * profile is the documented exception (docs/adr/0012-start-profile.md), and
  * test/unit/runtime-portability.test.ts pins every env read to this file.
  *
  * Works on Node, Bun and Deno without importing a runtime module: Node and Bun

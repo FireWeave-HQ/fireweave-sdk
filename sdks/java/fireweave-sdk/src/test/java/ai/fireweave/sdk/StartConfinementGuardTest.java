@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Start-profile confinement (docs/adr/0011-start-profile.md; the Java counterpart of node's
+ * Start-profile confinement (docs/adr/0012-start-profile.md; the Java counterpart of node's
  * architecture-layers test and Go's architecture_guard_test.go):
  *
  * <ul>
@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>no core package imports or names {@code start/}, so the core never depends on the layer
  *       over it;</li>
  *   <li>{@code start/} registers no JVM shutdown hook and writes no files (nothing is written to
- *       disk, ADR-0011 rule 6).</li>
+ *       disk, ADR-0012 rule 6).</li>
  * </ul>
  *
  * <p>Scans are scoped to this module's {@code src/main}, with comments and string literals
@@ -190,7 +190,7 @@ class StartConfinementGuardTest {
         }
         assertEquals(List.of(), offenders,
                 "only " + ENV_SEAM + " may read the environment, system properties or the host name (the core "
-                        + "reads none, spec/modes.md; the start profile reads through one seam, ADR-0011)");
+                        + "reads none, spec/modes.md; the start profile reads through one seam, ADR-0012)");
     }
 
     /** The flip side: the exemption is load-bearing, not a dead carve-out. */
@@ -251,7 +251,7 @@ class StartConfinementGuardTest {
             }
         }
         assertEquals(List.of(), offenders,
-                "start/ registers no JVM shutdown hook and writes nothing to disk (ADR-0011): " + offenders);
+                "start/ registers no JVM shutdown hook and writes nothing to disk (ADR-0012): " + offenders);
     }
 
     @Test

@@ -61,7 +61,7 @@ class ArchitectureLayersGuardTest {
         return moduleRoot().resolve("src/main/java/ai/fireweave/sdk/application");
     }
 
-    /** The start profile (docs/adr/0011-start-profile.md); its own rules are in StartConfinementGuardTest. */
+    /** The start profile (docs/adr/0012-start-profile.md); its own rules are in StartConfinementGuardTest. */
     private static Path startDir() {
         return moduleRoot().resolve("src/main/java/ai/fireweave/sdk/start");
     }
@@ -237,7 +237,7 @@ class ArchitectureLayersGuardTest {
         // A fourth top-level package under ai.fireweave.sdk would be a layer in disguise
         // (mirrors the fw-server "no-top-level-deviations" idiom, ported to this module's
         // three-layer shape). The ONE sanctioned exception is start/, the opt-in start profile
-        // layered over the core's public API (docs/adr/0011-start-profile.md, the same carve-out
+        // layered over the core's public API (docs/adr/0012-start-profile.md, the same carve-out
         // as node's src/start/ and Go's fw/). It is not a layer: StartConfinementGuardTest keeps
         // it on application/ + domain/ only and keeps every core package from importing it. Any
         // other new package still fails here.

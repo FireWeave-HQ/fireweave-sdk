@@ -13,7 +13,7 @@ import java.util.function.Function;
  * The ONLY class in this module that reads the process environment or the host name.
  *
  * <p>The core SDK reads no environment variables (spec/modes.md). The start profile is the
- * documented exception (docs/adr/0011-start-profile.md), and
+ * documented exception (docs/adr/0012-start-profile.md), and
  * {@code StartConfinementGuardTest} pins every environment read and host-name lookup to this
  * file.
  *

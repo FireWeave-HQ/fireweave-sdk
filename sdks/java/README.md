@@ -20,7 +20,7 @@ Supported Java: **11+** (CI: Temurin 11 and 25). Do not raise the floor without 
 
 ## Quick start (one line: the start profile)
 
-Most apps need only this ([ADR-0011](../../docs/adr/0011-start-profile.md)). Package
+Most apps need only this ([ADR-0012](../../docs/adr/0012-start-profile.md)). Package
 `ai.fireweave.sdk.start` (in the same `fireweave-sdk` artifact) is an opt-in layer over the
 unchanged core: one flags class, one call in `main`, then reads from anywhere.
 

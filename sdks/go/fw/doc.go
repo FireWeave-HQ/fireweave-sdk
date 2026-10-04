@@ -1,5 +1,5 @@
 // Package fw is the FireWeave start profile: one-line setup layered over the
-// unchanged core SDK (docs/adr/0011-start-profile.md).
+// unchanged core SDK (docs/adr/0012-start-profile.md).
 //
 // The core (package fireweave and everything under it) reads no environment
 // and never infers a mode. This package is the documented exception: it reads

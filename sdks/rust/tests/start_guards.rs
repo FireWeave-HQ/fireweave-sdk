@@ -1,4 +1,4 @@
-//! Start-profile guards (`docs/adr/0011-start-profile.md`, "the portability
+//! Start-profile guards (`docs/adr/0012-start-profile.md`, "the portability
 //! guard changes shape, not strength"), the Rust counterpart of go's
 //! `fireweave/architecture_guard_test.go` start-profile section:
 //!
@@ -388,7 +388,7 @@ fn the_start_module_uses_only_the_crate_root_public_api_and_std() {
     );
     assert!(
         offenders.is_empty(),
-        "src/start/ may use only the crate root's public re-exports and std (ADR-0011):\n{}",
+        "src/start/ may use only the crate root's public re-exports and std (ADR-0012):\n{}",
         offenders.join("\n")
     );
 }
@@ -471,7 +471,7 @@ fn only_the_env_seam_reads_the_environment_or_the_host_name() {
     }
     assert!(
         offenders.is_empty(),
-        "only {ENV_SEAM} may read the environment or the host name (the core reads none, spec/modes.md; the start profile reads through one seam, ADR-0011):\n{}",
+        "only {ENV_SEAM} may read the environment or the host name (the core reads none, spec/modes.md; the start profile reads through one seam, ADR-0012):\n{}",
         offenders.join("\n")
     );
 

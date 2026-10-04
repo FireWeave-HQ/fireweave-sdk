@@ -1,7 +1,7 @@
 """This distribution's version and release channel.
 
 The start profile defaults its fw-server host from the channel the installed
-package was released on (docs/adr/0011-start-profile.md, rule 3).
+package was released on (docs/adr/0012-start-profile.md, rule 3).
 tools/release/version.sh versions a Python staging build as a PEP 440
 prerelease (``X.Y.ZaN``, because ``-staging.N`` is not a valid Python
 version), so the channel is read from the version itself: any prerelease is

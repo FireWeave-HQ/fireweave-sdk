@@ -7,14 +7,14 @@ registration, the two v1 capabilities (spec/control-points.md "Scope of v1").
 - **The core SDK reads no environment variables** — every option is an explicit
   argument to `init_fireweave` (spec/modes.md). The opt-in start profile,
   `fireweave.start`, is the one documented exception
-  ([ADR-0011](../../docs/adr/0011-start-profile.md)).
+  ([ADR-0012](../../docs/adr/0012-start-profile.md)).
 - **No vendor SDK, key, or hostname in your process.** Applications hold a
   Fireweave project key and talk to fw-server; which backend fw-server
   forwards to is fw-server's concern.
 
 ## Quick start (one line: the start profile)
 
-Most apps need only this ([ADR-0011](../../docs/adr/0011-start-profile.md)). One small module and one call:
+Most apps need only this ([ADR-0012](../../docs/adr/0012-start-profile.md)). One small module and one call:
 
 ```python
 # src/fireweave_setup/flags.py: every control point the app reads, with its local value

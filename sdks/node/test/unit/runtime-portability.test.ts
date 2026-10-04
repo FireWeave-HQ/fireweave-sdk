@@ -52,7 +52,7 @@ test('no source file uses the Node-only Buffer global', () => {
 });
 
 /**
- * The start profile (docs/adr/0011-start-profile.md) is the one sanctioned
+ * The start profile (docs/adr/0012-start-profile.md) is the one sanctioned
  * reader of the environment and the host name. It does so through two files
  * and nowhere else; the core stays exactly as before (no env, no runtime
  * globals at all).

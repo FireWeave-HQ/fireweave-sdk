@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The start profile's resolution table (ADR-0011 rules 1–4), through the pure resolver alone:
+ * The start profile's resolution table (ADR-0012 rules 1–4), through the pure resolver alone:
  * precedence, the mode rule, the endpoint and its allowlist, and the key-family check.
  */
 class StartResolverTest {
