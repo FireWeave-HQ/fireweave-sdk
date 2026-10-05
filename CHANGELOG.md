@@ -65,6 +65,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `spec/start-profile.md`: the normative rules (SP-1…SP-26) for the start profile on every SDK — profiles, names, precedence, the fail-closed mode rule, the release-channel endpoint, key families, flags, idempotency, the instance key with FNV-1a test vectors. `spec/modes.md` now scopes "reads no environment" to the core.
 - `contracts/start/`: 14 fixtures (101 cases) with a closed schema, run by each SDK's own tests and validated by `tools/conformance/compare-start.mjs` in CI.
 
+### Changed — shared contracts (proposed with ADR-0012)
+
+- `spec/control-points.md`: SDKs that read from a prefetched cache (web, Swift, Dart) keep the last good decisions after a failed or timed-out re-fetch and serve them with reason `STALE`; only a fetch with no earlier success falls back to defaults with `ERROR`.
+- `contracts/errors.json` gains `rules.redaction` (with 16 test vectors) and every SDK's redactor implements it: bearer tokens, URL userinfo, the values of `FIREWEAVE_KEY` / `FIREWEAVE_BROWSER_KEY` / `FW_PROJECT_API_KEY` assignments, and key-shaped values (`project-api-key_`, `fw_public_`, `fw_ingest_pub_`, `fw_org_`, `cli_at_`, `ph*_`) become `[REDACTED]`. A variable **name** now stays readable (Go no longer blanks the bare name `FW_PROJECT_API_KEY`), and Go's placeholder changes from `[redacted]` to `[REDACTED]`.
+- `spec/start-profile.md`: client profiles never crash the app on a bad configuration (SP-23, now including Swift apps), and server profiles report a refused, rate-limited or unreachable fw-server once per kind with `lastErrorKind` (SP-27).
+
+### Fixed — cores
+
+- Go: the remote adapter's `Close` no longer races `Resolve`/`RegisterTarget` (a data race under `-race`), and the adapter owns its own HTTP transport instead of sharing `http.DefaultTransport`.
+- Python: the remote adapter refuses HTTP redirects, which used to re-send the `Authorization` header to the redirect target; proxies still come from the environment. Non-`EvaluationContext` contexts, non-string targeting keys and non-JSON registration properties now degrade to `InvalidContext` instead of raising.
+- Swift and Dart: one failed re-fetch no longer switches every read to its default (see the `STALE` rule above). Web now reports `STALE` for decisions served after a failed re-fetch instead of the backend's original reason.
+
+### Added — start profiles
+
+- Server profiles in Node, Python, Go, Java and Rust log one line per remote failure kind (key rejected, rate limited, unreachable), naming the key's source and the host, never the key, and expose `lastErrorKind` in status. Java adds `Fw.verify()`.
+- Dart and Swift server profiles re-fetch decisions every 30 s by default (`refreshInterval`). A Dart CLI in remote mode must now call `fw.shutdown()` (or pass a zero interval) to exit.
+- Swift app profile: `startFireweave(flags:)` no longer throws; a configuration fault sets the status to failed and reads serve defaults.
+- Python: a provisional client replaced by the first explicit `start()` is now shut down.
+
+### Release
+
+- Java staging releases publish `X.Y.Z-staging.N` to Maven Central (previously uploaded unpublished), so an app can opt into the staging channel by version.
+- New `publish-swift-mirror` job pushes `sdks/swift` to a mirror repository with a root `Package.swift` and plain semver tags, which SwiftPM can resolve. It fails closed until the mirror and its deploy key are provisioned (`.github/RELEASE.md`).
+
 ### Fixed
 
 - `FireweaveRemoteAdapter.shutdown()` clears its timeout timer, so a clean shutdown no longer holds the process open for up to `shutdownTimeoutMs`.

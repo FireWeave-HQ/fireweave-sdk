@@ -97,15 +97,18 @@ Both follow the server rules above, with idiomatic surfaces (`fireweave.start.st
 read before it cannot be deferred to a later turn the way Node defers it:
 
 - **Python** starts from the environment on that first read, and the first explicit `start()`
-  replaces that provisional start once, with a warning. After `os.fork()` the child rebuilds its
+  replaces that provisional start once, with a warning, then shuts the replaced client down (a
+  read racing the swap retries once on the new client). After `os.fork()` the child rebuilds its
   client from the stored config.
 - **Go** starts from the environment on that first read, once; a later `Start` with a different
   configuration is an error, as in Node. `fw.Client()` is one permanent client for the process,
   so a pointer captured at package init keeps working across `Start` and `Shutdown`.
 
-Deferred core fixes from the build plan (they change core behaviour, so they are separate work):
-Python's input guards, no-redirect transport and extended redaction; Go's remote-adapter
-Close/Resolve race (GO-1), extended redaction (GO-RD) and the lower `go` directive (GO-FL).
+Core fixes that landed with this work (2026-10-05): Python refuses HTTP redirects (urllib re-sent
+`Authorization` to the redirect target) and degrades bad input types to `InvalidContext`; Go's
+remote adapter no longer races `Close` against `Resolve` and owns its own HTTP transport; both
+redact by the shared contract (`contracts/errors.json` `rules.redaction`). Still deferred: the lower
+`go` directive (GO-FL), until it can be verified on a Go 1.22 toolchain.
 
 ## Java and Rust
 
@@ -120,8 +123,10 @@ Java adds `start` as a fourth top-level package beside `application`, `domain` a
 ADR is the decision that admits `start` to it; `StartConfinementGuardTest` keeps it on the public
 `application` and `domain` types and keeps every core package from importing it.
 
-Deferred: Java's `Fw.verify()` credential probe and Spring profile support; Rust's remote
-diagnostics (its MSRV is now 1.85, matching the locked `ureq` 3 graph); redaction learning `FIREWEAVE_KEY` in both cores.
+Landed (2026-10-05): both redact by the shared contract, both start profiles report a refused,
+rate-limited or unreachable fw-server once per kind with `lastErrorKind` (SP-27), and Java adds
+`Fw.verify()`, a one-round-trip key check that never throws. Rust's MSRV is 1.85, matching the
+locked `ureq` 3 graph. Still deferred: Spring profile support in Java.
 
 ## Dart and Swift
 
@@ -131,7 +136,8 @@ Both ship a **client** profile and a **server** profile, because both run in app
   keys only, a device id for anonymous visitors, `identify`/`reset`, and configuration fixed at
   build time — Dart compile-time defines (`--dart-define`, read only as `const` literals, because a
   non-const read is empty under AOT and throws under dart2js) and Swift Info.plist values. They read
-  no process environment. A Swift debug build with no key and no environment name counts as
+  no process environment. A configuration fault never crashes the app (SP-23): it sets the status to
+  failed and reads serve defaults. A Swift debug build with no key and no environment name counts as
   development through `FireweaveStart`'s own debug define; a release build fails closed.
 - **Server profiles** follow the server rules above: project keys, `FIREWEAVE_*` from the process
   environment, legacy names with a warning, and `instanceKey`.
@@ -139,11 +145,20 @@ Both ship a **client** profile and a **server** profile, because both run in app
   apply dart|swift` stamps a build-info file like the TypeScript SDKs. Swift has no manifest and
   releases by tag alone, so a Swift release must commit the stamp before tagging.
 - **Lifecycle.** Dart has no side-effect imports or top-level await, so the line is
-  `await Fireweave.start(...)`, and the singleton is per isolate. The Dart client never throws, like
-  web; the Dart server and Swift `startFireweave` throw configuration errors before any I/O.
+  `await Fireweave.start(...)`, and the singleton is per isolate. Neither client profile throws, like
+  web. The Dart server throws a configuration error before any I/O; the Swift server stops the
+  process from `startFireweave(flags:)` (`fatalError`) or throws from
+  `try startFireweave(FireweaveStartOptions(...))`, so a deploy without its key never starts.
+- **Refresh.** Their cores now keep the last good decisions after a failed re-fetch and report
+  `STALE` (spec/control-points.md), and both server profiles re-fetch every 30 s by default
+  (`refreshInterval`; zero turns it off). A Dart CLI in remote mode must call `fw.shutdown()` or
+  pass a zero interval, or the pending refresh keeps the isolate alive.
+
+Distribution: a Swift release now pushes `sdks/swift` to a mirror repository with a root
+`Package.swift` and plain semver tags (`publish-swift-mirror`; the mirror and its deploy key are
+company-side provisioning). Java staging builds publish `X.Y.Z-staging.N` to Maven Central.
 
 Deferred: the `fireweave_flutter` companion (persisted device id, build-mode environment, refresh
-on resume); Swift's core fixes SW-8 (redaction) and SW-9 (last-good on a failed refresh), its
-refresh scheduler, privacy manifest, distribution (a root `Package.swift` mirror) and on-device
-checks. The Swift start profile builds and passes its tests on CI's Linux Swift 6.0.3 and 6.2.1
-legs; it has not run on an Apple device yet.
+on resume) and the web real-bundler suite, both waiting for local toolchains; Swift's privacy
+manifest and on-device checks. The Swift start profile builds and passes its tests on CI's Linux
+Swift legs; it has not run on an Apple device yet.
