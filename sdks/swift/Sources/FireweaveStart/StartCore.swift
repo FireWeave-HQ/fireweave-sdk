@@ -9,6 +9,10 @@ import Foundation
 /// client is installed, reads are answered here: local mode from the flags,
 /// remote mode with the caller's default (`NotReady`).
 ///
+/// A configuration fault throws on the server profile only. On the app
+/// profile it never throws (SP-23): the state becomes `.failed` with a
+/// `problem`, one line is logged, and reads serve their defaults.
+///
 /// `@unchecked Sendable`: every mutable property is guarded by `lock`. No
 /// lock is held across an `await`, while logging, or while calling into the
 /// core except for its own non-blocking state reads, so a log sink or a
@@ -38,6 +42,18 @@ final class StartCore: @unchecked Sendable {
     var task: Task<Void, Never>?
     var client: FireweaveClient?
     var failure: FireweaveError?
+    /// Server, remote mode: the periodic re-fetch, cancelled by shutdown.
+    var refresher: Task<Void, Never>?
+    /// The kind of the latest failed fw-server request (SP-27). It stays
+    /// after a later success.
+    var lastErrorKind: ErrorKind?
+  }
+
+  /// An app-profile configuration fault: nothing started, so there is no
+  /// run.
+  private struct Rejection {
+    var profile: FireweaveProfile
+    var error: FireweaveError
   }
 
   /// A snapshot of the running client, for work done outside the lock.
@@ -56,7 +72,11 @@ final class StartCore: @unchecked Sendable {
   /// start is discarded.
   private var generation: UInt64 = 0
   private var run: Run?
+  private var rejection: Rejection?
   private var warned: Set<String> = []
+  /// The fw-server failure groups already logged: one line each for the
+  /// life of the process (SP-27).
+  private var diagnosed: Set<String> = []
   private var logSink: LogSink?
   /// The server instance key handed out so far. It identifies the process,
   /// so it outlives a run.
@@ -69,6 +89,10 @@ final class StartCore: @unchecked Sendable {
 
   // MARK: - start
 
+  /// Resolves `options` and starts. Throws a configuration fault on the
+  /// server profile only, so a deploy without its key never starts; on the
+  /// app profile a fault is reported through `status` and one log line
+  /// instead (SP-23).
   func start(_ options: FireweaveStartOptions) throws {
     let profile = options.profile ?? sources.platformProfile
     var env = sources.env
@@ -80,13 +104,20 @@ final class StartCore: @unchecked Sendable {
       infoPlist = trimmingLookup(custom)
     }
     let lookups = StartLookups(env: env, infoPlist: infoPlist, isDebugBuild: sources.isDebugBuild)
-    let config = try resolveStart(
-      options,
-      profile: profile,
-      lookups: lookups,
-      channel: sources.channel,
-      sdkVersion: sources.sdkVersion
-    )
+    let config: ResolvedStart
+    do {
+      config = try resolveStart(
+        options,
+        profile: profile,
+        lookups: lookups,
+        channel: sources.channel,
+        sdkVersion: sources.sdkVersion
+      )
+    } catch let fault as FireweaveError {
+      guard profile == .app else { throw fault }
+      reject(fault, profile: profile, log: options.log)
+      return
+    }
     let signature = StartSignature(
       config: config,
       deviceId: profile == .app ? nonBlank(options.deviceId) : nil,
@@ -100,6 +131,35 @@ final class StartCore: @unchecked Sendable {
     try outcome.get()
   }
 
+  /// The app profile's answer to a configuration fault (SP-23): while a
+  /// start is running it keeps it and says so; otherwise the state becomes
+  /// `.failed` with the fault as `problem`, and reads serve their defaults.
+  /// One log line either way, naming sources, never values.
+  private func reject(_ fault: FireweaveError, profile: FireweaveProfile, log: LogSink?) {
+    var lines: [LogLine] = []
+    lock.locked { () -> Void in
+      if phase == .running {
+        warnOnceLocked(fault.message + " Keeping the running configuration.", into: &lines)
+        return
+      }
+      // Nothing is running, so this start may set the sink its failure is
+      // reported through.
+      if let sink = log {
+        logSink = sink
+      }
+      generation += 1
+      phase = .failed
+      run = nil
+      rejection = Rejection(profile: profile, error: fault)
+      notifyLocked(.failed)
+      warnOnceLocked(
+        fault.message + " FireWeave is not running; reads serve their defaults.",
+        into: &lines
+      )
+    }
+    emit(lines)
+  }
+
   private func beginLocked(
     _ config: ResolvedStart,
     signature: StartSignature,
@@ -111,12 +171,15 @@ final class StartCore: @unchecked Sendable {
       let changed = current.signature.differences(from: signature)
       if changed.isEmpty { return .success(()) }
       let fields = changed.joined(separator: ", ")
-      return .failure(
-        startConfigurationError(
-          "startFireweave was already called with a different configuration (\(fields))."
-            + " Call startFireweave once, at launch."
-        )
-      )
+      let conflict =
+        "startFireweave was already called with a different configuration (\(fields))."
+      if current.config.profile == .app {
+        // SP-20: a client logs it once and keeps the first.
+        let keep = "Keeping the first one; call startFireweave once, at launch."
+        warnOnceLocked(phrase("[fireweave]", conflict, keep), into: &lines)
+        return .success(())
+      }
+      return .failure(startConfigurationError(conflict + " Call startFireweave once, at launch."))
     }
 
     // A server never touches UserDefaults.
@@ -174,8 +237,15 @@ final class StartCore: @unchecked Sendable {
     }
 
     let transport = options.transport
+    let interval = options.refreshInterval
     let task = Task.detached { [self] in
-      await self.boot(generation: current, config: config, subject: subject, transport: transport)
+      await self.boot(
+        generation: current,
+        config: config,
+        subject: subject,
+        transport: transport,
+        refreshInterval: interval
+      )
     }
     run = Run(
       generation: current,
@@ -190,21 +260,25 @@ final class StartCore: @unchecked Sendable {
       task: task
     )
     phase = .running
+    rejection = nil
     notifyLocked(.initializing)
     return .success(())
   }
 
   /// Builds the core client off the caller's thread and installs it, unless
-  /// a shutdown or a newer start got there first.
+  /// a shutdown or a newer start got there first. A remote server start
+  /// then re-fetches every `refreshInterval`.
   private func boot(
     generation expected: UInt64,
     config: ResolvedStart,
     subject: String,
-    transport: (any RemoteHTTPTransport)?
+    transport: (any RemoteHTTPTransport)?,
+    refreshInterval interval: Duration
   ) async {
     let log: LogSink = { [self] line in
       self.emit([LogLine(level: .info, text: line)])
     }
+    let refreshes = config.profile == .server && config.mode == .remote && interval > .zero
     do {
       let client = try await makeStartClient(
         config,
@@ -215,10 +289,17 @@ final class StartCore: @unchecked Sendable {
       let installed = lock.locked { () -> Bool in
         guard phase == .running, run?.generation == expected else { return false }
         run?.client = client
+        if refreshes {
+          run?.refresher = Task.detached { [self] in
+            await self.refreshLoop(generation: expected, client: client, every: interval)
+          }
+        }
         notifyLocked(stateLocked())
         return true
       }
-      if !installed {
+      if installed {
+        observe(generation: expected, client: client)
+      } else {
         await client.shutdown()
       }
     } catch {
@@ -238,6 +319,66 @@ final class StartCore: @unchecked Sendable {
     }
   }
 
+  // MARK: - refresh and diagnostics
+
+  /// Server, remote mode: re-fetches the decisions every `interval` until
+  /// shutdown. A success swaps them; a failure keeps the last good ones (the
+  /// core serves them as `STALE`) and is reported like any other fw-server
+  /// failure. One re-fetch at a time: the next wait starts only after the
+  /// previous re-fetch settled.
+  private func refreshLoop(
+    generation expected: UInt64,
+    client: FireweaveClient,
+    every interval: Duration
+  ) async {
+    let delay = nanoseconds(of: interval)
+    while !Task.isCancelled {
+      do {
+        try await Task.sleep(nanoseconds: delay)
+      } catch {
+        return
+      }
+      guard isCurrent(expected) else { return }
+      let before = client.runtime.state()
+      await client.runtime.refresh()
+      guard isCurrent(expected) else { return }
+      observe(generation: expected, client: client)
+      if Self.startState(client.runtime.state()) != Self.startState(before) {
+        announce(generation: expected)
+      }
+    }
+  }
+
+  private func isCurrent(_ expected: UInt64) -> Bool {
+    lock.locked { phase == .running && run?.generation == expected }
+  }
+
+  /// Announces the current state, if `expected` is still the running start.
+  private func announce(generation expected: UInt64) {
+    lock.locked { () -> Void in
+      guard phase == .running, run?.generation == expected else { return }
+      notifyLocked(stateLocked())
+    }
+  }
+
+  /// Records the outcome of the client's latest fetch (SP-27): a fw-server
+  /// failure sets `lastErrorKind` and logs one line per kind for the life of
+  /// the process, naming the key's source or the endpoint, never the key.
+  private func observe(generation expected: UInt64, client: FireweaveClient) {
+    guard let failure = currentFailure(client.runtime) else { return }
+    var lines: [LogLine] = []
+    lock.locked { () -> Void in
+      guard phase == .running, var current = run, current.generation == expected else { return }
+      guard let diagnosis = remoteDiagnosis(failure, config: current.config) else { return }
+      current.lastErrorKind = failure.error.kind
+      run = current
+      if diagnosed.insert(diagnosis.group).inserted {
+        lines.append(LogLine(level: .warning, text: diagnosis.line))
+      }
+    }
+    emit(lines)
+  }
+
   // MARK: - reads
 
   /// How one read is answered: by the installed client, or here.
@@ -255,7 +396,7 @@ final class StartCore: @unchecked Sendable {
       case .shutdown:
         return .fallback(FallbackReader(error: FireweaveError(kind: .alreadyClosed)))
       case .failed:
-        let failure = run?.failure ?? FireweaveError(kind: .notReady)
+        let failure = run?.failure ?? rejection?.error ?? FireweaveError(kind: .notReady)
         return .fallback(FallbackReader(error: failure, subject: run?.subject))
       case .running:
         guard let current = run else {
@@ -350,6 +491,7 @@ final class StartCore: @unchecked Sendable {
     settle(generation: running.generation) { state in
       state.currentKey = targetingKey
     }
+    observe(generation: running.generation, client: running.client)
     return result
   }
 
@@ -380,6 +522,7 @@ final class StartCore: @unchecked Sendable {
     settle(generation: running.generation) { state in
       state.currentKey = running.subject
     }
+    observe(generation: running.generation, client: running.client)
   }
 
   func forget() async {
@@ -414,6 +557,7 @@ final class StartCore: @unchecked Sendable {
     settle(generation: running.generation) { state in
       state.currentKey = fresh
     }
+    observe(generation: running.generation, client: running.client)
   }
 
   func setPersistence(_ persistence: FireweavePersistence) {
@@ -517,16 +661,21 @@ final class StartCore: @unchecked Sendable {
   }
 
   func shutdown() async {
+    var refresher: Task<Void, Never>?
     let (client, pending) = lock.locked { () -> (FireweaveClient?, Task<Void, Never>?) in
       guard phase == .running || phase == .failed else { return (nil, nil) }
       generation += 1
       let installed = run?.client
       let starting = installed == nil ? run?.task : nil
+      refresher = run?.refresher
+      run?.refresher = nil
       run?.client = nil
+      rejection = nil
       phase = .shutdown
       notifyLocked(.shutdown)
       return (installed, starting)
     }
+    refresher?.cancel()
     if let client {
       await client.shutdown()
     } else if let pending {
@@ -540,7 +689,9 @@ final class StartCore: @unchecked Sendable {
     lock.locked { () -> Void in
       phase = .notStarted
       run = nil
+      rejection = nil
       warned = []
+      diagnosed = []
       logSink = nil
       instanceKeyCache = nil
       notifyLocked(.notStarted)
@@ -571,7 +722,7 @@ final class StartCore: @unchecked Sendable {
       case .shutdown:
         return .failure(FireweaveError(kind: .alreadyClosed))
       case .failed:
-        return .failure(run?.failure ?? FireweaveError(kind: .notReady))
+        return .failure(run?.failure ?? rejection?.error ?? FireweaveError(kind: .notReady))
       case .running:
         guard let current = run, let client = current.client else {
           return .failure(FireweaveError(kind: .notReady))
@@ -629,7 +780,17 @@ final class StartCore: @unchecked Sendable {
       sdkVersion: sources.sdkVersion,
       flagCount: 0
     )
-    guard phase != .notStarted, let current = run else { return status }
+    guard phase != .notStarted else { return status }
+    guard let current = run else {
+      if phase == .failed, let rejected = rejection {
+        status.profile = rejected.profile
+        status.problem = FireweaveStartProblem(
+          kind: rejected.error.kind,
+          message: rejected.error.message
+        )
+      }
+      return status
+    }
     let config = current.config
     status.profile = config.profile
     status.mode = config.mode
@@ -643,9 +804,10 @@ final class StartCore: @unchecked Sendable {
     }
     if phase == .failed, let failure = current.failure {
       status.problem = FireweaveStartProblem(kind: failure.kind, message: failure.message)
-    } else if let cause = current.client?.runtime.initializationError() {
-      status.problem = FireweaveStartProblem(kind: cause.kind, message: cause.message)
+    } else if let runtime = current.client?.runtime, let cause = currentFailure(runtime) {
+      status.problem = FireweaveStartProblem(kind: cause.error.kind, message: cause.error.message)
     }
+    status.lastErrorKind = current.lastErrorKind
     return status
   }
 

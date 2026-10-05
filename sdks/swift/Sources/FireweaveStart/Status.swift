@@ -10,12 +10,16 @@ public enum FireweaveStartState: String, Sendable, Equatable {
   /// defaults (`NotReady`); local reads already answer from the flags.
   case initializing = "INITIALIZING"
   case ready = "READY"
-  /// The prefetch missed its ceiling; reads carry `STALE`.
+  /// The prefetch missed its ceiling, or a re-fetch failed after an earlier
+  /// success (`status.problem` says why): reads serve the last decisions
+  /// fetched, if any, with reason `STALE`.
   case stale = "STALE"
-  /// The prefetch failed (`status.problem` says why); reads serve their
-  /// defaults with an `ERROR` decision.
+  /// The prefetch failed with nothing good to serve (`status.problem` says
+  /// why); reads serve their defaults with an `ERROR` decision.
   case error = "ERROR"
-  /// The core refused the configuration after `startFireweave` returned.
+  /// The configuration was refused: an app's `startFireweave` (which never
+  /// throws), or the core after `startFireweave` returned. `status.problem`
+  /// says why; reads serve their defaults.
   case failed = "FAILED"
   /// `fw.shutdown()` ran. Reads serve their defaults (`AlreadyClosed`) until
   /// the next `startFireweave`.
@@ -58,4 +62,9 @@ public struct FireweaveStatus: Sendable, Equatable {
   public var environment: String?
   public var flagCount: Int
   public var problem: FireweaveStartProblem?
+  /// The kind of the latest failed fw-server request (`.authentication`,
+  /// `.authorization`, `.rateLimited`, `.network`, …; SP-27). It stays after
+  /// a later success, which clears `problem`, so a key that was refused once
+  /// is still visible. Nil until a request fails.
+  public var lastErrorKind: ErrorKind?
 }

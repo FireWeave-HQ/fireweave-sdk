@@ -514,12 +514,34 @@ struct GlobalStartTests {
   @Test func startFireweaveReturnsTheProcessWideHandle() async throws {
     await resetFireweaveForTesting()
     let log = LogCollector()
-    let handle = try startFireweave(flags: ["new-checkout": true], mode: .local, log: log.sink)
+    let handle = startFireweave(flags: ["new-checkout": true], mode: .local, log: log.sink)
     #expect(handle === fw)
     #expect(fw.controlPoints.getBooleanValue("new-checkout", default: false))
 
-    let again = try startFireweave(flags: ["new-checkout": true], mode: .local)
+    let again = startFireweave(flags: ["new-checkout": true], mode: .local)
     #expect(again === fw)
+
+    // The throwing form with the same configuration is the same no-op.
+    let same = FireweaveStartOptions(flags: ["new-checkout": true], mode: .local)
+    let viaOptions = try startFireweave(same)
+    #expect(viaOptions === fw)
+
+    await resetFireweaveForTesting()
+    #expect(fw.status.state == .notStarted)
+  }
+
+  /// SP-23 through the public call: an app's configuration fault never
+  /// throws and never traps.
+  @Test func anAppConfigurationFaultNeverThrowsFromStartFireweave() async {
+    await resetFireweaveForTesting()
+    let log = LogCollector()
+    // An app that forces remote mode without a browser key.
+    let handle = startFireweave(mode: .remote, profile: .app, log: log.sink)
+    #expect(handle === fw)
+    #expect(fw.status.state == .failed)
+    #expect(fw.status.problem?.kind == .configuration)
+    #expect(log.count(containing: "FireWeave is not running") == 1)
+    #expect(!fw.controlPoints.getBooleanValue("new-checkout", default: false))
 
     await resetFireweaveForTesting()
     #expect(fw.status.state == .notStarted)

@@ -15,8 +15,10 @@ public enum LifecycleState: Sendable, Equatable {
   case stale
   /// A transient, retriable failure reached from `refresh()`'s prefetch
   /// failing for a non-timeout reason (a real adapter-reported error, not
-  /// a ceiling loss, which goes to `.stale` instead). A later `refresh()`
-  /// can recover from this.
+  /// a ceiling loss, which goes to `.stale` instead) BEFORE any prefetch has
+  /// succeeded. A failure after an earlier success goes to `.stale` and
+  /// keeps the last good decisions instead. A later `refresh()` can recover
+  /// from this.
   case error
   /// A non-recoverable-without-reconstruction boot failure: `adapter
   /// .initialize()` itself threw (`contracts/` wire name `"FATAL"`,
@@ -70,6 +72,12 @@ final class ControlPointsCacheBox: @unchecked Sendable {
   private var state: LifecycleState = .uninitialized
   private var cache: PrefetchResult = [:]
   private var initError: FireweaveError?
+  private var refreshError: FireweaveError?
+  /// At least one prefetch succeeded: from then on `cache` holds the last
+  /// good decisions, and a failed re-fetch keeps them
+  /// (`spec/control-points.md` "A failed re-fetch keeps the last good
+  /// decisions").
+  private var hasLastGood = false
 
   /// Consistent (state, cache) pair as of one instant — never two separate
   /// lock acquisitions, which could observe a torn update.
@@ -81,25 +89,55 @@ final class ControlPointsCacheBox: @unchecked Sendable {
     lock.withLock { state }
   }
 
+  /// The error of the most recent prefetch when it failed; nil once one
+  /// succeeds. A ceiling loss leaves it as it was.
+  func lastRefreshError() -> FireweaveError? {
+    lock.withLock { refreshError }
+  }
+
   func setState(_ newState: LifecycleState) {
     lock.withLock { state = newState }
   }
 
-  /// Successful prefetch: replace the cache and enter `.ready`.
+  /// Successful prefetch: replace the cache and enter `.ready`. Discarded
+  /// after shutdown: closed stays closed.
   func apply(_ newCache: PrefetchResult) {
     lock.withLock {
+      guard state != .shutdown else { return }
       cache = newCache
       state = .ready
       initError = nil
+      refreshError = nil
+      hasLastGood = true
     }
   }
 
-  /// A prefetch failure (real error, not a ceiling timeout): enter
-  /// `.error`, remembering why. Reachable again by a later `refresh()`.
+  /// A prefetch failure (real error, not a ceiling timeout). With no
+  /// earlier success: enter `.error`, remembering why, so reads serve their
+  /// defaults. After one: keep the last good decisions and enter `.stale`,
+  /// so reads serve them with reason `STALE` instead of every read falling
+  /// back to its default on one 429, 5xx or network blip. Either way a
+  /// later `refresh()` can recover. Discarded after shutdown.
   func fail(_ error: FireweaveError) {
     lock.withLock {
-      state = .error
-      initError = error
+      guard state != .shutdown else { return }
+      refreshError = error
+      if hasLastGood {
+        state = .stale
+      } else {
+        state = .error
+        initError = error
+      }
+    }
+  }
+
+  /// The prefetch lost the race against its ceiling: `.stale`, keeping
+  /// whatever the cache holds (the last good decisions, or nothing).
+  /// Discarded after shutdown.
+  func timeOut() {
+    lock.withLock {
+      guard state != .shutdown else { return }
+      state = .stale
     }
   }
 

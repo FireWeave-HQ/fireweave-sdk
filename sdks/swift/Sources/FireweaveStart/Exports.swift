@@ -9,7 +9,7 @@
 // import FireweaveStart
 //
 // @main struct ShopApp: App {
-//   init() { try! startFireweave(flags: appFlags) }
+//   init() { startFireweave(flags: appFlags) }
 //   var body: some Scene { WindowGroup { RootView() } }
 // }
 //

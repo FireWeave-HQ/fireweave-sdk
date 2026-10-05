@@ -439,8 +439,8 @@ private func missingKeyMessage(
   switch profile {
   case .app:
     let message = phrase(
-      "\(StartNames.browserKey) is not set in Info.plist and \(situation). Add",
-      "\(StartNames.browserKey) = $(\(StartNames.browserKey)) to Info.plist and set that",
+      "\(StartNames.browserKey) is not set in Info.plist and \(situation). Add an Info.plist",
+      "entry \(StartNames.browserKey) with the value $(\(StartNames.browserKey)), set that",
       "build setting to a browser key (fw_public_…), or pass startFireweave(mode: .local)",
       "for local work."
     )

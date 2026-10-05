@@ -52,10 +52,14 @@ let appFlags = defineFlags([
 import FireweaveStart
 
 @main struct ShopApp: App {
-  init() { try! startFireweave(flags: appFlags) }
+  init() { startFireweave(flags: appFlags) }
   var body: some Scene { WindowGroup { RootView() } }
 }
 ```
+
+In an app, `startFireweave` never throws and never crashes the app: a misconfiguration (a
+missing or wrong key, a bad endpoint) sets `fw.status.state` to `.failed` with the reason in
+`fw.status.problem`, logs one line, and every read serves its default.
 
 **Server** (Vapor `configure`, Hummingbird, a worker or a CLI `main`):
 
@@ -63,10 +67,14 @@ import FireweaveStart
 import FireweaveStart
 
 public func configure(_ app: Application) async throws {
-  try startFireweave(flags: appFlags)
+  try startFireweave(FireweaveStartOptions(flags: appFlags))  // throws on a misconfiguration
   await fw.ready()  // the first request sees decisions
 }
 ```
+
+A server fails loudly, so a deploy without its key never starts: the `FireweaveStartOptions`
+form throws a `FireweaveError` of kind `.configuration`, and the one-line
+`startFireweave(flags:)` form stops the process at launch with the same message.
 
 **Anywhere** (the core's nine read methods, unchanged; synchronous, never throw):
 
@@ -83,11 +91,11 @@ fw.status                                                // mode, channel, host,
 for await state in fw.updates { rerender() }             // after start, identify, reset and forget
 ```
 
-`startFireweave` is synchronous: it resolves the configuration, throws before any network
-I/O if it is wrong, and starts the first prefetch in the background. Until that prefetch
-settles, remote reads return your default; local reads answer from your flags from the very
-first read. SwiftUI does not re-render when decisions arrive: `await fw.ready()` before the
-first screen, or observe `fw.updates`.
+`startFireweave` is synchronous: it resolves the configuration before any network I/O and
+starts the first prefetch in the background. Until that prefetch settles, remote reads return
+your default; local reads answer from your flags from the very first read. SwiftUI does not
+re-render when decisions arrive: `await fw.ready()` before the first screen, or observe
+`fw.updates`.
 
 ### Where the key comes from
 
@@ -127,7 +135,7 @@ whitespace-only values count as unset.
 | Option | App (Info.plist) | Server (environment) | Default | What it does |
 | --- | --- | --- | --- | --- |
 | `flags` | — | — | `[:]` | Local values per control point (`defineFlags`). Served in local mode only; a read of a key missing from them warns once. |
-| `mode` | — | — | inferred | `.remote` or `.local`. Remote without a key throws; local ignores a key (one warning). |
+| `mode` | — | — | inferred | `.remote` or `.local`. Remote without a key is a configuration fault; local ignores a key (one warning). |
 | `environment` | `FIREWEAVE_ENV` | `FIREWEAVE_ENV`, then `APP_ENV` | — | Only feeds the mode rule. `FW_ENV` is not read. |
 | `url` | `FIREWEAVE_URL` (legacy `FWApiUrl`) | `FIREWEAVE_URL` (legacy `FW_API_URL`, `FW_ATTEST_URL`) | this SDK build's channel | A `-staging.N` build calls `https://staging-app-server.fireweave.ai`, any other `https://app-server.fireweave.ai`. https is required except on localhost; an override's allowlist is its own host plus loopback. |
 | `key` | `FIREWEAVE_BROWSER_KEY` | `FIREWEAVE_KEY` (legacy `FW_PROJECT_API_KEY`) | — | App: browser keys only. Server: project keys; browser keys are refused. Analytics vendor keys and org/CLI tokens are refused in both. Messages name the source, never the value. |
@@ -136,27 +144,34 @@ whitespace-only values count as unset.
 | `persistence` | — | — | `.userDefaults` | App: `.userDefaults` keeps the id at `fireweave.device-id` (the scaffolded harness's key, so existing installs keep their ramp buckets); `.memory` stores nothing until `fw.setPersistence(.userDefaults)`. |
 | `instanceId` | — | `FIREWEAVE_INSTANCE_ID` | `inst_` + hash of the host name | Server: the value of `fw.instanceKey()` and the key the process prefetches under. Set it when replicas share a host name. |
 | `log` | — | — | unified log (Apple), stderr (Linux) | Receives every `[fireweave]` line. |
+| `refreshInterval` | — | — | 30 seconds | Server, remote mode: how often decisions are re-fetched until `fw.shutdown()`. `.zero` turns it off. Apps re-fetch on `identify`, `reset` and `forget` only. |
 
 `FireweaveStartOptions` adds three test seams: `env` and `infoPlist` (lookups that replace the
 environment and Info.plist) and `transport` (a `RemoteHTTPTransport`, for a fake server or a
-custom `URLSession`). Call `startFireweave(FireweaveStartOptions(...))` to use them, and
+custom `URLSession`). Call `try startFireweave(FireweaveStartOptions(...))` to use them, and
 `await resetFireweaveForTesting()` between tests.
 
 **Mode rule.** `mode` wins. Otherwise: a key means remote. No key and a development
 environment name means local. An app's **debug** build with no environment name counts as
 development (the `FireweaveStart` target's own `FIREWEAVE_START_DEBUG` flag); a release build
-never does. Anything else throws a `FireweaveError` of kind `.configuration` naming
-`FIREWEAVE_BROWSER_KEY` (app) or `FIREWEAVE_KEY` (server), so a TestFlight or App Store build
-that lost its key crashes at launch under `try!` instead of silently serving defaults. Use
-`try?` if you would rather degrade to defaults.
+never does. Anything else is a configuration fault naming `FIREWEAVE_BROWSER_KEY` (app) or
+`FIREWEAVE_KEY` (server), never its value, so a build that lost its key never silently turns
+into local evaluation. A TestFlight or App Store build that lost its key keeps running on your
+defaults and says why in `fw.status.problem` and in its log; a server does not start.
 
 **Reads never throw.** Before `startFireweave`, and until the first remote prefetch settles,
 reads return your default (the `*Details` forms return an `ERROR` decision with `NotReady`).
-A refused key or an unreachable fw-server shows up as `ERROR` decisions and in
-`fw.status.problem`, never as a throw. A second `startFireweave` with the same configuration
-is a no-op; a different one throws and leaves the running client alone. After
-`await fw.shutdown()`, reads serve defaults (`AlreadyClosed`) until the next `startFireweave`,
-which may use any configuration.
+A refused key or an unreachable fw-server shows up in `fw.status.problem`, never as a throw:
+before any fetch has succeeded, reads return your default with an `ERROR` decision; after one
+has, a failed re-fetch keeps serving the last decisions fetched, with reason `STALE`, until the
+next success replaces them. A second `startFireweave` with the same configuration is a no-op;
+a different one leaves the running client alone and throws (server) or is logged once (app).
+After `await fw.shutdown()`, reads serve defaults (`AlreadyClosed`) until the next
+`startFireweave`, which may use any configuration.
+
+**Refresh.** A remote server re-fetches its decisions every `refreshInterval` (30 seconds) until
+`fw.shutdown()`; each success swaps them in one step. An app re-fetches when `identify`, `reset`
+or `forget` changes who the decisions are for.
 
 **Identity.** In an app, decisions are prefetched for the device id until `fw.identify`, then
 for the user; `fw.reset()` goes back to the device id. `identify`, `reset` and `forget` run one
@@ -166,8 +181,11 @@ per-call `context` is validated but does not select a decision.
 
 **Debugging.** `fw.status` reports the state, profile, mode and why (`option`, `key` or
 `environment`), channel, SDK version, fw-server host, endpoint source, key source, environment
-name, flag count and problem. It never contains the key, so it is safe to log or send to a
-crash reporter:
+name, flag count, problem and `lastErrorKind`, the kind of the latest failed fw-server request
+(it stays after a later success). When fw-server refuses the key (401, 403), rate-limits it
+(429) or cannot be reached, one line per kind is logged for the life of the process, naming the
+key's variable or the endpoint, never the key. A revoked key does not look like a rollout at 0%.
+`fw.status` never contains the key, so it is safe to log or send to a crash reporter:
 
 ```swift
 print("fireweave:", fw.status)

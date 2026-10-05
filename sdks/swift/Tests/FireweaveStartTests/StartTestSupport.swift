@@ -126,18 +126,24 @@ struct RecordedRequest: Sendable {
   var body: JSONValue
 }
 
-/// Answers `/v1/flags/evaluate` with fixed decisions and every other path
-/// with `{}`, after an optional delay, recording what was sent.
+/// Answers `/v1/flags/evaluate` with the current decisions and every other
+/// path with `{}`, after an optional delay, recording what was sent. The
+/// status and the decisions can change mid-test.
 final class StartFakeTransport: RemoteHTTPTransport, @unchecked Sendable {
   static let newCheckoutOn = """
     {"decisions":[{"flagKey":"new-checkout","value":true,"variant":"on",\
     "reason":"TARGETING_MATCH","found":true,"enabled":true}]}
     """
 
+  static let newCheckoutOff = """
+    {"decisions":[{"flagKey":"new-checkout","value":false,"variant":"off",\
+    "reason":"TARGETING_MATCH","found":true,"enabled":true}]}
+    """
+
   private let lock = NSLock()
-  private let statusCode: Int
+  private var statusCode: Int
   private let delayNs: UInt64
-  private let decisionsJSON: String
+  private var decisionsJSON: String
   private var recorded: [RecordedRequest] = []
 
   init(
@@ -162,6 +168,20 @@ final class StartFakeTransport: RemoteHTTPTransport, @unchecked Sendable {
     requests.filter { $0.path.hasSuffix("/v1/targets/register") }
   }
 
+  /// The HTTP status of every later response.
+  func setStatusCode(_ code: Int) {
+    lock.locked {
+      statusCode = code
+    }
+  }
+
+  /// The evaluate body of every later response.
+  func setDecisions(_ json: String) {
+    lock.locked {
+      decisionsJSON = json
+    }
+  }
+
   func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
     if delayNs > 0 {
       try await Task.sleep(nanoseconds: delayNs)
@@ -174,16 +194,28 @@ final class StartFakeTransport: RemoteHTTPTransport, @unchecked Sendable {
       authorization: request.value(forHTTPHeaderField: "Authorization"),
       body: body
     )
-    lock.locked {
+    let (status, decisions) = lock.locked { () -> (Int, String) in
       recorded.append(record)
+      return (statusCode, decisionsJSON)
     }
-    let json = path.hasSuffix("/v1/flags/evaluate") ? decisionsJSON : "{}"
+    let json = path.hasSuffix("/v1/flags/evaluate") ? decisions : "{}"
     let response = HTTPURLResponse(
       url: request.url!,
-      statusCode: statusCode,
+      statusCode: status,
       httpVersion: "HTTP/1.1",
       headerFields: nil
     )!
     return (Data(json.utf8), response)
   }
+}
+
+/// Polls `condition` every 20 ms until it holds or `seconds` pass, and
+/// returns whether it held.
+func eventually(within seconds: Double = 3, _ condition: () -> Bool) async -> Bool {
+  let deadline = Date().addingTimeInterval(seconds)
+  while Date() < deadline {
+    if condition() { return true }
+    try? await Task.sleep(nanoseconds: 20_000_000)
+  }
+  return condition()
 }

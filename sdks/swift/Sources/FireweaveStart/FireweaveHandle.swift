@@ -82,7 +82,7 @@ public final class FireweaveHandle: Sendable {
   /// prefetch ceiling (5 seconds). Never throws.
   ///
   /// ```swift
-  /// try startFireweave()
+  /// startFireweave()
   /// await fw.ready()  // the first request sees decisions
   /// ```
   @discardableResult
@@ -92,7 +92,8 @@ public final class FireweaveHandle: Sendable {
 
   /// What `startFireweave` decided and how it is going: state, profile, mode
   /// and why, channel, SDK version, host, endpoint source, key source,
-  /// environment, flag count and problem. Never the key.
+  /// environment, flag count, problem and the latest fw-server error kind.
+  /// Never the key.
   public var status: FireweaveStatus {
     core.status
   }
@@ -112,9 +113,9 @@ public final class FireweaveHandle: Sendable {
     core.client
   }
 
-  /// Closes the running client. Afterwards reads serve their defaults
-  /// (`AlreadyClosed`) until the next `startFireweave`, which may use any
-  /// configuration.
+  /// Closes the running client and stops a server's periodic re-fetch.
+  /// Afterwards reads serve their defaults (`AlreadyClosed`) until the next
+  /// `startFireweave`, which may use any configuration.
   public func shutdown() async {
     await core.shutdown()
   }

@@ -115,6 +115,14 @@ public final class FireweaveRuntime: @unchecked Sendable {
   /// see `initialize()`'s doc comment).
   public func initializationError() -> FireweaveError? { cacheBox.snapshot().initError }
 
+  /// The error of the most recent prefetch when it failed, nil once a
+  /// prefetch succeeds. Unlike `initializationError()` it is also set when
+  /// a re-fetch fails after an earlier success, which leaves the runtime
+  /// `.stale` serving the last good decisions, so a caller can still report
+  /// why the decisions stopped being fresh. A ceiling loss carries no error
+  /// and leaves it as it was.
+  public func lastRefreshError() -> FireweaveError? { cacheBox.lastRefreshError() }
+
   // MARK: - context layering
 
   public func setClientContext(_ context: EvaluationContext?) {
@@ -158,17 +166,23 @@ public final class FireweaveRuntime: @unchecked Sendable {
   /// Re-run the prefetch against the current global+client context. Races
   /// the ceiling via `PrefetchRaceGate` (see that type's doc comment for
   /// why not a `TaskGroup`).
+  ///
+  /// A success swaps the whole cache in one step. A failure or a ceiling
+  /// loss after an earlier success keeps the last good decisions and moves
+  /// to `.stale`, so reads serve them with reason `STALE`
+  /// (`spec/control-points.md` "A failed re-fetch keeps the last good
+  /// decisions"). Only a failure with no earlier success is `.error`.
   public func refresh() async {
     if cacheBox.currentState() == .shutdown { return }
 
     let (global, client) = contextBox.snapshot()
     let merged = mergeContexts([global, client])
-    if case .failure = validateContext(
+    if case .failure(let invalid) = validateContext(
       merged, limits: limits,
       reservedKeys: reservedAttributeKeys.union(defaultReservedAttributeKeys),
       requireTargetingKey: false
     ) {
-      cacheBox.setState(.error)
+      cacheBox.fail(invalid)
       return
     }
 
@@ -199,7 +213,7 @@ public final class FireweaveRuntime: @unchecked Sendable {
       // STALE and the lifecycle state says so. The losing prefetch
       // Task, if it eventually completes, is simply discarded — see
       // PrefetchRaceGate's doc comment.
-      cacheBox.setState(.stale)
+      cacheBox.timeOut()
     }
   }
 
@@ -247,7 +261,8 @@ public final class FireweaveRuntime: @unchecked Sendable {
     //    definition exists but its targeting conditions did not select
     //    this caller (`InMemoryAdapter`'s rich matchAttribute/matchGroups/
     //    matchPerson/matchTargetingKey conditions). This is ALWAYS
-    //    `.defaultReason`, regardless of which adapter produced it —
+    //    `.defaultReason` (`.stale` when it is the last good answer after
+    //    a failed re-fetch), regardless of which adapter produced it —
     //    "no decision for this key/context" is a claim about the FLAG,
     //    not about the adapter's miss policy.
     // 2. The key is ABSENT from the batch entirely — governed by
@@ -256,7 +271,10 @@ public final class FireweaveRuntime: @unchecked Sendable {
     //    adapter's absent key is `default`/`ERROR`/`FlagNotFound`.
     if let resolution = snap.cache[key] {
       if !resolution.found {
-        return Decision(value: defaultValue, reason: .defaultReason)
+        // STALE when this answer is the last good one after a failed
+        // re-fetch.
+        let reason: DecisionReason = snap.state == .stale ? .stale : .defaultReason
+        return Decision(value: defaultValue, reason: reason)
       }
       return Self.decisionFromResolution(
         resolution, type: type, defaultValue: defaultValue, options: options, snap: snap
@@ -318,11 +336,15 @@ public final class FireweaveRuntime: @unchecked Sendable {
     }
 
     let reason: DecisionReason
-    if resolution.enabled == false {
+    if snap.state == .stale {
+      // The cache outlived a failed or timed-out re-fetch: whatever reason
+      // the backend gave when it was fresh, the claim now is "last good".
+      reason = .stale
+    } else if resolution.enabled == false {
       reason = .disabled
     } else if let forced = resolution.reason {
       reason = forced
-    } else if resolution.fromCache || snap.state == .stale {
+    } else if resolution.fromCache {
       reason = .stale
     } else {
       reason = .targetingMatch
