@@ -167,7 +167,7 @@ signing into the workflow.
 | Go | proxy.golang.org | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2` | No registry credentials — "publishing" is pushing the `sdks/go/v*` tag on the public repo; the proxy picks it up. **Major ≥ 2 requires the `/v2` module-path suffix** (Go modules rule); the git tag prefix stays `sdks/go/`. |
 | Java | Maven Central | groupId `ai.fireweave` | Workflows are release-ready and fail closed without secrets. |
 | Rust | crates.io | `fireweave` | Publish via **`CARGO_REGISTRY_TOKEN`** GitHub secret (environment `release`). No staging registry exists — see "Pre-release channels". |
-| Swift | — | — | No package registry is used; consumption is git-tag-only, and (see "Tag convention") not currently resolvable as a direct SwiftPM dependency against this repo at all. |
+| Swift | mirror repository (`vars.SWIFT_MIRROR_REPO`, default `FireWeave-HQ/fireweave-swift`) | `.package(url:, from:)` on the mirror | No package registry; SwiftPM resolves the mirror's root `Package.swift` and plain semver tags, which `publish-swift-mirror` pushes. Blocked until the mirror exists (provisioning below). |
 | Dart | pub.dev | `fireweave` | Publish via pub.dev **automated publishing** (OIDC — no token secret; `dart-lang/setup-dart` exchanges the GitHub id-token). Must be enabled on pub.dev for the package, bound to this repository, `release.yml`, and the `release` environment; until then pub.dev rejects the publish. No staging registry exists — see "Pre-release channels". |
 
 ## Pre-release channels
@@ -189,10 +189,10 @@ that tag is now pure syntax, not the channel signal:
 | --- | --- | --- |
 | npm (server, web) | publish `X.Y.Z-staging.N`, `--tag next` (`npm install @fireweaveai/server-sdk@next`) | fresh `channel: production` run computes the plain `X.Y.Z`, published `--tag latest` |
 | PyPI | upload `X.Y.ZaN` to **TestPyPI** (`test.pypi.org`) — PEP 440 alpha; `-staging.N` is not a valid packaging version | push tag `python/vX.Y.Z` (preferred) or re-run `release.yml` with `channel: production` |
-| Maven | deploy to the Central portal (`autoPublish=false` on staging — no separate staging registry or credentials exist). Validate in the portal, then release. | `autoPublish=true` on production / tag `java/v*` |
+| Maven | publish `X.Y.Z-staging.N` to Maven Central (`autoPublish=true`; decision D4, ADR-0012). Maven resolves it only when asked for exactly, so an app opts into the staging channel by version; the workflow refuses a staging run whose version lacks `-staging.`. Each staging version is permanent on Central, like npm `next` versions. | fresh `channel: production` run publishes the plain `X.Y.Z` / tag `java/v*` |
 | crates.io (rust) | **no publish at all** — `cargo publish --dry-run` proves `X.Y.Z-staging.N` packages cleanly, plus the git tag. crates.io has no TestPyPI equivalent, and yanking is not deletion, so an actual staging upload would spend the version permanently. | fresh `channel: production` run computes the plain `X.Y.Z` and runs `cargo publish` for real (`CARGO_REGISTRY_TOKEN`) |
 | Go | tag `sdks/go/vX.Y.Z-staging.N` (`go get` will not auto-select a prerelease tag); optional proxy warm | tag the final `sdks/go/vX.Y.Z` |
-| Swift | tag `swift/vX.Y.Z-staging.N` — no publish step exists for swift at any channel; the tag IS the release | tag the final `swift/vX.Y.Z` |
+| Swift | `publish-swift-mirror` copies `sdks/swift` (with `BuildInfo.swift` stamped) to the mirror repository's root and tags it `X.Y.Z-staging.N` there (decision D5, ADR-0012); the monorepo keeps `swift/vX.Y.Z-staging.N` | the same job tags the plain `X.Y.Z` in the mirror |
 | pub.dev (dart) | **no publish at all** — `dart pub publish --dry-run` proves `X.Y.Z-staging.N` packages cleanly, plus the git tag. pub.dev has no staging registry, and a published version can only be retracted (within 7 days) — never deleted — so an actual staging upload would spend the version permanently. | fresh `channel: production` run computes the plain `X.Y.Z` and runs `dart pub publish --force` for real (OIDC automated publishing) |
 
 ## GitHub environments
@@ -203,12 +203,12 @@ believed they were hitting TestPyPI:
 
 | Environment | Used by | Secrets | Required reviewers |
 | --- | --- | --- | --- |
-| `release` | `publish-npm-server-production`, `publish-npm-web-production`, `publish-pypi-production`, `publish-maven` (BOTH channels — see below), `publish-cargo-production`, `publish-pub-production` | `PYPI_API_TOKEN`, `MAVEN_CENTRAL_USERNAME`/`_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`/`_PASSPHRASE`, `CARGO_REGISTRY_TOKEN` (the two npm jobs and pub.dev need no secret — OIDC) | **Yes** — this is the gate that must stay a human approval |
-| `release-staging` | `publish-npm`, `publish-npm-web`, `publish-pypi`, `publish-go`, `publish-cargo`, `publish-pub` | `TEST_PYPI_API_TOKEN` (npm/go/cargo-dry-run/pub-dry-run need no secret — OIDC or none) | No |
+| `release` | `publish-npm-server-production`, `publish-npm-web-production`, `publish-pypi-production`, `publish-maven` (BOTH channels — see below), `publish-cargo-production`, `publish-pub-production`, `publish-swift-mirror` (production) | `PYPI_API_TOKEN`, `MAVEN_CENTRAL_USERNAME`/`_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`/`_PASSPHRASE`, `CARGO_REGISTRY_TOKEN`, `SWIFT_MIRROR_DEPLOY_KEY` (the two npm jobs and pub.dev need no secret — OIDC) | **Yes** — this is the gate that must stay a human approval |
+| `release-staging` | `publish-npm`, `publish-npm-web`, `publish-pypi`, `publish-go`, `publish-cargo`, `publish-pub`, `publish-swift-mirror` (staging) | `TEST_PYPI_API_TOKEN`, `SWIFT_MIRROR_DEPLOY_KEY` (npm/go/cargo-dry-run/pub-dry-run need no secret — OIDC or none) | No |
 
 **Java is the one exception**: Maven Central Portal has no separate staging
-registry or credential set — `autoPublish=false` vs `true` is what makes a
-staging deploy non-final, not a different secret — so `publish-maven` stays
+registry or credential set — a staging run publishes an `X.Y.Z-staging.N`
+version with the same credentials — so `publish-maven` stays
 on `environment: release` for both `channel: staging` and
 `channel: production`. This means a java STAGING run also requires reviewer
 approval, unlike every other ecosystem's staging path; that is the accepted
@@ -240,21 +240,28 @@ silently skips or falls back to an unauthenticated attempt.
 
 ## Company-side provisioning required
 
-1. **pub.dev**: publish the first `fireweave` version manually (pub.dev
+1. **Swift mirror** (decision D5): create the repository named by the
+   `SWIFT_MIRROR_REPO` repository variable (default
+   `FireWeave-HQ/fireweave-swift`), add a **write** deploy key to it, and store
+   the private half as the `SWIFT_MIRROR_DEPLOY_KEY` secret in **both** the
+   `release` and `release-staging` environments. Add a ruleset on the mirror so
+   only that deploy key can push to its default branch and tags; nobody edits
+   the mirror by hand. `publish-swift-mirror` fails closed until this exists.
+2. **pub.dev**: publish the first `fireweave` version manually (pub.dev
    requires an initial human publish before automated publishing can be
    configured), then on the package's **Admin** tab enable **Automated
    publishing** from GitHub Actions with repository `FireWeave-HQ/fireweave-sdk`,
    tag pattern `dart/v{{version}}`, and **require the GitHub Actions
    environment** `release`. No token secret is involved; the `release`
    environment's required reviewers remain the human gate.
-2. **GitHub repo settings**: allow GitHub Actions to create and approve
+3. **GitHub repo settings**: allow GitHub Actions to create and approve
    attestations (for `actions/attest-build-provenance`); create the two
    protected environments described above (`release` with required
    reviewers, `release-staging` without) and point the publish jobs at them
    (already done in `release.yml` — this step is about the environments and
    their secrets/reviewers existing, not workflow edits).
-3. **Signing**: bot GPG key or gitsign for signed tags (above).
-4. **Branch/tag protection**: protect `main` and `*/v*` tags so only the
+4. **Signing**: bot GPG key or gitsign for signed tags (above).
+5. **Branch/tag protection**: protect `main` and `*/v*` tags so only the
    release workflow/owners can push tags.
 
 ## Rollback

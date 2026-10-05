@@ -42,9 +42,9 @@
 # rust and swift have no staging registry at all (crates.io has no TestPyPI
 # equivalent, and yanking is not deletion — a real staging publish would
 # spend the version permanently): rust staging stops at
-# `cargo publish --dry-run` plus the git tag; go and swift staging (and
-# production) resolve from the git tag alone — for swift there is no publish
-# step whatsoever, staging or production.
+# `cargo publish --dry-run` plus the git tag; go staging (and production)
+# resolve from the git tag alone. swift publishes by pushing sdks/swift to a
+# mirror repository and tagging it there (publish-swift-mirror, decision D5).
 #
 # dart (ADR-0011, added 2026-09-02 during the dart-sdk implementation
 # work — NOT a separate human authorization; flag for a human to confirm)
@@ -799,15 +799,82 @@ jobs:
         run: tools/release/version.sh apply java "${{ steps.version.outputs.release_version }}"
       - name: Sign + deploy
         working-directory: sdks/java
+        # Both channels publish (decision D4, ADR-0012): a staging run deploys
+        # X.Y.Z-staging.N, which Maven resolves only when asked for exactly, so an
+        # app can opt into the staging channel by version and the start profile's
+        # channel rule (spec/start-profile.md SP-13) sees "-staging.". The guard
+        # keeps a staging run from ever publishing a plain release version.
         env:
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+          RELEASE_VERSION: ${{ steps.version.outputs.release_version }}
+          CHANNEL: ${{ inputs.channel }}
         run: |
-          if [ "${{ inputs.channel }}" = "production" ]; then AUTO=true; else AUTO=false; fi
+          case "$CHANNEL:$RELEASE_VERSION" in
+            staging:*-staging.*|production:*) ;;
+            *) echo "::error::staging must publish an X.Y.Z-staging.N version, got '$RELEASE_VERSION'"; exit 1 ;;
+          esac
           mvn -B -ntp -Prelease -DskipTests deploy \
-            -Dcentral.autoPublish="$AUTO" \
+            -Dcentral.autoPublish=true \
             -Dcentral.waitUntil=validated
+
+  # Swift (decision D5, ADR-0012). SwiftPM resolves a package only from a
+  # repository whose ROOT holds Package.swift and whose tags are plain semver;
+  # this monorepo has neither (sdks/swift, swift/vX.Y.Z tags), so no Swift
+  # release has ever been installable. A release copies sdks/swift, with its
+  # BuildInfo.swift stamped for this version, to the mirror repository's root
+  # and tags it X.Y.Z there. Fails closed until the mirror and its deploy key
+  # exist (.github/RELEASE.md "Company-side provisioning").
+  publish-swift-mirror:
+    name: push the Swift mirror (SwiftPM)
+    needs: [validate, build, verify, tag]
+    if: ${{ inputs.dry_run == false && contains(fromJson(needs.validate.outputs.components), 'swift') }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.channel == 'production' && 'release' || 'release-staging' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-swift
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
+      - name: Require the mirror deploy key
+        env:
+          SWIFT_MIRROR_DEPLOY_KEY: ${{ secrets.SWIFT_MIRROR_DEPLOY_KEY }}
+        run: |
+          if [ -z "$SWIFT_MIRROR_DEPLOY_KEY" ]; then
+            echo "::error::SWIFT_MIRROR_DEPLOY_KEY is not set. Create the Swift mirror repository and its deploy key first (.github/RELEASE.md)."
+            exit 1
+          fi
+      - name: Stamp the Swift build info for this version
+        run: tools/release/version.sh apply swift "${{ steps.version.outputs.release_version }}"
+      - name: Push sdks/swift to the mirror and tag it
+        env:
+          SWIFT_MIRROR_DEPLOY_KEY: ${{ secrets.SWIFT_MIRROR_DEPLOY_KEY }}
+          MIRROR_REPO: ${{ vars.SWIFT_MIRROR_REPO || 'FireWeave-HQ/fireweave-swift' }}
+          RELEASE_VERSION: ${{ steps.version.outputs.release_version }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SWIFT_MIRROR_DEPLOY_KEY" > ~/.ssh/swift_mirror
+          chmod 600 ~/.ssh/swift_mirror
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/swift_mirror -o IdentitiesOnly=yes"
+          git clone --depth 1 "git@github.com:${MIRROR_REPO}.git" mirror
+          if git -C mirror ls-remote --exit-code --tags origin "refs/tags/${RELEASE_VERSION}" >/dev/null; then
+            echo "::error::${MIRROR_REPO} already has tag ${RELEASE_VERSION}; a released Swift version is never re-tagged."
+            exit 1
+          fi
+          rsync -a --delete --exclude .git sdks/swift/ mirror/
+          cp LICENSE mirror/LICENSE
+          git -C mirror config user.name "fireweave-release"
+          git -C mirror config user.email "release@fireweave.ai"
+          git -C mirror add -A
+          git -C mirror commit -m "Release ${RELEASE_VERSION} (fireweave-sdk ${GITHUB_SHA})"
+          git -C mirror tag -a "${RELEASE_VERSION}" -m "fireweave Swift ${RELEASE_VERSION}"
+          git -C mirror push origin HEAD "refs/tags/${RELEASE_VERSION}"
 
   publish-go:
     name: warm Go module proxy (staging)
