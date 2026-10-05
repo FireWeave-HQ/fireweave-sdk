@@ -50,22 +50,32 @@ func TestErrorsAsAndUnwrap(t *testing.T) {
 }
 
 func TestMessagesNeverContainSecrets(t *testing.T) {
-	secrets := []string{
-		"phc_SUPERSECRET000001",
-		"phs_secretkey",
-		"phx_personalkey",
-		"Bearer abc.def.ghi",
-		"FW_PROJECT_API_KEY",
+	cases := []struct{ secret, value string }{
+		{"phc_SUPERSECRET000001", "phc_SUPERSECRET000001"},
+		{"phs_secretkey", "phs_secretkey"},
+		{"phx_personalkey", "phx_personalkey"},
+		{"Bearer abc.def.ghi", "abc.def.ghi"},
+		{"FW_PROJECT_API_KEY=plainsecret", "plainsecret"},
+		{"FIREWEAVE_KEY: plainsecret", "plainsecret"},
 	}
-	for _, secret := range secrets {
-		err := NewError(KindAuthentication, "auth failed for "+secret+" at host", nil)
-		for _, needle := range []string{"phc_", "phs_", "phx_", "Bearer ", "FW_PROJECT_API_KEY"} {
-			if strings.Contains(err.Message, needle) {
-				t.Errorf("message %q leaked secret pattern %q", err.Message, needle)
-			}
+	for _, c := range cases {
+		err := NewError(KindAuthentication, "auth failed for "+c.secret+" at host", nil)
+		if strings.Contains(err.Message, c.value) {
+			t.Errorf("message %q leaked %q", err.Message, c.value)
 		}
-		if !strings.Contains(err.Message, "[redacted]") {
+		if !strings.Contains(err.Message, "[REDACTED]") {
 			t.Errorf("message %q should carry a redaction marker", err.Message)
+		}
+	}
+}
+
+// A variable name alone is never redacted: messages that tell the operator
+// which variable to set must stay legible.
+func TestMessagesKeepVariableNames(t *testing.T) {
+	for _, name := range []string{"FIREWEAVE_KEY", "FIREWEAVE_BROWSER_KEY", "FW_PROJECT_API_KEY"} {
+		msg := "set " + name + " to the project key"
+		if got := NewError(KindConfiguration, msg, nil).Message; got != msg {
+			t.Errorf("message = %q, want %q", got, msg)
 		}
 	}
 }

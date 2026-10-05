@@ -21,6 +21,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"log/slog"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -140,9 +141,15 @@ type singleton struct {
 
 	logger *slog.Logger
 	warned map[string]bool
+
+	// lastErrorKind is the latest fw-server failure a read or Identify saw
+	// in this run (SP-27). signalled holds the failure kinds already logged:
+	// one line per kind for the life of the process.
+	lastErrorKind fireweave.ErrorKind
+	signalled     map[fireweave.ErrorKind]bool
 }
 
-var st = &singleton{state: StateUnstarted, warned: map[string]bool{}}
+var st = &singleton{state: StateUnstarted, warned: map[string]bool{}, signalled: map[fireweave.ErrorKind]bool{}}
 
 // permanent is the one client handed out for the life of the process.
 var permanent = newPermanentClient()
@@ -196,6 +203,7 @@ func (s *singleton) freshRunLocked() {
 	s.client = nil
 	s.err = nil
 	s.lookup = nil
+	s.lastErrorKind = ""
 	// The instance key outlives a run: it identifies the process, so a key
 	// handed out before a failed or shut-down start stays the same after it.
 }
@@ -393,7 +401,9 @@ func (forwarder) Resolve(ctx context.Context, req fireweave.ResolveRequest) fire
 	if err != nil {
 		return fireweave.ErrorDecision(req.FlagKey, req.DefaultValue, err, nil)
 	}
-	return client.Runtime().Evaluate(ctx, req)
+	d := client.Runtime().Evaluate(ctx, req)
+	observeRemote(client, d.Error)
+	return d
 }
 
 func (forwarder) RegisterTarget(ctx context.Context, targetingKey string, opts fireweave.RegisterTargetOptions) fireweave.RegisterTargetResult {
@@ -401,7 +411,70 @@ func (forwarder) RegisterTarget(ctx context.Context, targetingKey string, opts f
 	if err != nil {
 		return fireweave.RegisterTargetResult{Error: err}
 	}
-	return client.Runtime().RegisterTarget(ctx, targetingKey, opts)
+	res := client.Runtime().RegisterTarget(ctx, targetingKey, opts)
+	observeRemote(client, res.Error)
+	return res
+}
+
+// remoteFailureLine is the one line logged for a kind of fw-server failure
+// (SP-27), or "" for a kind that is not one. It names the key's source or the
+// endpoint and its host, never the key: a revoked key must not look like a
+// rollout at 0%.
+func remoteFailureLine(kind fireweave.ErrorKind, r *resolved) string {
+	host := "fw-server"
+	if u, err := url.Parse(r.url); err == nil && u.Hostname() != "" {
+		host = u.Hostname()
+	}
+	unreachable := func(why string) string {
+		return "[fireweave] Could not reach fw-server at " + host + " (endpoint from " + r.urlSource + "): " + why + ". Reads serve their defaults until a later request succeeds."
+	}
+	switch kind {
+	case fireweave.KindAuthentication:
+		return "[fireweave] fw-server at " + host + " rejected the key from " + r.keySource + " (HTTP 401): it is wrong, revoked or from another project. Reads serve their defaults."
+	case fireweave.KindAuthorization:
+		return "[fireweave] fw-server at " + host + " refused the key from " + r.keySource + " for this project or environment (HTTP 403). Reads serve their defaults."
+	case fireweave.KindRateLimited:
+		return "[fireweave] fw-server at " + host + " rate-limited the key from " + r.keySource + " (HTTP 429). Reads serve their defaults until a later request succeeds."
+	case fireweave.KindNetwork:
+		return unreachable("the connection failed (offline, a firewall, or the wrong endpoint)")
+	case fireweave.KindTimeout:
+		return unreachable("the request timed out")
+	case fireweave.KindBackendUnavailable:
+		return unreachable("it answered with an error status")
+	}
+	return ""
+}
+
+// observeRemote records a remote failure a read or Identify saw through the
+// forwarder: Status().LastErrorKind takes its kind, and the first failure of
+// each kind in the process logs one Warn line. It changes nothing about the
+// call's result.
+func observeRemote(client *fireweave.Client, err *fireweave.Error) {
+	if err == nil {
+		return
+	}
+	st.mu.Lock()
+	r := st.resolved
+	// A call that finished after a Shutdown or a restart reports on a run
+	// that is no longer current.
+	if st.client != client || r == nil || r.mode != ModeRemote {
+		st.mu.Unlock()
+		return
+	}
+	line := remoteFailureLine(err.Kind, r)
+	if line == "" {
+		st.mu.Unlock()
+		return
+	}
+	st.lastErrorKind = err.Kind
+	var lines []logLine
+	if !st.signalled[err.Kind] {
+		st.signalled[err.Kind] = true
+		lines = append(lines, logLine{level: slog.LevelWarn, msg: fireweave.Redact(line)})
+	}
+	logger := st.loggerLocked()
+	st.mu.Unlock()
+	emit(logger, lines)
 }
 
 // Close never runs: fw.Shutdown shuts the started client, never the
@@ -444,6 +517,7 @@ func resetForTests() {
 	st.instanceOption, st.instanceKey, st.instanceSet = "", "", false
 	st.logger = nil
 	st.warned = map[string]bool{}
+	st.signalled = map[fireweave.ErrorKind]bool{}
 	st.mu.Unlock()
 	if client != nil {
 		_ = client.Runtime().Shutdown(context.Background())

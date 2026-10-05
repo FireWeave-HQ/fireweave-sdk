@@ -334,12 +334,12 @@ func TestResolveVendorOrgAndCLIKeysAreRejected(t *testing.T) {
 	}
 }
 
-// The core redactor blanks the bare name FW_PROJECT_API_KEY in every error
-// message, so that source is described in words, legibly.
-func TestResolveALegacyKeySourceStaysLegibleInAnError(t *testing.T) {
+// The core redactor scrubs values, never a variable name, so a legacy key
+// source is named directly in an error.
+func TestResolveALegacyKeySourceIsNamedInAnError(t *testing.T) {
 	msg := configMessage(t, Options{}, env(map[string]string{"FW_PROJECT_API_KEY": "fw_public_secretvalue"}), prodBuild)
-	assertContains(t, msg, "the legacy key variable (rename it to FIREWEAVE_KEY)")
-	assertNotContains(t, msg, "[redacted]")
+	assertContains(t, msg, "The key from FW_PROJECT_API_KEY is a browser key")
+	assertNotContains(t, msg, "[REDACTED]")
 	assertNotContains(t, msg, "secretvalue")
 }
 

@@ -87,11 +87,22 @@ which reads serve defaults until a new `fw.Start`.
 
 **Debugging.** `fw.Status()` reports the state, mode and why (`option`, `key` or
 `environment`), channel, SDK version, fw-server host, endpoint source, key source, environment
-name, flag count and the start error. It never contains the key, so it is safe to log:
+name, flag count, the start error and `LastErrorKind`. It never contains the key, so it is safe
+to log:
 
 ```go
 log.Printf("fireweave: %+v", fw.Status())
 ```
+
+A key fw-server refuses must not look like a rollout at 0%. When a read or `fw.Identify` gets
+a 401 or 403 (`Authentication`, `Authorization`), a 429 (`RateLimited`), or cannot reach
+fw-server (`Network`, `Timeout`, `BackendUnavailable`), the start profile logs one `Warn` line
+per kind for the life of the process through `Options.Log`. The line names the key's source
+(`FIREWEAVE_KEY`, `Options.Key`) or the endpoint's source, and the host, never the key.
+`fw.Status().LastErrorKind` holds the latest of those kinds for the current start, while reads
+go on serving their defaults. Every error message passes through `fireweave.Redact`, which
+scrubs key values, bearer tokens and URL credentials but leaves variable names readable
+(`rules.redaction` in `contracts/errors.json`).
 
 ## Package layout
 

@@ -139,11 +139,17 @@ type StartStatus struct {
 	FlagCount   int
 	// Error is why start failed, when it did. Already redacted.
 	Error string
+	// LastErrorKind is the latest fw-server failure a read or Identify saw
+	// in this run: Authentication or Authorization (the key was refused,
+	// 401/403), RateLimited (429), or Network, Timeout or BackendUnavailable
+	// (fw-server could not be reached or answered with an error). Empty
+	// until one happens. Each kind also logs one Warn line per process.
+	LastErrorKind fireweave.ErrorKind
 }
 
 // Status reports the singleton's state and what Start decided: mode and why,
 // channel, SDK version, host, endpoint source, key source, environment and
-// flag count. It never includes the key, so it is safe to log.
+// flag count, and the latest fw-server failure (LastErrorKind). It never includes the key, so it is safe to log.
 //
 //	log.Printf("fireweave: %+v", fw.Status())
 func Status() StartStatus {
@@ -168,5 +174,6 @@ func Status() StartStatus {
 	if st.err != nil {
 		s.Error = st.err.Message
 	}
+	s.LastErrorKind = st.lastErrorKind
 	return s
 }

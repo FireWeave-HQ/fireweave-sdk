@@ -91,16 +91,6 @@ func pick(option, optionName string, names, legacy []string, lookup lookupFunc, 
 	return sourced{}, false
 }
 
-// errorSource names a source inside a *fireweave.Error message. Every error
-// message passes through fireweave.Redact, which blanks the bare name
-// FW_PROJECT_API_KEY, so that one source is described instead of named.
-func errorSource(source string) string {
-	if source == "FW_PROJECT_API_KEY" {
-		return "the legacy key variable (rename it to " + envKey + ")"
-	}
-	return source
-}
-
 // vendorKey matches analytics-vendor key shapes. It is a pattern rather than
 // literal prefixes, and the message says "analytics vendor key", so no vendor
 // key prefix appears in this file or in an error.
@@ -109,14 +99,13 @@ var vendorKey = regexp.MustCompile(`^ph[a-z]_`)
 // checkKeyFamily runs before any request. Messages name the source, never the
 // value.
 func checkKeyFamily(key, source string) *fireweave.Error {
-	src := errorSource(source)
 	switch {
 	case strings.HasPrefix(key, "fw_public_"):
-		return configError("The key from " + src + " is a browser key (fw_public_…). Server apps need a project key (project-api-key_…) from Project settings, API keys.")
+		return configError("The key from " + source + " is a browser key (fw_public_…). Server apps need a project key (project-api-key_…) from Project settings, API keys.")
 	case vendorKey.MatchString(key):
-		return configError("The key from " + src + " is an analytics vendor key, not a FireWeave project key. Use the project key (project-api-key_…).")
+		return configError("The key from " + source + " is an analytics vendor key, not a FireWeave project key. Use the project key (project-api-key_…).")
 	case strings.HasPrefix(key, "fw_org_"), strings.HasPrefix(key, "cli_at_"):
-		return configError("The key from " + src + " is an organisation or CLI token, not a project key. Use the project key (project-api-key_…).")
+		return configError("The key from " + source + " is an organisation or CLI token, not a project key. Use the project key (project-api-key_…).")
 	}
 	return nil
 }
@@ -132,11 +121,11 @@ func resolveURL(opts Options, lookup lookupFunc, build buildInfo, warnings *[]st
 	raw := strings.TrimRight(picked.value, "/")
 	parsed, perr := url.Parse(raw)
 	if perr != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" {
-		return "", "", nil, configError("The endpoint from " + errorSource(picked.source) + " is not a valid URL.")
+		return "", "", nil, configError("The endpoint from " + picked.source + " is not a valid URL.")
 	}
 	host := strings.ToLower(parsed.Hostname())
 	if parsed.Scheme == "http" && !isLoopback(host) {
-		return "", "", nil, configError("The endpoint from " + errorSource(picked.source) + " must use https (http is allowed only for localhost).")
+		return "", "", nil, configError("The endpoint from " + picked.source + " must use https (http is allowed only for localhost).")
 	}
 	hosts = []string{host}
 	for _, h := range loopbackHosts {
