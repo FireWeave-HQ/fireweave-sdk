@@ -219,7 +219,12 @@ def validate_context(
     if getattr(context, "_had_cyclic_input", False):
         return _fail(InvalidContextError("context contains a circular reference"))
 
+    if context.targeting_key is not None and not isinstance(context.targeting_key, str):
+        return _fail(InvalidContextError("targeting key must be a string"))
+
     attrs = dict(context.attributes)
+    if not all(isinstance(key, str) for key in _iter_keys(attrs)):
+        return _fail(InvalidContextError("context attribute names must be strings"))
 
     reserved = set(reserved_keys)
     for key in attrs:

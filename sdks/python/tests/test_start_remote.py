@@ -85,3 +85,19 @@ def test_a_wrong_key_never_raises_from_a_read(server_url):
     start(key="project-api-key_wrong", url=server_url, env={}, log=lambda line: None)
     decision = fw.control_points.get_boolean_details("fw-bool-on", False, CTX)
     assert (decision.value, decision.reason, decision.error_kind) == (False, "ERROR", ErrorKind.AUTHENTICATION)
+
+
+def test_a_wrong_key_from_fireweave_key_logs_one_line_and_sets_last_error_kind(server_url):
+    lines = []
+    wrong = "project-api-key_WRONGSENTINEL"
+    start(env={"FIREWEAVE_KEY": wrong, "FIREWEAVE_URL": server_url}, log=lines.append)
+    # Reads only: the stub serves no /v1/targets/register route.
+    for _ in range(3):
+        assert fw.control_points.get_boolean_value("fw-bool-on", False, CTX) is False
+        decision = fw.control_points.get_string_details("fw-string-theme", "light", CTX)
+        assert decision.error_kind is ErrorKind.AUTHENTICATION
+    assert len(lines) == 1, lines
+    assert "FIREWEAVE_KEY" in lines[0] and "127.0.0.1" in lines[0]
+    assert wrong not in lines[0] and "WRONGSENTINEL" not in lines[0]
+    status = fw.status()
+    assert status.last_error_kind == "Authentication" and "WRONGSENTINEL" not in repr(status)

@@ -118,19 +118,55 @@ _RETRYABLE = {
     ErrorKind.BACKEND_UNAVAILABLE,
 }
 
-# Secret redaction: prefix-token patterns (project/secret keys, bearer tokens).
-_SECRET_PATTERNS = re.compile(
-    r"(ph[csx]_[A-Za-z0-9_\-]*"
-    r"|Bearer\s+\S+|FW_PROJECT_API_KEY\s*[=:]\s*\S+)"
+# The redaction contract (contracts/errors.json `rules.redaction`,
+# contracts/errors.md rule 2, start-profile SP-26). Applied in this order:
+# bearer tokens, URL userinfo, named assignments, then key-shaped values. A
+# variable NAME is never redacted on its own; only its value is.
+# tests/test_redaction_contract.py runs every contract vector through
+# redact_secrets. `(?<![A-Za-z0-9_])` spells JavaScript's ASCII `\b` (the node
+# reference), since Python's `\b` is Unicode-aware.
+REDACTION_PLACEHOLDER = "[REDACTED]"
+
+#: Variables whose assigned value is scrubbed: ``NAME=value``, ``NAME: value``,
+#: ``NAME = "value"``, ``NAME='value'``.
+_ASSIGNMENT_NAMES = ("FIREWEAVE_KEY", "FIREWEAVE_BROWSER_KEY", "FW_PROJECT_API_KEY")
+
+#: Key families; a prefix only counts when one or more of [A-Za-z0-9_-] follows
+#: it, so prose such as ``project-api-key_…`` stays readable.
+_VALUE_PREFIXES = (
+    "project-api-key_",
+    "fw_public_",
+    "fw_ingest_pub_",
+    "fw_org_",
+    "cli_at_",
+    "phc_",
+    "phx_",
+    "phs_",
 )
+
+_BEARER = re.compile(r"(?<![A-Za-z0-9_])Bearer(\s+)[A-Za-z0-9._~+/=-]+")
+# scheme://userinfo@host: userinfo cannot hold whitespace, '/', '?', '#' or '@'.
+_URL_USERINFO = re.compile(r"(?<![A-Za-z0-9_])([A-Za-z][A-Za-z0-9+.-]*://)[^\s/?#@]+@")
+# The name stays, as do the separator and any opening quote; the value runs to
+# whitespace, a quote, a comma or a semicolon. The lookbehind keeps a longer
+# name that merely ends in one of these (MY_FIREWEAVE_KEY) out of scope.
+_ASSIGNMENT = re.compile(
+    r"(?<![A-Za-z0-9_])(" + "|".join(map(re.escape, _ASSIGNMENT_NAMES)) + r")(\s*[=:]\s*)([\"']?)[^\s\"',;]+"
+)
+# No leading boundary: a key glued to other text is still a key.
+_KEY_VALUE = re.compile("(?:" + "|".join(map(re.escape, _VALUE_PREFIXES)) + r")[A-Za-z0-9_-]+")
 
 
 def redact_secrets(text: Optional[str]) -> Optional[str]:
-    """Redact secret-shaped substrings and collapse whitespace runs."""
+    """Scrub secrets per the redaction contract, then collapse whitespace runs
+    and trim (so a message stays on one log line)."""
     if text is None:
         return None
-    redacted = _SECRET_PATTERNS.sub("[REDACTED]", text)
-    return re.sub(r"\s+", " ", redacted).strip()
+    out = _BEARER.sub(lambda m: f"Bearer{m.group(1)}{REDACTION_PLACEHOLDER}", text)
+    out = _URL_USERINFO.sub(lambda m: f"{m.group(1)}{REDACTION_PLACEHOLDER}@", out)
+    out = _ASSIGNMENT.sub(lambda m: f"{m.group(1)}{m.group(2)}{m.group(3)}{REDACTION_PLACEHOLDER}", out)
+    out = _KEY_VALUE.sub(REDACTION_PLACEHOLDER, out)
+    return re.sub(r"\s+", " ", out).strip()
 
 
 def default_message(kind: ErrorKind) -> str:

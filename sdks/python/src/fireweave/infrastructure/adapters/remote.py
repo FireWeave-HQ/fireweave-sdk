@@ -42,6 +42,30 @@ _EVALUATE_PATH = "/v1/flags/evaluate"
 _REGISTER_TARGET_PATH = "/v1/targets/register"
 
 
+class _RefuseRedirects(urllib.request.HTTPRedirectHandler):
+    """Never follow a redirect. urllib's default handler re-sends the request
+    headers, ``Authorization`` included, to whatever host the ``Location``
+    names; the allowlist checked at init would not see that host. A 3xx is
+    left to surface as an HTTPError, which ``_request`` maps to
+    BackendUnavailable like any other non-2xx answer."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[override]
+        return None
+
+
+_OPENER: Dict[str, urllib.request.OpenerDirector] = {}
+
+
+def _opener() -> urllib.request.OpenerDirector:
+    """Built on first use, not at import, then shared like urlopen's own.
+    ``build_opener`` keeps urllib's other default handlers, ProxyHandler
+    included, so proxies still come from the environment."""
+    opener = _OPENER.get("opener")
+    if opener is None:
+        opener = _OPENER.setdefault("opener", urllib.request.build_opener(_RefuseRedirects()))
+    return opener
+
+
 def _default_allowed_hosts_for(api_url: str) -> Optional[tuple]:
     """Adapter-level default when the caller supplies no `allowed_hosts`:
     the URL's own hostname plus loopback — NOT the canonical
@@ -216,10 +240,15 @@ class FireweaveRemoteAdapter:
                 method="POST",
             )
             try:
-                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                with _opener().open(req, timeout=timeout) as resp:
                     status = resp.status
                     raw = resp.read().decode("utf-8")
             except urllib.error.HTTPError as e:
+                if 300 <= e.code < 400:
+                    # A redirect that was refused (see _RefuseRedirects): its
+                    # body is not fw-server's, so it is never parsed.
+                    e.close()
+                    raise BackendUnavailableError() from e
                 status = e.code
                 raw = e.read().decode("utf-8") if e.fp else ""
             except TimeoutError as e:
@@ -239,7 +268,7 @@ class FireweaveRemoteAdapter:
             raise AuthorizationError()
         if status == 429:
             raise RateLimitedError()
-        if status >= 400:
+        if not 200 <= status < 300:
             raise BackendUnavailableError()
         if not isinstance(parsed, dict):
             raise MalformedResponseError()

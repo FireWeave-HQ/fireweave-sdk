@@ -11,10 +11,12 @@ environment alone (Python has no event-loop turn to defer it to, unlike the
 Node profile). That start is provisional: the first explicit ``start()``
 afterwards replaces it once, with a warning, so an entrypoint that calls
 ``start()`` after some module read a flag at import time still wins. The
-replaced client is not shut down, so a read racing the swap never sees
-AlreadyClosed. A failed implicit start installs a client whose runtime is
-FATAL: reads return their default (an ERROR decision with the Configuration
-error for the details forms), and nothing raises.
+replaced client is shut down (flushing whatever it holds) only after the new
+one is in the slot; a facade read that loaded the old client just before the
+swap and gets AlreadyClosed from it reads again from the new one, so a read
+racing the swap never sees AlreadyClosed. A failed implicit start installs a
+client whose runtime is FATAL: reads return their default (an ERROR decision
+with the Configuration error for the details forms), and nothing raises.
 
 After ``os.fork()`` the child rebuilds its client from the stored resolved
 config (cheap: no I/O, no thread), so a runtime lock held by another thread
@@ -36,6 +38,7 @@ from urllib.parse import urlparse
 
 from fireweave import (
     ConfigurationError,
+    ErrorKind,
     FireweaveClient,
     FireweaveError,
     FireweaveRuntime,
@@ -75,6 +78,10 @@ class FireweaveStatus:
     flag_count: Optional[int] = None
     #: Why start failed, when it did. Already redacted.
     error: Optional[str] = None
+    #: The latest fw-server failure a read or identify() saw in remote mode
+    #: (an ErrorKind value: 'Authentication', 'Authorization', 'RateLimited',
+    #: 'Network', 'Timeout' or 'BackendUnavailable'). SP-27.
+    last_error_kind: Optional[str] = None
 
 
 class _Slot:
@@ -96,6 +103,9 @@ class _Slot:
         self.log: Optional[LogSink] = None
         self.pid: Optional[int] = None
         self.warned: set = set()
+        self.last_error_kind: Optional[str] = None
+        #: fw-server failure groups already logged: once per process (SP-27).
+        self.remote_failures_logged: set = set()
 
 
 _S = _Slot()
@@ -259,6 +269,7 @@ def _install(
     s.resolved = r
     s.client = client
     s.error = None
+    s.last_error_kind = None
     s.read = read
     s.transport = transport
     s.flags_file = flags_file(flags_source)
@@ -336,12 +347,17 @@ def start(
                 init_fatal=True,
             )
         replacing = s.state == "ready" and s.implicit
+        # The implicit client this start() swaps out (a provisional or a
+        # failed one). Shut down only once the new one is in the slot.
+        replaced: Optional[FireweaveClient] = None
         if replacing and signature == s.signature:
             # The implicit start already did exactly this: adopt it.
             s.implicit = False
             messages: List[_Message] = []
         else:
             client = _build_client(resolved, transport)  # raises before any state changes
+            if s.state in ("ready", "failed") and s.client is not None:
+                replaced = s.client
             messages = _install(
                 resolved, signature, client, implicit=False, read=read, transport=transport, flags_source=flags
             )
@@ -358,6 +374,13 @@ def start(
             s.log = sink
         if instance_option is not None:
             s.instance_id_option = instance_option
+    if replaced is not None:
+        # Swap first (above, under the lock), then shut the old client down,
+        # outside the lock: its shutdown flushes and must not block reads.
+        try:
+            replaced.shutdown()
+        except Exception:
+            pass
     _flush(messages)
 
 
@@ -419,6 +442,70 @@ def _implicit_start() -> FireweaveClient:
         client = s.client
     _flush(messages)
     return client
+
+
+# -- fw-server failures (SP-27) --------------------------------------------------
+
+_REMOTE_FAILURE_GROUPS: Dict[ErrorKind, str] = {
+    ErrorKind.AUTHENTICATION: "key-rejected-401",
+    ErrorKind.AUTHORIZATION: "key-rejected-403",
+    ErrorKind.RATE_LIMITED: "rate-limited",
+    ErrorKind.NETWORK: "unreachable",
+    ErrorKind.TIMEOUT: "unreachable",
+    ErrorKind.BACKEND_UNAVAILABLE: "unreachable",
+}
+
+
+def _remote_failure_line(group: str, r: ResolvedStart) -> _Message:
+    """Names the key's source or the endpoint's, and the host; never a key."""
+    host = (urlparse(r.url).hostname if r.url else None) or "fw-server"
+    if group == "key-rejected-401":
+        return (
+            logging.ERROR,
+            f"[fireweave] fw-server at {host} rejected the key from {r.key_source} (HTTP 401): it is wrong, "
+            "revoked or from another project. Reads serve their defaults; this is not a rollout at 0%.",
+        )
+    if group == "key-rejected-403":
+        return (
+            logging.ERROR,
+            f"[fireweave] fw-server at {host} refused the key from {r.key_source} for this project or "
+            "environment (HTTP 403). Reads serve their defaults; this is not a rollout at 0%.",
+        )
+    if group == "rate-limited":
+        return (
+            logging.WARNING,
+            f"[fireweave] fw-server at {host} rate-limited the key from {r.key_source} (HTTP 429). Reads "
+            "serve their defaults until a later request succeeds.",
+        )
+    return (
+        logging.WARNING,
+        f"[fireweave] Could not reach fw-server at {host} (endpoint from {r.url_source}): offline, a "
+        "firewall, or the wrong endpoint. Reads serve their defaults.",
+    )
+
+
+def observe_error(kind: Optional[ErrorKind]) -> None:
+    """Called by the facade with the error kind of each decision or identify()
+    result. A fw-server failure in remote mode lands in ``last_error_kind``,
+    and its group (key rejected 401, 403, rate limited, unreachable) is logged
+    once per process. Observes only: the core's behaviour is unchanged."""
+    group = _REMOTE_FAILURE_GROUPS.get(kind) if kind is not None else None
+    if group is None:
+        return
+    s = _S
+    if s.last_error_kind == kind.value and group in s.remote_failures_logged:
+        return  # the hot path of a sustained outage: no lock
+    message: Optional[_Message] = None
+    with _lock():
+        r = s.resolved
+        if r is None or r.mode != "remote" or s.state != "ready":
+            return
+        s.last_error_kind = kind.value
+        if group not in s.remote_failures_logged:
+            s.remote_failures_logged.add(group)
+            message = _remote_failure_line(group, r)
+    if message is not None:
+        _emit(*message)
 
 
 # -- fork ------------------------------------------------------------------------
@@ -502,6 +589,8 @@ def current_status() -> FireweaveStatus:
             fields.update(host=urlparse(r.url).hostname, endpoint_source=r.url_source)
     if s.error is not None:
         fields["error"] = s.error.message
+    if s.last_error_kind is not None:
+        fields["last_error_kind"] = s.last_error_kind
     return FireweaveStatus(
         state=s.state,
         channel=r.channel if r is not None else SDK_CHANNEL,

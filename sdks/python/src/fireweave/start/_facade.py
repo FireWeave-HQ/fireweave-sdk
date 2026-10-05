@@ -6,14 +6,21 @@ start failed, reads serve the caller's default (or an ERROR decision for
 ``evaluate`` and the ``*_details`` forms). Forwarding on every call means a
 captured ``fw.control_points`` keeps working across the one-time replacement
 of an implicit start and across a fork rebuild.
+
+Every read goes through the core's ``evaluate`` (the value forms return its
+``.value``, exactly as the core's own value methods do), so the facade sees
+each decision's error kind: a read that loaded the client just before the
+one-time replacement shut it down reads again from the new client, and a
+fw-server failure in remote mode is reported once per kind (SP-27).
 """
 
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping, Optional, TypeVar
+from typing import Any, Mapping, Optional
 
 from fireweave import (
     Decision,
+    ErrorKind,
     EvaluateOptions,
     EvaluationContext,
     FireweaveClient,
@@ -30,8 +37,6 @@ from fireweave import (
 
 from . import _state
 from ._state import FireweaveStatus
-
-T = TypeVar("T")
 
 # fireweave.domain.errors.FLAG_METADATA_ERROR_KIND_KEY, which the public
 # package does not export; start/ may only use the public API.
@@ -74,23 +79,31 @@ def _note_local_key(flag_key: str) -> None:
 
 def _read(
     flag_key: str,
+    flag_type: FlagType,
     default: Any,
     context: Any,
-    details: bool,
-    run: Callable[[Any], T],
-) -> Any:
+    options: Optional[EvaluateOptions] = None,
+) -> Decision:
     try:
         client = _state.current_client()
         if context is not None and not isinstance(context, EvaluationContext):
             # The core expects an EvaluationContext; anything else is an
             # invalid context, never an exception out of a read.
-            error = InvalidContextError("context must be a fireweave.EvaluationContext")
-            return _error_decision(default, error) if details else default
-        result = run(client.control_points)
+            return _error_decision(default, InvalidContextError("context must be a fireweave.EvaluationContext"))
+        decision = client.control_points.evaluate(flag_key, flag_type, default, context, options)
+        if decision.error_kind is ErrorKind.ALREADY_CLOSED:
+            # The client was swapped out and shut down between loading it and
+            # reading (the first explicit start() after an implicit one): read
+            # again from the client now in the slot. After fw.shutdown() the
+            # slot still holds the closed client, so this does not retry.
+            current = _state.current_client()
+            if current is not client:
+                decision = current.control_points.evaluate(flag_key, flag_type, default, context, options)
     except Exception as exc:
-        return _error_decision(default, _as_fireweave_error(exc)) if details else default
+        return _error_decision(default, _as_fireweave_error(exc))
+    _state.observe_error(decision.error_kind)
     _note_local_key(flag_key)
-    return result
+    return decision
 
 
 class ControlPoints:
@@ -107,37 +120,37 @@ class ControlPoints:
         context: Optional[EvaluationContext] = None,
         options: Optional[EvaluateOptions] = None,
     ) -> Decision:
-        return _read(flag_key, default, context, True, lambda cp: cp.evaluate(flag_key, flag_type, default, context, options))
+        return _read(flag_key, flag_type, default, context, options)
 
     def get_boolean_value(self, flag_key: str, default: bool, context: Optional[EvaluationContext] = None) -> bool:
-        return _read(flag_key, default, context, False, lambda cp: cp.get_boolean_value(flag_key, default, context))
+        return _read(flag_key, FlagType.BOOLEAN, default, context).value
 
     def get_string_value(self, flag_key: str, default: str, context: Optional[EvaluationContext] = None) -> str:
-        return _read(flag_key, default, context, False, lambda cp: cp.get_string_value(flag_key, default, context))
+        return _read(flag_key, FlagType.STRING, default, context).value
 
     def get_number_value(self, flag_key: str, default: Any, context: Optional[EvaluationContext] = None) -> Any:
-        return _read(flag_key, default, context, False, lambda cp: cp.get_number_value(flag_key, default, context))
+        return _read(flag_key, FlagType.NUMBER, default, context).value
 
     def get_object_value(
         self, flag_key: str, default: JsonValue, context: Optional[EvaluationContext] = None
     ) -> JsonValue:
-        return _read(flag_key, default, context, False, lambda cp: cp.get_object_value(flag_key, default, context))
+        return _read(flag_key, FlagType.OBJECT, default, context).value
 
     def get_boolean_details(
         self, flag_key: str, default: bool, context: Optional[EvaluationContext] = None
     ) -> Decision:
-        return _read(flag_key, default, context, True, lambda cp: cp.get_boolean_details(flag_key, default, context))
+        return _read(flag_key, FlagType.BOOLEAN, default, context)
 
     def get_string_details(self, flag_key: str, default: str, context: Optional[EvaluationContext] = None) -> Decision:
-        return _read(flag_key, default, context, True, lambda cp: cp.get_string_details(flag_key, default, context))
+        return _read(flag_key, FlagType.STRING, default, context)
 
     def get_number_details(self, flag_key: str, default: Any, context: Optional[EvaluationContext] = None) -> Decision:
-        return _read(flag_key, default, context, True, lambda cp: cp.get_number_details(flag_key, default, context))
+        return _read(flag_key, FlagType.NUMBER, default, context)
 
     def get_object_details(
         self, flag_key: str, default: JsonValue, context: Optional[EvaluationContext] = None
     ) -> Decision:
-        return _read(flag_key, default, context, True, lambda cp: cp.get_object_details(flag_key, default, context))
+        return _read(flag_key, FlagType.OBJECT, default, context)
 
 
 class Fireweave:
@@ -165,13 +178,24 @@ class Fireweave:
         not bind a subject for later reads: pass the targeting key to each
         read. A blocking HTTP call in remote mode."""
         try:
-            client = _state.current_client()
-            return client.register_target(
-                targeting_key,
-                RegisterTargetOptions(kind=kind, properties=dict(properties) if properties is not None else None),
+            options = RegisterTargetOptions(
+                kind=kind,
+                # Not a mapping: passed through for the core to answer
+                # InvalidContext, rather than failing here in dict().
+                properties=(
+                    dict(properties) if isinstance(properties, Mapping) else properties  # type: ignore[arg-type]
+                ),
             )
+            client = _state.current_client()
+            result = client.register_target(targeting_key, options)
+            if result.error is not None and result.error.kind is ErrorKind.ALREADY_CLOSED:
+                current = _state.current_client()
+                if current is not client:
+                    result = current.register_target(targeting_key, options)
         except Exception as exc:
             return RegisterTargetResult(ok=False, error=_as_fireweave_error(exc))
+        _state.observe_error(result.error.kind if result.error is not None else None)
+        return result
 
     def instance_key(self) -> str:
         """Stable key for reads where the server is the subject (cron, boot):

@@ -84,7 +84,8 @@ nothing, a different one raises `ConfigurationError`. It does no network I/O and
 thread, so it is ready when it returns. Call it in every process entrypoint; a forked worker
 (gunicorn `--preload`, Celery prefork) rebuilds its client on its own. A read before any `start()`
 starts FireWeave immediately from the environment alone (one warning); the first explicit
-`start()` afterwards replaces that once, with a warning. Processes that never run your entrypoint
+`start()` afterwards replaces that once, with a warning, and shuts the provisional client down
+(reads in flight move to the new one). Processes that never run your entrypoint
 (`manage.py`, spawned children) get the environment-only start, so prefer `FIREWEAVE_*`
 variables to options for anything every process needs.
 
@@ -95,9 +96,17 @@ warns once, naming the flags file.
 
 **Debugging.** `fw.status()` reports what start decided: `state`, `started_by`, `mode` and
 `mode_source`, `channel`, `sdk_version`, `host`, `endpoint_source`, `key_source`, `environment`,
-`flag_count` and `error`. It never includes the key. `fw.client()` is the core `FireweaveClient`
-for anything the facade does not cover (do not cache it); `fw.shutdown()` flushes and closes, and
-a later `start()` begins fresh. Tests call `fireweave.start.reset_for_tests()` between cases.
+`flag_count`, `error` and `last_error_kind`. It never includes the key. When fw-server refuses the
+key (401/403), rate-limits it (429) or cannot be reached (network error, timeout, 5xx or a
+redirect, which is never followed), reads serve their defaults, so a revoked key would otherwise
+look like a rollout at 0%. Each of those kinds logs **one** line per process through your `log`
+sink (default: the `fireweave.start` logger), naming the key's source (`FIREWEAVE_KEY`,
+`start(key=...)`) or the endpoint's, and the host, never the key; `last_error_kind` keeps the
+latest kind (`Authentication`, `Authorization`, `RateLimited`, `Network`, `Timeout`,
+`BackendUnavailable`). `fw.client()` is the core `FireweaveClient` for anything the facade does not
+cover (do not cache it: the first explicit `start()` after a read-triggered one shuts the
+provisional client down); `fw.shutdown()` flushes and closes, and a later `start()` begins fresh.
+Tests call `fireweave.start.reset_for_tests()` between cases.
 
 ## Quick start (production path)
 

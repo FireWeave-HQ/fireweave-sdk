@@ -9,7 +9,7 @@ from __future__ import annotations
 import enum
 import json
 import threading
-from typing import Optional
+from typing import Mapping, Optional
 
 from ..domain.context import ContextLimits, DEFAULT_RESERVED_ATTRIBUTE_KEYS, EvaluationContext, merge_contexts
 from ..domain.decision import Decision, Reason
@@ -20,6 +20,7 @@ from ..domain.errors import (
     FireweaveError,
     FlagNotFoundError,
     InternalError,
+    InvalidContextError,
     NotReadyError,
     TypeMismatchError,
     UnsupportedCapabilityError,
@@ -45,6 +46,37 @@ def _stable_json(value) -> str:
     byte-for-byte (contracts/evaluation/eval-payload-attached.json's expected
     ``fireweave.payload`` string)."""
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _register_target_input_error(targeting_key, options) -> Optional[FireweaveError]:
+    """register_target's input guard: a non-string targeting key, options
+    that are not RegisterTargetOptions, or a body that cannot be sent as JSON
+    (a datetime or set property value, a non-string property name, a cycle)
+    is an InvalidContext ``ok=False``, never an exception into a sign-in
+    path."""
+    if not isinstance(targeting_key, str):
+        return InvalidContextError("targeting key must be a string")
+    if options is None:
+        return None
+    if not isinstance(options, RegisterTargetOptions):
+        return InvalidContextError("register_target options must be RegisterTargetOptions")
+    properties = options.properties
+    if properties is not None and (
+        not isinstance(properties, Mapping) or not all(isinstance(k, str) for k in properties)
+    ):
+        return InvalidContextError("register_target properties must be a mapping with string keys")
+    try:
+        json.dumps(
+            {
+                "kind": options.kind,
+                "environment": options.environment,
+                "properties": dict(properties) if properties is not None else None,
+            },
+            allow_nan=False,
+        )
+    except (TypeError, ValueError, RecursionError):
+        return InvalidContextError("register_target properties must be JSON-serialisable")
+    return None
 
 
 class LifecycleState(enum.Enum):
@@ -201,6 +233,9 @@ class FireweaveRuntime:
         sign-in paths, where a targeting concern must not break
         authentication (spec/modes.md "registerTarget in local mode").
         Adapters without the capability report `UnsupportedCapability`."""
+        input_error = _register_target_input_error(targeting_key, options)
+        if input_error is not None:
+            return RegisterTargetResult(ok=False, error=input_error)
         gate = self._lifecycle_error()
         if gate is not None:
             return RegisterTargetResult(ok=False, error=gate)
@@ -248,7 +283,15 @@ class FireweaveRuntime:
         if not default_result.ok:
             return self._error_decision(default_value, default_result.error)
 
-        merged = self.merged_context(invocation_context)
+        with self._lock:
+            layers = (self._global_context, self._client_context, invocation_context)
+        if any(layer is not None and not isinstance(layer, EvaluationContext) for layer in layers):
+            # A dict (or anything else) where an EvaluationContext belongs, in
+            # any layer, is an invalid context, never an exception out of a read.
+            return self._error_decision(
+                default_value, InvalidContextError("context must be a fireweave.EvaluationContext")
+            )
+        merged = merge_contexts(*layers)
         context_result = validate_context(
             merged,
             limits=self._limits,

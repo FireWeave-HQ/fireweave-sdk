@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from fireweave import ConfigurationError, ErrorKind, EvaluationContext, FireweaveClient, FlagType
+from fireweave import ConfigurationError, ErrorKind, EvaluationContext, FireweaveClient, FlagType, LifecycleState
 from fireweave.start import define_flags, fw, start
 from fireweave.start import _state
 
@@ -155,15 +155,73 @@ class TestImplicitStart:
         captured = fw.control_points
         assert captured.get_boolean_value("new-checkout", False, CTX) is False  # implicit: no flags
         provisional = fw.client()
+        at_shutdown = []
+        real_shutdown = provisional.shutdown
+
+        def spy_shutdown():
+            # Swap first, then shut down, outside the lock.
+            at_shutdown.append((_state._S.client is provisional, _state._lock().locked()))
+            real_shutdown()
+
+        monkeypatch.setattr(provisional, "shutdown", spy_shutdown)
         start(flags=FLAGS, log=lines.append)
+        assert at_shutdown == [(False, False)]
         assert captured.get_boolean_value("new-checkout", False, CTX) is True
         assert fw.client() is not provisional
         assert any("replaced the configuration" in line for line in lines)
-        # The replaced client is not shut down: a captured reference still reads.
-        assert provisional.control_points.get_boolean_details("x", False, CTX).error_kind is None
+        # The replaced client is shut down (its adapter flushed and closed);
+        # fw.control_points, captured before the swap, reads the new one.
+        assert provisional.runtime.state is LifecycleState.SHUTDOWN
+        assert provisional.runtime.adapter.is_closed()
+        assert provisional.control_points.get_boolean_details("x", False, CTX).error_kind is ErrorKind.ALREADY_CLOSED
         assert fw.status().started_by == "explicit"
         with pytest.raises(ConfigurationError):
             start(flags={"other": {"local": True}})
+
+    @pytest.mark.parametrize(
+        ("call", "expected"),
+        [
+            (lambda: fw.control_points.get_boolean_details("new-checkout", False, CTX).value, True),
+            (lambda: fw.control_points.get_boolean_details("new-checkout", False, CTX).error_kind, None),
+            (lambda: fw.control_points.get_boolean_value("new-checkout", False, CTX), True),
+            (lambda: fw.control_points.evaluate("new-checkout", FlagType.BOOLEAN, False, CTX).value, True),
+            (lambda: fw.identify("user-1").ok, True),
+        ],
+        ids=["details-value", "details-error-kind", "value", "evaluate", "identify"],
+    )
+    def test_a_read_racing_the_swap_never_sees_already_closed(self, monkeypatch, call, expected):
+        monkeypatch.setenv("FIREWEAVE_ENV", "development")
+        fw.control_points.get_boolean_value("x", False, CTX)  # an implicit, provisional start
+        provisional = fw.client()
+        real = _state.current_client
+        raced = []
+
+        def load_then_lose_the_race():
+            # The reader loads the provisional client; before it reads, an
+            # explicit start() swaps it out and shuts it down.
+            client = real()
+            if not raced:
+                raced.append(client)
+                start(flags=FLAGS, log=lambda line: None)
+            return client
+
+        monkeypatch.setattr(_state, "current_client", load_then_lose_the_race)
+        assert call() == expected
+        assert raced == [provisional] and provisional.runtime.state is LifecycleState.SHUTDOWN
+
+    def test_after_shutdown_a_read_does_not_retry_into_a_new_client(self):
+        start(flags=FLAGS, env=DEV)
+        fw.shutdown()
+        decision = fw.control_points.get_boolean_details("new-checkout", False, CTX)
+        assert decision.error_kind is ErrorKind.ALREADY_CLOSED
+        assert fw.status().state == "shutdown"
+
+    def test_a_failed_implicit_client_is_shut_down_when_start_replaces_it(self):
+        fw.control_points.get_boolean_value("x", False, CTX)  # no key, no env: failed implicit start
+        failed = fw.client()
+        start(flags=FLAGS, env=DEV)
+        assert failed.runtime.state is LifecycleState.SHUTDOWN
+        assert fw.control_points.get_boolean_value("new-checkout", False, CTX) is True
 
     def test_an_identical_explicit_start_adopts_the_implicit_one(self, monkeypatch):
         monkeypatch.setenv("FIREWEAVE_ENV", "development")
