@@ -287,9 +287,12 @@ export class FireweaveWebRuntime {
   }
 
   private reasonFor(resolution: AdapterResolution): DecisionReason {
+    // A STALE runtime is serving the last good decisions after a failed or
+    // timed-out re-fetch (spec/control-points.md): say so, whatever reason the
+    // backend gave when the decision was fresh.
+    if (this.state === 'STALE') return 'STALE';
     if (resolution.enabled === false) return 'DISABLED';
     if (resolution.reason !== undefined) return resolution.reason;
-    if (this.state === 'STALE') return 'STALE';
     return 'TARGETING_MATCH';
   }
 

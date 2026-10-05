@@ -92,6 +92,34 @@ test('a timed-out boot is distinguishable from an all-off rollout', async () => 
   assert.equal(offDecision.value, false);
 });
 
+test('a failed re-fetch keeps the last good value and reports STALE, whatever the backend reason was', async () => {
+  let fail = false;
+  const adapter: WebBackendAdapter = {
+    name: 'other',
+    features: () => ({ remoteEvaluation: true }),
+    async initialize() {},
+    async prefetch() {
+      if (fail) throw new FireweaveError('BackendUnavailable');
+      return new Map([['new-checkout', { found: true, value: true, reason: 'TARGETING_MATCH' as const }]]);
+    },
+    async shutdown() {},
+  };
+  const runtime = new FireweaveWebRuntime(adapter, { globalContext: CTX });
+  await runtime.initialize();
+  assert.equal(runtime.evaluateSync('new-checkout', 'boolean', false, CTX).reason, 'TARGETING_MATCH');
+
+  fail = true;
+  await runtime.refresh();
+  const stale = runtime.evaluateSync('new-checkout', 'boolean', false, CTX);
+  assert.equal(runtime.getState(), 'STALE');
+  assert.equal(stale.value, true, 'the last good value is kept');
+  assert.equal(stale.reason, 'STALE');
+
+  fail = false;
+  await runtime.refresh();
+  assert.equal(runtime.evaluateSync('new-checkout', 'boolean', false, CTX).reason, 'TARGETING_MATCH');
+});
+
 test('an adapter that fails to initialize reports ERROR, not READY', async () => {
   const runtime = new FireweaveWebRuntime(
     new InMemoryWebAdapter({ fault: { kind: 'Authentication', onInitialize: true } }),
