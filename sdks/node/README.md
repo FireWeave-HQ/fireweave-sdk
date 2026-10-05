@@ -85,6 +85,16 @@ decision). `fw.status()` reports the mode, channel, host and key source, never t
 `import '@fireweaveai/server-sdk/register'` (or `node --import`, `bun --preload`) instead of
 `src/fireweave/start.ts`.
 
+**When reads return only defaults.** A revoked or wrong key must not look like a rollout at 0%.
+When fw-server refuses the key (HTTP 401 or 403), rate-limits it (429) or cannot be reached
+(network error, timeout, 5xx), the start profile logs **one** `[fireweave]` line per kind for the
+life of the process, naming where the key came from (`FIREWEAVE_KEY`, `FW_PROJECT_API_KEY` or
+`start({ key })`) or the endpoint host, never the key itself. `fw.status().lastErrorKind` holds
+the kind of the latest failed request (`Authentication`, `Authorization`, `RateLimited`,
+`Network`, `Timeout` or `BackendUnavailable`). It is sticky: once requests succeed again, reads
+return real values, but `lastErrorKind` keeps the last failure and the line is not logged again.
+A fresh `start()` after `fw.shutdown()` clears it.
+
 ## Quick start (production path, core API)
 
 ```ts

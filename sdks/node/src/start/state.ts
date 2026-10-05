@@ -17,6 +17,7 @@ import {
   isFireweaveError,
   stableStringify,
   type FireweaveClient,
+  type FireweaveErrorKind,
   type FireweaveRemoteAdapterOptions,
   type InitFireweaveOptions,
 } from '../index.js';
@@ -63,6 +64,12 @@ export interface FireweaveStatus {
   readonly flagCount?: number;
   /** Why start failed, when it did. Already redacted. */
   readonly error?: string;
+  /**
+   * The kind of the latest failed fw-server request (Authentication,
+   * Authorization, RateLimited, Network, Timeout or BackendUnavailable).
+   * Sticky: a later success does not clear it; a fresh start() does.
+   */
+  readonly lastErrorKind?: FireweaveErrorKind;
 }
 
 interface Deferred<T> {
@@ -93,6 +100,9 @@ interface Slot {
   instance?: InstanceKey;
   log: (line: string) => void;
   readonly warned: Set<string>;
+  lastErrorKind?: FireweaveErrorKind;
+  /** fw-server failure groups already logged; one line each for the life of the process. */
+  readonly diagnosed: Set<string>;
 }
 
 const SLOT_KEY = Symbol.for('@fireweaveai/server-sdk/start');
@@ -110,6 +120,7 @@ const freshSlot = (): Slot => ({
   implicitScheduled: false,
   log: defaultLog,
   warned: new Set(),
+  diagnosed: new Set(),
 });
 
 export function slot(): Slot {
@@ -154,7 +165,75 @@ function localLine(r: ResolvedStart): string {
   return `[fireweave:local] Local mode (${why}). Serving ${n} flag${n === 1 ? '' : 's'} from your flags object; nothing is sent to fw-server.`;
 }
 
-function initOptions(r: ResolvedStart, options: StartOptions, s: Slot): InitFireweaveOptions {
+type Transport = NonNullable<FireweaveRemoteAdapterOptions['fetch']>;
+
+/** The kind the core's remote adapter reports for an HTTP status, or undefined for a success. */
+function kindForStatus(status: number): FireweaveErrorKind | undefined {
+  if (status < 400) return undefined;
+  if (status === 401) return 'Authentication';
+  if (status === 403) return 'Authorization';
+  if (status === 429) return 'RateLimited';
+  return 'BackendUnavailable';
+}
+
+/**
+ * SP-27: a refused key, a rate limit or an unreachable fw-server is logged
+ * once per group for the life of the process and kept as lastErrorKind, so a
+ * revoked key does not look like a rollout at 0%. Lines name the key's source
+ * and the host, never the key.
+ */
+function observeFailure(s: Slot, token: Slot['ready'], r: ResolvedStart, kind: FireweaveErrorKind, detail: string): void {
+  if (s.ready !== token) return; // a response for a client that was shut down or replaced
+  s.lastErrorKind = kind;
+  const host = r.url !== undefined ? new URL(r.url).host : 'fw-server';
+  let group: string;
+  let line: string;
+  switch (kind) {
+    case 'Authentication':
+      group = 'key-rejected-401';
+      line = `[fireweave] fw-server at ${host} rejected the key from ${r.keySource} (HTTP 401): it is wrong, revoked or from another project. Reads serve their defaults; this is not a rollout at 0%.`;
+      break;
+    case 'Authorization':
+      group = 'key-rejected-403';
+      line = `[fireweave] fw-server at ${host} refused the key from ${r.keySource} for this project or environment (HTTP 403). Reads serve their defaults; this is not a rollout at 0%.`;
+      break;
+    case 'RateLimited':
+      group = 'rate-limited';
+      line = `[fireweave] fw-server at ${host} rate-limited the key from ${r.keySource} (HTTP 429). Reads serve their defaults until a request succeeds.`;
+      break;
+    default:
+      group = 'unreachable';
+      line = `[fireweave] Could not reach fw-server at ${host} (endpoint from ${r.urlSource ?? 'the SDK channel'}; ${detail}): offline, a firewall, or the wrong endpoint. Reads serve their defaults until a request succeeds.`;
+  }
+  if (s.diagnosed.has(group)) return;
+  s.diagnosed.add(group);
+  try {
+    s.log(line);
+  } catch {
+    // A faulty log sink must not turn into a transport failure.
+  }
+}
+
+/** The transport handed to the core, observed. The core's behaviour is unchanged. */
+function observedTransport(s: Slot, token: Slot['ready'], r: ResolvedStart, base: Transport | undefined): Transport {
+  return async (url, init) => {
+    const call = base ?? (globalThis.fetch as unknown as Transport);
+    let response: Awaited<ReturnType<Transport>>;
+    try {
+      response = await call(url, init);
+    } catch (err) {
+      // The same split the core makes: its own deadline aborts the request.
+      const timedOut = err instanceof Error && err.name === 'AbortError';
+      observeFailure(s, token, r, timedOut ? 'Timeout' : 'Network', timedOut ? 'timed out' : 'network error');
+      throw err;
+    }
+    const kind = kindForStatus(response.status);
+    if (kind !== undefined) observeFailure(s, token, r, kind, `HTTP ${response.status}`);
+    return response;
+  };
+}
+
+function initOptions(r: ResolvedStart, options: StartOptions, s: Slot, token: Slot['ready']): InitFireweaveOptions {
   if (r.mode === 'local') {
     return { mode: 'local', local: { controlPoints: toLocalControlPoints(r.flags), log: (line) => s.log(line) } };
   }
@@ -163,7 +242,7 @@ function initOptions(r: ResolvedStart, options: StartOptions, s: Slot): InitFire
     apiKey: r.key as string,
     apiUrl: r.url as string,
     ...(r.allowedHosts !== undefined ? { allowedHosts: r.allowedHosts } : {}),
-    ...(options.fetch !== undefined ? { fetch: options.fetch } : {}),
+    fetch: observedTransport(s, token, r, options.fetch),
   };
 }
 
@@ -175,8 +254,9 @@ export function start(options: StartOptions = {}): void {
 export function startWith(options: StartOptions, implicit: boolean): void {
   const s = slot();
   if (s.state === 'shutdown' || s.state === 'failed') {
-    const kept = s.warned;
-    Object.assign(s, freshSlot(), { warned: kept });
+    // Warnings and fw-server failure lines are once per process, across restarts.
+    Object.assign(s, freshSlot(), { warned: s.warned, diagnosed: s.diagnosed });
+    delete s.lastErrorKind; // freshSlot() has no such key, so assign alone would keep it
   }
 
   const read = options.env !== undefined ? envFromBag(options.env) : processEnv();
@@ -211,7 +291,7 @@ export function startWith(options: StartOptions, implicit: boolean): void {
   if (resolved.mode === 'local') s.log(localLine(resolved));
 
   const ready = s.ready;
-  const pending = initFireweave(initOptions(resolved, options, s)).then(
+  const pending = initFireweave(initOptions(resolved, options, s, ready)).then(
     (client) => {
       if (s.ready !== ready) return undefined; // superseded by shutdown/restart
       s.state = 'ready';
@@ -267,6 +347,7 @@ export function currentStatus(): FireweaveStatus {
         }
       : {}),
     ...(s.error !== undefined ? { error: s.error.message } : {}),
+    ...(s.lastErrorKind !== undefined ? { lastErrorKind: s.lastErrorKind } : {}),
   };
 }
 

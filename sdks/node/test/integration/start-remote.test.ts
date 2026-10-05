@@ -49,4 +49,18 @@ describe('start() in remote mode ↔ test-server', () => {
     assert.equal(decision.errorKind, 'Authentication');
     await fw.shutdown();
   });
+
+  it('SP-27: a refused FIREWEAVE_KEY logs one line naming the variable, never the key', async () => {
+    await resetForTests();
+    const lines: string[] = [];
+    start({ env: { FIREWEAVE_KEY: 'project-api-key_revoked123', FIREWEAVE_URL: server.url }, log: (l) => void lines.push(l) });
+    for (let n = 0; n < 3; n += 1) {
+      assert.equal(await fw.controlPoints.getBooleanValue('fw-bool-on', false, { targetingKey: 'user-1' }), false);
+    }
+    const refused = lines.filter((l) => /rejected the key from FIREWEAVE_KEY \(HTTP 401\)/.test(l));
+    assert.equal(refused.length, 1, lines.join('\n'));
+    assert.equal(fw.status().lastErrorKind, 'Authentication');
+    assert.doesNotMatch(lines.join('\n') + JSON.stringify(fw.status()), /revoked123/);
+    await fw.shutdown();
+  });
 });
