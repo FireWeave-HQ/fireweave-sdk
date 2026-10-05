@@ -3,37 +3,48 @@ import 'package:test/test.dart';
 
 void main() {
   group('redactSecrets', () {
+    // Every vector of contracts/errors.json rules.redaction is checked by
+    // redaction_contract_test.dart; these pin the edges around it.
     test('redacts project key prefixes', () {
       expect(
         redactSecrets('key phc_SUPERSECRET0000 leaked'),
         'key [REDACTED] leaked',
       );
       expect(redactSecrets('phs_abc-DEF_123'), '[REDACTED]');
-      expect(redactSecrets('phx_'), '[REDACTED]');
     });
 
-    test('redacts bearer tokens', () {
+    test('a bare prefix with no value is prose', () {
+      expect(redactSecrets('keys start with phx_'), 'keys start with phx_');
+    });
+
+    test('redacts the bearer token and keeps the word', () {
       expect(
         redactSecrets('Authorization: Bearer abc.def.ghi'),
-        'Authorization: [REDACTED]',
+        'Authorization: Bearer [REDACTED]',
       );
     });
 
-    test('redacts FW_PROJECT_API_KEY assignments', () {
-      expect(redactSecrets('FW_PROJECT_API_KEY=supersecret'), '[REDACTED]');
-      expect(redactSecrets('FW_PROJECT_API_KEY : supersecret'), '[REDACTED]');
-      // No assignment marker -> not matched (mirrors the reference regex).
+    test('redacts assignment values and keeps the name', () {
+      expect(
+        redactSecrets('FW_PROJECT_API_KEY=supersecret'),
+        'FW_PROJECT_API_KEY=[REDACTED]',
+      );
+      expect(
+        redactSecrets('FW_PROJECT_API_KEY : supersecret'),
+        'FW_PROJECT_API_KEY : [REDACTED]',
+      );
+      expect(
+        redactSecrets("FIREWEAVE_KEY='s3cret', next"),
+        "FIREWEAVE_KEY='[REDACTED]', next",
+      );
       expect(
         redactSecrets('FW_PROJECT_API_KEY is unset'),
         'FW_PROJECT_API_KEY is unset',
       );
     });
 
-    test('collapses whitespace and trims', () {
-      expect(redactSecrets('  a   b\n\tc  '), 'a b c');
-    });
-
-    test('leaves ordinary text alone', () {
+    test('changes nothing but the secrets', () {
+      expect(redactSecrets('  a   b\n\tc  '), '  a   b\n\tc  ');
       expect(redactSecrets('invalid configuration'), 'invalid configuration');
     });
   });
@@ -100,6 +111,13 @@ void main() {
       );
       expect(err.message, 'rejected key [REDACTED]');
       expect(FireweaveError(ErrorKind.flagNotFound).message, 'flag not found');
+    });
+
+    test('messages collapse whitespace and trim', () {
+      expect(
+        FireweaveError(ErrorKind.internal, message: '  a   b\n\tc  ').message,
+        'a b c',
+      );
     });
   });
 }

@@ -23,9 +23,10 @@ import 'transport/owned_transport.dart';
 /// Where a start profile is.
 ///
 /// [starting] until the first prefetch settles; then [ready], [stale] (the
-/// prefetch lost the boot ceiling) or [error] (it failed); [failed] when the
-/// configuration was refused or the core could not start; [shutdown] after
-/// `fw.shutdown()`.
+/// prefetch lost the boot ceiling, or a re-fetch failed after an earlier
+/// success and the last good decisions are being served) or [error] (it
+/// failed with nothing good to serve); [failed] when the configuration was
+/// refused or the core could not start; [shutdown] after `fw.shutdown()`.
 enum StartState { notStarted, starting, ready, stale, error, failed, shutdown }
 
 /// Why the start profile is not serving decisions, or what went wrong with
@@ -105,8 +106,9 @@ final class FireweaveStatus {
   /// Why start failed, when it did. Names sources, never values.
   final String? error;
 
-  /// The kind of the last failed fw-server request, sticky across a later
-  /// success (which clears [problem]).
+  /// The kind of the last failed fw-server request (`Authentication`,
+  /// `Authorization`, `RateLimited`, `Network`, ...; SP-27), sticky across a
+  /// later success (which clears [problem]). `lastErrorKind` in [toJson].
   final ErrorKind? lastErrorKind;
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -196,6 +198,12 @@ class StartCore {
 
   /// The targeting key the current decisions were prefetched under.
   String? currentKey;
+
+  /// How often a remote start re-fetches its decisions in the background;
+  /// zero or negative disables it. Set by the server profile; the client
+  /// profile re-fetches on `identify`/`reset` only.
+  Duration refreshInterval = Duration.zero;
+  Timer? _refreshTimer;
   LogSink log = _defaultLog;
   final Set<String> _warned = <String>{};
   final Set<String> _diagnosed = <String>{};
@@ -280,6 +288,7 @@ class StartCore {
     HttpTransport? transport,
   }) {
     final gen = ++generation;
+    _cancelRefresh();
     config = startConfig;
     signature = startSignature;
     problem = null;
@@ -346,6 +355,7 @@ class StartCore {
       _owned = owned;
       observeRuntime(started.runtime);
       setState(_fromLifecycle(started.runtime.state), always: true);
+      _scheduleRefresh(gen);
     } on Object catch (error) {
       owned?.close();
       if (gen != generation) {
@@ -364,6 +374,50 @@ class StartCore {
     }
   }
 
+  // ---------------------------------------------------- periodic refresh
+
+  /// Arm the next background re-fetch, when this is a remote start with a
+  /// positive [refreshInterval]. One timer at a time: the next one is armed
+  /// only after the previous re-fetch settled, so they never overlap.
+  void _scheduleRefresh(int gen) {
+    final interval = refreshInterval;
+    if (gen != generation ||
+        interval <= Duration.zero ||
+        config?.mode != Mode.remote ||
+        client == null) {
+      return;
+    }
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer(interval, () => unawaited(_refreshInBackground(gen)));
+  }
+
+  /// One background re-fetch: a success swaps the decisions; a failure
+  /// keeps the last good ones (the runtime serves them as `STALE`) and is
+  /// reported like any other fw-server failure.
+  Future<void> _refreshInBackground(int gen) async {
+    _refreshTimer = null;
+    final c = client;
+    if (gen != generation || c == null) {
+      return;
+    }
+    try {
+      await c.runtime.refresh();
+    } on Object {
+      // the runtime reports a failed prefetch through its state
+    }
+    if (gen != generation) {
+      return;
+    }
+    observeRuntime(c.runtime);
+    setState(_fromLifecycle(c.runtime.state));
+    _scheduleRefresh(gen);
+  }
+
+  void _cancelRefresh() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
+  }
+
   // ------------------------------------------------------- diagnostics
 
   /// Record the outcome of the runtime's last prefetch.
@@ -374,9 +428,16 @@ class StartCore {
       case LifecycleState.error:
       case LifecycleState.fatal:
         observeError(runtime.initializationError);
+      case LifecycleState.stale:
+        // A re-fetch failed after an earlier success: the last good
+        // decisions are still served, but the failure is still reported.
+        // (A ceiling loss carries no error and reports nothing.)
+        final error = runtime.lastRefreshError;
+        if (error != null) {
+          observeError(error, servingLastGood: true);
+        }
       case LifecycleState.uninitialized:
       case LifecycleState.initializing:
-      case LifecycleState.stale:
       case LifecycleState.shutdown:
         break;
     }
@@ -396,8 +457,9 @@ class StartCore {
 
   /// One line per kind of fw-server failure, once per isolate; every kind
   /// lands in [lastErrorKind]. Lines name the key's source and the host,
-  /// never a value.
-  void observeError(FireweaveError? error) {
+  /// never a value. [servingLastGood] when reads keep serving the decisions
+  /// of an earlier successful fetch rather than their defaults.
+  void observeError(FireweaveError? error, {bool servingLastGood = false}) {
     final c = config;
     if (error == null || c == null || c.mode != Mode.remote) {
       return;
@@ -405,6 +467,9 @@ class StartCore {
     lastErrorKind = error.kind;
     final host = c.host ?? 'fw-server';
     final keySource = c.keySource;
+    final serve = servingLastGood
+        ? 'Reads keep serving the last decisions fetched (reason STALE)'
+        : 'Reads serve their defaults';
     final (String code, String? variable, String group, String line)? entry =
         switch (error.kind) {
           ErrorKind.authentication => (
@@ -413,23 +478,22 @@ class StartCore {
             'key-rejected-401',
             '[fireweave] fw-server at $host rejected the key from $keySource '
                 '(HTTP 401): it is wrong, revoked or from another project. '
-                'Reads serve their defaults.',
+                '$serve.',
           ),
           ErrorKind.authorization => (
             'key-rejected',
             keySource,
             'key-rejected-403',
             '[fireweave] fw-server at $host refused the key from $keySource '
-                'for this project or environment (HTTP 403). Reads serve '
-                'their defaults.',
+                'for this project or environment (HTTP 403). $serve.',
           ),
           ErrorKind.rateLimited => (
             'rate-limited',
             keySource,
             'rate-limited',
             '[fireweave] fw-server at $host rate-limited the key from '
-                '$keySource (HTTP 429). Reads serve their defaults until a '
-                'later request succeeds.',
+                '$keySource (HTTP 429). $serve until a later request '
+                'succeeds.',
           ),
           ErrorKind.network ||
           ErrorKind.timeout ||
@@ -439,15 +503,14 @@ class StartCore {
             'unreachable',
             '[fireweave] Could not reach fw-server at $host (endpoint from '
                 '${c.urlSource}): offline, a firewall, or the wrong endpoint. '
-                'Reads serve their defaults.',
+                '$serve.',
           ),
           ErrorKind.malformedResponse => (
             'unexpected-response',
             c.urlSource,
             'unexpected-response',
             '[fireweave] fw-server at $host (endpoint from ${c.urlSource}) '
-                'did not answer like fw-server: check the endpoint. Reads '
-                'serve their defaults.',
+                'did not answer like fw-server: check the endpoint. $serve.',
           ),
           _ => null,
         };
@@ -597,7 +660,9 @@ class StartCore {
 
   /// Flush and close. A later start begins fresh.
   Future<void> shutdown() async {
+    _cancelRefresh();
     await ready;
+    _cancelRefresh();
     final c = client;
     final owned = _owned;
     generation += 1;
@@ -616,6 +681,8 @@ class StartCore {
   /// logged again and the log sink is the default.
   Future<void> resetForTests() async {
     generation += 1;
+    _cancelRefresh();
+    refreshInterval = Duration.zero;
     final c = client;
     final owned = _owned;
     state = StartState.notStarted;

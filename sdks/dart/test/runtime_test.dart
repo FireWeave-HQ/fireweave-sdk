@@ -268,6 +268,131 @@ void main() {
     });
   });
 
+  group(
+    'FireweaveRuntime: a failed re-fetch keeps the last good decisions',
+    () {
+      // spec/control-points.md "A failed re-fetch keeps the last good
+      // decisions" and the `STALE` row of the failure table.
+      InMemoryAdapter adapterServing(String value) =>
+          InMemoryAdapter(<String, FlagDefinition>{
+            'colour': FlagDefinition(variant: value, value: value),
+          });
+
+      test(
+        'success then a failed re-fetch serves the old value as STALE',
+        () async {
+          final adapter = adapterServing('blue');
+          final runtime = FireweaveRuntime(adapter);
+          await runtime.initialize(
+            context: EvaluationContext(targetingKey: 't1'),
+          );
+          expect(
+            runtime.evaluate('colour', FlagType.string, 'none').reason,
+            DecisionReason.targetingMatch,
+          );
+
+          adapter.setFlags(<String, FlagDefinition>{
+            'colour': const FlagDefinition(variant: 'red', value: 'red'),
+          });
+          adapter.setFault(const InMemoryFault(ErrorKind.backendUnavailable));
+          await runtime.refresh();
+
+          expect(runtime.state, LifecycleState.stale);
+          expect(runtime.lastRefreshError?.kind, ErrorKind.backendUnavailable);
+          expect(runtime.initializationError, isNull);
+          final decision = runtime.evaluate('colour', FlagType.string, 'none');
+          expect(decision.value, 'blue');
+          expect(decision.variant, 'blue');
+          expect(decision.reason, DecisionReason.stale);
+          expect(decision.errorKind, isNull);
+          expect(decision.errorCode, isNull);
+        },
+      );
+
+      test(
+        'a failure with no earlier success is ERROR with the default',
+        () async {
+          final adapter = adapterServing('blue');
+          adapter.setFault(const InMemoryFault(ErrorKind.rateLimited));
+          final runtime = FireweaveRuntime(adapter);
+          await runtime.initialize(
+            context: EvaluationContext(targetingKey: 't1'),
+          );
+          expect(runtime.state, LifecycleState.error);
+          expect(runtime.lastRefreshError?.kind, ErrorKind.rateLimited);
+
+          // A second failure still has nothing good to keep.
+          await runtime.refresh();
+          expect(runtime.state, LifecycleState.error);
+          final decision = runtime.evaluate('colour', FlagType.string, 'none');
+          expect(decision.value, 'none');
+          expect(decision.reason, DecisionReason.error);
+          expect(decision.errorKind, ErrorKind.rateLimited);
+        },
+      );
+
+      test('a success after STALE replaces the decisions', () async {
+        final adapter = adapterServing('blue');
+        final runtime = FireweaveRuntime(adapter);
+        await runtime.initialize(
+          context: EvaluationContext(targetingKey: 't1'),
+        );
+        adapter.setFault(const InMemoryFault(ErrorKind.network));
+        await runtime.refresh();
+        expect(runtime.state, LifecycleState.stale);
+
+        adapter.setFault(null);
+        adapter.setFlags(<String, FlagDefinition>{
+          'colour': const FlagDefinition(variant: 'red', value: 'red'),
+        });
+        await runtime.refresh();
+
+        expect(runtime.state, LifecycleState.ready);
+        expect(runtime.lastRefreshError, isNull);
+        final decision = runtime.evaluate('colour', FlagType.string, 'none');
+        expect(decision.value, 'red');
+        expect(decision.reason, DecisionReason.targetingMatch);
+      });
+
+      test('a timed-out re-fetch also keeps the last good decisions', () async {
+        final adapter = _SwitchableSlowAdapter(<String, AdapterResolution>{
+          'f': const AdapterResolution(
+            found: true,
+            enabled: true,
+            value: true,
+            reason: DecisionReason.targetingMatch,
+          ),
+        });
+        final runtime = FireweaveRuntime(
+          adapter,
+          config: const RuntimeConfig(flagsReadyTimeoutMs: 30),
+        );
+        await runtime.initialize();
+        expect(runtime.state, LifecycleState.ready);
+
+        adapter.delay = const Duration(milliseconds: 300);
+        await runtime.refresh();
+        expect(runtime.state, LifecycleState.stale);
+        final decision = runtime.evaluate('f', FlagType.boolean, false);
+        expect(decision.value, isTrue);
+        expect(decision.reason, DecisionReason.stale);
+      });
+
+      test('a re-fetch still in flight at shutdown cannot reopen it', () async {
+        final adapter = _SwitchableSlowAdapter(
+          const <String, AdapterResolution>{},
+        );
+        final runtime = FireweaveRuntime(adapter);
+        await runtime.initialize();
+        adapter.delay = const Duration(milliseconds: 50);
+        final inFlight = runtime.refresh();
+        await runtime.shutdown();
+        await inFlight;
+        expect(runtime.state, LifecycleState.shutdown);
+      });
+    },
+  );
+
   group('FireweaveRuntime concurrency: prefetch ceiling + sync read', () {
     /// Ceiling loses the race against a slow prefetch: `refresh()` returns
     /// PROMPTLY (near the ceiling, not near the adapter's real delay), and
@@ -372,6 +497,37 @@ class _InitThrowingAdapter implements ControlPointsBackendAdapter {
     EvaluationContext context, {
     PrefetchOptions? options,
   }) async => const <String, AdapterResolution>{};
+
+  @override
+  Future<RegisterTargetResult> registerTarget(
+    String targetingKey, {
+    RegisterTargetOptions? options,
+  }) async => const RegisterTargetResult.success();
+
+  @override
+  Future<void> shutdown() async {}
+}
+
+class _SwitchableSlowAdapter implements ControlPointsBackendAdapter {
+  _SwitchableSlowAdapter(this.result);
+
+  final PrefetchResult result;
+  Duration delay = Duration.zero;
+
+  @override
+  DecisionReason? get missReason => null;
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<PrefetchResult> prefetch(
+    EvaluationContext context, {
+    PrefetchOptions? options,
+  }) async {
+    await Future<void>.delayed(delay);
+    return result;
+  }
 
   @override
   Future<RegisterTargetResult> registerTarget(

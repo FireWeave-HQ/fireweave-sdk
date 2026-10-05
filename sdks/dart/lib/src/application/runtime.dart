@@ -25,8 +25,10 @@ enum LifecycleState {
 
   /// A transient, retriable failure reached from `refresh()`'s prefetch
   /// failing for a non-timeout reason (a real adapter-reported error, not a
-  /// ceiling loss, which goes to [stale] instead). A later `refresh()` can
-  /// recover from this.
+  /// ceiling loss, which goes to [stale] instead) BEFORE any prefetch has
+  /// succeeded. A failure after an earlier success goes to [stale] and keeps
+  /// the last good decisions instead. A later `refresh()` can recover from
+  /// this.
   error('ERROR'),
 
   /// A non-recoverable-without-reconstruction boot failure:
@@ -127,6 +129,13 @@ class FireweaveRuntime {
   LifecycleState _state = LifecycleState.uninitialized;
   PrefetchResult _cache = const <String, AdapterResolution>{};
   FireweaveError? _initError;
+  FireweaveError? _lastRefreshError;
+
+  /// Whether at least one prefetch has succeeded: from then on [_cache] holds
+  /// the last good decisions, and a failed re-fetch keeps them
+  /// (`spec/control-points.md` "A failed re-fetch keeps the last good
+  /// decisions").
+  bool _hasLastGood = false;
   EvaluationContext? _globalContext;
   EvaluationContext? _clientContext;
 
@@ -145,6 +154,13 @@ class FireweaveRuntime {
   /// applies to `initFireweave`, not this runtime, which is deliberately
   /// fail-open — see [initialize]).
   FireweaveError? get initializationError => _initError;
+
+  /// The error of the most recent prefetch when it failed, `null` once a
+  /// prefetch succeeds. Unlike [initializationError] it is also set when a
+  /// re-fetch fails after an earlier success, which leaves the runtime
+  /// [LifecycleState.stale] serving the last good decisions — so a caller
+  /// can still report WHY the decisions stopped being fresh.
+  FireweaveError? get lastRefreshError => _lastRefreshError;
 
   Set<String> get _allReservedKeys => <String>{
     ..._reservedAttributeKeys,
@@ -205,6 +221,14 @@ class FireweaveRuntime {
   /// eventual result is discarded (no auto-heal on a late win — the next
   /// explicit [refresh]/`identify()` gets a fresh attempt), mirroring
   /// `sdks/web`'s `Promise.race` and swift's `PrefetchRaceGate`.
+  ///
+  /// A success swaps the whole cache in one step. A failure or a ceiling
+  /// loss after an earlier success keeps the last good decisions and moves
+  /// to [LifecycleState.stale], so reads serve them with reason `STALE`
+  /// instead of every read falling back to its default on one 429, 5xx or
+  /// network blip (`spec/control-points.md` "A failed re-fetch keeps the
+  /// last good decisions"). Only a failure with no earlier success is
+  /// [LifecycleState.error].
   Future<void> refresh() async {
     if (_state == LifecycleState.shutdown) {
       return;
@@ -260,14 +284,28 @@ class FireweaveRuntime {
       () => settle(const _TimedOut()),
     );
 
-    switch (await completer.future) {
+    final outcome = await completer.future;
+    if (_state == LifecycleState.shutdown) {
+      // shutdown() ran while this prefetch was in flight: closed stays
+      // closed, and the result is discarded.
+      return;
+    }
+    switch (outcome) {
       case _Prefetched(:final result):
         _cache = Map<String, AdapterResolution>.unmodifiable(result);
         _state = LifecycleState.ready;
         _initError = null;
+        _lastRefreshError = null;
+        _hasLastGood = true;
       case _Failed(:final error):
-        _state = LifecycleState.error;
-        _initError = error;
+        _lastRefreshError = error;
+        if (_hasLastGood) {
+          // Keep the last good decisions; reads report STALE.
+          _state = LifecycleState.stale;
+        } else {
+          _state = LifecycleState.error;
+          _initError = error;
+        }
       case _TimedOut():
         // Fail OPEN (boot continues) but not SILENT: reads will carry STALE
         // and the lifecycle state says so.
@@ -319,7 +357,9 @@ class FireweaveRuntime {
     //
     // 1. The key is PRESENT in the batch but `found == false` — the
     //    definition exists but its targeting conditions did not select this
-    //    caller. ALWAYS `DEFAULT`, regardless of which adapter produced it.
+    //    caller. ALWAYS `DEFAULT`, regardless of which adapter produced it
+    //    (`STALE` when that answer is the last good one after a failed
+    //    re-fetch).
     // 2. The key is ABSENT from the batch entirely — governed by
     //    `adapter.missReason`: local mode's unknown-key row is
     //    `default`/`DEFAULT` (`spec/modes.md`); every other adapter's absent
@@ -329,7 +369,9 @@ class FireweaveRuntime {
       if (!resolution.found) {
         return Decision(
           value: defaultValue,
-          reason: DecisionReason.defaultReason,
+          reason: _state == LifecycleState.stale
+              ? DecisionReason.stale
+              : DecisionReason.defaultReason,
         );
       }
       return _decisionFromResolution(resolution, type, defaultValue, options);
@@ -393,11 +435,15 @@ class FireweaveRuntime {
     }
 
     final DecisionReason reason;
-    if (resolution.enabled == false) {
+    if (_state == LifecycleState.stale) {
+      // The cache outlived a failed or timed-out re-fetch: whatever reason
+      // the backend gave when it was fresh, the claim now is "last good".
+      reason = DecisionReason.stale;
+    } else if (resolution.enabled == false) {
       reason = DecisionReason.disabled;
     } else if (resolution.reason != null) {
       reason = resolution.reason!;
-    } else if (resolution.fromCache || _state == LifecycleState.stale) {
+    } else if (resolution.fromCache) {
       reason = DecisionReason.stale;
     } else {
       reason = DecisionReason.targetingMatch;

@@ -151,12 +151,20 @@ fw.instanceKey; // FIREWEAVE_INSTANCE_ID, else inst_ + a hash of the host name
 ```
 
 The key comes from the process environment only, never a define, so it is never baked into an
-executable. `server.dart` refuses to start on the web. Server decisions are prefetched once, at
-start, under `fw.instanceKey` (the server is the subject): a read whose per-call
+executable. `server.dart` refuses to start on the web. Server decisions are prefetched at start
+under `fw.instanceKey` (the server is the subject): a read whose per-call
 `context.targetingKey` differs serves the default with `InvalidContext` and warns once. Per-user
-server reads and periodic refresh are not part of the start profile yet; until then
-`await fw.client?.runtime.refresh()` re-fetches, and `initFireweave` with a per-user context
-covers per-user reads.
+server reads are not part of the start profile; `initFireweave` with a per-user context covers
+them.
+
+In remote mode the server profile re-fetches its decisions every 30 seconds
+(`refreshInterval:`; `Duration.zero` turns it off; local mode never re-fetches). A success swaps
+the decisions in one step. A re-fetch that fails or times out keeps the last good decisions and
+serves them with reason `STALE` (`fw.status.state` is `stale`), logs the failure once per kind
+and records it in `fw.status`; the next success replaces them. Only a start whose first fetch
+fails serves defaults. The pending re-fetch keeps the isolate alive, so `fw.shutdown()` stops
+it: a CLI either calls `fw.shutdown()` when it is done or starts with
+`refreshInterval: Duration.zero`.
 
 ### Options and overrides
 
@@ -177,6 +185,7 @@ unset.
 | `env` (server) | — | — | the process environment | A map read instead, for tests. |
 | `transport` | — | — | the profile's own `dart:io` client, closed by `fw.shutdown()`; `fetch` on the web | Not part of the configuration check. |
 | `log` | — | — | `print` | Where `[fireweave]` lines go. Not part of the configuration check. |
+| `refreshInterval` (server) | — | — | 30 s (`defaultServerRefreshInterval`) | How often remote mode re-fetches; `Duration.zero` turns it off. Not part of the configuration check. |
 
 ### The mode rule
 
@@ -214,7 +223,9 @@ It never contains the key. `problem` says why decisions are defaults: a configur
 `start-failed`) or the last fw-server failure (`key-rejected` for 401/403, `rate-limited`,
 `unreachable`, `unexpected-response`, cleared by a later success). Each kind of fw-server
 failure also logs one line per isolate naming the key's source and the host, and
-`lastErrorKind` keeps the kind. A local start logs one `[fireweave:local]` line, so a local boot
+`lastErrorKind` keeps the latest kind (`Authentication`, `Authorization`, `RateLimited`,
+`Network`, `Timeout`, `BackendUnavailable`, `MalformedResponse`), so a revoked key never looks
+like a rollout at 0%. A local start logs one `[fireweave:local]` line, so a local boot
 in a production log stands out.
 
 ## Quick start (production path)
@@ -245,7 +256,9 @@ await fw.shutdown();
 A boot that times out against fw-server (5 s ceiling by default) does not block the
 app: the runtime enters `STALE` and serves defaults with reason `STALE`, so a
 timed-out boot stays distinguishable from a rollout at 0%. The next `identify()` /
-`runtime.refresh()` gets a fresh attempt.
+`runtime.refresh()` gets a fresh attempt. Once a fetch has succeeded, a later one that fails or
+times out keeps the last good decisions and serves them with reason `STALE`; only a failure
+with no earlier success serves defaults with `ERROR`.
 
 ## Quick start (local dev — no network, no credentials)
 

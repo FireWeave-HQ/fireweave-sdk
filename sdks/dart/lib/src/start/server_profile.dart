@@ -77,6 +77,9 @@ final class ServerCore extends StartCore {
 /// This isolate's server singleton.
 final ServerCore serverCore = ServerCore();
 
+/// How often a remote server start re-fetches its decisions by default.
+const Duration defaultServerRefreshInterval = Duration(seconds: 30);
+
 /// The server profile's instance-key derivation with its sources injected:
 /// [read] stands in for the process environment and [osHostName] for the
 /// operating system's host name (`HOSTNAME` is read first, as node does).
@@ -204,6 +207,7 @@ Future<void> startServer({
   Map<String, String>? env,
   HttpTransport? transport,
   LogSink? log,
+  Duration refreshInterval = defaultServerRefreshInterval,
 }) async {
   if (!hasDartIo) {
     // dart2js and dart2wasm compile a dart:io import into run-time stubs, so
@@ -270,6 +274,7 @@ Future<void> startServer({
   if (log != null) {
     core.log = log;
   }
+  core.refreshInterval = refreshInterval;
   core.lookup = read;
   if (instanceOption != null) {
     core.instanceIdOption = instanceOption;
@@ -315,6 +320,15 @@ abstract final class Fireweave {
   /// naming `FIREWEAVE_KEY`. A second call with the same configuration is a
   /// no-op; a different one throws. A fw-server that is down does not throw:
   /// start completes and reads serve their defaults.
+  ///
+  /// In remote mode the decisions are re-fetched every [refreshInterval]
+  /// (30 s by default; [Duration.zero] turns it off) until `fw.shutdown()`.
+  /// A re-fetch that fails keeps the last good decisions, served with reason
+  /// `STALE`, and the next success replaces them. The pending re-fetch
+  /// keeps the isolate alive, so a CLI either calls `fw.shutdown()` when it
+  /// is done or passes `refreshInterval: Duration.zero`. Like [log] and
+  /// [transport], it is not part of the configuration check: the first
+  /// start's value applies.
   static Future<void> start({
     Map<String, Flag>? flags,
     Mode? mode,
@@ -325,6 +339,7 @@ abstract final class Fireweave {
     Map<String, String>? env,
     HttpTransport? transport,
     LogSink? log,
+    Duration refreshInterval = defaultServerRefreshInterval,
   }) => startServer(
     flags: flags,
     mode: mode,
@@ -335,10 +350,11 @@ abstract final class Fireweave {
     env: env,
     transport: transport,
     log: log,
+    refreshInterval: refreshInterval,
   );
 
-  /// Flush and close (`fw.shutdown()`), so the VM can exit. A later start
-  /// begins fresh.
+  /// Flush and close (`fw.shutdown()`), and stop the periodic re-fetch, so
+  /// the VM can exit. A later start begins fresh.
   static Future<void> shutdown() => serverCore.shutdown();
 
   /// Test only: shut down and forget this isolate's singleton, its one-time
@@ -390,7 +406,8 @@ final class FireweaveServerStart {
   /// until start settles.
   FireweaveClient? get client => serverCore.client;
 
-  /// Flush and close, so the VM can exit. A later start begins fresh.
+  /// Flush and close, and stop the periodic re-fetch, so the VM can exit. A
+  /// later start begins fresh.
   Future<void> shutdown() => serverCore.shutdown();
 }
 

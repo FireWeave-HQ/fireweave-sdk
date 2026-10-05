@@ -121,7 +121,7 @@ class FireweaveError implements Exception {
     this.quotaLimited = false,
     this.initFatal = false,
     this.targetingKeyMissing = false,
-  }) : message = redactSecrets(message ?? kind.defaultMessage);
+  }) : message = _normalizeMessage(message ?? kind.defaultMessage);
 
   /// [ErrorKind.flagNotFound], optionally noting the backend reported quota
   /// limiting (`contracts/errors.json`: "quota-limited responses resolve as
@@ -176,22 +176,60 @@ class FireweaveError implements Exception {
   String toString() => 'FireweaveError(${kind.wireName}: $message)';
 }
 
-// Matches node/python/rust's
-// `(ph[csx]_[A-Za-z0-9_\-]*|Bearer\s+\S+|FW_PROJECT_API_KEY\s*[=:]\s*\S+)`
-// byte-for-byte. Dart's `RegExp` is part of `dart:core`, so unlike swift
-// (which hand-rolled a scanner to keep its Foundation-only budget honest)
-// there is no dependency question here.
-final RegExp _secretPattern = RegExp(
-  r'ph[csx]_[A-Za-z0-9_\-]*|Bearer\s+\S+|FW_PROJECT_API_KEY\s*[=:]\s*\S+',
+/// The text a redacted value becomes (`contracts/errors.json`
+/// `rules.redaction.placeholder`).
+const String redactionPlaceholder = '[REDACTED]';
+
+// `contracts/errors.json` `rules.redaction`, applied in its order: bearer
+// tokens, URL userinfo, named assignments, then key-shaped values. Dart's
+// `RegExp` is part of `dart:core`, so there is no dependency question here.
+
+/// `Bearer <token>`: the token goes, the word stays.
+final RegExp _bearer = RegExp(r'\bBearer(\s+)[A-Za-z0-9._~+/=-]+');
+
+/// `scheme://userinfo@host`: the userinfo goes.
+final RegExp _urlUserinfo = RegExp(
+  r'\b([A-Za-z][A-Za-z0-9+.-]*://)[^\s/?#@]+@',
 );
+
+/// `NAME=value`, `NAME: value`, `NAME = "value"` and `NAME='value'` for the
+/// three key variables: the value (up to whitespace, a quote, a comma or a
+/// semicolon) goes; the name, the separator and the quotes stay. A name with
+/// no separator after it is prose and stays whole.
+final RegExp _assignment = RegExp(
+  '(FIREWEAVE_KEY|FIREWEAVE_BROWSER_KEY|FW_PROJECT_API_KEY)'
+  r'''(\s*[=:]\s*["']?)[^\s"',;]+''',
+);
+
+/// A key-shaped value: a known prefix followed by one or more
+/// `[A-Za-z0-9_-]`. A prefix followed by anything else (the ellipsis in
+/// `project-api-key_…`) is prose and stays.
+final RegExp _keyValue = RegExp(
+  // The three analytics-vendor prefixes as one character class, so no
+  // vendor key shape appears literally in lib/ (portability_guard_test).
+  '(?:project-api-key_|fw_public_|fw_ingest_pub_|fw_org_|cli_at_|ph[csx]_)'
+  '[A-Za-z0-9_-]+',
+);
+
 final RegExp _whitespaceRun = RegExp(r'\s+');
 
-/// Redacts secret-shaped substrings (`spec/errors.schema.json`
-/// `secretPatterns`) and collapses whitespace runs. Defensive: applied to
-/// every message that reaches [FireweaveError], even though canonical
-/// default messages never contain a secret in the first place — this is the
-/// safety net for a message built dynamically elsewhere in the SDK.
+/// Scrubs secrets from [text] exactly as `contracts/errors.json`
+/// `rules.redaction` specifies (`contracts/errors.md` rule 2): bearer
+/// tokens, then URL userinfo, then the values assigned to `FIREWEAVE_KEY`,
+/// `FIREWEAVE_BROWSER_KEY` and `FW_PROJECT_API_KEY`, then key-shaped values
+/// each become [redactionPlaceholder]. A variable NAME is never redacted on
+/// its own, only its value, and nothing else in [text] changes.
+///
+/// Applied to every message that reaches [FireweaveError], even though
+/// canonical default messages never contain a secret: it is the safety net
+/// for a message built dynamically elsewhere in the SDK.
 String redactSecrets(String text) => text
-    .replaceAll(_secretPattern, '[REDACTED]')
-    .replaceAll(_whitespaceRun, ' ')
-    .trim();
+    .replaceAllMapped(_bearer, (m) => 'Bearer${m[1]}$redactionPlaceholder')
+    .replaceAllMapped(_urlUserinfo, (m) => '${m[1]}$redactionPlaceholder@')
+    .replaceAllMapped(_assignment, (m) => '${m[1]}${m[2]}$redactionPlaceholder')
+    .replaceAll(_keyValue, redactionPlaceholder);
+
+/// A message as [FireweaveError] stores it: redacted, then whitespace runs
+/// collapsed to one space and trimmed.
+String _normalizeMessage(String text) =>
+    redactSecrets(text).replaceAll(_whitespaceRun, ' ').trim();

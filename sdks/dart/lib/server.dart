@@ -49,4 +49,5 @@ export 'src/start/build_info.dart' show buildSdkChannel, buildSdkVersion;
 export 'src/start/channel.dart' show SdkChannel;
 export 'src/start/core.dart' show FireweaveStatus, StartProblem, StartState;
 export 'src/start/flags.dart' show Flag, defineFlags;
-export 'src/start/server_profile.dart' show Fireweave, FireweaveServerStart, fw;
+export 'src/start/server_profile.dart'
+    show Fireweave, FireweaveServerStart, defaultServerRefreshInterval, fw;

@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:fireweave/fireweave.dart' show FireweaveLocalAdapter;
 import 'package:fireweave/server.dart';
@@ -818,4 +819,167 @@ void main() {
       },
     );
   });
+
+  group('periodic refresh (over real HTTP)', () {
+    late LoopbackFwServer server;
+
+    setUp(() async {
+      server = await LoopbackFwServer.start(
+        decisions: <String, Object?>{'new-checkout': true},
+      );
+    });
+
+    tearDown(() async {
+      await Fireweave.debugResetForTests();
+      await server.close();
+    });
+
+    Map<String, String> remoteEnv() => <String, String>{
+      'FIREWEAVE_KEY': key,
+      'FIREWEAVE_URL': server.url,
+    };
+
+    int evaluates() =>
+        server.requests.where((r) => r.path == '/v1/flags/evaluate').length;
+
+    test('re-fetches on the interval and swaps in new decisions', () async {
+      await Fireweave.start(
+        env: remoteEnv(),
+        log: log.call,
+        refreshInterval: const Duration(milliseconds: 40),
+      );
+      expect(fw.controlPoints.getBooleanValue('new-checkout', false), isTrue);
+
+      server.decisions = <String, Object?>{'new-checkout': false};
+      await until(() => evaluates() >= 3);
+      final details = fw.controlPoints.getBooleanDetails('new-checkout', true);
+      expect(details.value, isFalse);
+      expect(details.reason, DecisionReason.targetingMatch);
+      expect(fw.status.state, StartState.ready);
+    });
+
+    test('a failed re-fetch keeps the last good decisions as STALE, logs '
+        'once, and the next success replaces them', () async {
+      await Fireweave.start(
+        env: remoteEnv(),
+        log: log.call,
+        refreshInterval: const Duration(milliseconds: 40),
+      );
+      expect(fw.status.state, StartState.ready);
+
+      server.status = 503;
+      server.decisions = <String, Object?>{'new-checkout': false};
+      final before = evaluates();
+      await until(() => evaluates() >= before + 2);
+      await until(() => fw.status.state == StartState.stale);
+      final stale = fw.controlPoints.getBooleanDetails('new-checkout', false);
+      expect(stale.value, isTrue);
+      expect(stale.reason, DecisionReason.stale);
+      expect(stale.errorKind, isNull);
+      expect(fw.status.lastErrorKind, ErrorKind.backendUnavailable);
+      expect(fw.status.toJson()['lastErrorKind'], 'BackendUnavailable');
+      expect(
+        fw.status.problem,
+        const StartProblem('unreachable', variable: 'FIREWEAVE_URL'),
+      );
+      final lines = log.containing('Could not reach fw-server');
+      expect(lines, hasLength(1));
+      expect(lines.single, contains('last decisions fetched'));
+      expect(log.lines.join('\n'), isNot(contains('s3cr3t')));
+
+      server.status = 200;
+      await until(() => fw.status.state == StartState.ready);
+      final fresh = fw.controlPoints.getBooleanDetails('new-checkout', true);
+      expect(fresh.value, isFalse);
+      expect(fresh.reason, DecisionReason.targetingMatch);
+      expect(fw.status.problem, isNull);
+      expect(fw.status.lastErrorKind, ErrorKind.backendUnavailable);
+    });
+
+    test('Duration.zero turns the re-fetch off', () async {
+      await Fireweave.start(env: remoteEnv(), refreshInterval: Duration.zero);
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(evaluates(), 1);
+    });
+
+    test('fw.shutdown() stops the re-fetch', () async {
+      await Fireweave.start(
+        env: remoteEnv(),
+        refreshInterval: const Duration(milliseconds: 30),
+      );
+      await until(() => evaluates() >= 2);
+      await fw.shutdown();
+      final atShutdown = evaluates();
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(evaluates(), atShutdown);
+      expect(fw.status.state, StartState.shutdown);
+    });
+
+    test(
+      'a program that calls fw.shutdown() exits promptly despite the default '
+      '30 s re-fetch',
+      () async {
+        final run = await runExitFixture(<String>[
+          'remote',
+          server.url,
+          'shutdown',
+        ]);
+        expect(run.stdout.trim(), 'true');
+        expect(run.exitCode, 0);
+        expect(run.elapsed, lessThan(const Duration(seconds: 20)));
+      },
+      timeout: const Timeout(Duration(seconds: 60)),
+    );
+
+    test(
+      'local mode never re-fetches: a program exits without shutdown',
+      () async {
+        final run = await runExitFixture(<String>['local', 'no-shutdown']);
+        expect(run.stdout.trim(), 'true');
+        expect(run.exitCode, 0);
+        expect(server.requests, isEmpty);
+      },
+      timeout: const Timeout(Duration(seconds: 60)),
+    );
+  });
+}
+
+/// Polls [condition] every 5 ms; fails after [timeout].
+Future<void> until(
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 5),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!condition()) {
+    if (DateTime.now().isAfter(deadline)) {
+      fail('condition not met within $timeout');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+}
+
+/// Runs `test/support/server_exit_fixture.dart` in a fresh VM and reports how
+/// long it took to exit. A VM still alive after 20 s is killed: the caller's
+/// elapsed-time expectation then fails instead of the test hanging.
+Future<({int exitCode, String stdout, Duration elapsed})> runExitFixture(
+  List<String> args,
+) async {
+  final stopwatch = Stopwatch()..start();
+  final process = await Process.start(Platform.resolvedExecutable, <String>[
+    'run',
+    'test/support/server_exit_fixture.dart',
+    ...args,
+  ]);
+  final out = process.stdout.transform(const SystemEncoding().decoder).join();
+  final err = process.stderr.transform(const SystemEncoding().decoder).join();
+  final killer = Timer(const Duration(seconds: 20), process.kill);
+  final exitCode = await process.exitCode;
+  killer.cancel();
+  stopwatch.stop();
+  final stdoutText = await out;
+  final stderrText = await err;
+  if (exitCode != 0 && stderrText.isNotEmpty) {
+    printOnFailure(stderrText);
+  }
+  return (exitCode: exitCode, stdout: stdoutText, elapsed: stopwatch.elapsed);
 }
