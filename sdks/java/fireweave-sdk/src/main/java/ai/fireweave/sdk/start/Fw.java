@@ -170,11 +170,37 @@ public final class Fw {
 
     /**
      * The singleton's state and what start decided: mode and why, channel, SDK version, host,
-     * endpoint source, key source, environment, flag count and the start error. It never includes
-     * the key, so it is safe to log.
+     * endpoint source, key source, environment, flag count, the start error and the latest remote
+     * failure kind ({@link StartStatus#lastErrorKind()}). It never includes the key, so it is safe
+     * to log.
      */
     public static StartStatus status() {
         return StartSingleton.status();
+    }
+
+    /**
+     * Checks the configured key against fw-server now: one synchronous evaluation round trip of
+     * a probe control point, with this process's key. Never throws. Returns
+     * {@link VerifyResult#ok()} when fw-server accepted the key (the probe itself need not
+     * exist); otherwise the error kind: {@code Authentication} for a wrong or revoked key (401),
+     * {@code Authorization} (403), {@code RateLimited} (429), {@code Network}, {@code Timeout} or
+     * {@code BackendUnavailable} when fw-server cannot be reached, {@code Configuration} when
+     * start failed or FireWeave runs in local mode (there is no key to check), and
+     * {@code AlreadyClosed} after {@link #shutdown()}. Like a read, it starts FireWeave from the
+     * environment if nothing has started it yet.
+     *
+     * <p>Use it in a readiness probe or a deploy smoke test; reads never need it. It blocks for
+     * up to one request timeout, so keep it off the request path.
+     *
+     * <pre>{@code
+     * VerifyResult v = Fw.verify();
+     * if (!v.ok()) {
+     *     log.warn("FireWeave key check failed: {} ({})", v.errorKind(), v.message());
+     * }
+     * }</pre>
+     */
+    public static VerifyResult verify() {
+        return StartSingleton.verify();
     }
 
     /**

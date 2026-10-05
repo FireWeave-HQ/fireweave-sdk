@@ -112,11 +112,19 @@ once). Inside an async handler, run them in `tokio::task::spawn_blocking` (or ac
 
 **Debugging.** `fireweave::start::status()` reports the state, mode and why (`option`, `key` or
 `environment`), channel, SDK version, host, endpoint source, key source, environment name, flag
-count and the start error. It never contains the key, so it is safe to log:
+count, the start error and `last_error_kind`. It never contains the key, so it is safe to log:
 
 ```rust
 eprintln!("fireweave: {:?}", fireweave::start::status());
 ```
+
+Reads never fail, so a key fw-server refuses would otherwise look like a rollout at 0%. When
+fw-server rejects the key (401 `Authentication`, 403 `Authorization`), rate-limits it (429
+`RateLimited`) or cannot be reached (`Network`, `Timeout`, `BackendUnavailable`), the start
+profile logs one line per kind for the life of the process through your `log` sink (standard
+error by default), naming the key's source (for example `FIREWEAVE_KEY`) or the fw-server host and
+never the key, and `status().last_error_kind` reports the latest of them. Every message and line
+passes `fireweave::redact_secrets`, which implements `rules.redaction` in `contracts/errors.json`.
 
 ## Quick start (production path)
 

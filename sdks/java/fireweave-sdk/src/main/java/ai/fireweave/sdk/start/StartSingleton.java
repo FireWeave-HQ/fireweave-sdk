@@ -15,6 +15,7 @@ import ai.fireweave.sdk.domain.EvaluationContext;
 import ai.fireweave.sdk.domain.FireweaveError;
 import ai.fireweave.sdk.domain.FireweaveException;
 import ai.fireweave.sdk.domain.Mode;
+import ai.fireweave.sdk.domain.Redaction;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -22,6 +23,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -100,6 +102,18 @@ final class StartSingleton {
     /** The app's log sink, set by the first explicit start that begins. */
     private static volatile Consumer<String> sink;
     private static final Set<String> WARNED = ConcurrentHashMap.newKeySet();
+
+    /**
+     * Remote failures that mean "the key was refused, throttled or fw-server is unreachable"
+     * (SP-27): each is logged once for the life of the process and reported in status.
+     */
+    static final Set<ErrorKind> REMOTE_FAILURES = Collections.unmodifiableSet(EnumSet.of(
+            ErrorKind.Authentication, ErrorKind.Authorization, ErrorKind.RateLimited,
+            ErrorKind.Network, ErrorKind.Timeout, ErrorKind.BackendUnavailable));
+    /** The {@link #REMOTE_FAILURES} kinds already logged; kept across shutdown and restart. */
+    private static final Set<ErrorKind> REMOTE_WARNED = ConcurrentHashMap.newKeySet();
+    /** The latest {@link #REMOTE_FAILURES} kind the running client saw; null if none. */
+    private static volatile ErrorKind lastErrorKind;
 
     // Test seams (resetForTests): where an implicit start and instanceKey() read from.
     private static volatile Function<String, String> processEnv = StartEnv::processEnv;
@@ -238,6 +252,7 @@ final class StartSingleton {
         implicitTried = false;
         error = null;
         lookup = null;
+        lastErrorKind = null;
         // The instance key outlives a run: it identifies the process, so a key handed out before
         // a failed or shut-down start stays the same after it.
     }
@@ -323,10 +338,12 @@ final class StartSingleton {
     /** The client for one read or registration, or the error that read reports instead. */
     private static final class Acquired {
         final FireweaveClient client;
+        final Mode mode;
         final FireweaveException error;
 
-        Acquired(FireweaveClient client, FireweaveException error) {
+        Acquired(FireweaveClient client, Mode mode, FireweaveException error) {
             this.client = client;
+            this.mode = mode;
             this.error = error;
         }
     }
@@ -343,7 +360,7 @@ final class StartSingleton {
                 noteLocalKey(current.resolved, flagKey, lines);
                 emit(lines);
             }
-            return new Acquired(current.client, null);
+            return new Acquired(current.client, current.resolved.mode, null);
         }
         List<Line> lines = new ArrayList<>();
         Acquired out;
@@ -354,11 +371,11 @@ final class StartSingleton {
             Run r = run;
             if (state == StartState.READY && r != null) {
                 noteLocalKey(r.resolved, flagKey, lines);
-                out = new Acquired(r.client, null);
+                out = new Acquired(r.client, r.resolved.mode, null);
             } else if (state == StartState.SHUTDOWN) {
-                out = new Acquired(null, new FireweaveException(ErrorKind.AlreadyClosed));
+                out = new Acquired(null, null, new FireweaveException(ErrorKind.AlreadyClosed));
             } else {
-                out = new Acquired(null, error != null ? error
+                out = new Acquired(null, null, error != null ? error
                         : new FireweaveException(ErrorKind.NotReady, "FireWeave was not started."));
             }
         }
@@ -401,8 +418,10 @@ final class StartSingleton {
             }
             // The context is already merged and validated by the permanent runtime; the real
             // runtime validates it again (idempotent) and applies its own lifecycle gate.
-            return a.client.runtime().evaluate(request.flagKey(), request.type(), request.defaultValue(),
+            Decision d = a.client.runtime().evaluate(request.flagKey(), request.type(), request.defaultValue(),
                     EvaluationContext.empty(), request.context(), request.options());
+            observeRemote(d.error());
+            return d;
         }
 
         @Override
@@ -411,12 +430,100 @@ final class StartSingleton {
             if (a.error != null) {
                 return RegisterTargetResult.failure(FireweaveError.from(a.error));
             }
-            return a.client.registerTarget(targetingKey, options);
+            RegisterTargetResult result = a.client.registerTarget(targetingKey, options);
+            if (!result.ok()) {
+                observeRemote(result.error());
+            }
+            return result;
         }
 
         @Override
         public void shutdown() {
             // Fw.shutdown closes the started client, never the permanent one.
+        }
+    }
+
+    // ---------------------------------------------------------------- refused key, throttling, unreachable
+
+    /**
+     * Notes a failure the started client got back from fw-server (SP-27): a refused key, rate
+     * limiting or an unreachable endpoint is logged once per kind for the life of the process
+     * and becomes {@link StartStatus#lastErrorKind()}, so a revoked key does not look like a
+     * rollout at 0%. Observes only: the read has already resolved to its default.
+     */
+    private static void observeRemote(FireweaveError err) {
+        if (err == null || !REMOTE_FAILURES.contains(err.kind())) {
+            return;
+        }
+        ErrorKind kind = err.kind();
+        List<Line> lines = new ArrayList<>(1);
+        synchronized (LOCK) {
+            lastErrorKind = kind;
+            if (REMOTE_WARNED.add(kind)) {
+                lines.add(new Line(System.Logger.Level.WARNING, Redaction.sanitize(remoteLine(kind, resolved))));
+            }
+        }
+        emit(lines);
+    }
+
+    /** The one line for a remote failure kind: names the key's source or the host, never the key. */
+    static String remoteLine(ErrorKind kind, StartResolver.Resolved r) {
+        String source = r == null || r.keySource == null || "none".equals(r.keySource) ? Names.ENV_KEY : r.keySource;
+        String host = r == null ? null : hostOf(r.url);
+        String server = host == null ? "fw-server" : "fw-server at " + host;
+        String endpoint = r == null || r.urlSource == null ? Names.ENV_URL : r.urlSource;
+        switch (kind) {
+            case Authentication:
+                return "[fireweave] " + server + " rejected the key from " + source + " (401, Authentication), "
+                        + "so every read serves its default. Check that " + source + " holds this project's key "
+                        + "(project-api-key_\u2026) and that it has not been revoked.";
+            case Authorization:
+                return "[fireweave] " + server + " refused the key from " + source + " (403, Authorization), "
+                        + "so every read serves its default. Check that the key belongs to this project.";
+            case RateLimited:
+                return "[fireweave] " + server + " is rate-limiting the key from " + source + " (429, RateLimited); "
+                        + "reads serve their defaults until it recovers.";
+            default:
+                return "[fireweave] Could not reach " + server + " (" + kind.name() + "); reads serve their "
+                        + "defaults until it is reachable. The endpoint comes from " + endpoint + ".";
+        }
+    }
+
+    /** The host name of an endpoint URL, normalized; null when there is none. */
+    private static String hostOf(String url) {
+        if (url == null) {
+            return null;
+        }
+        try {
+            return StartResolver.normalizeHost(new URI(url).getHost());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** The probe {@link Fw#verify()} evaluates; fw-server answering "not found" proves the key. */
+    static final String VERIFY_KEY = "fireweave-verify";
+
+    static VerifyResult verify() {
+        try {
+            Acquired a = acquire(null);
+            if (a.error != null) {
+                return VerifyResult.failure(a.error.kind(), a.error.getMessage());
+            }
+            if (a.mode != Mode.REMOTE) {
+                return VerifyResult.failure(ErrorKind.Configuration, "FireWeave is in local mode, so there is no "
+                        + "key to verify and nothing is sent to fw-server. Set " + Names.ENV_KEY + " to verify a key.");
+            }
+            Decision d = PERMANENT.controlPoints().getBooleanDetails(VERIFY_KEY, false,
+                    EvaluationContext.builder().targetingKey(VERIFY_KEY).build());
+            FireweaveError e = d.error();
+            if (e == null || e.kind() == ErrorKind.FlagNotFound) {
+                // fw-server accepted the key; the probe key simply is not a control point.
+                return VerifyResult.success();
+            }
+            return VerifyResult.failure(e.kind(), e.message());
+        } catch (RuntimeException e) {
+            return VerifyResult.failure(ErrorKind.Internal, ErrorKind.Internal.defaultMessage());
         }
     }
 
@@ -455,20 +562,12 @@ final class StartSingleton {
             String err = error == null ? null : error.getMessage();
             if (r == null) {
                 return new StartStatus(state, null, null, BuildInfo.channel(), BuildInfo.version(),
-                        null, null, null, null, 0, err);
+                        null, null, null, null, 0, err, lastErrorKind);
             }
-            String host = null;
-            String endpointSource = null;
-            if (r.url != null) {
-                try {
-                    host = StartResolver.normalizeHost(new URI(r.url).getHost());
-                } catch (Exception e) {
-                    host = null;
-                }
-                endpointSource = r.urlSource;
-            }
+            String host = hostOf(r.url);
+            String endpointSource = r.url == null ? null : r.urlSource;
             return new StartStatus(state, r.mode, r.modeSource, r.channel, r.sdkVersion, host, endpointSource,
-                    r.keySource, r.environment, r.flags.size(), err);
+                    r.keySource, r.environment, r.flags.size(), err, lastErrorKind);
         }
     }
 
@@ -531,6 +630,7 @@ final class StartSingleton {
             instanceKey = null;
             sink = null;
             WARNED.clear();
+            REMOTE_WARNED.clear();
             processEnv = env == null ? StartEnv::processEnv : StartEnv.lookup(env, null);
             processHostName = hostName == null ? StartEnv::processHostName : hostName;
         }

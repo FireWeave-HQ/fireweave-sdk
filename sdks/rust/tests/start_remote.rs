@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
 use fireweave::start::{self, define_flags, env_map, Flag, LogFn, StartOptions, StartState};
-use fireweave::{ErrorKind, EvaluationContext, JsonValue, Mode};
+use fireweave::{redact_secrets, ErrorKind, EvaluationContext, JsonValue, Mode};
 
 static TEST_LOCK: Mutex<()> = Mutex::new(());
 
@@ -55,6 +55,8 @@ struct Stub {
     host: String,
     registered: Arc<Mutex<Vec<JsonValue>>>,
     auth_headers: Arc<Mutex<Vec<String>>>,
+    /// When set, every request gets this status line regardless of its key.
+    forced: Arc<Mutex<Option<&'static str>>>,
 }
 
 impl Stub {
@@ -63,12 +65,14 @@ impl Stub {
         let addr = listener.local_addr().expect("local addr");
         let registered = Arc::new(Mutex::new(Vec::new()));
         let auth_headers = Arc::new(Mutex::new(Vec::new()));
+        let forced = Arc::new(Mutex::new(None));
         let reg = Arc::clone(&registered);
         let auth = Arc::clone(&auth_headers);
+        let force = Arc::clone(&forced);
         thread::spawn(move || {
             for stream in listener.incoming() {
                 let Ok(stream) = stream else { continue };
-                handle(stream, key, &reg, &auth);
+                handle(stream, key, &reg, &auth, &force);
             }
         });
         Stub {
@@ -76,7 +80,19 @@ impl Stub {
             host: addr.ip().to_string(),
             registered,
             auth_headers,
+            forced,
         }
+    }
+
+    fn force(&self, status: Option<&'static str>) {
+        *self.forced.lock().unwrap_or_else(PoisonError::into_inner) = status;
+    }
+
+    fn requests(&self) -> usize {
+        self.auth_headers
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .len()
     }
 
     fn registered(&self) -> Vec<JsonValue> {
@@ -149,6 +165,7 @@ fn handle(
     key: &str,
     registered: &Mutex<Vec<JsonValue>>,
     auth_headers: &Mutex<Vec<String>>,
+    forced: &Mutex<Option<&'static str>>,
 ) {
     let Some((path, authorization, body)) = read_request(&mut stream) else {
         return;
@@ -157,6 +174,10 @@ fn handle(
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .push(authorization.clone());
+    if let Some(status) = *forced.lock().unwrap_or_else(PoisonError::into_inner) {
+        respond(&mut stream, status, "{}");
+        return;
+    }
     if authorization != format!("Bearer {key}") {
         respond(&mut stream, "401 Unauthorized", "{}");
         return;
@@ -433,4 +454,154 @@ fn the_default_endpoint_is_the_channel_host_and_needs_no_custom_allowlist() {
         Some(format!("SDK channel ({})", start::sdk_channel()))
     );
     start::shutdown();
+}
+
+// ------------------------------------------------- SP-27: refused key signal
+
+/// Starts from the environment, as a deploy does: the key comes from
+/// `FIREWEAVE_KEY`.
+fn start_from_env(key: &str, url: &str, rec: &Recorder) {
+    start::start(StartOptions {
+        env: Some(env_map([("FIREWEAVE_KEY", key), ("FIREWEAVE_URL", url)])),
+        log: Some(rec.sink()),
+        ..Default::default()
+    })
+    .unwrap();
+}
+
+fn assert_no_key(lines: &[String], keys: &[&str]) {
+    for line in lines {
+        assert!(keys.iter().all(|k| !line.contains(k)), "{line}");
+        assert_eq!(
+            &redact_secrets(line),
+            line,
+            "a signal line survives redaction"
+        );
+    }
+}
+
+#[test]
+fn a_rejected_key_is_logged_once_naming_fireweave_key_and_shows_in_status() {
+    let (_g, rec) = fresh();
+    let stub = Stub::start("project-api-key_right");
+    let wrong = "project-api-key_wrong_signal";
+    start_from_env(wrong, &stub.url, &rec);
+    assert_eq!(start::status().last_error_kind, None, "nothing failed yet");
+
+    let cp = start::control_points();
+    for _ in 0..5 {
+        assert!(!cp.get_boolean_value("fw-bool-on", false, Some(&ctx("u"))));
+    }
+    assert_eq!(
+        start::identify("u", [("a", "b")]).unwrap_err().kind,
+        ErrorKind::Authentication
+    );
+    assert_eq!(stub.requests(), 6, "every read really went to fw-server");
+
+    let lines = rec.lines();
+    assert_eq!(
+        rec.count("rejected the key from FIREWEAVE_KEY (401, Authentication)"),
+        1,
+        "{lines:?}"
+    );
+    assert_eq!(
+        rec.count("(401, "),
+        1,
+        "repeated failures log once: {lines:?}"
+    );
+    assert_eq!(
+        rec.count(&format!("fw-server at {}", stub.host)),
+        1,
+        "{lines:?}"
+    );
+    assert_no_key(&lines, &[wrong, "project-api-key_right"]);
+
+    let s = start::status();
+    assert_eq!(s.last_error_kind, Some(ErrorKind::Authentication));
+    let rendered = format!("{s:?}");
+    assert!(
+        rendered.contains("last_error_kind: Some(Authentication)"),
+        "{rendered}"
+    );
+    assert!(!rendered.contains(wrong), "{rendered}");
+}
+
+#[test]
+fn each_kind_is_logged_once_for_the_life_of_the_process_and_status_keeps_the_latest() {
+    let (_g, rec) = fresh();
+    let key = "project-api-key_kinds";
+    let stub = Stub::start(key);
+    start_from_env(key, &stub.url, &rec);
+    let cp = start::control_points();
+    let read = || cp.get_boolean_value("fw-bool-on", false, Some(&ctx("u")));
+    assert!(read());
+    assert_eq!(start::status().last_error_kind, None);
+
+    stub.force(Some("429 Too Many Requests"));
+    read();
+    read();
+    assert_eq!(
+        start::status().last_error_kind,
+        Some(ErrorKind::RateLimited)
+    );
+    stub.force(Some("503 Service Unavailable"));
+    read();
+    assert_eq!(
+        start::status().last_error_kind,
+        Some(ErrorKind::BackendUnavailable)
+    );
+    stub.force(Some("403 Forbidden"));
+    read();
+    assert_eq!(
+        start::status().last_error_kind,
+        Some(ErrorKind::Authorization)
+    );
+
+    // A restart in the same process starts with no remote failure and does
+    // not log a kind again.
+    start::shutdown();
+    stub.force(None);
+    start_from_env(key, &stub.url, &rec);
+    assert_eq!(start::status().last_error_kind, None);
+    stub.force(Some("429 Too Many Requests"));
+    read();
+    assert_eq!(
+        start::status().last_error_kind,
+        Some(ErrorKind::RateLimited)
+    );
+
+    let lines = rec.lines();
+    assert_eq!(rec.count("(429, RateLimited)"), 1, "{lines:?}");
+    assert_eq!(rec.count("(BackendUnavailable)"), 1, "{lines:?}");
+    assert_eq!(
+        rec.count("refused the key from FIREWEAVE_KEY (403, Authorization)"),
+        1,
+        "{lines:?}"
+    );
+    assert_eq!(lines.len(), 3, "{lines:?}");
+    assert_no_key(&lines, &[key]);
+}
+
+#[test]
+fn an_unreachable_endpoint_names_the_host_never_the_key() {
+    let (_g, rec) = fresh();
+    let dead = {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        format!("http://{}", listener.local_addr().expect("addr"))
+    };
+    let key = "project-api-key_unreachable";
+    start_from_env(key, &dead, &rec);
+    let cp = start::control_points();
+    assert!(!cp.get_boolean_value("fw-bool-on", false, Some(&ctx("u"))));
+    assert!(!cp.get_boolean_value("fw-bool-on", false, Some(&ctx("u"))));
+
+    assert_eq!(start::status().last_error_kind, Some(ErrorKind::Network));
+    let lines = rec.lines();
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(
+        lines[0].contains("Could not reach fw-server at 127.0.0.1 (Network)"),
+        "{lines:?}"
+    );
+    assert!(lines[0].contains("FIREWEAVE_URL"), "{lines:?}");
+    assert_no_key(&lines, &[key]);
 }

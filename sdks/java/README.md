@@ -94,11 +94,28 @@ a new `Fw.start`. No JVM shutdown hook is registered: servlet apps call `Fw.shut
 `contextDestroyed`.
 
 **Debugging.** `Fw.status()` reports the state, mode and why (`option`, `key` or `environment`),
-channel, SDK version, fw-server host, endpoint source, key source, environment name, flag count
-and the start error. It never contains the key, so it is safe to log:
+channel, SDK version, fw-server host, endpoint source, key source, environment name, flag count,
+the start error and `lastErrorKind`. It never contains the key, so it is safe to log:
 
 ```java
 logger.info("fireweave: " + Fw.status());
+```
+
+Reads never fail, so a key fw-server refuses would otherwise look like a rollout at 0%. When
+fw-server rejects the key (401 `Authentication`, 403 `Authorization`), rate-limits it (429
+`RateLimited`) or cannot be reached (`Network`, `Timeout`, `BackendUnavailable`), the start
+profile logs one line per kind for the life of the process through your `log` sink, naming the
+key's source (for example `FIREWEAVE_KEY`) or the fw-server host and never the key, and
+`Fw.status().lastErrorKind()` reports the latest of them. To check the key on purpose, for example
+in a readiness probe or a deploy smoke test, call `Fw.verify()`: one synchronous evaluation round
+trip that never throws and returns `ok()` or the `errorKind()` (`Authentication` for a wrong or
+revoked key; `Configuration` in local mode or after a failed start):
+
+```java
+VerifyResult v = Fw.verify();
+if (!v.ok()) {
+    logger.warn("FireWeave key check failed: " + v.errorKind() + " (" + v.message() + ")");
+}
 ```
 
 ## Modules
@@ -181,7 +198,7 @@ Auth: `Authorization: Bearer <FW_PROJECT_API_KEY>`. Endpoints: `POST /v1/flags/e
 | `Configuration` on init | Missing `mode`; missing/blank `apiKey`/`apiUrl` for `mode=REMOTE`; credentials supplied for `mode=LOCAL`; host not allowlisted; non-https off-loopback |
 | `registerTarget` → `UnsupportedCapability` | Neither built-in adapter degrades this way today — local records+traces, remote posts to fw-server. A custom `BackendAdapter` without the capability is the only source. |
 | `FLAG_NOT_FOUND`/`ERROR` in production, `DEFAULT` on a laptop | Expected: the divergent unknown-key row is per-mode by design (spec/modes.md), not provider-specific. |
-| Secrets in logs | Messages pass `Redaction` (`phc_`/`phs_`/`phx_`, `Bearer`, `FW_PROJECT_API_KEY`). If you see a raw key, that is a bug. |
+| Secrets in logs | Messages pass `Redaction`, which implements `rules.redaction` in `contracts/errors.json`: bearer tokens, URL userinfo, the values of `FIREWEAVE_KEY`, `FIREWEAVE_BROWSER_KEY` and `FW_PROJECT_API_KEY`, and key-shaped values (`project-api-key_`, `fw_public_`, `fw_ingest_pub_`, `fw_org_`, `cli_at_`, `phc_`/`phx_`/`phs_`) become `[REDACTED]`; a variable name alone stays. If you see a raw key, that is a bug. |
 | Demo cannot resolve `ai.fireweave:*` | From `examples/java`, the reactor compiles the SDK modules from this repo. You do not need Maven Central. |
 
 ## Build / test / demo

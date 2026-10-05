@@ -1,5 +1,6 @@
 package ai.fireweave.sdk.start;
 
+import ai.fireweave.sdk.domain.ErrorKind;
 import ai.fireweave.sdk.domain.Mode;
 
 /**
@@ -19,10 +20,11 @@ public final class StartStatus {
     private final String environment;
     private final int flagCount;
     private final String error;
+    private final ErrorKind lastErrorKind;
 
     StartStatus(StartState state, Mode mode, String modeSource, SdkChannel channel, String sdkVersion,
                 String host, String endpointSource, String keySource, String environment, int flagCount,
-                String error) {
+                String error, ErrorKind lastErrorKind) {
         this.state = state;
         this.mode = mode;
         this.modeSource = modeSource;
@@ -34,6 +36,7 @@ public final class StartStatus {
         this.environment = environment;
         this.flagCount = flagCount;
         this.error = error;
+        this.lastErrorKind = lastErrorKind;
     }
 
     public StartState state() {
@@ -90,6 +93,17 @@ public final class StartStatus {
         return error;
     }
 
+    /**
+     * The latest failure the started client got back from fw-server that means the key was
+     * refused ({@code Authentication} for 401, {@code Authorization} for 403), throttled
+     * ({@code RateLimited}, 429) or fw-server could not be reached ({@code Network},
+     * {@code Timeout}, {@code BackendUnavailable}); null when there was none since start. Each of
+     * these kinds is also logged once per process. Reads keep serving defaults meanwhile.
+     */
+    public ErrorKind lastErrorKind() {
+        return lastErrorKind;
+    }
+
     @Override
     public String toString() {
         return "StartStatus{state=" + state
@@ -102,6 +116,7 @@ public final class StartStatus {
                 + ", keySource=" + keySource
                 + ", environment=" + environment
                 + ", flagCount=" + flagCount
-                + ", error=" + error + "}";
+                + ", error=" + error
+                + ", lastErrorKind=" + lastErrorKind + "}";
     }
 }

@@ -23,15 +23,16 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 
 use crate::{
-    init_fireweave, BackendAdapter, ControlPointsNamespace, ErrorKind, EvaluationContext,
-    FireweaveClient, FireweaveError, FireweaveRuntime, FlagResolution, InitOptions, JsonValue,
-    LifecycleState, Mode, RegisterTargetOptions, RegisterTargetResult, RuntimeConfig, TargetKind,
+    init_fireweave, redact_secrets, BackendAdapter, ControlPointsNamespace, ErrorKind,
+    EvaluationContext, FireweaveClient, FireweaveError, FireweaveRuntime, FlagResolution,
+    InitOptions, JsonValue, LifecycleState, Mode, RegisterTargetOptions, RegisterTargetResult,
+    RuntimeConfig, TargetKind,
 };
 
 use super::channel::{sdk_channel, sdk_version, Channel};
 use super::env::{lookup_from, process_hostname, Lookup};
 use super::instance::{derive_instance_key, SOURCE_RANDOM};
-use super::names::{ENV_INSTANCE_ID, ENV_KEY, FLAGS_FILE, OPT_INSTANCE_ID};
+use super::names::{ENV_INSTANCE_ID, ENV_KEY, ENV_URL, FLAGS_FILE, OPT_INSTANCE_ID};
 use super::options::{LogFn, StartOptions};
 use super::resolve::{config_error, resolve, BuildInfo, Resolved, MODE_SOURCE_ENVIRONMENT};
 
@@ -133,7 +134,24 @@ struct Singleton {
 
     log: Option<LogFn>,
     warned: BTreeSet<String>,
+
+    /// The [`REMOTE_FAILURES`] kinds already logged; kept across shutdown
+    /// and restart, so each is logged once for the life of the process.
+    remote_warned: Vec<ErrorKind>,
+    /// The latest [`REMOTE_FAILURES`] kind the running client saw.
+    last_error_kind: Option<ErrorKind>,
 }
+
+/// Remote failures that mean the key was refused or throttled, or fw-server
+/// cannot be reached (SP-27): logged once per kind, reported in [`Status`].
+const REMOTE_FAILURES: [ErrorKind; 6] = [
+    ErrorKind::Authentication,
+    ErrorKind::Authorization,
+    ErrorKind::RateLimited,
+    ErrorKind::Network,
+    ErrorKind::Timeout,
+    ErrorKind::BackendUnavailable,
+];
 
 impl Singleton {
     const fn new() -> Self {
@@ -150,6 +168,8 @@ impl Singleton {
             instance_key: None,
             log: None,
             warned: BTreeSet::new(),
+            remote_warned: Vec::new(),
+            last_error_kind: None,
         }
     }
 
@@ -172,6 +192,7 @@ impl Singleton {
         self.client = None;
         self.err = None;
         self.lookup = None;
+        self.last_error_kind = None;
     }
 
     /// `start`'s body. Returns the lines to log once the lock is released.
@@ -436,6 +457,56 @@ fn acquire(flag_key: Option<&str>) -> Result<Arc<FireweaveClient>, FireweaveErro
     result
 }
 
+/// Notes a failure the started client got back from fw-server (SP-27): a
+/// refused key, rate limiting or an unreachable endpoint is logged once per
+/// kind for the life of the process and becomes [`Status::last_error_kind`],
+/// so a revoked key does not look like a rollout at 0%. Observes only: the
+/// read has already resolved to its default.
+fn observe_remote(kind: ErrorKind) {
+    if !REMOTE_FAILURES.contains(&kind) {
+        return;
+    }
+    let (lines, log) = {
+        let mut st = lock();
+        st.last_error_kind = Some(kind);
+        let mut lines = Vec::new();
+        if !st.remote_warned.contains(&kind) {
+            st.remote_warned.push(kind);
+            lines.push(redact_secrets(&remote_line(kind, st.resolved.as_ref())));
+        }
+        (lines, st.log.clone())
+    };
+    emit(log, lines);
+}
+
+/// The one line for a remote failure kind: names the key's source or the
+/// host, never the key.
+fn remote_line(kind: ErrorKind, r: Option<&Resolved>) -> String {
+    let source = r
+        .map(|r| r.key_source.as_str())
+        .filter(|s| !s.is_empty() && *s != "none")
+        .unwrap_or(ENV_KEY);
+    let server = match r.and_then(|r| r.host.as_deref()) {
+        Some(host) => format!("fw-server at {host}"),
+        None => "fw-server".to_string(),
+    };
+    let endpoint = r.and_then(|r| r.url_source.as_deref()).unwrap_or(ENV_URL);
+    match kind {
+        ErrorKind::Authentication => format!(
+            "[fireweave] {server} rejected the key from {source} (401, Authentication), so every read serves its default. Check that {source} holds this project's key (project-api-key_\u{2026}) and that it has not been revoked."
+        ),
+        ErrorKind::Authorization => format!(
+            "[fireweave] {server} refused the key from {source} (403, Authorization), so every read serves its default. Check that the key belongs to this project."
+        ),
+        ErrorKind::RateLimited => format!(
+            "[fireweave] {server} is rate-limiting the key from {source} (429, RateLimited); reads serve their defaults until it recovers."
+        ),
+        _ => format!(
+            "[fireweave] Could not reach {server} ({kind}); reads serve their defaults until it is reachable. The endpoint comes from {endpoint}."
+        ),
+    }
+}
+
 /// The permanent client's adapter: it hands each call to the client the
 /// latest [`start`] built. Reads that cannot reach one degrade to the
 /// caller's default with the start error, exactly as a core read degrades.
@@ -460,7 +531,11 @@ impl BackendAdapter for Forwarder {
         let runtime = client.runtime();
         match runtime.state() {
             LifecycleState::Ready | LifecycleState::Stale => {
-                runtime.adapter().resolve(flag_key, context)
+                let resolution = runtime.adapter().resolve(flag_key, context);
+                if let Err(err) = &resolution {
+                    observe_remote(err.kind);
+                }
+                resolution
             }
             LifecycleState::Shutdown => Err(FireweaveError::new(ErrorKind::AlreadyClosed)),
             _ => Err(FireweaveError::new(ErrorKind::NotReady)),
@@ -477,7 +552,13 @@ impl BackendAdapter for Forwarder {
         options: Option<&RegisterTargetOptions>,
     ) -> RegisterTargetResult {
         match acquire(None) {
-            Ok(client) => client.register_target(targeting_key, options),
+            Ok(client) => {
+                let result = client.register_target(targeting_key, options);
+                if let Some(err) = result.error.as_ref().filter(|_| !result.ok) {
+                    observe_remote(err.kind);
+                }
+                result
+            }
             Err(err) => RegisterTargetResult::failure(err),
         }
     }
@@ -655,11 +736,19 @@ pub struct Status {
     pub flag_count: usize,
     /// Why start failed, when it did. Already redacted.
     pub error: Option<String>,
+    /// The latest failure the started client got back from fw-server that
+    /// means the key was refused (`Authentication` for 401, `Authorization`
+    /// for 403), throttled (`RateLimited`, 429) or fw-server could not be
+    /// reached (`Network`, `Timeout`, `BackendUnavailable`); `None` when there
+    /// was none since start. Each of these kinds is also logged once per
+    /// process. Reads keep serving defaults meanwhile.
+    pub last_error_kind: Option<ErrorKind>,
 }
 
 /// Reports the singleton's state and what [`start`] decided: mode and why,
 /// channel, SDK version, host, endpoint source, key source, environment and
-/// flag count, and the start error if any. It never includes the key.
+/// flag count, the start error if any, and the latest remote failure kind
+/// ([`Status::last_error_kind`]). It never includes the key.
 ///
 /// ```
 /// eprintln!("fireweave: {:?}", fireweave::start::status());
@@ -678,6 +767,7 @@ pub fn status() -> Status {
         environment: None,
         flag_count: 0,
         error: st.err.as_ref().map(|e| e.message.clone()),
+        last_error_kind: st.last_error_kind,
     };
     if let Some(r) = &st.resolved {
         s.mode = Some(r.mode);

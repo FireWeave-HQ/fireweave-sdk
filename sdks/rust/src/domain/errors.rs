@@ -236,17 +236,61 @@ impl std::fmt::Display for FireweaveError {
 impl std::error::Error for FireweaveError {}
 
 // ---------------------------------------------------------------------------
-// Secret redaction — manual scanner, NOT a regex crate: the dependency
-// budget for this SDK is exactly ureq + serde + serde_json
-// (tests/architecture_guard.rs), so `spec/errors.schema.json`'s
-// `secretPatterns` (`phc_`/`phs_`/`phx_`, `Bearer <token>`,
-// `FW_PROJECT_API_KEY=<token>`/`FW_PROJECT_API_KEY:<token>`) are matched by
-// hand rather than compiled from a pattern string. Equivalent to node/
-// python's `(ph[csx]_[A-Za-z0-9_\-]*|Bearer\s+\S+|FW_PROJECT_API_KEY\s*[=:]
-// \s*\S+)` regex, byte-for-byte on the covered cases.
+// Secret redaction: `rules.redaction` in `contracts/errors.json` (start-profile
+// spec SP-26). A manual scanner, NOT a regex crate: the dependency budget for
+// this SDK is exactly ureq + serde + serde_json (tests/architecture_guard.rs).
+// Four passes, in the contract's order, each the hand-written equivalent of
+// (Java's `Redaction`):
+//
+//   1. bearer        `(Bearer\s+)[A-Za-z0-9._~+/=-]+`          -> `$1[REDACTED]`
+//   2. URL userinfo  `([A-Za-z][A-Za-z0-9+.-]*://)[^/?#@\s]+@` -> `$1[REDACTED]@`
+//   3. assignments   `(NAME)(\s*[=:]\s*)(["']?)[^\s"',;]+`    -> `$1$2$3[REDACTED]`
+//   4. key values    `(PREFIX)[A-Za-z0-9_-]+`                   -> `[REDACTED]`
+//
+// A variable NAME alone is never redacted; a prefix followed by anything but
+// a token character (`project-api-key_…`) is prose and stays.
+// `tests/redaction_contract.rs` runs every contract vector through
+// [`redact_secrets`].
 // ---------------------------------------------------------------------------
 
-const SECRET_KEY_PREFIXES: [&str; 3] = ["phc_", "phs_", "phx_"];
+const PLACEHOLDER: &str = "[REDACTED]";
+
+/// Variables whose assigned value is a credential (`rules.redaction.assignmentNames`).
+const ASSIGNMENT_NAMES: [&str; 3] = [
+    "FIREWEAVE_KEY",
+    "FIREWEAVE_BROWSER_KEY",
+    "FW_PROJECT_API_KEY",
+];
+
+/// Key prefixes whose token is a credential (`rules.redaction.valuePrefixes`).
+const VALUE_PREFIXES: [&str; 8] = [
+    "project-api-key_",
+    "fw_public_",
+    "fw_ingest_pub_",
+    "fw_org_",
+    "cli_at_",
+    "phc_",
+    "phx_",
+    "phs_",
+];
+
+/// `\s` as the other SDKs' regex engines read it: ASCII whitespace,
+/// vertical tab included.
+fn is_space(c: char) -> bool {
+    matches!(c, ' ' | '\t' | '\n' | '\x0B' | '\x0C' | '\r')
+}
+
+fn is_bearer_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '~' | '+' | '/' | '=' | '-')
+}
+
+fn is_key_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_' || c == '-'
+}
+
+fn is_scheme_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || matches!(c, '+' | '.' | '-')
+}
 
 fn consume_while(s: &str, pred: impl Fn(char) -> bool) -> usize {
     let mut n = 0;
@@ -260,61 +304,110 @@ fn consume_while(s: &str, pred: impl Fn(char) -> bool) -> usize {
     n
 }
 
-/// Matches a `phc_`/`phs_`/`phx_` prefix (case-sensitive, matching the
-/// reference regex) followed by zero or more `[A-Za-z0-9_-]` characters.
-/// Returns the byte length of the whole match, if `rest` starts with one.
-fn match_project_key_prefix(rest: &str) -> Option<usize> {
-    let prefix = SECRET_KEY_PREFIXES.iter().find(|p| rest.starts_with(**p))?;
-    let mut end = prefix.len();
-    end += consume_while(&rest[end..], |c| {
-        c.is_ascii_alphanumeric() || c == '_' || c == '-'
-    });
-    Some(end)
+/// One left-to-right pass: at each position `matcher` either returns
+/// `(consumed, replacement)` or `None`, in which case one char is copied.
+fn scan(text: &str, matcher: impl Fn(&str, &str) -> Option<(usize, String)>) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0usize;
+    while i < text.len() {
+        let rest = &text[i..];
+        if let Some((len, replacement)) = matcher(&text[..i], rest) {
+            if len > 0 {
+                out.push_str(&replacement);
+                i += len;
+                continue;
+            }
+        }
+        let ch = rest
+            .chars()
+            .next()
+            .expect("i < text.len() implies a char remains");
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
 }
 
-/// Matches `Bearer` + required whitespace run + required non-whitespace
-/// run (`Bearer\s+\S+`).
-fn match_bearer_token(rest: &str) -> Option<usize> {
+/// Pass 1: `Bearer` + whitespace + token; the word and the whitespace stay.
+fn match_bearer(_before: &str, rest: &str) -> Option<(usize, String)> {
     const KEYWORD: &str = "Bearer";
     if !rest.starts_with(KEYWORD) {
         return None;
     }
-    let mut idx = KEYWORD.len();
-    let ws = consume_while(&rest[idx..], char::is_whitespace);
+    let ws = consume_while(&rest[KEYWORD.len()..], is_space);
     if ws == 0 {
         return None;
     }
-    idx += ws;
-    let token = consume_while(&rest[idx..], |c| !c.is_whitespace());
+    let head = KEYWORD.len() + ws;
+    let token = consume_while(&rest[head..], is_bearer_char);
     if token == 0 {
         return None;
     }
-    idx += token;
-    Some(idx)
+    Some((head + token, format!("{}{PLACEHOLDER}", &rest[..head])))
 }
 
-/// Matches `FW_PROJECT_API_KEY` + optional whitespace + (`=` or `:`) +
-/// optional whitespace + required non-whitespace run
-/// (`FW_PROJECT_API_KEY\s*[=:]\s*\S+`).
-fn match_fw_project_api_key_assignment(rest: &str) -> Option<usize> {
-    const KEYWORD: &str = "FW_PROJECT_API_KEY";
-    if !rest.starts_with(KEYWORD) {
+/// Pass 2: `scheme://userinfo@`, matched at the `://`. The scheme (already
+/// copied) is the run of scheme characters before it and must contain a
+/// letter; the userinfo is `[^/?#@\s]+` up to the `@`.
+fn match_url_userinfo(before: &str, rest: &str) -> Option<(usize, String)> {
+    const SEP: &str = "://";
+    if !rest.starts_with(SEP) {
         return None;
     }
-    let mut idx = KEYWORD.len();
-    idx += consume_while(&rest[idx..], char::is_whitespace);
+    let scheme_start = before
+        .char_indices()
+        .rev()
+        .take_while(|(_, c)| is_scheme_char(*c))
+        .last()
+        .map(|(idx, _)| idx)?;
+    if !before[scheme_start..]
+        .chars()
+        .any(|c| c.is_ascii_alphabetic())
+    {
+        return None;
+    }
+    let userinfo = consume_while(&rest[SEP.len()..], |c| {
+        !is_space(c) && !matches!(c, '/' | '?' | '#' | '@')
+    });
+    if userinfo == 0 || !rest[SEP.len() + userinfo..].starts_with('@') {
+        return None;
+    }
+    Some((SEP.len() + userinfo + 1, format!("{SEP}{PLACEHOLDER}@")))
+}
+
+/// Pass 3: `NAME` + optional spaces + `=` or `:` + optional spaces +
+/// optional quote + value; the value (up to whitespace, a quote, a comma or
+/// a semicolon) is replaced, everything else stays.
+fn match_assignment(_before: &str, rest: &str) -> Option<(usize, String)> {
+    let name = ASSIGNMENT_NAMES.iter().find(|n| rest.starts_with(**n))?;
+    let mut idx = name.len();
+    idx += consume_while(&rest[idx..], is_space);
     let marker = rest[idx..].chars().next()?;
     if marker != '=' && marker != ':' {
         return None;
     }
     idx += marker.len_utf8();
-    idx += consume_while(&rest[idx..], char::is_whitespace);
-    let token = consume_while(&rest[idx..], |c| !c.is_whitespace());
+    idx += consume_while(&rest[idx..], is_space);
+    if rest[idx..].starts_with(['"', '\'']) {
+        idx += 1;
+    }
+    let value = consume_while(&rest[idx..], |c| {
+        !is_space(c) && !matches!(c, '"' | '\'' | ',' | ';')
+    });
+    if value == 0 {
+        return None;
+    }
+    Some((idx + value, format!("{}{PLACEHOLDER}", &rest[..idx])))
+}
+
+/// Pass 4: a known key prefix followed by one or more token characters.
+fn match_key_value(_before: &str, rest: &str) -> Option<(usize, String)> {
+    let prefix = VALUE_PREFIXES.iter().find(|p| rest.starts_with(**p))?;
+    let token = consume_while(&rest[prefix.len()..], is_key_char);
     if token == 0 {
         return None;
     }
-    idx += token;
-    Some(idx)
+    Some((prefix.len() + token, PLACEHOLDER.to_string()))
 }
 
 /// Collapses whitespace runs to a single space and trims both ends —
@@ -339,39 +432,19 @@ fn collapse_and_trim_whitespace(s: &str) -> String {
     out
 }
 
-/// Redacts secret-shaped substrings (`spec/errors.schema.json`
-/// `secretPatterns`) and collapses whitespace runs. Defensive: applied to
+/// Redacts secret-shaped substrings (`contracts/errors.json`
+/// `rules.redaction`: bearer tokens, URL userinfo, the values of
+/// `FIREWEAVE_KEY`/`FIREWEAVE_BROWSER_KEY`/`FW_PROJECT_API_KEY`, then
+/// key-shaped values) and collapses whitespace runs. Defensive: applied to
 /// every message that reaches [`FireweaveError`]'s constructors, even
 /// though canonical default messages never contain a secret in the first
 /// place — this is the safety net for a message built dynamically
 /// elsewhere in the SDK.
 pub fn redact_secrets(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut i = 0usize;
-    while i < text.len() {
-        let rest = &text[i..];
-        if let Some(len) = match_project_key_prefix(rest) {
-            out.push_str("[REDACTED]");
-            i += len;
-            continue;
-        }
-        if let Some(len) = match_bearer_token(rest) {
-            out.push_str("[REDACTED]");
-            i += len;
-            continue;
-        }
-        if let Some(len) = match_fw_project_api_key_assignment(rest) {
-            out.push_str("[REDACTED]");
-            i += len;
-            continue;
-        }
-        let ch = rest
-            .chars()
-            .next()
-            .expect("i < text.len() implies a char remains");
-        out.push(ch);
-        i += ch.len_utf8();
-    }
+    let out = scan(text, match_bearer);
+    let out = scan(&out, match_url_userinfo);
+    let out = scan(&out, match_assignment);
+    let out = scan(&out, match_key_value);
     collapse_and_trim_whitespace(&out)
 }
 
@@ -386,14 +459,15 @@ mod tests {
             "key [REDACTED] leaked"
         );
         assert_eq!(redact_secrets("phs_abc-DEF_123"), "[REDACTED]");
-        assert_eq!(redact_secrets("phx_"), "[REDACTED]");
+        // A prefix with no token after it is prose, not a key.
+        assert_eq!(redact_secrets("phx_"), "phx_");
     }
 
     #[test]
     fn redacts_bearer_tokens() {
         assert_eq!(
             redact_secrets("Authorization: Bearer abc.def.ghi"),
-            "Authorization: [REDACTED]"
+            "Authorization: Bearer [REDACTED]"
         );
     }
 
@@ -401,17 +475,44 @@ mod tests {
     fn redacts_fw_project_api_key_assignment() {
         assert_eq!(
             redact_secrets("FW_PROJECT_API_KEY=supersecret"),
-            "[REDACTED]"
+            "FW_PROJECT_API_KEY=[REDACTED]"
         );
         assert_eq!(
             redact_secrets("FW_PROJECT_API_KEY : supersecret"),
-            "[REDACTED]"
+            "FW_PROJECT_API_KEY : [REDACTED]"
+        );
+        assert_eq!(
+            redact_secrets("FIREWEAVE_KEY='abc',FIREWEAVE_BROWSER_KEY=x;"),
+            "FIREWEAVE_KEY='[REDACTED]',FIREWEAVE_BROWSER_KEY=[REDACTED];"
         );
         // No assignment marker -> not matched (mirrors the reference regex).
         assert_eq!(
             redact_secrets("FW_PROJECT_API_KEY is unset"),
             "FW_PROJECT_API_KEY is unset"
         );
+    }
+
+    #[test]
+    fn redacts_url_userinfo_only_before_an_at() {
+        assert_eq!(
+            redact_secrets("GET https://u:p@h.example/x and mailto a@b"),
+            "GET https://[REDACTED]@h.example/x and mailto a@b"
+        );
+        assert_eq!(
+            redact_secrets("https://h.example/p?q=a@b"),
+            "https://h.example/p?q=a@b"
+        );
+        assert_eq!(redact_secrets("1://u@h"), "1://u@h");
+    }
+
+    #[test]
+    fn redaction_is_idempotent() {
+        let once = redact_secrets("Bearer t.k FIREWEAVE_KEY=\"v\" https://a:b@c phc_x1");
+        assert_eq!(
+            once,
+            "Bearer [REDACTED] FIREWEAVE_KEY=\"[REDACTED]\" https://[REDACTED]@c [REDACTED]"
+        );
+        assert_eq!(redact_secrets(&once), once);
     }
 
     #[test]
