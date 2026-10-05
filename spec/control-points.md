@@ -62,12 +62,21 @@ A control-point read MUST NOT raise into the caller. Every failure resolves to t
 | context fails validation | `default` | `ERROR` | `InvalidContext` |
 | runtime not initialised | `default` | `ERROR` | `NotReady` |
 | runtime closed | `default` | `ERROR` | `AlreadyClosed` |
-| backend unreachable / slow | `default` | `ERROR` | `Network` \| `Timeout` \| `BackendUnavailable` |
+| backend unreachable / slow, no earlier successful fetch | `default` | `ERROR` | `Network` \| `Timeout` \| `BackendUnavailable` |
+| a re-fetch fails after an earlier success (prefetching SDKs) | last good value | `STALE` | — |
 | prefetch ceiling lost the race (web) | `default` | `STALE` | — |
 
 Error kinds are the 15 in `errors.schema.json`. `STALE` is a `reason`, not an error: the
 runtime is serving a usable-but-not-fresh cache, which is a different claim from failure and
 MUST stay distinguishable.
+
+**A failed re-fetch keeps the last good decisions.** SDKs that read from a prefetched cache
+(web, Swift, Dart) MUST NOT discard it when a later fetch fails: after at least one successful
+fetch, a failed or timed-out re-fetch keeps the cached decisions and serves them with reason
+`STALE`, and the next successful fetch replaces them. Switching every read to its default on one
+429, 5xx or network blip would roll every user back at once; that is a worse outcome than
+serving decisions that are a little old, and it is exactly what `STALE` exists to report. Only
+a fetch with no earlier success falls back to defaults with `ERROR`.
 
 **Why a return rather than an exception.** These calls sit in request and render paths. If
 they raise, every call site needs a guard and fail-open becomes a convention instead of a

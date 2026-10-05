@@ -7,7 +7,7 @@ Machine-readable twin: [`errors.json`](./errors.json).
 ## Global rules
 
 1. **Defaults do not throw.** A control-point read never raises into the caller; every failure resolves to the caller's default ([`spec/control-points.md`](../spec/control-points.md) "Return discipline"). Fireweave public facades that wrap an SDK client MUST preserve this.
-2. **No secrets in messages.** Never include API keys (`phc_`, `phx_`, `phs_`), bearer tokens, `FW_PROJECT_API_KEY` values, Authorization headers, or raw credential env contents in `errorMessage`, logs, or extension signals.
+2. **No secrets in messages.** Never include API keys (`phc_`, `phx_`, `phs_`, `project-api-key_`, `fw_public_`, `fw_ingest_pub_`, `fw_org_`, `cli_at_`), bearer tokens, the values of `FIREWEAVE_KEY`, `FIREWEAVE_BROWSER_KEY` or `FW_PROJECT_API_KEY`, URL userinfo, Authorization headers, or raw credential env contents in `errorMessage`, logs, or extension signals. Every SDK's redactor implements `rules.redaction` in [`errors.json`](./errors.json) and passes its `vectors`; a variable **name** stays readable, only its value is scrubbed.
 3. **Stable `kind` strings** below are Fireweave-canonical; `openFeatureErrorCode` is what appears in evaluation details.
 4. **Retryable** means a later identical call *may* succeed without config change. **Transient** vs **permanent** classifies failure durability for adapters and signals.
 

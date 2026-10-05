@@ -11,7 +11,96 @@
       "Bearer ",
       "FW_PROJECT_API_KEY"
     ],
-    "flagMetadataErrorKindKey": "fireweave.errorKind"
+    "flagMetadataErrorKindKey": "fireweave.errorKind",
+    "redaction": {
+      "description": "How every SDK scrubs text before it reaches an error message, a log line or a signal. Applied in this order: bearer tokens, URL userinfo, named assignments, then key-shaped values. A variable NAME is never redacted on its own; only its value is. Each SDK's redactor MUST turn every vector's `in` into exactly its `out` (start-profile spec SP-26).",
+      "placeholder": "[REDACTED]",
+      "bearer": "the token after `Bearer ` ([A-Za-z0-9._~+/=-]+) becomes the placeholder; the word `Bearer` stays",
+      "urlUserinfo": "in `scheme://userinfo@host`, the userinfo becomes the placeholder",
+      "assignmentNames": [
+        "FIREWEAVE_KEY",
+        "FIREWEAVE_BROWSER_KEY",
+        "FW_PROJECT_API_KEY"
+      ],
+      "assignment": "`NAME=value`, `NAME: value`, `NAME = \"value\"` or `NAME='value'`: the value (up to whitespace, a quote, a comma or a semicolon) becomes the placeholder; the name, separator and quotes stay",
+      "valuePrefixes": [
+        "project-api-key_",
+        "fw_public_",
+        "fw_ingest_pub_",
+        "fw_org_",
+        "cli_at_",
+        "phc_",
+        "phx_",
+        "phs_"
+      ],
+      "value": "a token that starts with a value prefix followed by one or more of [A-Za-z0-9_-] becomes the placeholder; a prefix followed by anything else (for example the ellipsis in `project-api-key_…`) is prose and stays",
+      "vectors": [
+        {
+          "in": "key phc_abc123XYZ rejected",
+          "out": "key [REDACTED] rejected"
+        },
+        {
+          "in": "using project-api-key_9f8e7d6c now",
+          "out": "using [REDACTED] now"
+        },
+        {
+          "in": "browser key fw_public_ab12cd34 refused",
+          "out": "browser key [REDACTED] refused"
+        },
+        {
+          "in": "legacy fw_ingest_pub_abcd1234 key",
+          "out": "legacy [REDACTED] key"
+        },
+        {
+          "in": "org token fw_org_abcd1234 here",
+          "out": "org token [REDACTED] here"
+        },
+        {
+          "in": "cli token cli_at_abcd1234 expired",
+          "out": "cli token [REDACTED] expired"
+        },
+        {
+          "in": "FIREWEAVE_KEY=project-api-key_abc123",
+          "out": "FIREWEAVE_KEY=[REDACTED]"
+        },
+        {
+          "in": "FIREWEAVE_KEY=plainsecret123 was set",
+          "out": "FIREWEAVE_KEY=[REDACTED] was set"
+        },
+        {
+          "in": "FW_PROJECT_API_KEY: abc123def",
+          "out": "FW_PROJECT_API_KEY: [REDACTED]"
+        },
+        {
+          "in": "FIREWEAVE_BROWSER_KEY=\"fw_public_x1y2z3\"",
+          "out": "FIREWEAVE_BROWSER_KEY=\"[REDACTED]\""
+        },
+        {
+          "in": "header Bearer eyJhbGciOi.payload.sig sent",
+          "out": "header Bearer [REDACTED] sent"
+        },
+        {
+          "in": "fetch https://user:pa55word@fw.example.com/v1/flags failed",
+          "out": "fetch https://[REDACTED]@fw.example.com/v1/flags failed"
+        },
+        {
+          "in": "set FIREWEAVE_KEY in the environment",
+          "out": "set FIREWEAVE_KEY in the environment"
+        },
+        {
+          "in": "FW_PROJECT_API_KEY is a legacy name",
+          "out": "FW_PROJECT_API_KEY is a legacy name"
+        },
+        {
+          "in": "a server key (project-api-key_…) is required",
+          "out": "a server key (project-api-key_…) is required"
+        },
+        {
+          "in": "no secret here",
+          "out": "no secret here"
+        }
+      ]
+    }
   },
   "errors": [
     {
@@ -41,7 +130,9 @@
     {
       "kind": "InvalidContext",
       "openFeatureErrorCode": "INVALID_CONTEXT",
-      "openFeatureErrorCodeAlternates": ["TARGETING_KEY_MISSING"],
+      "openFeatureErrorCodeAlternates": [
+        "TARGETING_KEY_MISSING"
+      ],
       "retryable": false,
       "class": "permanent",
       "defaultMessage": "invalid evaluation context",
@@ -114,7 +205,9 @@
     {
       "kind": "Configuration",
       "openFeatureErrorCode": "PROVIDER_FATAL",
-      "openFeatureErrorCodeAlternates": ["GENERAL"],
+      "openFeatureErrorCodeAlternates": [
+        "GENERAL"
+      ],
       "retryable": false,
       "class": "permanent",
       "defaultMessage": "invalid configuration",

@@ -28,6 +28,32 @@
           "type": "string",
           "const": "fireweave.errorKind",
           "description": "flagMetadata key carrying the canonical Fireweave kind on error decisions."
+        },
+        "redaction": {
+          "type": "object",
+          "description": "The redaction contract every SDK's scrubber implements, with test vectors (contracts/errors.md rule 2).",
+          "additionalProperties": false,
+          "required": ["placeholder", "assignmentNames", "valuePrefixes", "vectors"],
+          "properties": {
+            "description": { "type": "string" },
+            "placeholder": { "type": "string", "minLength": 1 },
+            "bearer": { "type": "string" },
+            "urlUserinfo": { "type": "string" },
+            "assignmentNames": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            "assignment": { "type": "string" },
+            "valuePrefixes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            "value": { "type": "string" },
+            "vectors": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["in", "out"],
+                "properties": { "in": { "type": "string" }, "out": { "type": "string" } }
+              }
+            }
+          }
         }
       }
     },

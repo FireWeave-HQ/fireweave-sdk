@@ -133,9 +133,15 @@ returns the caller's default and warns once, naming the flags file. **[SP-18]**
   the client (Node, Python, Go, Java, Rust) start it from the environment alone on the first read;
   client profiles return `NotReady` defaults and warn once. **[SP-21]**
 - `status` reports mode, why, channel, host, sources and any problem, and never the key. **[SP-22]**
-- A configuration fault in a **client** profile SHOULD NOT crash the app: it is reported through
-  `status` and one log line, and reads serve defaults (web, Dart). Swift's app profile currently
-  throws from `startFireweave` (open item, ADR-0012). Server profiles fail loudly. **[SP-23]**
+- A configuration fault in a **client** profile MUST NOT crash the app: it is reported through
+  `status` and one log line, and reads serve defaults (web, Dart, the Swift app profile). Server
+  profiles fail loudly, so a deploy without its key never starts. **[SP-23]**
+
+- When fw-server refuses the key (401/403), rate-limits (429) or cannot be reached, a server
+  profile logs **one** line per kind for the life of the process, naming the key variable or the
+  endpoint but never the key, and reports the latest kind in `status` (`lastErrorKind`). A revoked
+  key must not look like a rollout at 0%. Client profiles already report it as `problem`.
+  **[SP-27]**
 
 ## 9. Instance key (server profiles)
 
