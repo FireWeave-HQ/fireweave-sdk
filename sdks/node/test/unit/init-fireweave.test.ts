@@ -8,7 +8,7 @@
  * difference between modes lives entirely in the adapter seam (spec/modes.md
  * "Behaviour per mode"), never in a mode check downstream of it. That table
  * has one deliberately DIVERGENT row — an unknown control point resolves
- * `default`/`DEFAULT` in local mode but `default`/`ERROR`/`FlagNotFound` in
+ * `default`/`DEFAULT` in local mode but `default`/`ERROR`/`ControlPointNotFound` in
  * remote — asserted per-mode below, not as a shared shape. `registerTarget`
  * genuinely IS shape-identical across modes (resolves `{ ok: true }`, never
  * throws), which is also asserted below. The registerTarget wiring itself
@@ -152,19 +152,19 @@ describe('initFireweave — adapter selection', () => {
     await omitted.shutdown();
   });
 
-  it('remote mode selects FireweaveRemoteAdapter and evaluates over POST /v1/flags/evaluate', async () => {
+  it('remote mode selects FireweaveRemoteAdapter and evaluates over POST /v1/control-points/evaluate', async () => {
     const calls: FetchCall[] = [];
     const client = await initFireweave({
       mode: 'remote',
       apiKey: 'project-api-key_test',
       apiUrl: 'http://127.0.0.1:3901',
       fetch: mockFetch((url) => {
-        assert.ok(url.endsWith('/v1/flags/evaluate'));
+        assert.ok(url.endsWith('/v1/control-points/evaluate'));
         return {
           status: 200,
           body: {
             decisions: [
-              { flagKey: 'checkout-v2', value: true, reason: 'TARGETING_MATCH', found: true, enabled: true },
+              { controlPointKey: 'checkout-v2', value: true, reason: 'TARGETING_MATCH', found: true, enabled: true },
             ],
           },
         };
@@ -208,7 +208,7 @@ describe('initFireweave — does nothing else conditional on mode', () => {
     // Neither call throws — that much IS identical across modes. The
     // resulting Decision shape is not: local's unknown-key row is
     // `default`/`reason: DEFAULT` (no error at all), remote's is
-    // `default`/`reason: ERROR`/`FlagNotFound` (spec/modes.md "Behaviour per
+    // `default`/`reason: ERROR`/`ControlPointNotFound` (spec/modes.md "Behaviour per
     // mode" table).
     const localDecision = await local.controlPoints.getBooleanDetails('does-not-exist', false, {
       targetingKey: 'user-1',
@@ -223,7 +223,7 @@ describe('initFireweave — does nothing else conditional on mode', () => {
     });
     assert.equal(remoteDecision.value, false);
     assert.equal(remoteDecision.reason, 'ERROR');
-    assert.equal(remoteDecision.errorKind, 'FlagNotFound');
+    assert.equal(remoteDecision.errorKind, 'ControlPointNotFound');
 
     await local.shutdown();
     await remote.shutdown();

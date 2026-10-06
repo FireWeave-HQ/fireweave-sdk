@@ -67,7 +67,7 @@ export class InMemoryWebAdapter implements WebBackendAdapter {
     if (this.fault !== undefined && this.fault.onInitialize !== true) {
       throw new FireweaveError(this.fault.kind);
     }
-    const wanted = options?.flagKeys;
+    const wanted = options?.controlPointKeys;
     const out = new Map<string, AdapterResolution>();
     for (const [key, def] of this.flags) {
       if (wanted !== undefined && wanted.length > 0 && !wanted.includes(key)) continue;

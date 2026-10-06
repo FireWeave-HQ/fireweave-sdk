@@ -12,7 +12,7 @@ library;
 import 'package:fireweave/fireweave.dart';
 
 import 'channel.dart';
-import 'flags.dart';
+import 'control_points.dart';
 import 'names.dart';
 
 /// Which profile is resolving: it decides the accepted key family and the
@@ -63,7 +63,7 @@ final class ResolvedStart {
     required this.mode,
     required this.modeSource,
     required this.keySource,
-    required this.flags,
+    required this.controlPoints,
     required this.channel,
     required this.sdkVersion,
     this.url,
@@ -98,7 +98,7 @@ final class ResolvedStart {
   final String? environment;
   final String? environmentSource;
 
-  final Map<String, Flag> flags;
+  final Map<String, LocalControlPoint> controlPoints;
   final SdkChannel channel;
   final String sdkVersion;
 
@@ -143,7 +143,7 @@ final class PolicyFailure extends PolicyResult {
 final class PolicyInput {
   const PolicyInput({
     required this.profile,
-    required this.flags,
+    required this.controlPoints,
     required this.channel,
     required this.sdkVersion,
     required this.environmentChecked,
@@ -160,7 +160,7 @@ final class PolicyInput {
   final Sourced? key;
   final Sourced? url;
   final Sourced? environment;
-  final Map<String, Flag> flags;
+  final Map<String, LocalControlPoint> controlPoints;
   final SdkChannel channel;
   final String sdkVersion;
 
@@ -339,7 +339,7 @@ PolicyResult _remote(
       allowedHosts: endpoint.allowedHosts,
       key: key.value,
       keySource: key.source,
-      flags: input.flags,
+      controlPoints: input.controlPoints,
       channel: input.channel,
       sdkVersion: input.sdkVersion,
       warnings: List<String>.unmodifiable(warnings),
@@ -371,7 +371,7 @@ PolicyResult resolvePolicy(PolicyInput input) {
         mode: Mode.local,
         modeSource: 'option',
         keySource: 'none',
-        flags: input.flags,
+        controlPoints: input.controlPoints,
         channel: input.channel,
         sdkVersion: input.sdkVersion,
         warnings: List<String>.unmodifiable(warnings),
@@ -405,7 +405,7 @@ PolicyResult resolvePolicy(PolicyInput input) {
         keySource: 'none',
         environment: environment.value,
         environmentSource: environment.source,
-        flags: input.flags,
+        controlPoints: input.controlPoints,
         channel: input.channel,
         sdkVersion: input.sdkVersion,
         warnings: List<String>.unmodifiable(warnings),

@@ -23,13 +23,13 @@ import {
 } from '../index.js';
 import { SDK_CHANNEL, SDK_VERSION } from './build-info.js';
 import { envFromBag, processEnv, type EnvReader } from './env.js';
-import { toLocalControlPoints, type FlagMap } from './flags.js';
+import { toLocalControlPoints, type ControlPointMap } from './control-points.js';
 import { deriveInstanceKey, type InstanceKey } from './instance.js';
 import { resolveStart, type ResolvedStart, type SdkChannel, type StartMode } from './resolve.js';
 
 export interface StartOptions {
-  /** Control points and their local values; import from src/fireweave/flags.ts. */
-  readonly flags?: FlagMap;
+  /** Control points and their local values; import from src/fireweave/control-points.ts. */
+  readonly controlPoints?: ControlPointMap;
   /** Force a mode. Without it: a key means remote; no key means local only in a dev environment. */
   readonly mode?: StartMode;
   /** Environment name used to infer the mode, instead of FIREWEAVE_ENV, APP_ENV or NODE_ENV. */
@@ -61,7 +61,7 @@ export interface FireweaveStatus {
   readonly endpointSource?: string;
   readonly keySource?: string;
   readonly environment?: string;
-  readonly flagCount?: number;
+  readonly controlPointCount?: number;
   /** Why start failed, when it did. Already redacted. */
   readonly error?: string;
   /**
@@ -153,16 +153,16 @@ const signatureOf = (r: ResolvedStart, instanceId: string | undefined): string =
     allowedHosts: r.allowedHosts !== undefined ? [...r.allowedHosts] : null,
     instanceId: instanceId ?? null,
     // Seeds only matter in local mode; remote ignores them, so an env-only
-    // implicit start followed by start({ flags }) under a key is not a conflict.
-    ...(r.mode === 'local' ? { flags: toLocalControlPoints(r.flags) } : {}),
+    // implicit start followed by start({ controlPoints }) under a key is not a conflict.
+    ...(r.mode === 'local' ? { controlPoints: toLocalControlPoints(r.controlPoints) } : {}),
   });
 
 function localLine(r: ResolvedStart): string {
   const why = r.modeSource === 'option'
     ? "start({ mode: 'local' })"
     : `no FIREWEAVE_KEY; environment '${r.environment ?? ''}' from ${r.environmentSource ?? 'env'}`;
-  const n = Object.keys(r.flags).length;
-  return `[fireweave:local] Local mode (${why}). Serving ${n} flag${n === 1 ? '' : 's'} from your flags object; nothing is sent to fw-server.`;
+  const n = Object.keys(r.controlPoints).length;
+  return `[fireweave:local] Local mode (${why}). Serving ${n} control point${n === 1 ? '' : 's'} from your control-points object; nothing is sent to fw-server.`;
 }
 
 type Transport = NonNullable<FireweaveRemoteAdapterOptions['fetch']>;
@@ -235,7 +235,7 @@ function observedTransport(s: Slot, token: Slot['ready'], r: ResolvedStart, base
 
 function initOptions(r: ResolvedStart, options: StartOptions, s: Slot, token: Slot['ready']): InitFireweaveOptions {
   if (r.mode === 'local') {
-    return { mode: 'local', local: { controlPoints: toLocalControlPoints(r.flags), log: (line) => s.log(line) } };
+    return { mode: 'local', local: { controlPoints: toLocalControlPoints(r.controlPoints), log: (line) => s.log(line) } };
   }
   return {
     mode: 'remote',
@@ -341,7 +341,7 @@ export function currentStatus(): FireweaveStatus {
           mode: r.mode,
           modeSource: r.modeSource,
           keySource: r.keySource,
-          flagCount: Object.keys(r.flags).length,
+          controlPointCount: Object.keys(r.controlPoints).length,
           ...(r.url !== undefined ? { host: new URL(r.url).hostname, endpointSource: r.urlSource } : {}),
           ...(r.environment !== undefined ? { environment: r.environment } : {}),
         }

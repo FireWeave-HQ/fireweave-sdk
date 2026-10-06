@@ -5,11 +5,11 @@
   "tags": ["sync", "structural"],
   "given": {
     "providerState": "READY",
-    "flags": { "web-sync": { "type": "boolean", "enabled": true, "value": true } }
+    "controlPoints": { "web-sync": { "type": "boolean", "enabled": true, "value": true } }
   },
   "when": {
     "operation": "assertSyncProvider",
-    "flagKey": "web-sync",
+    "controlPointKey": "web-sync",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": { "targetingKey": "user_web_1" }

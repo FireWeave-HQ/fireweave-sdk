@@ -1,6 +1,6 @@
 import 'package:fireweave/fireweave.dart';
 import 'package:fireweave/src/start/channel.dart';
-import 'package:fireweave/src/start/flags.dart';
+import 'package:fireweave/src/start/control_points.dart';
 import 'package:fireweave/src/start/policy.dart';
 import 'package:test/test.dart';
 
@@ -21,7 +21,7 @@ PolicyResult resolve(
     key: key,
     url: url,
     environment: environment,
-    flags: const <String, Flag>{},
+    controlPoints: const <String, LocalControlPoint>{},
     channel: channel,
     sdkVersion: '0.0.0-test',
     environmentChecked: 'the test sources',
@@ -328,43 +328,69 @@ void main() {
     });
   });
 
-  group('flags', () {
-    test('defineFlags validates keys with the core rule and copies', () {
-      final input = <String, Flag>{
-        'b': const Flag.local(false),
-        'a': const Flag.local(true),
-      };
-      final flags = defineFlags(input);
-      expect(flags.keys, <String>['a', 'b']);
-      expect(flags['a']!.localValue, isTrue);
-      expect(() => flags['c'] = const Flag.local(true), throwsUnsupportedError);
-      expect(localSeeds(flags), <String, bool>{'a': true, 'b': false});
-    });
+  group('controlPoints', () {
+    test(
+      'defineControlPoints validates keys with the core rule and copies',
+      () {
+        final input = <String, LocalControlPoint>{
+          'b': const LocalControlPoint.local(false),
+          'a': const LocalControlPoint.local(true),
+        };
+        final controlPoints = defineControlPoints(input);
+        expect(controlPoints.keys, <String>['a', 'b']);
+        expect(controlPoints['a']!.localValue, isTrue);
+        expect(
+          () => controlPoints['c'] = const LocalControlPoint.local(true),
+          throwsUnsupportedError,
+        );
+        expect(localSeeds(controlPoints), <String, bool>{
+          'a': true,
+          'b': false,
+        });
+      },
+    );
 
     test('an invalid key throws Configuration naming it', () {
       expect(
-        () => defineFlags(<String, Flag>{'': const Flag.local(true)}),
+        () => defineControlPoints(<String, LocalControlPoint>{
+          '': const LocalControlPoint.local(true),
+        }),
         throwsA(
           isA<FireweaveError>()
               .having((e) => e.kind, 'kind', ErrorKind.configuration)
-              .having((e) => e.message, 'message', contains('flags')),
+              .having((e) => e.message, 'message', contains('controlPoints')),
         ),
       );
       expect(
-        () => defineFlags(<String, Flag>{'bad\nkey': const Flag.local(true)}),
+        () => defineControlPoints(<String, LocalControlPoint>{
+          'bad\nkey': const LocalControlPoint.local(true),
+        }),
         throwsA(isA<FireweaveError>()),
       );
       expect(
-        () => defineFlags(<String, Flag>{'k' * 257: const Flag.local(true)}),
+        () => defineControlPoints(<String, LocalControlPoint>{
+          'k' * 257: const LocalControlPoint.local(true),
+        }),
         throwsA(isA<FireweaveError>()),
       );
     });
 
-    test('Flag carries an optional description and compares by value', () {
-      const flag = Flag.local(true, description: 'New checkout');
-      expect(flag.description, 'New checkout');
-      expect(flag, const Flag.local(true, description: 'New checkout'));
-      expect(flag, isNot(const Flag.local(false, description: 'New checkout')));
-    });
+    test(
+      'LocalControlPoint carries an optional description and compares by value',
+      () {
+        const flag = LocalControlPoint.local(true, description: 'New checkout');
+        expect(flag.description, 'New checkout');
+        expect(
+          flag,
+          const LocalControlPoint.local(true, description: 'New checkout'),
+        );
+        expect(
+          flag,
+          isNot(
+            const LocalControlPoint.local(false, description: 'New checkout'),
+          ),
+        );
+      },
+    );
   });
 }

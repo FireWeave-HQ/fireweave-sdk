@@ -12,15 +12,15 @@ are not exposed.
 
 Most apps need only this ([ADR-0012](../../docs/adr/0012-start-profile.md)). Package
 `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fw` is an opt-in layer over the
-unchanged core: one flags file, one call in `main`, then reads from anywhere.
+unchanged core: one control-points file, one call in `main`, then reads from anywhere.
 
 ```go
-// internal/fireweave/flags.go: every control point the app reads, with its local value
+// internal/fireweave/control_points.go: every control point the app reads, with its local value
 package fireweave
 
 import "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fw"
 
-var Flags = fw.DefineFlags(fw.Flags{
+var ControlPoints = fw.DefineControlPoints(fw.LocalControlPoints{
 	"new-checkout": {Local: true, Description: "new checkout flow"}, // served only in local mode
 })
 ```
@@ -33,7 +33,7 @@ import (
 )
 
 func main() {
-	if err := fw.Start(fw.Options{Flags: appfw.Flags}); err != nil {
+	if err := fw.Start(fw.Options{ControlPoints: appfw.ControlPoints}); err != nil {
 		log.Fatal(err) // or fw.MustStart(...)
 	}
 	defer fw.Shutdown(context.Background())
@@ -60,7 +60,7 @@ default. Empty and whitespace-only values count as unset.
 
 | Option | Env var | Default | What it does |
 | --- | --- | --- | --- |
-| `Flags` | — | none | Local values per control point (`fw.DefineFlags`). Ignored in remote mode. |
+| `ControlPoints` | — | none | Local values per control point (`fw.DefineControlPoints`). Ignored in remote mode. |
 | `Mode` | — | inferred | `fw.ModeRemote` or `fw.ModeLocal`. Overrides inference. Remote without a key is a start error; local ignores a key (one warning). |
 | `Environment` | `FIREWEAVE_ENV`, `APP_ENV` | — | Environment name used for inference when there is no key and no `Mode`. Pass your own, e.g. a deploy-stage setting. `NODE_ENV` and `FW_ENV` are not read. |
 | `URL` | `FIREWEAVE_URL` (legacy `FW_API_URL`, `FW_ATTEST_URL`) | from the SDK build | A `-staging.N` module version calls `staging-app-server.fireweave.ai`; any other (including `(devel)`) calls `app-server.fireweave.ai`. Set it for a self-hosted or local fw-server: https is required except on localhost, and the allowlist becomes that host plus loopback. |
@@ -112,9 +112,9 @@ scrubs key values, bearer tokens and URL credentials but leaves variable names r
 | `application` | The runtime engine (`Runtime`: lifecycle state machine, context merge/validation, evaluation pipeline) and the public `Client` surface (`ControlPoints`, `RegisterTarget`, `InvokeCapability`). `application/mode.go` is the sole composition root — the only file that imports concrete `infrastructure/adapters/*` packages — and hosts `Init`, the single SDK entry point. |
 | `infrastructure/adapters/inmemory` | Deterministic, fixture-driven `BackendAdapter` for unit tests and the conformance harness. No target registration. |
 | `infrastructure/adapters/local` | The local-development `BackendAdapter` (`Init`'s `Mode: local`): an in-process boolean seed map (reason `STATIC` on a hit, `DEFAULT` on a miss — never an error), plus `RegisterTarget` recording + a `[fireweave:local]` trace line. |
-| `infrastructure/adapters/remote` | The production `BackendAdapter` (`Init`'s `Mode: remote`, ADR-0005): speaks only the Fireweave remote protocol to fw-server (`POST /v1/flags/evaluate`, `POST /v1/targets/register`) over `Authorization: Bearer <apiKey>`. No vendor SDK, key, or host in this process; which backend fw-server forwards to is fw-server's concern. |
+| `infrastructure/adapters/remote` | The production `BackendAdapter` (`Init`'s `Mode: remote`, ADR-0005): speaks only the Fireweave remote protocol to fw-server (`POST /v1/control-points/evaluate`, `POST /v1/targets/register`) over `Authorization: Bearer <apiKey>`. No vendor SDK, key, or host in this process; which backend fw-server forwards to is fw-server's concern. |
 | `fireweave` | The public façade: re-exports the above via type aliases and a thin `Init` wrapper, so callers only ever import this one package. Also hosts the layering/surface/init guard tests (this package sits at the same nesting depth as `domain`/`application`, mirroring where the java reference keeps its equivalent guard tests). |
-| `fw` | The start profile ([ADR-0012](../../docs/adr/0012-start-profile.md)): `Start`, `DefineFlags`, `ControlPoints`, `Identify`, `InstanceKey`, `Status`, `Client`, `Shutdown`. Built only on the `fireweave` facade and the standard library, and the only package that reads the environment (through `fw/env.go`); guard-enforced in `fireweave/architecture_guard_test.go`. |
+| `fw` | The start profile ([ADR-0012](../../docs/adr/0012-start-profile.md)): `Start`, `DefineControlPoints`, `ControlPoints`, `Identify`, `InstanceKey`, `Status`, `Client`, `Shutdown`. Built only on the `fireweave` facade and the standard library, and the only package that reads the environment (through `fw/env.go`); guard-enforced in `fireweave/architecture_guard_test.go`. |
 | `internal/conformance`, `cmd/conformance`, `conformance` | The differential conformance gate: runs the canonical `contracts/` fixtures against the real v1 `fireweave.Client.ControlPoints` surface (no OpenFeature bridge — ADR-0010 retired it) and emits the `compatibility-report.go.json` compared across all seven languages by `scripts/conformance-all.sh`. |
 
 ### Why `BackendAdapter` lives in `domain`, not `application`
@@ -197,7 +197,7 @@ degrade to the caller's default with `Decision.Reason == "ERROR"`.
 
 An unknown control point diverges deliberately by mode: local misses
 resolve `default`/`DEFAULT` (not an error); remote misses resolve
-`default`/`ERROR`/`FlagNotFound`.
+`default`/`ERROR`/`ControlPointNotFound`.
 
 ### SSRF host allowlist (remote mode)
 

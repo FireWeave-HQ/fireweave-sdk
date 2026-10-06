@@ -76,7 +76,7 @@ void main() {
     });
 
     test('vendor metadata gate requires all three signals', () async {
-      // vendorFlagId + reasonCode but NO condition_index -> gate fails.
+      // vendorControlPointId + reasonCode but NO condition_index -> gate fails.
       final adapter = InMemoryAdapter.fromFlagsJson({
         'f': {
           'type': 'boolean',
@@ -87,7 +87,7 @@ void main() {
         },
       });
       final result = await adapter.prefetch(EvaluationContext());
-      expect(result['f']?.vendorFlagId, isNull);
+      expect(result['f']?.vendorControlPointId, isNull);
       expect(result['f']?.reasonCode, isNull);
     });
 

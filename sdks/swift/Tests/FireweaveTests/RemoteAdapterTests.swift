@@ -47,8 +47,8 @@ struct RemoteAdapterTests {
   @Test func vendorMetadataSurfacesWhenServerSendsBothKeys() async throws {
     let transport = FakeTransport(
       bodyJSON: """
-        {"decisions":[{"flagKey":"f","value":true,"variant":"on","reason":"TARGETING_MATCH","found":true,\
-        "enabled":true,"flagMetadata":{"fireweave.vendorFlagId":1001,"fireweave.reasonCode":"condition_match"}}]}
+        {"decisions":[{"controlPointKey":"f","value":true,"variant":"on","reason":"TARGETING_MATCH","found":true,\
+        "enabled":true,"controlPointMetadata":{"fireweave.vendorControlPointId":1001,"fireweave.reasonCode":"condition_match"}}]}
         """
     )
     let adapter = try await makeReadyAdapter(transport: transport)
@@ -57,15 +57,15 @@ struct RemoteAdapterTests {
     let decision = runtime.evaluate(key: "f", type: .boolean, defaultValue: .bool(false))
 
     #expect(decision.value == .bool(true))
-    #expect(decision.flagMetadata["fireweave.vendorFlagId"] == .number(1001))
-    #expect(decision.flagMetadata["fireweave.reasonCode"] == .string("condition_match"))
+    #expect(decision.controlPointMetadata["fireweave.vendorControlPointId"] == .number(1001))
+    #expect(decision.controlPointMetadata["fireweave.reasonCode"] == .string("condition_match"))
   }
 
   @Test func omitsVendorMetadataWhenOnlyOneKeyPresent() async throws {
     let transport = FakeTransport(
       bodyJSON: """
-        {"decisions":[{"flagKey":"f","value":true,"variant":"on","reason":"TARGETING_MATCH","found":true,\
-        "enabled":true,"flagMetadata":{"fireweave.reasonCode":"condition_match"}}]}
+        {"decisions":[{"controlPointKey":"f","value":true,"variant":"on","reason":"TARGETING_MATCH","found":true,\
+        "enabled":true,"controlPointMetadata":{"fireweave.reasonCode":"condition_match"}}]}
         """
     )
     let adapter = try await makeReadyAdapter(transport: transport)
@@ -73,17 +73,17 @@ struct RemoteAdapterTests {
     await runtime.initialize(context: EvaluationContext(targetingKey: "user-1"))
     let decision = runtime.evaluate(key: "f", type: .boolean, defaultValue: .bool(false))
 
-    #expect(decision.flagMetadata["fireweave.vendorFlagId"] == nil)
-    #expect(decision.flagMetadata["fireweave.reasonCode"] == nil)
+    #expect(decision.controlPointMetadata["fireweave.vendorControlPointId"] == nil)
+    #expect(decision.controlPointMetadata["fireweave.reasonCode"] == nil)
   }
 
-  @Test func absentKeyFromDecisionsIsFlagNotFound() async throws {
+  @Test func absentKeyFromDecisionsIsControlPointNotFound() async throws {
     let transport = FakeTransport(bodyJSON: #"{"decisions":[]}"#)
     let adapter = try await makeReadyAdapter(transport: transport)
     let runtime = FireweaveRuntime(adapter: adapter)
     await runtime.initialize(context: EvaluationContext(targetingKey: "user-1"))
     let decision = runtime.evaluate(key: "missing", type: .boolean, defaultValue: .bool(false))
-    #expect(decision.errorKind == .flagNotFound)
+    #expect(decision.errorKind == .controlPointNotFound)
   }
 
   @Test func httpStatusMapsToTheDocumentedErrorKind() async throws {

@@ -107,21 +107,21 @@ public final class InMemoryAdapter implements BackendAdapter {
         if (fault != null) {
             throw fault;
         }
-        FlagDefinition def = flags.get(request.flagKey());
+        FlagDefinition def = flags.get(request.controlPointKey());
         if (def == null) {
-            throw new FireweaveException(ErrorKind.FlagNotFound);
+            throw new FireweaveException(ErrorKind.ControlPointNotFound);
         }
         if (def.type != request.type()) {
             throw new FireweaveException(ErrorKind.TypeMismatch);
         }
         if (!matches(def, request.context())) {
-            return Decision.builder(request.flagKey())
+            return Decision.builder(request.controlPointKey())
                     .value(request.defaultValue())
                     .reason(Reasons.DEFAULT)
                     .build();
         }
 
-        Decision.Builder b = Decision.builder(request.flagKey())
+        Decision.Builder b = Decision.builder(request.controlPointKey())
                 .value(def.value)
                 .variant(def.variant);
         if (!def.enabled) {
@@ -134,12 +134,12 @@ public final class InMemoryAdapter implements BackendAdapter {
             b.reason(Reasons.TARGETING_MATCH);
         }
         if (def.version != null) {
-            b.metadata("fireweave.flagVersion", def.version);
+            b.metadata("fireweave.controlPointVersion", def.version);
         }
         // Detailed vendor fields travel together: only when the backend reports BOTH a
         // vendor flag id AND a matched condition index (mirrors node/go/python).
         if (def.vendorId != null && def.conditionIndex != null) {
-            b.metadata("fireweave.vendorFlagId", def.vendorId);
+            b.metadata("fireweave.vendorControlPointId", def.vendorId);
             if (def.reasonCode != null) {
                 b.metadata("fireweave.reasonCode", def.reasonCode);
             }

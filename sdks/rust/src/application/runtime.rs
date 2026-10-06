@@ -10,8 +10,8 @@ use crate::domain::context::{
     merge_contexts, ContextLimits, EvaluationContext, DEFAULT_RESERVED_ATTRIBUTE_KEYS,
 };
 use crate::domain::decision::{reason, Decision};
-use crate::domain::errors::{ErrorKind, FireweaveError, FLAG_METADATA_ERROR_KIND_KEY};
-use crate::domain::types::{FlagMetadata, FlagType, JsonValue};
+use crate::domain::errors::{ErrorKind, FireweaveError, CONTROL_POINT_METADATA_ERROR_KIND_KEY};
+use crate::domain::types::{ControlPointMetadata, FlagType, JsonValue};
 use crate::domain::validation::{
     matches_expected_type, validate_context, validate_control_point_key, validate_default_value,
 };
@@ -278,13 +278,13 @@ impl FireweaveRuntime {
     /// does this reach the adapter (the one I/O call in this method).
     pub fn evaluate(
         &self,
-        flag_key: &str,
+        control_point_key: &str,
         flag_type: FlagType,
         default_value: JsonValue,
         invocation_context: Option<&EvaluationContext>,
         options: Option<&EvaluateOptions>,
     ) -> Decision {
-        if let Err(err) = validate_control_point_key(flag_key) {
+        if let Err(err) = validate_control_point_key(control_point_key) {
             return Self::error_decision(default_value, err);
         }
         if let Err(err) = validate_default_value(flag_type, &default_value) {
@@ -307,7 +307,7 @@ impl FireweaveRuntime {
             return Self::error_decision(default_value, err);
         }
 
-        match self.adapter.resolve(flag_key, &merged) {
+        match self.adapter.resolve(control_point_key, &merged) {
             Ok(resolution) => {
                 self.decision_from_resolution(resolution, flag_type, default_value, options)
             }
@@ -329,7 +329,7 @@ impl FireweaveRuntime {
             // default/reason DEFAULT — deliberately not an error. Any
             // adapter that reports matched: false gets this branch (the
             // strict seam); an adapter signalling a genuine backend-side
-            // "unknown key" instead RETURNS Err(FlagNotFound), which is
+            // "unknown key" instead RETURNS Err(ControlPointNotFound), which is
             // caught in `evaluate` and takes the ERROR branch below.
             return Decision::new(default_value, None, reason::DEFAULT);
         }
@@ -351,30 +351,31 @@ impl FireweaveRuntime {
             reason::TARGETING_MATCH.to_string()
         };
 
-        let mut metadata: FlagMetadata = FlagMetadata::new();
+        let mut metadata: ControlPointMetadata = ControlPointMetadata::new();
         if let Some(version) = resolution.version {
             metadata.insert(
-                "fireweave.flagVersion".to_string(),
+                "fireweave.controlPointVersion".to_string(),
                 JsonValue::from(version),
             );
         }
-        // Detailed enrichment (ruling 11): emit fireweave.vendorFlagId +
+        // Detailed enrichment (ruling 11): emit fireweave.vendorControlPointId +
         // fireweave.reasonCode together, or neither. The runtime's job is
         // only this pass-through pairing — it does NOT re-derive the
         // ruling-11 gate itself (that gate needs a "did the backend report
         // a condition index" signal that only InMemoryAdapter's fixture
         // input carries; FireweaveRemoteAdapter has no such field on the
-        // wire and relies on fw-server having already gated flagMetadata
+        // wire and relies on fw-server having already gated controlPointMetadata
         // before responding). See FlagResolution's doc comment for the
         // full reasoning (task-12 review finding: a stale client-side
         // re-gate on a field the remote wire protocol doesn't carry used
         // to suppress both keys unconditionally for every remote decision).
-        if let (Some(vendor_flag_id), Some(reason_code)) =
-            (resolution.vendor_flag_id, resolution.reason_code.clone())
-        {
+        if let (Some(vendor_control_point_id), Some(reason_code)) = (
+            resolution.vendor_control_point_id,
+            resolution.reason_code.clone(),
+        ) {
             metadata.insert(
-                "fireweave.vendorFlagId".to_string(),
-                JsonValue::from(vendor_flag_id),
+                "fireweave.vendorControlPointId".to_string(),
+                JsonValue::from(vendor_control_point_id),
             );
             metadata.insert(
                 "fireweave.reasonCode".to_string(),
@@ -409,17 +410,17 @@ impl FireweaveRuntime {
             error_code: None,
             error_message: None,
             error_kind: None,
-            flag_metadata: metadata,
+            control_point_metadata: metadata,
         }
     }
 
     fn error_decision(default_value: JsonValue, error: FireweaveError) -> Decision {
-        let mut metadata: FlagMetadata = FlagMetadata::new();
+        let mut metadata: ControlPointMetadata = ControlPointMetadata::new();
         metadata.insert(
-            FLAG_METADATA_ERROR_KIND_KEY.to_string(),
+            CONTROL_POINT_METADATA_ERROR_KIND_KEY.to_string(),
             JsonValue::String(error.kind.as_str().to_string()),
         );
-        if error.kind == ErrorKind::FlagNotFound && error.quota_limited {
+        if error.kind == ErrorKind::ControlPointNotFound && error.quota_limited {
             metadata.insert("fireweave.quotaLimited".to_string(), JsonValue::Bool(true));
         }
         Decision {
@@ -429,7 +430,7 @@ impl FireweaveRuntime {
             error_code: Some(error.openfeature_error_code().to_string()),
             error_message: Some(error.message.clone()),
             error_kind: Some(error.kind),
-            flag_metadata: metadata,
+            control_point_metadata: metadata,
         }
     }
 }
@@ -516,7 +517,7 @@ mod tests {
             Some(&ctx),
             None,
         );
-        assert_eq!(decision.error_kind, Some(ErrorKind::FlagNotFound));
+        assert_eq!(decision.error_kind, Some(ErrorKind::ControlPointNotFound));
         assert_eq!(decision.value, JsonValue::Bool(false));
     }
 
@@ -541,7 +542,9 @@ mod tests {
             Some(&ctx),
             None,
         );
-        assert!(!without.flag_metadata.contains_key("fireweave.payload"));
+        assert!(!without
+            .control_point_metadata
+            .contains_key("fireweave.payload"));
 
         let opts = EvaluateOptions {
             include_payload: true,
@@ -554,7 +557,7 @@ mod tests {
             Some(&opts),
         );
         assert_eq!(
-            with.flag_metadata
+            with.control_point_metadata
                 .get("fireweave.payload")
                 .and_then(JsonValue::as_str),
             Some("{\"maxRetries\":2,\"rolloutId\":\"r1\"}")

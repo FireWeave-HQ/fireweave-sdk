@@ -47,10 +47,8 @@ class ExtensionResult {
 const Set<String> _supportedCapabilities = <String>{};
 
 /// Typed evaluation helpers — the nine methods (`spec/control-points.md`
-/// "The nine methods"). A class with reference identity, so
-/// `client.flags` (the deprecated alias) can be documented as SHARING
-/// IDENTITY with `client.controlPoints` (ADR-0007): `identical(client.flags,
-/// client.controlPoints)` holds.
+/// "The nine methods"), reached as `client.controlPoints`. The
+/// `client.flags` alias was removed in 3.0.0 (ADR-0013).
 ///
 /// Every method here is SYNCHRONOUS ("web's shape, not node's") —
 /// [evaluate] is a pure cache read (`FireweaveRuntime.evaluate`), never an
@@ -178,20 +176,6 @@ class FireweaveClient {
 
   final FireweaveRuntime runtime;
   final ControlPointsNamespace controlPoints;
-
-  /// Control-point evaluation under its former name.
-  ///
-  /// Identical to [controlPoints] and shares its identity — both resolve to
-  /// the exact same [ControlPointsNamespace] instance, so
-  /// `identical(client.flags, client.controlPoints)` holds. Silent at
-  /// runtime: the alias is permanent, not scheduled for removal (ADR-0007),
-  /// so there is nothing to warn a caller toward — deprecation is conveyed
-  /// by this annotation only, never a runtime log.
-  @Deprecated(
-    'Renamed to controlPoints (ADR-0007). Identical object; no '
-    'migration is required.',
-  )
-  ControlPointsNamespace get flags => controlPoints;
 
   Future<void> initialize({EvaluationContext? context}) =>
       runtime.initialize(context: context);

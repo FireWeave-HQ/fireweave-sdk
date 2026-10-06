@@ -8,7 +8,7 @@
     "domains": {
       "payments": {
         "providerState": "READY",
-        "flags": {
+        "controlPoints": {
           "fw-pay": {
             "type": "boolean",
             "enabled": true,
@@ -19,7 +19,7 @@
       },
       "search": {
         "providerState": "READY",
-        "flags": {
+        "controlPoints": {
           "fw-search": {
             "type": "string",
             "enabled": true,
@@ -33,7 +33,7 @@
   "when": {
     "operation": "evaluate",
     "domain": "search",
-    "flagKey": "fw-search",
+    "controlPointKey": "fw-search",
     "flagType": "string",
     "defaultValue": "v1",
     "invocationContext": {

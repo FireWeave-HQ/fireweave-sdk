@@ -21,7 +21,7 @@ void main() {
       expect(validateControlPointKey('badkey').isValid, isFalse);
       expect(
         validateControlPointKey('badkey').errorKind,
-        ErrorKind.flagNotFound,
+        ErrorKind.controlPointNotFound,
       );
     });
   });

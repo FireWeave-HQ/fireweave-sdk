@@ -21,10 +21,10 @@ public typealias PrefetchResult = [String: AdapterResolution]
 public struct PrefetchOptions: Sendable, Equatable {
   /// Restrict the batch to these keys; omit to let the backend return all
   /// it knows.
-  public var flagKeys: [String]?
+  public var controlPointKeys: [String]?
 
-  public init(flagKeys: [String]? = nil) {
-    self.flagKeys = flagKeys
+  public init(controlPointKeys: [String]? = nil) {
+    self.controlPointKeys = controlPointKeys
   }
 }
 
@@ -49,15 +49,15 @@ public struct PrefetchOptions: Sendable, Equatable {
 ///    reports `.defaultReason` here too (`spec/modes.md` "Behaviour per
 ///    mode": local mode's unknown-key row), while `FireweaveRemoteAdapter`/
 ///    `InMemoryAdapter` leave `missReason` `nil` and an absent key resolves
-///    to `.error`/`.flagNotFound` instead.
+///    to `.error`/`.controlPointNotFound` instead.
 ///
 /// A resolution is only ever constructed with `found: false` for case 1 —
 /// case 2 is expressed by simply never inserting a key into the
 /// `PrefetchResult` dictionary, never by inserting a `found: false` entry.
 ///
-/// `vendorFlagId`/`reasonCode` are a PRE-GATED pair
+/// `vendorControlPointId`/`reasonCode` are a PRE-GATED pair
 /// (`spec/decision.schema.json` `standardMetadataKeys`, ruling 11): the
-/// runtime emits `fireweave.vendorFlagId`/`fireweave.reasonCode` together,
+/// runtime emits `fireweave.vendorControlPointId`/`fireweave.reasonCode` together,
 /// or neither — never one alone. There is deliberately no separate
 /// `conditionIndex` field here, mirroring rust's post-review fix
 /// (task-12-report.md fix-report finding 1): that gate is a statement about
@@ -74,7 +74,7 @@ public struct AdapterResolution: Sendable, Equatable {
   public var reason: DecisionReason?
   public var reasonCode: String?
   public var version: Int?
-  public var vendorFlagId: Int?
+  public var vendorControlPointId: Int?
   public var payload: JSONValue?
   public var fromCache: Bool
 
@@ -87,7 +87,7 @@ public struct AdapterResolution: Sendable, Equatable {
     reason: DecisionReason? = nil,
     reasonCode: String? = nil,
     version: Int? = nil,
-    vendorFlagId: Int? = nil,
+    vendorControlPointId: Int? = nil,
     payload: JSONValue? = nil,
     fromCache: Bool = false
   ) {
@@ -99,7 +99,7 @@ public struct AdapterResolution: Sendable, Equatable {
     self.reason = reason
     self.reasonCode = reasonCode
     self.version = version
-    self.vendorFlagId = vendorFlagId
+    self.vendorControlPointId = vendorControlPointId
     self.payload = payload
     self.fromCache = fromCache
   }
@@ -147,7 +147,7 @@ public struct RegisterTargetResult: Sendable, Equatable {
 /// carry a `signal` for and no per-call exposure opt-in) — a deliberate
 /// divergence from the web precedent studied for the sync/async SEAM, not
 /// an oversight: payload attachment is genuine v1 SURFACE (`Decision
-/// .flagMetadata["fireweave.payload"]`, never cut like releases/exposures/
+/// .controlPointMetadata["fireweave.payload"]`, never cut like releases/exposures/
 /// signals), swift runs the shared 65 fixtures for real
 /// (`eval-payload-attached`), and `AdapterResolution.payload` already
 /// carries the raw payload all the way from prefetch to this struct with no
@@ -171,9 +171,9 @@ public protocol ControlPointsBackendAdapter: Sendable {
   /// Miss-reason override for a control point ABSENT from the prefetch
   /// result (`spec/modes.md` "Behaviour per mode": local mode's
   /// unknown-key row is `default`/reason `DEFAULT`, not an error — unlike
-  /// remote's `default`/`ERROR`/`FlagNotFound`). `FireweaveLocalAdapter`
+  /// remote's `default`/`ERROR`/`ControlPointNotFound`). `FireweaveLocalAdapter`
   /// returns `.defaultReason` here; `FireweaveRemoteAdapter` and
-  /// `InMemoryAdapter` return `nil` and keep the FlagNotFound/ERROR path.
+  /// `InMemoryAdapter` return `nil` and keep the ControlPointNotFound/ERROR path.
   var missReason: DecisionReason? { get }
 
   /// Bring the backend to a usable state. Throws `FireweaveError` on fatal

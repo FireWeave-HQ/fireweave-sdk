@@ -42,7 +42,7 @@ class Decision {
     this.errorCode,
     this.errorMessage,
     this.errorKind,
-    this.flagMetadata = const <String, Object?>{},
+    this.controlPointMetadata = const <String, Object?>{},
   });
 
   final JsonValue value;
@@ -51,7 +51,7 @@ class Decision {
   final String? errorCode;
   final String? errorMessage;
   final ErrorKind? errorKind;
-  final FlagMetadata flagMetadata;
+  final ControlPointMetadata controlPointMetadata;
 
   bool get isError => reason == DecisionReason.error;
 
@@ -62,11 +62,11 @@ class Decision {
     'reason': reason.wireName,
     'errorCode': errorCode,
     'errorMessage': errorMessage,
-    'flagMetadata': flagMetadata,
+    'controlPointMetadata': controlPointMetadata,
   };
 
   @override
   String toString() =>
       'Decision(${reason.wireName} value=$value variant=$variant '
-      'errorKind=${errorKind?.wireName} metadata=$flagMetadata)';
+      'errorKind=${errorKind?.wireName} metadata=$controlPointMetadata)';
 }

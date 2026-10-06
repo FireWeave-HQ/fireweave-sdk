@@ -11,22 +11,22 @@
 //! enforces all three.
 //!
 //! ```
-//! use fireweave::start::{define_flags, Flag, Flags, StartOptions};
+//! use fireweave::start::{define_control_points, LocalControlPoint, LocalControlPoints, StartOptions};
 //! use fireweave::EvaluationContext;
 //! # fireweave::start::reset_for_tests();
 //!
-//! // src/fireweave_flags.rs: every control point the app reads, with its local value
-//! pub fn flags() -> Flags {
-//!     define_flags([("new-checkout", Flag::local(true))])
+//! // src/fireweave_control_points.rs: every control point the app reads, with its local value
+//! pub fn control_points() -> LocalControlPoints {
+//!     define_control_points([("new-checkout", LocalControlPoint::local(true))])
 //! }
 //!
 //! // main(), first thing after config loading
 //! # let run = || -> Result<(), fireweave::FireweaveError> {
-//! fireweave::start::start(StartOptions { flags: flags(), ..Default::default() })?;
+//! fireweave::start::start(StartOptions { control_points: control_points(), ..Default::default() })?;
 //! # Ok(()) };
 //! # let _ = run;
 //! # fireweave::start::start(StartOptions {
-//! #     flags: flags(),
+//! #     control_points: control_points(),
 //! #     mode: Some(fireweave::Mode::Local),
 //! #     log: Some(std::sync::Arc::new(|_line: &str| {})),
 //! #     ..Default::default()
@@ -73,8 +73,8 @@
 //! error if any. It never contains the key.
 
 mod channel;
+mod control_points;
 mod env;
-mod flags;
 mod instance;
 mod names;
 mod options;
@@ -83,7 +83,9 @@ mod state;
 mod test_hooks;
 
 pub use channel::{channel_for_version, sdk_channel, sdk_version, Channel};
-pub use flags::{define_flags, try_define_flags, Flag, Flags};
+pub use control_points::{
+    define_control_points, try_define_control_points, LocalControlPoint, LocalControlPoints,
+};
 pub use options::{env_map, EnvFn, LogFn, StartOptions};
 #[doc(hidden)]
 pub use state::reset_for_tests;

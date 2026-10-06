@@ -28,7 +28,7 @@ function scripted(...outcomes: Array<number | 'network' | 'timeout'>) {
     i += 1;
     if (next === 'network') throw new TypeError('fetch failed');
     if (next === 'timeout') throw Object.assign(new Error('aborted'), { name: 'AbortError' });
-    const body = next === 200 ? { decisions: [{ flagKey: 'f', value: true, reason: 'TARGETING_MATCH', found: true }] } : {};
+    const body = next === 200 ? { decisions: [{ controlPointKey: 'f', value: true, reason: 'TARGETING_MATCH', found: true }] } : {};
     return { status: next as number, text: async () => JSON.stringify(body), json: async () => body };
   };
   return { fetch, calls };
@@ -133,7 +133,7 @@ describe('SP-27: a refused key is visible', () => {
   });
 
   it('local mode makes no requests and never sets lastErrorKind', async () => {
-    start({ mode: 'local', env: {}, flags: { f: { local: true } }, log });
+    start({ mode: 'local', env: {}, controlPoints: { f: { local: true } }, log });
     await read();
     assert.equal(fw.status().lastErrorKind, undefined);
   });

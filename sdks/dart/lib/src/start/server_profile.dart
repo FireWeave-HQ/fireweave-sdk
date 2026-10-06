@@ -11,7 +11,7 @@ import 'package:fireweave/fireweave.dart';
 
 import 'channel.dart';
 import 'core.dart';
-import 'flags.dart';
+import 'control_points.dart';
 import 'identity.dart';
 import 'names.dart';
 import 'policy.dart';
@@ -135,7 +135,7 @@ Sourced? _pick(
 /// release channel. No I/O and no globals; [startServer] is this plus the
 /// singleton.
 PolicyResult resolveServerStart({
-  required Map<String, Flag> flags,
+  required Map<String, LocalControlPoint> controlPoints,
   required EnvLookup read,
   required SdkChannel channel,
   required String sdkVersion,
@@ -181,7 +181,7 @@ PolicyResult resolveServerStart({
       key: pickedKey,
       url: pickedUrl,
       environment: pickedEnvironment,
-      flags: flags,
+      controlPoints: controlPoints,
       channel: channel,
       sdkVersion: sdkVersion,
       environmentChecked:
@@ -198,7 +198,7 @@ PolicyResult resolveServerStart({
 
 /// Start the server profile.
 Future<void> startServer({
-  Map<String, Flag>? flags,
+  Map<String, LocalControlPoint>? controlPoints,
   Mode? mode,
   String? environment,
   String? url,
@@ -224,9 +224,9 @@ Future<void> startServer({
       ? (name) => _clean(env[name])
       : (name) => _clean(readProcessEnvironment(name));
 
-  final normalized = normalizeFlags(flags);
+  final normalized = normalizeControlPoints(controlPoints);
   final policy = resolveServerStart(
-    flags: normalized,
+    controlPoints: normalized,
     mode: mode,
     environment: environment,
     url: url,
@@ -302,7 +302,7 @@ abstract final class Fireweave {
   ///
   /// ```dart
   /// Future<void> main() async {
-  ///   await Fireweave.start(flags: flags);
+  ///   await Fireweave.start(controlPoints: controlPoints);
   ///   // serve...
   /// }
   /// ```
@@ -330,7 +330,7 @@ abstract final class Fireweave {
   /// [transport], it is not part of the configuration check: the first
   /// start's value applies.
   static Future<void> start({
-    Map<String, Flag>? flags,
+    Map<String, LocalControlPoint>? controlPoints,
     Mode? mode,
     String? environment,
     String? url,
@@ -341,7 +341,7 @@ abstract final class Fireweave {
     LogSink? log,
     Duration refreshInterval = defaultServerRefreshInterval,
   }) => startServer(
-    flags: flags,
+    controlPoints: controlPoints,
     mode: mode,
     environment: environment,
     url: url,

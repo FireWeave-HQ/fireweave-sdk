@@ -75,7 +75,7 @@ pub use domain::context::{
 pub use domain::decision::{reason, Decision};
 pub use domain::mode::Mode;
 pub use domain::target::TargetKind;
-pub use domain::types::{FlagMetadata, FlagType, JsonValue};
+pub use domain::types::{ControlPointMetadata, FlagType, JsonValue};
 
 // -- validation -----------------------------------------------------------------
 pub use domain::validation::{
@@ -84,4 +84,6 @@ pub use domain::validation::{
 };
 
 // -- errors -----------------------------------------------------------------------
-pub use domain::errors::{redact_secrets, ErrorKind, FireweaveError, FLAG_METADATA_ERROR_KIND_KEY};
+pub use domain::errors::{
+    redact_secrets, ErrorKind, FireweaveError, CONTROL_POINT_METADATA_ERROR_KIND_KEY,
+};

@@ -31,7 +31,7 @@ public interface BackendAdapter extends AutoCloseable {
      * Resolve a flag. Returns a {@link Decision} — including, for an adapter whose "unknown key"
      * row is {@code default}/{@code DEFAULT} rather than an error (spec/modes.md "Behaviour per
      * mode"), a plain, non-throwing {@code Decision} carrying the caller's default with reason
-     * {@code DEFAULT} — or throws {@link FireweaveException} (FlagNotFound, TypeMismatch,
+     * {@code DEFAULT} — or throws {@link FireweaveException} (ControlPointNotFound, TypeMismatch,
      * transport kinds, ...) for a genuine failure. The runtime — never the adapter — converts a
      * thrown exception into a default-valued ERROR decision; an adapter that wants the
      * DEFAULT-not-ERROR outcome MUST return it directly rather than throwing, so the runtime can

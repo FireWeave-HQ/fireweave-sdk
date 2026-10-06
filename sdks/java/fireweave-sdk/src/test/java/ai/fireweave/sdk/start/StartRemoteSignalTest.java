@@ -47,12 +47,12 @@ class StartRemoteSignalTest {
     void reset() throws IOException {
         Fw.resetForTests(new HashMap<String, String>()::get, () -> "api-pod-1");
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/v1/flags/evaluate", exchange -> {
+        server.createContext("/v1/control-points/evaluate", exchange -> {
             requests.incrementAndGet();
             exchange.getRequestBody().readAllBytes();
             int status = status(exchange);
             reply(exchange, status, status == 200
-                    ? "{\"decisions\":[{\"flagKey\":\"checkout-v2\",\"value\":true,\"found\":true}]}" : "{}");
+                    ? "{\"decisions\":[{\"controlPointKey\":\"checkout-v2\",\"value\":true,\"found\":true}]}" : "{}");
         });
         server.createContext("/v1/targets/register", exchange -> {
             requests.incrementAndGet();

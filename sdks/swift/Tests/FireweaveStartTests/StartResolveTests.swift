@@ -226,10 +226,10 @@ struct ServerResolveTests {
   }
 
   @Test func badFlagKeysFailNamingTheKey() throws {
-    let options = FireweaveStartOptions(flags: ["": true], mode: .local)
+    let options = FireweaveStartOptions(controlPoints: ["": true], mode: .local)
     let error = try #require(failure(options))
     #expect(error.kind == .configuration)
-    #expect(error.message.contains("flags:"))
+    #expect(error.message.contains("controlPoints:"))
   }
 }
 

@@ -30,21 +30,21 @@ describe('FireweaveRemoteAdapter', () => {
     });
   });
 
-  it('evaluates a flag via POST /v1/flags/evaluate with Bearer auth', async () => {
+  it('evaluates a flag via POST /v1/control-points/evaluate with Bearer auth', async () => {
     const calls: FetchCall[] = [];
     const fetch = mockFetch((url) => {
-      assert.ok(url.endsWith('/v1/flags/evaluate'));
+      assert.ok(url.endsWith('/v1/control-points/evaluate'));
       return {
         status: 200,
         body: {
           decisions: [
             {
-              flagKey: 'checkout-v2',
+              controlPointKey: 'checkout-v2',
               value: true,
               reason: 'TARGETING_MATCH',
               found: true,
               enabled: true,
-              flagMetadata: { 'fireweave.backend': 'other' },
+              controlPointMetadata: { 'fireweave.backend': 'other' },
             },
           ],
           requestId: 'req-1',
@@ -69,11 +69,11 @@ describe('FireweaveRemoteAdapter', () => {
     assert.equal(calls[0]?.init?.headers?.['authorization'], 'Bearer project-api-key_test');
     const body = JSON.parse(calls[0]?.init?.body ?? '{}') as {
       targetingKey: string;
-      flagKeys: string[];
+      controlPointKeys: string[];
       attributes: Record<string, string>;
     };
     assert.equal(body.targetingKey, 'user-1');
-    assert.deepEqual(body.flagKeys, ['checkout-v2']);
+    assert.deepEqual(body.controlPointKeys, ['checkout-v2']);
     assert.equal(body.attributes.plan, 'pro');
     await adapter.shutdown();
   });
@@ -104,7 +104,7 @@ describe('FireweaveRemoteAdapter', () => {
       }
       return {
         status: 200,
-        body: { decisions: [{ flagKey: 'f', value: true, reason: 'STATIC', found: true }] },
+        body: { decisions: [{ controlPointKey: 'f', value: true, reason: 'STATIC', found: true }] },
       };
     }, calls);
 
@@ -116,7 +116,7 @@ describe('FireweaveRemoteAdapter', () => {
     await adapter.initialize();
     adapter.recordExposure({
       targetingKey: 'user-1',
-      flagKey: 'checkout-v2',
+      controlPointKey: 'checkout-v2',
       value: true,
       variant: 'on',
     });
@@ -124,11 +124,11 @@ describe('FireweaveRemoteAdapter', () => {
     const capture = calls.find((c) => c.url.includes('/v1/capture'));
     assert.ok(capture);
     const body = JSON.parse(capture?.init?.body ?? '{}') as {
-      events: Array<{ type: string; flagKey: string }>;
+      events: Array<{ type: string; controlPointKey: string }>;
     };
     assert.equal(body.events.length, 1);
     assert.equal(body.events[0]?.type, 'exposure');
-    assert.equal(body.events[0]?.flagKey, 'checkout-v2');
+    assert.equal(body.events[0]?.controlPointKey, 'checkout-v2');
     await adapter.shutdown();
   });
 

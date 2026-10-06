@@ -6,35 +6,35 @@ import java.util.Objects;
  * One control point the app reads, with the value served in local mode. Immutable.
  *
  * <pre>{@code
- * Flag.local(true)
- * Flag.local(true, "new checkout flow")
+ * LocalControlPoint.local(true)
+ * LocalControlPoint.local(true, "new checkout flow")
  * }</pre>
  *
  * <p>The local value is ignored in remote mode, where fw-server and the rollout decide; call
- * sites keep {@code false} as their default, so a flags file can never switch a feature on in
+ * sites keep {@code false} as their default, so this file can never switch a feature on in
  * production.
  */
-public final class Flag {
+public final class LocalControlPoint {
 
     private final boolean localValue;
     private final String description;
 
-    private Flag(boolean localValue, String description) {
+    private LocalControlPoint(boolean localValue, String description) {
         this.localValue = localValue;
         this.description = description == null ? "" : description;
     }
 
     /** A control point served as {@code value} in local mode. */
-    public static Flag local(boolean value) {
-        return new Flag(value, "");
+    public static LocalControlPoint local(boolean value) {
+        return new LocalControlPoint(value, "");
     }
 
     /**
      * A control point served as {@code value} in local mode, with a note for humans and agents.
      * The description is never sent anywhere.
      */
-    public static Flag local(boolean value, String description) {
-        return new Flag(value, description);
+    public static LocalControlPoint local(boolean value, String description) {
+        return new LocalControlPoint(value, description);
     }
 
     /** The value served in local mode. */
@@ -49,10 +49,10 @@ public final class Flag {
 
     @Override
     public boolean equals(Object o) {
-        if (!(o instanceof Flag)) {
+        if (!(o instanceof LocalControlPoint)) {
             return false;
         }
-        Flag other = (Flag) o;
+        LocalControlPoint other = (LocalControlPoint) o;
         return localValue == other.localValue && description.equals(other.description);
     }
 
@@ -63,6 +63,6 @@ public final class Flag {
 
     @Override
     public String toString() {
-        return "Flag{local=" + localValue + (description.isEmpty() ? "" : ", description=" + description) + "}";
+        return "LocalControlPoint{local=" + localValue + (description.isEmpty() ? "" : ", description=" + description) + "}";
     }
 }

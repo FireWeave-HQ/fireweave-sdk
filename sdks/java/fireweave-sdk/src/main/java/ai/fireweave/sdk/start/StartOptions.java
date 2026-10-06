@@ -17,14 +17,14 @@ import java.util.function.Function;
  * as unset, options included.
  *
  * <pre>{@code
- * Fw.start(StartOptions.builder().flags(FireweaveFlags.FLAGS).build());
+ * Fw.start(StartOptions.builder().controlPoints(FireweaveControlPoints.CONTROL_POINTS).build());
  * }</pre>
  */
 public final class StartOptions {
 
     private static final StartOptions DEFAULTS = builder().build();
 
-    private final Flags flags;
+    private final LocalControlPoints controlPoints;
     private final Mode mode;
     private final String environment;
     private final String url;
@@ -34,7 +34,7 @@ public final class StartOptions {
     private final Consumer<String> log;
 
     private StartOptions(Builder b) {
-        this.flags = b.flags == null ? Flags.none() : b.flags;
+        this.controlPoints = b.controlPoints == null ? LocalControlPoints.none() : b.controlPoints;
         this.mode = b.mode;
         this.environment = b.environment;
         this.url = b.url;
@@ -54,8 +54,8 @@ public final class StartOptions {
     }
 
     /** Local values per control point. Applied in local mode only. Never null. */
-    public Flags flags() {
-        return flags;
+    public LocalControlPoints controlPoints() {
+        return controlPoints;
     }
 
     /** Forced mode, or null to infer it. */
@@ -92,7 +92,7 @@ public final class StartOptions {
 
     @Override
     public String toString() {
-        return "StartOptions{flags=" + flags.size()
+        return "StartOptions{controlPoints=" + controlPoints.size()
                 + ", mode=" + mode
                 + ", environment=" + environment
                 + ", url=" + url
@@ -103,7 +103,7 @@ public final class StartOptions {
     }
 
     public static final class Builder {
-        private Flags flags;
+        private LocalControlPoints controlPoints;
         private Mode mode;
         private String environment;
         private String url;
@@ -115,9 +115,9 @@ public final class StartOptions {
         private Builder() {
         }
 
-        /** Every control point the app reads, with its local value ({@link Fw#defineFlags}). */
-        public Builder flags(Flags flags) {
-            this.flags = flags;
+        /** Every control point the app reads, with its local value ({@link Fw#defineControlPoints}). */
+        public Builder controlPoints(LocalControlPoints controlPoints) {
+            this.controlPoints = controlPoints;
             return this;
         }
 

@@ -115,7 +115,7 @@ def test_vendor_exception_during_init_wrapped_with_cause():
 
 def test_adapter_exception_during_resolve_becomes_internal_decision():
     class ExplodingAdapter(InMemoryAdapter):
-        def resolve(self, flag_key, context):
+        def resolve(self, control_point_key, context):
             raise RuntimeError("vendor boom")
 
     rt = FireweaveRuntime(ExplodingAdapter())

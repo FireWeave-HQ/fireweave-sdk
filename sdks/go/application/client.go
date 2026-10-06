@@ -54,19 +54,6 @@ func (c *Client) Runtime() *Runtime { return c.runtime }
 // casing: ControlPoints).
 func (c *Client) ControlPoints() *ControlPoints { return c.controlPoints }
 
-// Flags is the control-point evaluation namespace under its FORMER name.
-//
-// Deprecated: renamed to Client.ControlPoints (ADR-0007). Identical and
-// fully supported — c.Flags() == c.ControlPoints() — so no migration is
-// required and none is planned. Silent at runtime: the alias is
-// permanent, not scheduled for removal, so there is nothing to warn a
-// caller toward — deprecation is conveyed by this doc comment only (no
-// log, and no env gate to control one, since the SDK reads no
-// environment variables regardless — spec/modes.md).
-func (c *Client) Flags() *ControlPoints {
-	return c.controlPoints
-}
-
 // RegisterTarget registers a user or device so rules can target its durable
 // properties (POST /v1/targets/register in remote mode; recorded
 // in-process and traced in local mode). Never panics: this runs in sign-in
@@ -103,8 +90,8 @@ func (c *Client) InvokeCapability(capability string, args map[string]any) *domai
 // ControlPoints is the typed evaluation surface — the nine methods
 // (spec/control-points.md "The nine methods"), Go-cased per
 // conformance/surface/control-points.surface.json. Documented as
-// Client.ControlPoints(); Client.Flags() is an identical alias sharing
-// identity, retained for compatibility.
+// Client.ControlPoints(). The Client.Flags() alias was removed in 3.0.0
+// (ADR-0013).
 type ControlPoints struct {
 	c *Client
 }
@@ -116,7 +103,7 @@ type ControlPoints struct {
 //
 // evalCtx and opts may be nil (equivalent to their zero values) — the Go
 // port of the descriptor's optional "context?"/"options?" arguments.
-func (cp *ControlPoints) Evaluate(flagKey string, flagType domain.FlagType, defaultValue any, evalCtx *domain.EvaluationContext, opts *EvaluateOptions) domain.Decision {
+func (cp *ControlPoints) Evaluate(controlPointKey string, flagType domain.FlagType, defaultValue any, evalCtx *domain.EvaluationContext, opts *EvaluateOptions) domain.Decision {
 	var ec domain.EvaluationContext
 	if evalCtx != nil {
 		ec = *evalCtx
@@ -126,11 +113,11 @@ func (cp *ControlPoints) Evaluate(flagKey string, flagType domain.FlagType, defa
 		includePayload = opts.IncludePayload
 	}
 	return cp.c.runtime.Evaluate(context.Background(), ResolveRequest{
-		FlagKey:        flagKey,
-		Type:           flagType,
-		DefaultValue:   defaultValue,
-		Context:        ec,
-		IncludePayload: includePayload,
+		ControlPointKey: controlPointKey,
+		Type:            flagType,
+		DefaultValue:    defaultValue,
+		Context:         ec,
+		IncludePayload:  includePayload,
 	})
 }
 
@@ -138,8 +125,8 @@ func (cp *ControlPoints) Evaluate(flagKey string, flagType domain.FlagType, defa
 // falling back to defaultValue when the resolved value is not itself a bool
 // (an adapter/type-mismatch edge the typed accessor must not propagate as a
 // panic).
-func (cp *ControlPoints) GetBooleanValue(flagKey string, defaultValue bool, evalCtx *domain.EvaluationContext) bool {
-	d := cp.Evaluate(flagKey, domain.FlagTypeBoolean, defaultValue, evalCtx, nil)
+func (cp *ControlPoints) GetBooleanValue(controlPointKey string, defaultValue bool, evalCtx *domain.EvaluationContext) bool {
+	d := cp.Evaluate(controlPointKey, domain.FlagTypeBoolean, defaultValue, evalCtx, nil)
 	if v, ok := d.Value.(bool); ok {
 		return v
 	}
@@ -147,8 +134,8 @@ func (cp *ControlPoints) GetBooleanValue(flagKey string, defaultValue bool, eval
 }
 
 // GetStringValue returns the resolved string value.
-func (cp *ControlPoints) GetStringValue(flagKey string, defaultValue string, evalCtx *domain.EvaluationContext) string {
-	d := cp.Evaluate(flagKey, domain.FlagTypeString, defaultValue, evalCtx, nil)
+func (cp *ControlPoints) GetStringValue(controlPointKey string, defaultValue string, evalCtx *domain.EvaluationContext) string {
+	d := cp.Evaluate(controlPointKey, domain.FlagTypeString, defaultValue, evalCtx, nil)
 	if v, ok := d.Value.(string); ok {
 		return v
 	}
@@ -157,8 +144,8 @@ func (cp *ControlPoints) GetStringValue(flagKey string, defaultValue string, eva
 
 // GetNumberValue returns the resolved number value. number, not integer —
 // Decision.Value is jsonValue.
-func (cp *ControlPoints) GetNumberValue(flagKey string, defaultValue float64, evalCtx *domain.EvaluationContext) float64 {
-	d := cp.Evaluate(flagKey, domain.FlagTypeNumber, defaultValue, evalCtx, nil)
+func (cp *ControlPoints) GetNumberValue(controlPointKey string, defaultValue float64, evalCtx *domain.EvaluationContext) float64 {
+	d := cp.Evaluate(controlPointKey, domain.FlagTypeNumber, defaultValue, evalCtx, nil)
 	if v, ok := asFloat64(d.Value); ok {
 		return v
 	}
@@ -167,8 +154,8 @@ func (cp *ControlPoints) GetNumberValue(flagKey string, defaultValue float64, ev
 
 // GetObjectValue returns the resolved JSON object/array value. REQUIRED,
 // not optional (spec/control-points.md "The nine methods").
-func (cp *ControlPoints) GetObjectValue(flagKey string, defaultValue any, evalCtx *domain.EvaluationContext) any {
-	d := cp.Evaluate(flagKey, domain.FlagTypeObject, defaultValue, evalCtx, nil)
+func (cp *ControlPoints) GetObjectValue(controlPointKey string, defaultValue any, evalCtx *domain.EvaluationContext) any {
+	d := cp.Evaluate(controlPointKey, domain.FlagTypeObject, defaultValue, evalCtx, nil)
 	switch d.Value.(type) {
 	case map[string]any, []any:
 		return d.Value
@@ -180,23 +167,23 @@ func (cp *ControlPoints) GetObjectValue(flagKey string, defaultValue any, evalCt
 // GetBooleanDetails returns the full Decision rather than just its value.
 // Same arguments as GetBooleanValue, so a caller upgrades from one to the
 // other without restructuring the call.
-func (cp *ControlPoints) GetBooleanDetails(flagKey string, defaultValue bool, evalCtx *domain.EvaluationContext) domain.Decision {
-	return cp.Evaluate(flagKey, domain.FlagTypeBoolean, defaultValue, evalCtx, nil)
+func (cp *ControlPoints) GetBooleanDetails(controlPointKey string, defaultValue bool, evalCtx *domain.EvaluationContext) domain.Decision {
+	return cp.Evaluate(controlPointKey, domain.FlagTypeBoolean, defaultValue, evalCtx, nil)
 }
 
 // GetStringDetails returns the full Decision for a string control point.
-func (cp *ControlPoints) GetStringDetails(flagKey string, defaultValue string, evalCtx *domain.EvaluationContext) domain.Decision {
-	return cp.Evaluate(flagKey, domain.FlagTypeString, defaultValue, evalCtx, nil)
+func (cp *ControlPoints) GetStringDetails(controlPointKey string, defaultValue string, evalCtx *domain.EvaluationContext) domain.Decision {
+	return cp.Evaluate(controlPointKey, domain.FlagTypeString, defaultValue, evalCtx, nil)
 }
 
 // GetNumberDetails returns the full Decision for a number control point.
-func (cp *ControlPoints) GetNumberDetails(flagKey string, defaultValue float64, evalCtx *domain.EvaluationContext) domain.Decision {
-	return cp.Evaluate(flagKey, domain.FlagTypeNumber, defaultValue, evalCtx, nil)
+func (cp *ControlPoints) GetNumberDetails(controlPointKey string, defaultValue float64, evalCtx *domain.EvaluationContext) domain.Decision {
+	return cp.Evaluate(controlPointKey, domain.FlagTypeNumber, defaultValue, evalCtx, nil)
 }
 
 // GetObjectDetails returns the full Decision for an object control point.
-func (cp *ControlPoints) GetObjectDetails(flagKey string, defaultValue any, evalCtx *domain.EvaluationContext) domain.Decision {
-	return cp.Evaluate(flagKey, domain.FlagTypeObject, defaultValue, evalCtx, nil)
+func (cp *ControlPoints) GetObjectDetails(controlPointKey string, defaultValue any, evalCtx *domain.EvaluationContext) domain.Decision {
+	return cp.Evaluate(controlPointKey, domain.FlagTypeObject, defaultValue, evalCtx, nil)
 }
 
 func asFloat64(v any) (float64, bool) {

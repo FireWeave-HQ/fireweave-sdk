@@ -1,7 +1,7 @@
 /**
  * The shared start-profile suite (contracts/start/, spec/start-profile.md) on
  * Node: the reference runner. Drives the pure resolver, the instance-key
- * derivation and defineFlags with each case's inputs, compares by the rules in
+ * derivation and defineControlPoints with each case's inputs, compares by the rules in
  * contracts/start/README.md, and writes
  * test/conformance/compatibility-report.start.node.json (gitignored).
  */
@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { resolveStart } from '../../src/start/resolve.ts';
 import { envFromBag } from '../../src/start/env.ts';
 import { deriveInstanceKey } from '../../src/start/instance.ts';
-import { defineFlags } from '../../src/start/flags.ts';
+import { defineControlPoints } from '../../src/start/control-points.ts';
 import { isFireweaveError } from '../../src/index.ts';
 
 const LANG = 'node';
@@ -94,9 +94,9 @@ function runInstanceKey(c: Case): Outcome {
   return { fields: { value: key.value }, warnings: [] };
 }
 
-function runDefineFlags(c: Case): Outcome {
+function runDefineControlPoints(c: Case): Outcome {
   try {
-    defineFlags(c.when.flags as never);
+    defineControlPoints(c.when.controlPoints as never);
     return { fields: { ok: true }, warnings: [] };
   } catch (err) {
     if (!isFireweaveError(err)) throw err;
@@ -110,8 +110,8 @@ function run(c: Case): Outcome {
       return runResolve(c);
     case 'instanceKey':
       return runInstanceKey(c);
-    case 'defineFlags':
-      return runDefineFlags(c);
+    case 'defineControlPoints':
+      return runDefineControlPoints(c);
     default:
       throw new Error(`operation ${c.when.operation} is not applicable to ${LANG}`);
   }

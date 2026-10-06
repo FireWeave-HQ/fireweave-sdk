@@ -8,14 +8,14 @@
 // process. It is built only on the fireweave package's public API and the
 // standard library.
 //
-//	// internal/fireweave/flags.go: every control point the app reads, with its local value
-//	var Flags = fw.DefineFlags(fw.Flags{
+//	// internal/fireweave/control_points.go: every control point the app reads, with its local value
+//	var ControlPoints = fw.DefineControlPoints(fw.LocalControlPoints{
 //		"new-checkout": {Local: true, Description: "new checkout flow"},
 //	})
 //
 //	// main(), after the app's own config loading
 //	// (appfw is the app's internal/fireweave package)
-//	if err := fw.Start(fw.Options{Flags: appfw.Flags}); err != nil {
+//	if err := fw.Start(fw.Options{ControlPoints: appfw.ControlPoints}); err != nil {
 //		log.Fatal(err)
 //	}
 //
@@ -48,6 +48,6 @@
 // # Debugging
 //
 // Status reports the state, mode and why, channel, SDK version, host,
-// endpoint source, key source, environment and flag count, and the start
+// endpoint source, key source, environment and control-point count, and the start
 // error if any. It never contains the key.
 package fw

@@ -53,14 +53,14 @@ void main() {
         expect((await fw.identify('user-1')).ok, isTrue);
         await fw.reset();
         expect(server.requests.map((r) => r.path), <String>[
-          '/v1/flags/evaluate',
+          '/v1/control-points/evaluate',
           '/v1/targets/register',
-          '/v1/flags/evaluate',
-          '/v1/flags/evaluate',
+          '/v1/control-points/evaluate',
+          '/v1/control-points/evaluate',
         ]);
         expect(
           server.requests
-              .where((r) => r.path == '/v1/flags/evaluate')
+              .where((r) => r.path == '/v1/control-points/evaluate')
               .map((r) => r.body['targetingKey']),
           <Object?>[device, 'user-1', device],
         );

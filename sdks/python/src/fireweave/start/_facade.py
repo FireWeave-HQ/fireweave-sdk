@@ -38,7 +38,7 @@ from fireweave import (
 from . import _state
 from ._state import FireweaveStatus
 
-# fireweave.domain.errors.FLAG_METADATA_ERROR_KIND_KEY, which the public
+# fireweave.domain.errors.CONTROL_POINT_METADATA_ERROR_KIND_KEY, which the public
 # package does not export; start/ may only use the public API.
 _ERROR_KIND_KEY = "fireweave.errorKind"
 
@@ -52,7 +52,7 @@ def _error_decision(default: Any, error: FireweaveError) -> Decision:
         error_code=error.openfeature_error_code,
         error_message=error.message,
         error_kind=error.kind,
-        flag_metadata={_ERROR_KIND_KEY: error.kind.value},
+        control_point_metadata={_ERROR_KIND_KEY: error.kind.value},
     )
 
 
@@ -64,21 +64,21 @@ def _as_fireweave_error(exc: Exception) -> FireweaveError:
     return wrapped
 
 
-def _note_local_key(flag_key: str) -> None:
-    """Local mode: a key missing from the flags object gets its default, with
-    one warning naming the flags file."""
-    local = _state.local_flags()
-    if local is None or flag_key in local[0]:
+def _note_local_key(control_point_key: str) -> None:
+    """Local mode: a key missing from the control-points object gets its default,
+    with one warning naming the file that declared it."""
+    local = _state.local_control_points()
+    if local is None or control_point_key in local[0]:
         return
     where = f" ({local[1]})" if local[1] is not None else ""
     _state.warn_once(
-        f"[fireweave:local] {flag_key!r} is not in your flags object{where}, so it gets its default. "
+        f"[fireweave:local] {control_point_key!r} is not in your control points{where}, so it gets its default. "
         "Add it there to try it locally."
     )
 
 
 def _read(
-    flag_key: str,
+    control_point_key: str,
     flag_type: FlagType,
     default: Any,
     context: Any,
@@ -90,7 +90,7 @@ def _read(
             # The core expects an EvaluationContext; anything else is an
             # invalid context, never an exception out of a read.
             return _error_decision(default, InvalidContextError("context must be a fireweave.EvaluationContext"))
-        decision = client.control_points.evaluate(flag_key, flag_type, default, context, options)
+        decision = client.control_points.evaluate(control_point_key, flag_type, default, context, options)
         if decision.error_kind is ErrorKind.ALREADY_CLOSED:
             # The client was swapped out and shut down between loading it and
             # reading (the first explicit start() after an implicit one): read
@@ -98,11 +98,11 @@ def _read(
             # slot still holds the closed client, so this does not retry.
             current = _state.current_client()
             if current is not client:
-                decision = current.control_points.evaluate(flag_key, flag_type, default, context, options)
+                decision = current.control_points.evaluate(control_point_key, flag_type, default, context, options)
     except Exception as exc:
         return _error_decision(default, _as_fireweave_error(exc))
     _state.observe_error(decision.error_kind)
-    _note_local_key(flag_key)
+    _note_local_key(control_point_key)
     return decision
 
 
@@ -114,43 +114,43 @@ class ControlPoints:
 
     def evaluate(
         self,
-        flag_key: str,
+        control_point_key: str,
         flag_type: FlagType,
         default: Any,
         context: Optional[EvaluationContext] = None,
         options: Optional[EvaluateOptions] = None,
     ) -> Decision:
-        return _read(flag_key, flag_type, default, context, options)
+        return _read(control_point_key, flag_type, default, context, options)
 
-    def get_boolean_value(self, flag_key: str, default: bool, context: Optional[EvaluationContext] = None) -> bool:
-        return _read(flag_key, FlagType.BOOLEAN, default, context).value
+    def get_boolean_value(self, control_point_key: str, default: bool, context: Optional[EvaluationContext] = None) -> bool:
+        return _read(control_point_key, FlagType.BOOLEAN, default, context).value
 
-    def get_string_value(self, flag_key: str, default: str, context: Optional[EvaluationContext] = None) -> str:
-        return _read(flag_key, FlagType.STRING, default, context).value
+    def get_string_value(self, control_point_key: str, default: str, context: Optional[EvaluationContext] = None) -> str:
+        return _read(control_point_key, FlagType.STRING, default, context).value
 
-    def get_number_value(self, flag_key: str, default: Any, context: Optional[EvaluationContext] = None) -> Any:
-        return _read(flag_key, FlagType.NUMBER, default, context).value
+    def get_number_value(self, control_point_key: str, default: Any, context: Optional[EvaluationContext] = None) -> Any:
+        return _read(control_point_key, FlagType.NUMBER, default, context).value
 
     def get_object_value(
-        self, flag_key: str, default: JsonValue, context: Optional[EvaluationContext] = None
+        self, control_point_key: str, default: JsonValue, context: Optional[EvaluationContext] = None
     ) -> JsonValue:
-        return _read(flag_key, FlagType.OBJECT, default, context).value
+        return _read(control_point_key, FlagType.OBJECT, default, context).value
 
     def get_boolean_details(
-        self, flag_key: str, default: bool, context: Optional[EvaluationContext] = None
+        self, control_point_key: str, default: bool, context: Optional[EvaluationContext] = None
     ) -> Decision:
-        return _read(flag_key, FlagType.BOOLEAN, default, context)
+        return _read(control_point_key, FlagType.BOOLEAN, default, context)
 
-    def get_string_details(self, flag_key: str, default: str, context: Optional[EvaluationContext] = None) -> Decision:
-        return _read(flag_key, FlagType.STRING, default, context)
+    def get_string_details(self, control_point_key: str, default: str, context: Optional[EvaluationContext] = None) -> Decision:
+        return _read(control_point_key, FlagType.STRING, default, context)
 
-    def get_number_details(self, flag_key: str, default: Any, context: Optional[EvaluationContext] = None) -> Decision:
-        return _read(flag_key, FlagType.NUMBER, default, context)
+    def get_number_details(self, control_point_key: str, default: Any, context: Optional[EvaluationContext] = None) -> Decision:
+        return _read(control_point_key, FlagType.NUMBER, default, context)
 
     def get_object_details(
-        self, flag_key: str, default: JsonValue, context: Optional[EvaluationContext] = None
+        self, control_point_key: str, default: JsonValue, context: Optional[EvaluationContext] = None
     ) -> Decision:
-        return _read(flag_key, FlagType.OBJECT, default, context)
+        return _read(control_point_key, FlagType.OBJECT, default, context)
 
 
 class Fireweave:
@@ -206,7 +206,7 @@ class Fireweave:
 
     def status(self) -> FireweaveStatus:
         """What start() decided: mode and why, channel, host, key source,
-        environment, flag count, error. Never includes the key."""
+        environment, control-point count, error. Never includes the key."""
         return _state.current_status()
 
     def client(self) -> FireweaveClient:

@@ -5,11 +5,11 @@
   "tags": ["type", "error"],
   "given": {
     "providerState": "READY",
-    "flags": { "web-bool": { "type": "boolean", "enabled": true, "value": true } }
+    "controlPoints": { "web-bool": { "type": "boolean", "enabled": true, "value": true } }
   },
   "when": {
     "operation": "evaluateSync",
-    "flagKey": "web-bool",
+    "controlPointKey": "web-bool",
     "flagType": "string",
     "defaultValue": "fallback",
     "invocationContext": { "targetingKey": "user_web_1" }

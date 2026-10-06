@@ -14,7 +14,7 @@
     "operation": "recordExposure",
     "exposure": {
       "targetingKey": "org_01HZXEXP000000000000001",
-      "flagKey": "fw-exp",
+      "controlPointKey": "fw-exp",
       "variant": "on",
       "value": true,
       "rolloutId": "rollout_01HZXEXP000000000000001"

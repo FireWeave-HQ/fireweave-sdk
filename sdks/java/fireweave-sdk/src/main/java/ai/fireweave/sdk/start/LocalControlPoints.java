@@ -12,59 +12,59 @@ import java.util.TreeMap;
 
 /**
  * Every control point the app reads, keyed by control point key, with the value served in local
- * mode. Built by {@link Fw#defineFlags(Map)}, which checks every key; immutable.
+ * mode. Built by {@link Fw#defineControlPoints(Map)}, which checks every key; immutable.
  *
- * <p>It conventionally lives in its own class ({@code FireweaveFlags.java}) and is passed as
- * {@link StartOptions.Builder#flags(Flags)}. It holds local values only: in remote mode call
- * sites keep {@code false} as their default, so a flags file can never switch a feature on in
+ * <p>It conventionally lives in its own class ({@code FireweaveControlPoints.java}) and is passed as
+ * {@link StartOptions.Builder#controlPoints(LocalControlPoints)}. It holds local values only: in remote mode call
+ * sites keep {@code false} as their default, so this file can never switch a feature on in
  * production.
  */
-public final class Flags {
+public final class LocalControlPoints {
 
-    private static final Flags NONE = new Flags(Collections.emptyMap());
+    private static final LocalControlPoints NONE = new LocalControlPoints(Collections.emptyMap());
 
     /** Sorted by key, so the signature and iteration order never depend on the caller's map. */
-    private final Map<String, Flag> entries;
+    private final Map<String, LocalControlPoint> entries;
 
-    private Flags(Map<String, Flag> entries) {
+    private LocalControlPoints(Map<String, LocalControlPoint> entries) {
         this.entries = Collections.unmodifiableMap(new LinkedHashMap<>(entries));
     }
 
-    /** No flags: every read gets its default in local mode. */
-    public static Flags none() {
+    /** No control points: every read gets its default in local mode. */
+    public static LocalControlPoints none() {
         return NONE;
     }
 
     /**
      * Checks every key with the core's control point key rule and returns an immutable copy.
-     * Throws {@link FireweaveException} (kind {@code Configuration}) for a null map, key or flag,
+     * Throws {@link FireweaveException} (kind {@code Configuration}) for a null map, key or value,
      * or a key the core would reject.
      */
-    static Flags of(Map<String, Flag> flags) {
-        if (flags == null) {
-            throw configError("flags: the map is null. Pass Flags.none() for no flags.");
+    static LocalControlPoints of(Map<String, LocalControlPoint> controlPoints) {
+        if (controlPoints == null) {
+            throw configError("controlPoints: the map is null. Pass LocalControlPoints.none() for none.");
         }
-        Map<String, Flag> sorted = new TreeMap<>();
-        for (Map.Entry<String, Flag> e : flags.entrySet()) {
+        Map<String, LocalControlPoint> sorted = new TreeMap<>();
+        for (Map.Entry<String, LocalControlPoint> e : controlPoints.entrySet()) {
             String key = e.getKey();
             if (key == null) {
-                throw configError("flags: a key is null.");
+                throw configError("controlPoints: a key is null.");
             }
             Validated<String> valid = Validation.validateControlPointKey(key);
             if (!valid.isOk()) {
-                throw configError("flags: " + describeKey(key) + " is not a valid control point key ("
+                throw configError("controlPoints: " + describeKey(key) + " is not a valid control point key ("
                         + valid.error().getMessage() + ").");
             }
             if (e.getValue() == null) {
-                throw configError("flags: " + describeKey(key) + " has no Flag. Use Flag.local(true) or Flag.local(false).");
+                throw configError("controlPoints: " + describeKey(key) + " has no LocalControlPoint. Use LocalControlPoint.local(true) or LocalControlPoint.local(false).");
             }
             sorted.put(key, e.getValue());
         }
-        return sorted.isEmpty() ? NONE : new Flags(sorted);
+        return sorted.isEmpty() ? NONE : new LocalControlPoints(sorted);
     }
 
-    /** Every flag, by key (sorted). Unmodifiable. */
-    public Map<String, Flag> asMap() {
+    /** Every control point, by key (sorted). Unmodifiable. */
+    public Map<String, LocalControlPoint> asMap() {
         return entries;
     }
 
@@ -79,7 +79,7 @@ public final class Flags {
     /** The core local adapter's seed map. */
     Map<String, Boolean> localValues() {
         Map<String, Boolean> out = new LinkedHashMap<>();
-        for (Map.Entry<String, Flag> e : entries.entrySet()) {
+        for (Map.Entry<String, LocalControlPoint> e : entries.entrySet()) {
             out.put(e.getKey(), e.getValue().localValue());
         }
         return out;
@@ -88,7 +88,7 @@ public final class Flags {
     /** A canonical rendering of the local values, for the idempotency check. */
     String signature() {
         StringBuilder sb = new StringBuilder();
-        for (Map.Entry<String, Flag> e : entries.entrySet()) {
+        for (Map.Entry<String, LocalControlPoint> e : entries.entrySet()) {
             sb.append(e.getKey().length()).append(':').append(e.getKey())
                     .append('=').append(e.getValue().localValue()).append(';');
         }
@@ -122,7 +122,7 @@ public final class Flags {
 
     @Override
     public boolean equals(Object o) {
-        return o instanceof Flags && entries.equals(((Flags) o).entries);
+        return o instanceof LocalControlPoints && entries.equals(((LocalControlPoints) o).entries);
     }
 
     @Override
@@ -132,6 +132,6 @@ public final class Flags {
 
     @Override
     public String toString() {
-        return "Flags" + entries;
+        return "LocalControlPoints" + entries;
     }
 }

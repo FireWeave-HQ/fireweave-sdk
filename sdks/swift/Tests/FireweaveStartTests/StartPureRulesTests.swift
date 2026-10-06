@@ -90,23 +90,23 @@ struct InstanceKeyTests {
   }
 }
 
-@Suite("Start profile: flags")
+@Suite("Start profile: controlPoints")
 struct FlagsTests {
-  @Test func defineFlagsReturnsItsArgument() {
-    let flags = defineFlags([
+  @Test func defineControlPointsReturnsItsArgument() {
+    let controlPoints = defineControlPoints([
       "new-checkout": .local(true, description: "New checkout flow"),
       "old-banner": false,
     ])
-    let expected = FireweaveFlag(localValue: true, description: "New checkout flow")
-    #expect(flags["new-checkout"] == expected)
-    #expect(flags["old-banner"]?.localValue == false)
-    #expect(localSeeds(flags) == ["new-checkout": true, "old-banner": false])
+    let expected = FireweaveLocalControlPoint(localValue: true, description: "New checkout flow")
+    #expect(controlPoints["new-checkout"] == expected)
+    #expect(controlPoints["old-banner"]?.localValue == false)
+    #expect(localSeeds(controlPoints) == ["new-checkout": true, "old-banner": false])
   }
 
   @Test func badKeysAreConfigurationErrorsNamingTheKey() {
     let tooLong = String(repeating: "k", count: 300)
     for key in ["", tooLong, "line\nbreak"] {
-      guard case .failure(let error) = normalizeFlags([key: true]) else {
+      guard case .failure(let error) = normalizeControlPoints([key: true]) else {
         Issue.record("\(key.prefix(10)) should be rejected")
         continue
       }
@@ -116,10 +116,10 @@ struct FlagsTests {
   }
 
   @Test func theSignatureIgnoresDescriptionsAndOrder() {
-    let first: FireweaveFlags = ["b": .local(true, description: "x"), "a": false]
-    let second: FireweaveFlags = ["a": false, "b": true]
-    #expect(flagsSignature(first) == flagsSignature(second))
-    #expect(flagsSignature(first) != flagsSignature(["a": true, "b": true]))
+    let first: FireweaveLocalControlPoints = ["b": .local(true, description: "x"), "a": false]
+    let second: FireweaveLocalControlPoints = ["a": false, "b": true]
+    #expect(controlPointsSignature(first) == controlPointsSignature(second))
+    #expect(controlPointsSignature(first) != controlPointsSignature(["a": true, "b": true]))
   }
 }
 

@@ -1,6 +1,6 @@
 """Fireweave remote backend adapter — default production path.
 
-HTTP client for fw-server ``POST /v1/flags/evaluate`` and
+HTTP client for fw-server ``POST /v1/control-points/evaluate`` and
 ``POST /v1/targets/register``. Auth: ``Authorization: Bearer <api_key>``.
 Speaks only the vendor-neutral Fireweave remote protocol — no vendor SDK,
 key, or host ever enters the application process; which backend fw-server
@@ -25,7 +25,7 @@ from ...domain.errors import (
     BackendUnavailableError,
     ConfigurationError,
     FireweaveError,
-    FlagNotFoundError,
+    ControlPointNotFoundError,
     MalformedResponseError,
     NetworkError,
     NotReadyError,
@@ -38,7 +38,7 @@ from ..hosts import assert_host_allowed
 
 __all__ = ["FireweaveRemoteAdapter"]
 
-_EVALUATE_PATH = "/v1/flags/evaluate"
+_EVALUATE_PATH = "/v1/control-points/evaluate"
 _REGISTER_TARGET_PATH = "/v1/targets/register"
 
 
@@ -114,7 +114,7 @@ class FireweaveRemoteAdapter:
         self.api_key = api_key
         self._ready = True
 
-    def resolve(self, flag_key: str, context: EvaluationContext) -> FlagResolution:
+    def resolve(self, control_point_key: str, context: EvaluationContext) -> FlagResolution:
         if self._closed:
             raise AlreadyClosedError()
         if not self._ready:
@@ -137,7 +137,7 @@ class FireweaveRemoteAdapter:
                 continue
             attributes[k] = v
 
-        body: Dict[str, Any] = {"targetingKey": targeting, "flagKeys": [flag_key]}
+        body: Dict[str, Any] = {"targetingKey": targeting, "controlPointKeys": [control_point_key]}
         if attributes:
             body["attributes"] = attributes
         if groups:
@@ -147,24 +147,24 @@ class FireweaveRemoteAdapter:
 
         data = self._request(_EVALUATE_PATH, body)
         decisions = data.get("decisions") or []
-        item = next((d for d in decisions if d.get("flagKey") == flag_key), None)
+        item = next((d for d in decisions if d.get("controlPointKey") == control_point_key), None)
         quota_limited = bool(data.get("quotaLimited"))
         if item is None or item.get("found") is False:
-            # key unknown to the backend -> ERROR/FlagNotFound
+            # key unknown to the backend -> ERROR/ControlPointNotFound
             # (spec/control-points.md return-discipline table) — deliberately
             # NOT `matched=False` (that path means the local-mode "no
             # decision, use the caller's default" seam, which does not apply
             # to remote's "unknown key" row).
-            raise FlagNotFoundError(quota_limited=quota_limited)
+            raise ControlPointNotFoundError(quota_limited=quota_limited)
 
-        meta = item.get("flagMetadata") or {}
+        meta = item.get("controlPointMetadata") or {}
         return FlagResolution(
             value=item.get("value"),
             variant=item.get("variant"),
             enabled=bool(item.get("enabled", True)),
             matched=True,
-            version=meta.get("fireweave.flagVersion"),
-            vendor_flag_id=meta.get("fireweave.vendorFlagId"),
+            version=meta.get("fireweave.controlPointVersion"),
+            vendor_control_point_id=meta.get("fireweave.vendorControlPointId"),
             reason_code=meta.get("fireweave.reasonCode"),
             payload=item.get("payload"),
             fireweave_reason=item.get("reason"),

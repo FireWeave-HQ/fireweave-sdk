@@ -9,16 +9,19 @@
 // (FIREWEAVE_BROWSER_KEY, and optionally FIREWEAVE_URL and FIREWEAVE_ENV).
 import 'package:fireweave/client.dart';
 
-// Conventionally lib/fireweave/flags.dart: every control point the app reads,
+// Conventionally lib/fireweave/controlPoints.dart: every control point the app reads,
 // with the value served in local mode only.
-final flags = defineFlags({
-  'new-checkout': const Flag.local(true, description: 'New checkout flow'),
+final controlPoints = defineControlPoints({
+  'new-checkout': const LocalControlPoint.local(
+    true,
+    description: 'New checkout flow',
+  ),
 });
 
 Future<void> main() async {
   // Never throws: a refused configuration leaves fw.status.state == failed and
   // every read serving its default.
-  await Fireweave.start(flags: flags);
+  await Fireweave.start(controlPoints: controlPoints);
 
   // @fireweave-controlpoint new-checkout
   final on = fw.controlPoints.getBooleanValue('new-checkout', false);

@@ -14,7 +14,7 @@ public struct RuntimeConfig: Sendable {
   public var flagsReadyTimeoutMs: Int
   public var globalContext: EvaluationContext?
   /// Restrict prefetch to a known set of control points.
-  public var flagKeys: [String]?
+  public var controlPointKeys: [String]?
 
   public init(
     limits: ContextLimits = defaultContextLimits,
@@ -22,14 +22,14 @@ public struct RuntimeConfig: Sendable {
     requireTargetingKey: Bool = false,
     flagsReadyTimeoutMs: Int = defaultFlagsReadyTimeoutMs,
     globalContext: EvaluationContext? = nil,
-    flagKeys: [String]? = nil
+    controlPointKeys: [String]? = nil
   ) {
     self.limits = limits
     self.reservedAttributeKeys = reservedAttributeKeys
     self.requireTargetingKey = requireTargetingKey
     self.flagsReadyTimeoutMs = flagsReadyTimeoutMs
     self.globalContext = globalContext
-    self.flagKeys = flagKeys
+    self.controlPointKeys = controlPointKeys
   }
 }
 
@@ -79,7 +79,7 @@ public final class FireweaveRuntime: @unchecked Sendable {
   private let reservedAttributeKeys: Set<String>
   private let requireTargetingKey: Bool
   private let flagsReadyTimeoutMs: Int
-  private let flagKeys: [String]?
+  private let controlPointKeys: [String]?
   private let cacheBox = ControlPointsCacheBox()
   private let contextBox: ContextBox
 
@@ -89,7 +89,7 @@ public final class FireweaveRuntime: @unchecked Sendable {
     self.reservedAttributeKeys = config.reservedAttributeKeys
     self.requireTargetingKey = config.requireTargetingKey
     self.flagsReadyTimeoutMs = config.flagsReadyTimeoutMs
-    self.flagKeys = config.flagKeys
+    self.controlPointKeys = config.controlPointKeys
     self.contextBox = ContextBox(global: config.globalContext)
   }
 
@@ -187,7 +187,7 @@ public final class FireweaveRuntime: @unchecked Sendable {
     }
 
     let gate = PrefetchRaceGate()
-    let options = flagKeys.map { PrefetchOptions(flagKeys: $0) }
+    let options = controlPointKeys.map { PrefetchOptions(controlPointKeys: $0) }
 
     Task { [adapter] in
       do {
@@ -268,7 +268,7 @@ public final class FireweaveRuntime: @unchecked Sendable {
     // 2. The key is ABSENT from the batch entirely — governed by
     //    `adapter.missReason`: local mode's unknown-key row is `default`/
     //    `DEFAULT` (`spec/modes.md` "Behaviour per mode"); every other
-    //    adapter's absent key is `default`/`ERROR`/`FlagNotFound`.
+    //    adapter's absent key is `default`/`ERROR`/`ControlPointNotFound`.
     if let resolution = snap.cache[key] {
       if !resolution.found {
         // STALE when this answer is the last good one after a failed
@@ -285,15 +285,15 @@ public final class FireweaveRuntime: @unchecked Sendable {
       return Decision(value: defaultValue, reason: .defaultReason)
     }
     // A cache miss while STALE is not a missing control point — it is an
-    // unanswered question. Reporting FlagNotFound there would send a
+    // unanswered question. Reporting ControlPointNotFound there would send a
     // caller hunting for a flag that may well exist.
     if snap.state == .stale {
       return Decision(
         value: defaultValue, variant: "default", reason: .stale,
-        flagMetadata: ["fireweave.stale": true]
+        controlPointMetadata: ["fireweave.stale": true]
       )
     }
-    return Self.errorDecision(defaultValue, .flagNotFound())
+    return Self.errorDecision(defaultValue, .controlPointNotFound())
   }
 
   private static func decisionFromResolution(
@@ -308,9 +308,9 @@ public final class FireweaveRuntime: @unchecked Sendable {
       return Self.errorDecision(defaultValue, FireweaveError(kind: .typeMismatch))
     }
 
-    var metadata: FlagMetadata = [:]
+    var metadata: ControlPointMetadata = [:]
     if let version = resolution.version {
-      metadata["fireweave.flagVersion"] = .number(Double(version))
+      metadata["fireweave.controlPointVersion"] = .number(Double(version))
     }
     // Detailed enrichment (ruling 11): emit both keys, or neither. This
     // pass-through does NOT re-derive the ruling-11 gate itself — that
@@ -318,8 +318,8 @@ public final class FireweaveRuntime: @unchecked Sendable {
     // only `InMemoryAdapter`'s fixture input carries, and it applies the
     // gate before constructing the `AdapterResolution` this reads (same
     // fix rust's task-12 review round applied to its own runtime).
-    if let vendorFlagId = resolution.vendorFlagId, let reasonCode = resolution.reasonCode {
-      metadata["fireweave.vendorFlagId"] = .number(Double(vendorFlagId))
+    if let vendorControlPointId = resolution.vendorControlPointId, let reasonCode = resolution.reasonCode {
+      metadata["fireweave.vendorControlPointId"] = .number(Double(vendorControlPointId))
       metadata["fireweave.reasonCode"] = .string(reasonCode)
     }
     if resolution.fromCache {
@@ -351,7 +351,7 @@ public final class FireweaveRuntime: @unchecked Sendable {
     }
 
     return Decision(
-      value: value, variant: resolution.variant, reason: reason, flagMetadata: metadata)
+      value: value, variant: resolution.variant, reason: reason, controlPointMetadata: metadata)
   }
 
   // MARK: - target registration
@@ -423,8 +423,8 @@ public final class FireweaveRuntime: @unchecked Sendable {
 
   private static func errorDecision(_ defaultValue: JSONValue, _ error: FireweaveError) -> Decision
   {
-    var metadata: FlagMetadata = [flagMetadataErrorKindKey: .string(error.kind.rawValue)]
-    if error.kind == .flagNotFound && error.quotaLimited {
+    var metadata: ControlPointMetadata = [controlPointMetadataErrorKindKey: .string(error.kind.rawValue)]
+    if error.kind == .controlPointNotFound && error.quotaLimited {
       metadata["fireweave.quotaLimited"] = .bool(true)
     }
     return Decision(
@@ -433,7 +433,7 @@ public final class FireweaveRuntime: @unchecked Sendable {
       errorCode: error.openFeatureErrorCode,
       errorMessage: error.message,
       errorKind: error.kind,
-      flagMetadata: metadata
+      controlPointMetadata: metadata
     )
   }
 }

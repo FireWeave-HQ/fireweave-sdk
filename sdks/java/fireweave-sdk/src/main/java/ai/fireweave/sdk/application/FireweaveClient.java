@@ -19,8 +19,8 @@ import java.util.Set;
  * framework, no statics.
  *
  * <h2>Evaluation</h2>
- * The documented namespace is {@link #controlPoints()} (ADR-0007). {@link #flags()} is the
- * same object, retained for compatibility.
+ * The namespace is {@link #controlPoints()} (ADR-0007). The {@code flags()} alias was removed
+ * in 3.0.0 (ADR-0013).
  *
  * <h2>Thread-safety</h2>
  * Fully thread-safe: evaluation delegates to {@link FireweaveRuntime}. {@link #registerTarget}
@@ -64,22 +64,6 @@ public final class FireweaveClient implements AutoCloseable {
 
     /** Documented evaluation namespace (ADR-0007). */
     public ControlPoints controlPoints() {
-        return controlPoints;
-    }
-
-    /**
-     * Control-point evaluation under its former name.
-     *
-     * <p>Identical to {@link #controlPoints()} — {@code client.flags() == client.controlPoints()}.
-     * Permanent, not scheduled for removal. Silent at runtime: there is nothing to warn a caller
-     * toward, so deprecation is conveyed by this Javadoc and {@code @Deprecated} only (no log, and
-     * no env gate to control one, since the SDK reads no environment variables regardless —
-     * spec/modes.md).
-     *
-     * @deprecated use {@link #controlPoints()}
-     */
-    @Deprecated
-    public ControlPoints flags() {
         return controlPoints;
     }
 
@@ -144,8 +128,7 @@ public final class FireweaveClient implements AutoCloseable {
      * Typed evaluation helpers on the Fireweave-native surface — the nine methods
      * (spec/control-points.md "The nine methods").
      *
-     * <p>Documented as {@link FireweaveClient#controlPoints()} (ADR-0007).
-     * {@link FireweaveClient#flags()} is an identical alias retained for compatibility.
+     * <p>Reached as {@link FireweaveClient#controlPoints()} (ADR-0007).
      */
     public final class ControlPoints {
 
@@ -153,33 +136,33 @@ public final class FireweaveClient implements AutoCloseable {
         }
 
         /** Detailed evaluation; never throws (defaults degrade with reason=ERROR). */
-        public Decision evaluate(String flagKey,
+        public Decision evaluate(String controlPointKey,
                                  FlagType type,
                                  JsonValue defaultValue,
                                  EvaluationContext invocationContext,
                                  EvaluationOptions options) {
-            return runtime.evaluate(flagKey, type, defaultValue, clientContext, invocationContext, options);
+            return runtime.evaluate(controlPointKey, type, defaultValue, clientContext, invocationContext, options);
         }
 
-        public boolean getBooleanValue(String flagKey, boolean defaultValue, EvaluationContext ctx) {
-            Decision d = evaluate(flagKey, FlagType.BOOLEAN, JsonValue.of(defaultValue), ctx, null);
+        public boolean getBooleanValue(String controlPointKey, boolean defaultValue, EvaluationContext ctx) {
+            Decision d = evaluate(controlPointKey, FlagType.BOOLEAN, JsonValue.of(defaultValue), ctx, null);
             return d.value().kind() == JsonValue.Kind.BOOLEAN ? d.value().asBoolean() : defaultValue;
         }
 
-        public String getStringValue(String flagKey, String defaultValue, EvaluationContext ctx) {
-            Decision d = evaluate(flagKey, FlagType.STRING, JsonValue.of(defaultValue), ctx, null);
+        public String getStringValue(String controlPointKey, String defaultValue, EvaluationContext ctx) {
+            Decision d = evaluate(controlPointKey, FlagType.STRING, JsonValue.of(defaultValue), ctx, null);
             return d.value().kind() == JsonValue.Kind.STRING ? d.value().asString() : defaultValue;
         }
 
         /** Returns {@code number}, not integer — {@code Decision.value} is {@code jsonValue}. */
-        public double getNumberValue(String flagKey, double defaultValue, EvaluationContext ctx) {
-            Decision d = evaluate(flagKey, FlagType.NUMBER, JsonValue.of(defaultValue), ctx, null);
+        public double getNumberValue(String controlPointKey, double defaultValue, EvaluationContext ctx) {
+            Decision d = evaluate(controlPointKey, FlagType.NUMBER, JsonValue.of(defaultValue), ctx, null);
             return d.value().kind() == JsonValue.Kind.NUMBER ? d.value().asNumber().doubleValue() : defaultValue;
         }
 
-        public JsonValue getObjectValue(String flagKey, JsonValue defaultValue, EvaluationContext ctx) {
+        public JsonValue getObjectValue(String controlPointKey, JsonValue defaultValue, EvaluationContext ctx) {
             JsonValue fallback = defaultValue == null ? JsonValue.ofNull() : defaultValue;
-            Decision d = evaluate(flagKey, FlagType.OBJECT, fallback, ctx, null);
+            Decision d = evaluate(controlPointKey, FlagType.OBJECT, fallback, ctx, null);
             JsonValue.Kind k = d.value().kind();
             return (k == JsonValue.Kind.OBJECT || k == JsonValue.Kind.ARRAY) ? d.value() : fallback;
         }
@@ -189,21 +172,21 @@ public final class FireweaveClient implements AutoCloseable {
          * as the {@code *Value} pair above, so a caller upgrades from one to the other without
          * restructuring the call (spec/control-points.md "The nine methods").
          */
-        public Decision getBooleanDetails(String flagKey, boolean defaultValue, EvaluationContext ctx) {
-            return evaluate(flagKey, FlagType.BOOLEAN, JsonValue.of(defaultValue), ctx, null);
+        public Decision getBooleanDetails(String controlPointKey, boolean defaultValue, EvaluationContext ctx) {
+            return evaluate(controlPointKey, FlagType.BOOLEAN, JsonValue.of(defaultValue), ctx, null);
         }
 
-        public Decision getStringDetails(String flagKey, String defaultValue, EvaluationContext ctx) {
-            return evaluate(flagKey, FlagType.STRING, JsonValue.of(defaultValue), ctx, null);
+        public Decision getStringDetails(String controlPointKey, String defaultValue, EvaluationContext ctx) {
+            return evaluate(controlPointKey, FlagType.STRING, JsonValue.of(defaultValue), ctx, null);
         }
 
-        public Decision getNumberDetails(String flagKey, double defaultValue, EvaluationContext ctx) {
-            return evaluate(flagKey, FlagType.NUMBER, JsonValue.of(defaultValue), ctx, null);
+        public Decision getNumberDetails(String controlPointKey, double defaultValue, EvaluationContext ctx) {
+            return evaluate(controlPointKey, FlagType.NUMBER, JsonValue.of(defaultValue), ctx, null);
         }
 
-        public Decision getObjectDetails(String flagKey, JsonValue defaultValue, EvaluationContext ctx) {
+        public Decision getObjectDetails(String controlPointKey, JsonValue defaultValue, EvaluationContext ctx) {
             JsonValue fallback = defaultValue == null ? JsonValue.ofNull() : defaultValue;
-            return evaluate(flagKey, FlagType.OBJECT, fallback, ctx, null);
+            return evaluate(controlPointKey, FlagType.OBJECT, fallback, ctx, null);
         }
     }
 }

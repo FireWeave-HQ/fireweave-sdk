@@ -29,8 +29,8 @@ describe('start() in remote mode ↔ test-server', () => {
     await server.close();
   });
 
-  it('a key plus a custom endpoint evaluates over the wire; flags are ignored for values', async () => {
-    start({ key, url: server.url, env: { NODE_ENV: 'production' }, flags: { 'fw-bool-on': { local: false } }, log: () => undefined });
+  it('a key plus a custom endpoint evaluates over the wire; local control points are ignored for values', async () => {
+    start({ key, url: server.url, env: { NODE_ENV: 'production' }, controlPoints: { 'fw-bool-on': { local: false } }, log: () => undefined });
     assert.equal(await fw.controlPoints.getBooleanValue('fw-bool-on', false, { targetingKey: 'user-1' }), true);
     assert.equal(await fw.controlPoints.getStringValue('fw-string-theme', 'light', { targetingKey: 'user-1' }), 'dark');
     const status = fw.status();

@@ -55,10 +55,10 @@ export interface FireweaveStart {
 const startFailure = (): FireweaveError =>
   slot().error ?? new FireweaveError('Configuration', { message: '[fireweave] FireWeave was not started.' });
 
-const errorDecision = (flagKey: string, defaultValue: JsonValue): Decision => {
+const errorDecision = (controlPointKey: string, defaultValue: JsonValue): Decision => {
   const err = startFailure();
   return {
-    flagKey,
+    controlPointKey,
     value: defaultValue,
     reason: 'ERROR',
     errorKind: err.kind,
@@ -68,43 +68,43 @@ const errorDecision = (flagKey: string, defaultValue: JsonValue): Decision => {
   };
 };
 
-/** Local mode: a key missing from the flags object gets its default, with one warning. */
-function noteLocalKey(flagKey: string): void {
+/** Local mode: a key missing from the control-points object gets its default, with one warning. */
+function noteLocalKey(controlPointKey: string): void {
   const s = slot();
   const r = s.resolved;
-  if (r?.mode !== 'local' || Object.prototype.hasOwnProperty.call(r.flags, flagKey)) return;
+  if (r?.mode !== 'local' || Object.prototype.hasOwnProperty.call(r.controlPoints, controlPointKey)) return;
   warnOnce(
     s,
-    `[fireweave:local] '${flagKey}' is not in your flags object (src/fireweave/flags.ts), so it gets its default. Add it there to try it locally.`,
+    `[fireweave:local] '${controlPointKey}' is not in your control points (src/fireweave/control-points.ts), so it gets its default. Add it there to try it locally.`,
   );
 }
 
-async function read<T>(flagKey: string, fallback: () => T, run: (client: FireweaveClient) => Promise<T>): Promise<T> {
+async function read<T>(controlPointKey: string, fallback: () => T, run: (client: FireweaveClient) => Promise<T>): Promise<T> {
   const client = await ensureClient();
   if (client === undefined) return fallback();
-  noteLocalKey(flagKey);
+  noteLocalKey(controlPointKey);
   return run(client);
 }
 
 const controlPoints: ControlPoints = {
-  evaluate: (flagKey: string, expectedType: ExpectedFlagType, defaultValue: JsonValue, context?: ContextInput, options?: EvaluateOptions) =>
-    read(flagKey, () => errorDecision(flagKey, defaultValue), (c) => c.controlPoints.evaluate(flagKey, expectedType, defaultValue, context, options)),
-  getBooleanValue: (flagKey: string, defaultValue: boolean, context?: ContextInput) =>
-    read(flagKey, () => defaultValue, (c) => c.controlPoints.getBooleanValue(flagKey, defaultValue, context)),
-  getStringValue: (flagKey: string, defaultValue: string, context?: ContextInput) =>
-    read(flagKey, () => defaultValue, (c) => c.controlPoints.getStringValue(flagKey, defaultValue, context)),
-  getNumberValue: (flagKey: string, defaultValue: number, context?: ContextInput) =>
-    read(flagKey, () => defaultValue, (c) => c.controlPoints.getNumberValue(flagKey, defaultValue, context)),
-  getObjectValue: (flagKey: string, defaultValue: JsonValue, context?: ContextInput) =>
-    read(flagKey, () => defaultValue, (c) => c.controlPoints.getObjectValue(flagKey, defaultValue, context)),
-  getBooleanDetails: (flagKey: string, defaultValue: boolean, context?: ContextInput) =>
-    read(flagKey, () => errorDecision(flagKey, defaultValue), (c) => c.controlPoints.getBooleanDetails(flagKey, defaultValue, context)),
-  getStringDetails: (flagKey: string, defaultValue: string, context?: ContextInput) =>
-    read(flagKey, () => errorDecision(flagKey, defaultValue), (c) => c.controlPoints.getStringDetails(flagKey, defaultValue, context)),
-  getNumberDetails: (flagKey: string, defaultValue: number, context?: ContextInput) =>
-    read(flagKey, () => errorDecision(flagKey, defaultValue), (c) => c.controlPoints.getNumberDetails(flagKey, defaultValue, context)),
-  getObjectDetails: (flagKey: string, defaultValue: JsonValue, context?: ContextInput) =>
-    read(flagKey, () => errorDecision(flagKey, defaultValue), (c) => c.controlPoints.getObjectDetails(flagKey, defaultValue, context)),
+  evaluate: (controlPointKey: string, expectedType: ExpectedFlagType, defaultValue: JsonValue, context?: ContextInput, options?: EvaluateOptions) =>
+    read(controlPointKey, () => errorDecision(controlPointKey, defaultValue), (c) => c.controlPoints.evaluate(controlPointKey, expectedType, defaultValue, context, options)),
+  getBooleanValue: (controlPointKey: string, defaultValue: boolean, context?: ContextInput) =>
+    read(controlPointKey, () => defaultValue, (c) => c.controlPoints.getBooleanValue(controlPointKey, defaultValue, context)),
+  getStringValue: (controlPointKey: string, defaultValue: string, context?: ContextInput) =>
+    read(controlPointKey, () => defaultValue, (c) => c.controlPoints.getStringValue(controlPointKey, defaultValue, context)),
+  getNumberValue: (controlPointKey: string, defaultValue: number, context?: ContextInput) =>
+    read(controlPointKey, () => defaultValue, (c) => c.controlPoints.getNumberValue(controlPointKey, defaultValue, context)),
+  getObjectValue: (controlPointKey: string, defaultValue: JsonValue, context?: ContextInput) =>
+    read(controlPointKey, () => defaultValue, (c) => c.controlPoints.getObjectValue(controlPointKey, defaultValue, context)),
+  getBooleanDetails: (controlPointKey: string, defaultValue: boolean, context?: ContextInput) =>
+    read(controlPointKey, () => errorDecision(controlPointKey, defaultValue), (c) => c.controlPoints.getBooleanDetails(controlPointKey, defaultValue, context)),
+  getStringDetails: (controlPointKey: string, defaultValue: string, context?: ContextInput) =>
+    read(controlPointKey, () => errorDecision(controlPointKey, defaultValue), (c) => c.controlPoints.getStringDetails(controlPointKey, defaultValue, context)),
+  getNumberDetails: (controlPointKey: string, defaultValue: number, context?: ContextInput) =>
+    read(controlPointKey, () => errorDecision(controlPointKey, defaultValue), (c) => c.controlPoints.getNumberDetails(controlPointKey, defaultValue, context)),
+  getObjectDetails: (controlPointKey: string, defaultValue: JsonValue, context?: ContextInput) =>
+    read(controlPointKey, () => errorDecision(controlPointKey, defaultValue), (c) => c.controlPoints.getObjectDetails(controlPointKey, defaultValue, context)),
 };
 
 export const fw: FireweaveStart = Object.freeze({

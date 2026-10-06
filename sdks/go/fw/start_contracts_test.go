@@ -2,7 +2,7 @@ package fw
 
 // The shared start-profile suite (contracts/start/, spec/start-profile.md) on
 // Go. Drives the pure resolver, the instance-key derivation with an injected
-// host name, DefineFlags and channelForVersion with each case's inputs,
+// host name, DefineControlPoints and channelForVersion with each case's inputs,
 // compares by the rules in contracts/start/README.md, and writes
 // fw/compatibility-report.start.go.json (gitignored). A port of node's
 // test/unit/start-contracts.test.ts.
@@ -37,14 +37,14 @@ type startOptions struct {
 }
 
 type startWhen struct {
-	Operation string                     `json:"operation"`
-	Options   startOptions               `json:"options"`
-	Env       map[string]string          `json:"env"`
-	Build     map[string]string          `json:"build"`
-	Channel   string                     `json:"channel"`
-	HostName  *string                    `json:"hostName"`
-	Flags     map[string]json.RawMessage `json:"flags"`
-	Version   *string                    `json:"version"`
+	Operation     string                     `json:"operation"`
+	Options       startOptions               `json:"options"`
+	Env           map[string]string          `json:"env"`
+	Build         map[string]string          `json:"build"`
+	Channel       string                     `json:"channel"`
+	HostName      *string                    `json:"hostName"`
+	ControlPoints map[string]json.RawMessage `json:"controlPoints"`
+	Version       *string                    `json:"version"`
 }
 
 type startCase struct {
@@ -185,19 +185,19 @@ type startFlagJSON struct {
 	Description *string `json:"description"`
 }
 
-// runStartDefineFlags translates the canonical flags object to fw.Flags.
+// runStartDefineControlPoints translates the canonical controlPoints object to fw.LocalControlPoints.
 // A shape Go cannot express (non-boolean local, ...) is a runner error: those
 // cases live in start-flags-untyped, which Go marks not-applicable.
-func runStartDefineFlags(c startCase) (out startOutcome, rerr error) {
-	flags := make(Flags, len(c.When.Flags))
-	for key, raw := range c.When.Flags {
+func runStartDefineControlPoints(c startCase) (out startOutcome, rerr error) {
+	controlPoints := make(LocalControlPoints, len(c.When.ControlPoints))
+	for key, raw := range c.When.ControlPoints {
 		var f startFlagJSON
 		dec := json.NewDecoder(strings.NewReader(string(raw)))
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&f); err != nil || f.Local == nil {
 			return startOutcome{}, fmt.Errorf("flag %q has a shape Go cannot express: %s", key, raw)
 		}
-		flags[key] = Flag{Local: *f.Local, Description: optString(f.Description)}
+		controlPoints[key] = LocalControlPoint{Local: *f.Local, Description: optString(f.Description)}
 	}
 	defer func() {
 		if p := recover(); p != nil {
@@ -209,7 +209,7 @@ func runStartDefineFlags(c startCase) (out startOutcome, rerr error) {
 			panic(p)
 		}
 	}()
-	DefineFlags(flags)
+	DefineControlPoints(controlPoints)
 	return startOutcome{fields: map[string]any{"ok": true}}, nil
 }
 
@@ -226,8 +226,8 @@ func runStartCase(c startCase) (startOutcome, error) {
 		return runStartResolve(c)
 	case "instanceKey":
 		return runStartInstanceKey(c)
-	case "defineFlags":
-		return runStartDefineFlags(c)
+	case "defineControlPoints":
+		return runStartDefineControlPoints(c)
 	case "channelForVersion":
 		return runStartChannelForVersion(c)
 	}

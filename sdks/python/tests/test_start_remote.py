@@ -65,7 +65,7 @@ def test_a_key_plus_a_custom_endpoint_evaluates_over_the_wire(server_url):
         key=KEY,
         url=server_url,
         env={"APP_ENV": "production"},
-        flags={"fw-bool-on": {"local": False}},
+        control_points={"fw-bool-on": {"local": False}},
         log=lambda line: None,
     )
     # The stub says on; the local value (False) is ignored in remote mode.

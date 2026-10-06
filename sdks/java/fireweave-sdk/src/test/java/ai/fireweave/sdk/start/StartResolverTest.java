@@ -327,7 +327,7 @@ class StartResolverTest {
 
     @Test
     void flagsPassThroughToTheDecision() {
-        Flags flags = Fw.defineFlags(Map.of("a", Flag.local(true)));
-        assertEquals(flags, resolve(opts().flags(flags).build(), env("FIREWEAVE_ENV", "dev")).flags);
+        LocalControlPoints controlPoints = Fw.defineControlPoints(Map.of("a", LocalControlPoint.local(true)));
+        assertEquals(controlPoints, resolve(opts().controlPoints(controlPoints).build(), env("FIREWEAVE_ENV", "dev")).controlPoints);
     }
 }

@@ -7,7 +7,7 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-obj-config": {
         "type": "object",
         "enabled": true,
@@ -28,7 +28,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-obj-config",
+    "controlPointKey": "fw-obj-config",
     "flagType": "object",
     "defaultValue": {},
     "invocationContext": {
@@ -44,8 +44,8 @@
     "reason": "TARGETING_MATCH",
     "errorCode": null,
     "errorMessage": null,
-    "flagMetadata": {
-      "fireweave.flagVersion": 4
+    "controlPointMetadata": {
+      "fireweave.controlPointVersion": 4
     }
   },
   "schemaVersion": 1,

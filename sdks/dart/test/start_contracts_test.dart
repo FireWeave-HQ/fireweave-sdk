@@ -8,7 +8,7 @@ import 'package:fireweave/fireweave.dart' show ErrorKind, FireweaveError, Mode;
 import 'package:fireweave/src/start/channel.dart';
 import 'package:fireweave/src/start/client_profile.dart'
     show resolveClientStart;
-import 'package:fireweave/src/start/flags.dart';
+import 'package:fireweave/src/start/control_points.dart';
 import 'package:fireweave/src/start/policy.dart';
 import 'package:fireweave/src/start/server_profile.dart'
     show deriveServerInstanceKey, resolveServerStart;
@@ -107,7 +107,7 @@ Outcome runResolve(String profile, Json when) {
   final PolicyResult result;
   if (profile == 'client') {
     result = resolveClientStart(
-      flags: const <String, Flag>{},
+      controlPoints: const <String, LocalControlPoint>{},
       mode: parseMode(options['mode']),
       environment: options['environment'],
       url: options['url'],
@@ -119,7 +119,7 @@ Outcome runResolve(String profile, Json when) {
   } else {
     final env = stringMap(when['env']);
     result = resolveServerStart(
-      flags: const <String, Flag>{},
+      controlPoints: const <String, LocalControlPoint>{},
       mode: parseMode(options['mode']),
       environment: options['environment'],
       url: options['url'],
@@ -174,15 +174,15 @@ Outcome runInstanceKey(Json when) {
 }
 
 Outcome runDefineFlags(Json when) {
-  final flags = <String, Flag>{
-    for (final entry in asJson(when['flags']).entries)
-      entry.key: Flag.local(
+  final controlPoints = <String, LocalControlPoint>{
+    for (final entry in asJson(when['controlPoints']).entries)
+      entry.key: LocalControlPoint.local(
         asJson(entry.value)['local'] as bool,
         description: asJson(entry.value)['description'] as String?,
       ),
   };
   try {
-    defineFlags(flags);
+    defineControlPoints(controlPoints);
     return Outcome(fields: <String, Object?>{'ok': true});
   } on FireweaveError catch (error) {
     return Outcome(errorKind: error.kind.wireName, errorMessage: error.message);
@@ -192,7 +192,7 @@ Outcome runDefineFlags(Json when) {
 Outcome run(String profile, Json when) => switch (when['operation']) {
   'resolve' => runResolve(profile, when),
   'instanceKey' => runInstanceKey(when),
-  'defineFlags' => runDefineFlags(when),
+  'defineControlPoints' => runDefineFlags(when),
   // start-channel-rule is not-applicable here: the channel is stamped at
   // release, so there is no run-time rule to call.
   final operation => throw StateError(

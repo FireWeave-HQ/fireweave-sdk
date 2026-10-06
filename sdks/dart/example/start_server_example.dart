@@ -8,15 +8,18 @@
 // before serving; shut down on SIGTERM so the process exits promptly.
 import 'package:fireweave/server.dart';
 
-// Conventionally lib/fireweave/flags.dart.
-final flags = defineFlags({
-  'nightly-reindex': const Flag.local(true, description: 'Nightly reindex'),
+// Conventionally lib/fireweave/controlPoints.dart.
+final controlPoints = defineControlPoints({
+  'nightly-reindex': const LocalControlPoint.local(
+    true,
+    description: 'Nightly reindex',
+  ),
 });
 
 Future<void> main() async {
   // Throws a Configuration FireweaveError on a bad configuration (for
   // example no FIREWEAVE_KEY outside a development environment).
-  await Fireweave.start(flags: flags);
+  await Fireweave.start(controlPoints: controlPoints);
 
   // Server-subject reads are prefetched under fw.instanceKey
   // (FIREWEAVE_INSTANCE_ID, else a hash of the host name).

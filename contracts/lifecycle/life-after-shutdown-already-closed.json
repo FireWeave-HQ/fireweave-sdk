@@ -5,7 +5,7 @@
   ],
   "given": {
     "providerState": "CLOSED",
-    "flags": {
+    "controlPoints": {
       "fw-life": {
         "type": "boolean",
         "enabled": true,
@@ -16,7 +16,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-life",
+    "controlPointKey": "fw-life",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {
@@ -29,7 +29,7 @@
     "reason": "ERROR",
     "errorCode": "PROVIDER_NOT_READY",
     "errorMessage": "provider already closed",
-    "flagMetadata": {
+    "controlPointMetadata": {
       "fireweave.errorKind": "AlreadyClosed"
     }
   },

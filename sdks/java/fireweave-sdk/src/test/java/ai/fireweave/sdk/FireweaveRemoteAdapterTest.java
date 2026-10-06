@@ -36,10 +36,10 @@ final class FireweaveRemoteAdapterTest {
     @BeforeEach
     void start() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/v1/flags/evaluate", exchange -> {
+        server.createContext("/v1/control-points/evaluate", exchange -> {
             lastAuth.set(exchange.getRequestHeaders().getFirst("Authorization"));
             lastBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
-            byte[] resp = ("{\"decisions\":[{\"flagKey\":\"checkout-v2\",\"value\":true,"
+            byte[] resp = ("{\"decisions\":[{\"controlPointKey\":\"checkout-v2\",\"value\":true,"
                     + "\"reason\":\"TARGETING_MATCH\",\"found\":true,\"enabled\":true}]}").getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
             exchange.sendResponseHeaders(200, resp.length);
@@ -117,8 +117,8 @@ final class FireweaveRemoteAdapterTest {
     @Test
     void includePayloadPassesThroughRawStringVerbatim() throws Exception {
         HttpServer payloadServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        payloadServer.createContext("/v1/flags/evaluate", exchange -> {
-            byte[] resp = ("{\"decisions\":[{\"flagKey\":\"checkout-v2\",\"value\":true,"
+        payloadServer.createContext("/v1/control-points/evaluate", exchange -> {
+            byte[] resp = ("{\"decisions\":[{\"controlPointKey\":\"checkout-v2\",\"value\":true,"
                     + "\"reason\":\"TARGETING_MATCH\",\"found\":true,"
                     + "\"payload\":\"{\\\"already\\\":\\\"serialized\\\"}\"}]}").getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
@@ -139,7 +139,7 @@ final class FireweaveRemoteAdapterTest {
                     EvaluationContext.builder().targetingKey("user-1").build(),
                     EvaluationOptions.withIncludePayload(true)));
 
-            assertEquals("{\"already\":\"serialized\"}", d.flagMetadata().get("fireweave.payload"));
+            assertEquals("{\"already\":\"serialized\"}", d.controlPointMetadata().get("fireweave.payload"));
             adapter.shutdown();
         } finally {
             payloadServer.stop(0);

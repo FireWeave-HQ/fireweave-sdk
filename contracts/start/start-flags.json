@@ -12,8 +12,8 @@
     {
       "name": "valid-flags",
       "when": {
-        "operation": "defineFlags",
-        "flags": {
+        "operation": "defineControlPoints",
+        "controlPoints": {
           "new-checkout": {
             "local": true,
             "description": "New checkout"
@@ -30,8 +30,8 @@
     {
       "name": "empty-flags",
       "when": {
-        "operation": "defineFlags",
-        "flags": {}
+        "operation": "defineControlPoints",
+        "controlPoints": {}
       },
       "expect": {
         "ok": true
@@ -40,8 +40,8 @@
     {
       "name": "key-of-256-characters",
       "when": {
-        "operation": "defineFlags",
-        "flags": {
+        "operation": "defineControlPoints",
+        "controlPoints": {
           "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk": {
             "local": true
           }
@@ -54,8 +54,8 @@
     {
       "name": "empty-key-rejected",
       "when": {
-        "operation": "defineFlags",
-        "flags": {
+        "operation": "defineControlPoints",
+        "controlPoints": {
           "": {
             "local": true
           }
@@ -70,8 +70,8 @@
     {
       "name": "control-character-rejected",
       "when": {
-        "operation": "defineFlags",
-        "flags": {
+        "operation": "defineControlPoints",
+        "controlPoints": {
           "bad\u0001key": {
             "local": true
           }
@@ -86,8 +86,8 @@
     {
       "name": "key-over-256-characters-rejected",
       "when": {
-        "operation": "defineFlags",
-        "flags": {
+        "operation": "defineControlPoints",
+        "controlPoints": {
           "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk": {
             "local": true
           }

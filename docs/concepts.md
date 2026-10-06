@@ -6,7 +6,7 @@ Every evaluation produces a canonical **Decision** (`spec/decision.schema.json`)
 
 | Field | Meaning |
 | --- | --- |
-| `flagKey` | The flag that was evaluated |
+| `controlPointKey` | The control point that was evaluated |
 | `value` | The resolved value — or your **default** on any failure |
 | `variant` | Variant name for multivariate flags (absent otherwise) |
 | `reason` | Why this value was chosen (below) |
@@ -29,12 +29,12 @@ OpenFeature-standard reason strings, as produced by this SDK:
 
 ## Error taxonomy
 
-Fireweave classifies every failure into one of **15 canonical kinds** (`spec/errors.schema.json`, `contracts/errors.md`), which map onto OpenFeature error codes. The Fireweave kind is preserved in `flagMetadata["fireweave.errorKind"]`.
+Fireweave classifies every failure into one of **15 canonical kinds** (`spec/errors.schema.json`, `contracts/errors.md`), which map onto OpenFeature error codes. The Fireweave kind is preserved in `controlPointMetadata["fireweave.errorKind"]`.
 
 | Fireweave kind | OpenFeature `errorCode` | Retryable | When |
 | --- | --- | --- | --- |
 | `NotReady` | `PROVIDER_NOT_READY` | yes | Evaluation before successful init |
-| `FlagNotFound` | `FLAG_NOT_FOUND` | no | Flag absent from snapshot/definitions; includes quota-limited empty snapshots (`fireweave.quotaLimited: true`) |
+| `ControlPointNotFound` | `FLAG_NOT_FOUND` | no | Control point absent from snapshot/definitions; includes quota-limited empty snapshots (`fireweave.quotaLimited: true`) |
 | `TypeMismatch` | `TYPE_MISMATCH` | no | Stored type ≠ requested typed getter |
 | `InvalidContext` | `INVALID_CONTEXT`, or `TARGETING_KEY_MISSING` when the targeting key is required and absent | no | Bad/oversized context, reserved-key misuse |
 | `Authentication` | `GENERAL` | no | 401 / invalid project or secret key |

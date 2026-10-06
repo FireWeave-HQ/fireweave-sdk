@@ -1,12 +1,12 @@
 {
-  "description": "Flag payload is exposed via flagMetadata as a JSON-string serialization (deterministic sorted-key order); structured payloads are otherwise delivered as object-flag values",
+  "description": "Flag payload is exposed via controlPointMetadata as a JSON-string serialization (deterministic sorted-key order); structured payloads are otherwise delivered as object-flag values",
   "tags": [
     "payload",
     "metadata"
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-payload-flag": {
         "type": "boolean",
         "enabled": true,
@@ -29,7 +29,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-payload-flag",
+    "controlPointKey": "fw-payload-flag",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {
@@ -45,8 +45,8 @@
     "reason": "TARGETING_MATCH",
     "errorCode": null,
     "errorMessage": null,
-    "flagMetadata": {
-      "fireweave.flagVersion": 3,
+    "controlPointMetadata": {
+      "fireweave.controlPointVersion": 3,
       "fireweave.payload": "{\"maxRetries\":2,\"rolloutId\":\"rollout_01HZXRL00000000000000001\"}"
     }
   },

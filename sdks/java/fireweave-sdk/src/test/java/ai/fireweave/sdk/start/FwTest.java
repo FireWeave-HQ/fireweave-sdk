@@ -68,8 +68,8 @@ class FwTest {
         return StartOptions.builder().env(Map.of("FIREWEAVE_ENV", "development")).log(lines::add);
     }
 
-    private static Flags flags(String key, boolean value) {
-        return Fw.defineFlags(Map.of(key, Flag.local(value)));
+    private static LocalControlPoints controlPoints(String key, boolean value) {
+        return Fw.defineControlPoints(Map.of(key, LocalControlPoint.local(value)));
     }
 
     private long linesContaining(String text) {
@@ -79,8 +79,8 @@ class FwTest {
     // ---------------------------------------------------------------- local mode
 
     @Test
-    void localModeServesTheFlagsAndWarnsOnceForAKeyMissingFromThem() {
-        FireweaveClient returned = Fw.start(dev().flags(flags("new-checkout", true)).build());
+    void localModeServesTheControlPointsAndWarnsOnceForAKeyMissingFromThem() {
+        FireweaveClient returned = Fw.start(dev().controlPoints(controlPoints("new-checkout", true)).build());
         assertSame(Fw.client(), returned);
 
         assertTrue(Fw.controlPoints().getBooleanValue("new-checkout", false, CTX));
@@ -90,9 +90,9 @@ class FwTest {
         assertFalse(Fw.controlPoints().getBooleanValue("not-declared", false, CTX));
         assertFalse(Fw.controlPoints().getBooleanValue("not-declared", false, CTX));
         assertEquals("DEFAULT", Fw.controlPoints().getBooleanDetails("not-declared", false, CTX).reason());
-        assertEquals(1, linesContaining("\"not-declared\" is not in your flags (FireweaveFlags.java)"), lines.toString());
+        assertEquals(1, linesContaining("\"not-declared\" is not in your control points (FireweaveControlPoints.java)"), lines.toString());
         assertEquals(1, linesContaining("[fireweave:local] Local mode (no FIREWEAVE_KEY; environment \"development\" "
-                + "from FIREWEAVE_ENV). Serving 1 flag from your flags"), lines.toString());
+                + "from FIREWEAVE_ENV). Serving 1 control point from your control points"), lines.toString());
 
         StartStatus s = Fw.status();
         assertEquals(StartState.READY, s.state());
@@ -100,7 +100,7 @@ class FwTest {
         assertEquals("environment", s.modeSource());
         assertEquals("development", s.environment());
         assertEquals("none", s.keySource());
-        assertEquals(1, s.flagCount());
+        assertEquals(1, s.controlPointCount());
         assertNull(s.host());
     }
 
@@ -120,7 +120,7 @@ class FwTest {
             assertEquals("ERROR", d.reason());
             assertEquals(ErrorKind.Configuration, d.error().kind());
             assertTrue(d.error().message().contains("FIREWEAVE_KEY is not set"), d.error().message());
-            assertEquals("Configuration", d.flagMetadata().get(ErrorKind.FLAG_METADATA_ERROR_KIND_KEY));
+            assertEquals("Configuration", d.controlPointMetadata().get(ErrorKind.FLAG_METADATA_ERROR_KIND_KEY));
         }
         assertFalse(Fw.identify("user-1").ok());
         assertEquals(StartState.FAILED, Fw.status().state());
@@ -131,12 +131,12 @@ class FwTest {
 
     @Test
     void anIdenticalSecondStartIsANoOpAndADifferentOneThrowsNamingFieldsOnly() {
-        Fw.start(dev().flags(flags("a", true)).build());
-        Fw.start(dev().flags(flags("a", true)).build());
+        Fw.start(dev().controlPoints(controlPoints("a", true)).build());
+        Fw.start(dev().controlPoints(controlPoints("a", true)).build());
 
-        FireweaveException e = assertThrows(FireweaveException.class, () -> Fw.start(dev().flags(flags("a", false)).build()));
+        FireweaveException e = assertThrows(FireweaveException.class, () -> Fw.start(dev().controlPoints(controlPoints("a", false)).build()));
         assertEquals(ErrorKind.Configuration, e.kind());
-        assertTrue(e.getMessage().contains("Fw.start was already called with a different configuration (flags)"),
+        assertTrue(e.getMessage().contains("Fw.start was already called with a different configuration (controlPoints)"),
                 e.getMessage());
         assertTrue(Fw.controlPoints().getBooleanValue("a", false, CTX), "the running client is untouched");
 
@@ -158,7 +158,7 @@ class FwTest {
     @Test
     void flagsDoNotCountInRemoteMode() {
         Fw.start(StartOptions.builder().key(KEY).env(Map.of()).build());
-        Fw.start(StartOptions.builder().key(KEY).env(Map.of()).flags(flags("a", true)).build());
+        Fw.start(StartOptions.builder().key(KEY).env(Map.of()).controlPoints(controlPoints("a", true)).build());
         assertEquals(Mode.REMOTE, Fw.status().mode());
     }
 
@@ -174,8 +174,8 @@ class FwTest {
         assertEquals("environment", Fw.status().modeSource());
         assertEquals("test", Fw.status().environment());
 
-        // The app's own start then differs (it adds flags in local mode): that is an error.
-        FireweaveException e = assertThrows(FireweaveException.class, () -> Fw.start(dev().flags(flags("a", true)).build()));
+        // The app's own start then differs (it adds controlPoints in local mode): that is an error.
+        FireweaveException e = assertThrows(FireweaveException.class, () -> Fw.start(dev().controlPoints(controlPoints("a", true)).build()));
         assertTrue(e.getMessage().startsWith("A control point was read before Fw.start ran"), e.getMessage());
 
         // An identical start is still a no-op.
@@ -193,7 +193,7 @@ class FwTest {
         processEnv.put("FIREWEAVE_ENV", "development");
         assertEquals("ERROR", Fw.controlPoints().getBooleanDetails("a", false, CTX).reason());
 
-        Fw.start(dev().flags(flags("a", true)).build());
+        Fw.start(dev().controlPoints(controlPoints("a", true)).build());
         assertTrue(Fw.controlPoints().getBooleanValue("a", false, CTX));
     }
 
@@ -302,7 +302,7 @@ class FwTest {
     @Test
     void shutdownServesDefaultsAndALaterStartBeginsFresh() {
         FireweaveClient before = Fw.client();
-        Fw.start(dev().flags(flags("a", true)).build());
+        Fw.start(dev().controlPoints(controlPoints("a", true)).build());
         assertTrue(Fw.controlPoints().getBooleanValue("a", false, CTX));
 
         Fw.shutdown();
@@ -315,7 +315,7 @@ class FwTest {
         assertEquals(ErrorKind.AlreadyClosed, Fw.identify("user-1").error().kind());
 
         // A different configuration is fine after shutdown.
-        Fw.start(dev().flags(flags("a", false)).build());
+        Fw.start(dev().controlPoints(controlPoints("a", false)).build());
         assertFalse(Fw.controlPoints().getBooleanValue("a", true, CTX));
         assertEquals(StartState.READY, Fw.status().state());
         assertSame(before, Fw.client(), "one permanent client across start, shutdown and restart");
@@ -324,14 +324,14 @@ class FwTest {
     // ---------------------------------------------------------------- remote
 
     @Test
-    void remoteModeDrivesRealRequestsWithTheKeyAndIgnoresFlags() throws Exception {
+    void remoteModeDrivesRealRequestsWithTheKeyAndIgnoresLocalValues() throws Exception {
         List<String> auth = new CopyOnWriteArrayList<>();
         List<String> registerBodies = new CopyOnWriteArrayList<>();
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/v1/flags/evaluate", exchange -> {
+        server.createContext("/v1/control-points/evaluate", exchange -> {
             auth.add(exchange.getRequestHeaders().getFirst("Authorization"));
             exchange.getRequestBody().readAllBytes();
-            byte[] resp = ("{\"decisions\":[{\"flagKey\":\"checkout-v2\",\"value\":true,"
+            byte[] resp = ("{\"decisions\":[{\"controlPointKey\":\"checkout-v2\",\"value\":true,"
                     + "\"reason\":\"TARGETING_MATCH\",\"found\":true,\"enabled\":true}]}")
                     .getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
@@ -355,11 +355,11 @@ class FwTest {
                 .env(Map.of("FIREWEAVE_KEY", KEY,
                         "FIREWEAVE_URL", "http://127.0.0.1:" + server.getAddress().getPort(),
                         "FIREWEAVE_ENV", "development"))
-                .flags(flags("checkout-v2", false))
+                .controlPoints(controlPoints("checkout-v2", false))
                 .log(lines::add)
                 .build());
 
-        assertTrue(Fw.controlPoints().getBooleanValue("checkout-v2", false, CTX), "fw-server decides, not the flags");
+        assertTrue(Fw.controlPoints().getBooleanValue("checkout-v2", false, CTX), "fw-server decides, not the controlPoints");
         assertEquals(List.of("Bearer " + KEY), auth);
         assertEquals(Mode.REMOTE, Fw.status().mode());
 
@@ -370,7 +370,7 @@ class FwTest {
         assertTrue(registerBodies.get(0).contains("\"plan\":\"pro\""), registerBodies.get(0));
 
         assertFalse(Fw.controlPoints().getBooleanValue("undeclared", false, CTX));
-        assertEquals(0, linesContaining("is not in your flags"), "the missing-key warning is local-only");
+        assertEquals(0, linesContaining("is not in your control points"), "the missing-key warning is local-only");
         for (String line : lines) {
             assertFalse(line.contains(KEY), line);
         }

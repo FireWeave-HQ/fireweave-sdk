@@ -39,9 +39,9 @@ pub(crate) const STAGING_URL: &str = "https://staging-app-server.fireweave.ai";
 /// Always allowed beside a custom endpoint, so local stacks keep working.
 pub(crate) const LOOPBACK_HOSTS: [&str; 3] = ["localhost", "127.0.0.1", "::1"];
 
-/// Where the app's flags conventionally live; named in the local-mode
+/// Where the app's control points conventionally live; named in the local-mode
 /// "missing key" warning.
-pub(crate) const FLAGS_FILE: &str = "src/fireweave_flags.rs";
+pub(crate) const CONTROL_POINTS_FILE: &str = "src/fireweave_control_points.rs";
 
 /// Option names as they appear in messages.
 pub(crate) const OPT_KEY: &str = "StartOptions.key";

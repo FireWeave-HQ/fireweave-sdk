@@ -24,10 +24,10 @@ import { initFireweave } from 'npm:@fireweaveai/server-sdk';
 Most apps need only this ([ADR-0012](../../docs/adr/0012-start-profile.md)). Two small files and one import:
 
 ```ts
-// src/fireweave/flags.ts: every control point the app reads, with its local value
-import { defineFlags } from '@fireweaveai/server-sdk/start';
+// src/fireweave/control-points.ts: every control point the app reads, with its local value
+import { defineControlPoints } from '@fireweaveai/server-sdk/start';
 
-export const flags = defineFlags({
+export const controlPoints = defineControlPoints({
   'new-checkout': { local: true }, // served only in local mode
 });
 ```
@@ -35,9 +35,9 @@ export const flags = defineFlags({
 ```ts
 // src/fireweave/start.ts
 import { start } from '@fireweaveai/server-sdk/start';
-import { flags } from './flags';
+import { controlPoints } from './control-points';
 
-start({ flags });
+start({ controlPoints });
 ```
 
 ```ts
@@ -65,7 +65,7 @@ Every value resolves as: `start()` option, then env var, then legacy name (warns
 
 | Option | Env var | Default | What it does |
 | --- | --- | --- | --- |
-| `flags` | — | `{}` | Local values per control point. Ignored in remote mode. |
+| `controlPoints` | — | `{}` | Local values per control point. Ignored in remote mode. |
 | `mode` | — | inferred | `'remote'` or `'local'`. Overrides inference. `'remote'` without a key is a start error; `'local'` ignores a key. |
 | `environment` | `FIREWEAVE_ENV`, `APP_ENV`, `NODE_ENV` | — | Environment name used for inference when there is no key and no `mode`. Pass your own, e.g. `environment: process.env.DEPLOY_STAGE`. |
 | `url` | `FIREWEAVE_URL` (legacy `FW_API_URL`, `FW_ATTEST_URL`) | from the SDK build | A `-staging.N` build calls `staging-app-server.fireweave.ai`; any other calls `app-server.fireweave.ai`. Set it for a self-hosted or local fw-server. |
@@ -157,10 +157,8 @@ const fireweave = new FireweaveClient(runtime);
 await fireweave.initialize();
 ```
 
-The per-call parameter is `flagKey`, not `controlPointKey` — that name is fixed by
-`spec/decision.schema.json` and the wire protocol shared with the Python, Go, and Java SDKs.
-"Control point" is the product noun; `flagKey` is its key at those boundaries
-([ADR-0007](../../docs/adr/0007-control-point-vocabulary.md)).
+The key is `controlPointKey` everywhere, on the wire and in `Decision`, from 3.0.0
+([ADR-0013](../../docs/adr/0013-control-point-wire.md)).
 
 ## Module layout
 
@@ -169,7 +167,7 @@ The per-call parameter is `flagKey`, not `controlPointKey` — that name is fixe
 | `application/runtime.ts` | Lifecycle state machine, config validation, context policy, decision construction. Evaluation never throws. |
 | `application/client.ts` | `FireweaveClient` — `controlPoints`, `registerTarget`. |
 | `application/mode.ts` | `initFireweave` — the single entry point; the only module allowed to import concrete adapters. |
-| `infrastructure/adapters/remote.ts` | `FireweaveRemoteAdapter` — the production backend (`/v1/flags/evaluate`, `/v1/targets/register`). |
+| `infrastructure/adapters/remote.ts` | `FireweaveRemoteAdapter` — the production backend (`/v1/control-points/evaluate`, `/v1/targets/register`). |
 | `infrastructure/adapters/inmemory.ts` | Deterministic fixture-driven adapter for tests and conformance. |
 | `infrastructure/adapters/local.ts` | `FireweaveLocalAdapter` — the DEV substrate `initFireweave({ mode: 'local' })` builds. |
 | `application/ports.ts` | The `BackendAdapter` boundary. |
@@ -189,9 +187,9 @@ The SDK reads no environment variables (spec/modes.md) — every option is an ex
 | `allowedHosts` | `remote` | SSRF allowlist override |
 | `local.controlPoints` | `local` | seeded boolean overrides; a present key resolves `STATIC`, an absent key misses to the caller's default with reason `DEFAULT` |
 
-## Renaming `flags` → `controlPoints` safely
+## Upgrading from 2.x: `flags` → `controlPoints`
 
-`client.flags` is a deprecated alias of `client.controlPoints` — identical, permanent, and not scheduled for removal, so renaming is optional. To adopt the new name, scope the edit. `flags` is an ordinary word: your repo very likely contains feature-flag code, config keys, DB columns, and `flags` variables that have nothing to do with this SDK.
+`client.flags` was removed in 3.0.0 ([ADR-0013](../../docs/adr/0013-control-point-wire.md)); use `client.controlPoints`, which is the same object it returned. `Decision.flagKey` is now `Decision.controlPointKey`, the error kind `FlagNotFound` is `ControlPointNotFound`, and the start option `flags` is `controlPoints` (`defineControlPoints`). Scope the edit. `flags` is an ordinary word: your repo very likely contains feature-flag code, config keys, DB columns, and `flags` variables that have nothing to do with this SDK.
 
 **Rename only `.flags` accesses whose receiver is provably a `FireweaveClient`** — traceable to a `new FireweaveClient(...)`/`initFireweave(...)` call, an imported binding assigned from one, or a parameter annotated `FireweaveClient`.
 
@@ -200,11 +198,11 @@ Never rename:
 | Looks similar | Why it stays |
 | --- | --- |
 | `new InMemoryAdapter({ flags: … })` | SDK option key, unchanged |
-| `flagKey`, `FlagValueType`, `InMemoryFlagDefinition` | SDK API, unchanged |
+| `FlagValueType`, `InMemoryFlagDefinition` | SDK API, unchanged |
 | your own `flags` variables, `featureFlags`, CLI `--flags`, `flags` columns | not this SDK |
 | another vendor's SDK (`ldClient.variation`, flagd, Unleash) | not this SDK |
 
-**Do not run a repo-wide `flags` → `controlPoints` replacement** — not with `sed`, not with editor replace-all. Go call site by call site, and when a receiver is ambiguous, leave it. A missed cosmetic rename costs nothing; a wrong one breaks unrelated code.
+**Do not run a repo-wide `flags` → `controlPoints` replacement** — not with `sed`, not with editor replace-all. Go call site by call site, and when a receiver is ambiguous, leave it. The compiler finds a missed rename; a wrong one breaks unrelated code.
 
 ## Development
 

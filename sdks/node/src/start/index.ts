@@ -3,8 +3,8 @@
  *
  *   // src/fireweave/start.ts  (imported first by your entrypoint)
  *   import { start } from '@fireweaveai/server-sdk/start';
- *   import { flags } from './flags';
- *   start({ flags });
+ *   import { controlPoints } from './control-points';
+ *   start({ controlPoints });
  *
  *   // anywhere
  *   import { fw } from '@fireweaveai/server-sdk/start';
@@ -17,7 +17,7 @@ export { start, resetForTests } from './state.js';
 export type { StartOptions, StartState, FireweaveStatus } from './state.js';
 export { fw } from './fw.js';
 export type { FireweaveStart, ControlPoints, IdentifyOptions } from './fw.js';
-export { defineFlags } from './flags.js';
-export type { FlagDefinition, FlagMap } from './flags.js';
+export { defineControlPoints } from './control-points.js';
+export type { ControlPointDefinition, ControlPointMap } from './control-points.js';
 export type { StartMode, SdkChannel } from './resolve.js';
 export { SDK_VERSION, SDK_CHANNEL } from './build-info.js';

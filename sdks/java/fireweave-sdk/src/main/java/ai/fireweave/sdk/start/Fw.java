@@ -19,12 +19,12 @@ import java.util.function.Supplier;
  * node's {@code fw}, Go's package {@code fw}). Safe to call from any thread, in any order.
  *
  * <pre>{@code
- * // FireweaveFlags.java: every control point the app reads, with its local value
- * public static final Flags FLAGS = Fw.defineFlags(Map.of(
- *         "new-checkout", Flag.local(true, "new checkout flow")));
+ * // FireweaveControlPoints.java: every control point the app reads, with its local value
+ * public static final LocalControlPoints CONTROL_POINTS = Fw.defineControlPoints(Map.of(
+ *         "new-checkout", LocalControlPoint.local(true, "new checkout flow")));
  *
  * // main(), first thing after the app's own config loading
- * Fw.start(StartOptions.builder().flags(FireweaveFlags.FLAGS).build());
+ * Fw.start(StartOptions.builder().controlPoints(FireweaveControlPoints.CONTROL_POINTS).build());
  *
  * // anywhere: the core client's nine read methods, unchanged
  * // @fireweave-controlpoint new-checkout
@@ -46,11 +46,11 @@ public final class Fw {
      * Declares the app's control points and returns them, checking every key with the core's
      * control point key rule so a typo fails where it was made.
      *
-     * @throws FireweaveException kind {@code Configuration}, for a null map, key or flag, or an
+     * @throws FireweaveException kind {@code Configuration}, for a null map, key or value, or an
      *     invalid key
      */
-    public static Flags defineFlags(Map<String, Flag> flags) {
-        return Flags.of(flags);
+    public static LocalControlPoints defineControlPoints(Map<String, LocalControlPoint> controlPoints) {
+        return LocalControlPoints.of(controlPoints);
     }
 
     /** {@link #start(StartOptions)} with everything read from the environment. */
@@ -170,7 +170,7 @@ public final class Fw {
 
     /**
      * The singleton's state and what start decided: mode and why, channel, SDK version, host,
-     * endpoint source, key source, environment, flag count, the start error and the latest remote
+     * endpoint source, key source, environment, control-point count, the start error and the latest remote
      * failure kind ({@link StartStatus#lastErrorKind()}). It never includes the key, so it is safe
      * to log.
      */

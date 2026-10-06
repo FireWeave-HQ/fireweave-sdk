@@ -12,9 +12,9 @@ from typing import Dict, List, Union
 # JSON-compatible value (spec/decision.schema.json $defs.jsonValue).
 JsonValue = Union[None, bool, int, float, str, List["JsonValue"], Dict[str, "JsonValue"]]
 
-# flagMetadata values per spec/decision.schema.json: bool | string | number.
-FlagMetadataValue = Union[bool, str, int, float]
-FlagMetadata = Dict[str, FlagMetadataValue]
+# controlPointMetadata values per spec/decision.schema.json: bool | string | number.
+ControlPointMetadataValue = Union[bool, str, int, float]
+ControlPointMetadata = Dict[str, ControlPointMetadataValue]
 
 
 class FlagType(str, enum.Enum):

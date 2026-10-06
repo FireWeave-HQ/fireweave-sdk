@@ -11,7 +11,7 @@ import (
 )
 
 // The pure resolver (resolve.go): precedence, the mode rule, the endpoint
-// from the channel, key families and flags. Mirrors node's
+// from the channel, key families and controlPoints. Mirrors node's
 // test/unit/start-resolve.test.ts row for row.
 
 var (
@@ -343,36 +343,36 @@ func TestResolveALegacyKeySourceIsNamedInAnError(t *testing.T) {
 	assertNotContains(t, msg, "secretvalue")
 }
 
-// ---------------------------------------------------------------- flags
+// ---------------------------------------------------------------- controlPoints
 
-func TestResolveCopiesTheFlags(t *testing.T) {
-	flags := Flags{"new-checkout": {Local: true, Description: "x"}}
-	r := mustResolve(t, Options{Mode: ModeLocal, Flags: flags}, env(nil), prodBuild)
-	if !reflect.DeepEqual(r.flags, flags) {
-		t.Fatalf("flags = %v", r.flags)
+func TestResolveCopiesTheControlPoints(t *testing.T) {
+	controlPoints := LocalControlPoints{"new-checkout": {Local: true, Description: "x"}}
+	r := mustResolve(t, Options{Mode: ModeLocal, ControlPoints: controlPoints}, env(nil), prodBuild)
+	if !reflect.DeepEqual(r.controlPoints, controlPoints) {
+		t.Fatalf("controlPoints = %v", r.controlPoints)
 	}
-	flags["new-checkout"] = Flag{Local: false}
-	if !r.flags["new-checkout"].Local {
-		t.Fatal("resolved flags must be a copy")
+	controlPoints["new-checkout"] = LocalControlPoint{Local: false}
+	if !r.controlPoints["new-checkout"].Local {
+		t.Fatal("resolved controlPoints must be a copy")
 	}
 }
 
 func TestResolveRejectsAnInvalidFlagKey(t *testing.T) {
 	for _, key := range []string{"", strings.Repeat("k", 257), "bad\nkey"} {
-		msg := configMessage(t, Options{Mode: ModeLocal, Flags: Flags{key: {Local: true}}}, env(nil), prodBuild)
+		msg := configMessage(t, Options{Mode: ModeLocal, ControlPoints: LocalControlPoints{key: {Local: true}}}, env(nil), prodBuild)
 		assertContains(t, msg, "is not a valid control point key")
 	}
 }
 
 func TestDefineFlagsReturnsACopyAndPanicsOnABadKey(t *testing.T) {
-	in := Flags{"new-checkout": {Local: true}}
-	out := DefineFlags(in)
+	in := LocalControlPoints{"new-checkout": {Local: true}}
+	out := DefineControlPoints(in)
 	if !reflect.DeepEqual(in, out) {
-		t.Fatalf("DefineFlags = %v, want %v", out, in)
+		t.Fatalf("DefineControlPoints = %v, want %v", out, in)
 	}
-	in["new-checkout"] = Flag{}
+	in["new-checkout"] = LocalControlPoint{}
 	if !out["new-checkout"].Local {
-		t.Fatal("DefineFlags must return a copy")
+		t.Fatal("DefineControlPoints must return a copy")
 	}
 
 	defer func() {
@@ -382,5 +382,5 @@ func TestDefineFlagsReturnsACopyAndPanicsOnABadKey(t *testing.T) {
 			t.Fatalf("panic = %v (%T), want a Configuration *fireweave.Error", r, r)
 		}
 	}()
-	DefineFlags(Flags{"": {Local: true}})
+	DefineControlPoints(LocalControlPoints{"": {Local: true}})
 }

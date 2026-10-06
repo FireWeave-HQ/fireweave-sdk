@@ -7,7 +7,7 @@
 ///   `FireweaveRuntime`+`FireweaveClient` directly.
 /// - faults: `fault-stale-cache` is the ONE faults-suite fixture that
 ///   transfers for real (staleness is provisioned directly via
-///   `providerState: STALE` + `given.flags[*].fromCache`, not a live per-call
+///   `providerState: STALE` + `given.controlPoints[*].fromCache`, not a live per-call
 ///   fault) — the other 8 are `skipped-with-documented-limitation`.
 /// - extensions: 13 of 14 target namespaces cut from v1 (ADR-0010),
 ///   classified data-driven from `when.operation`, reported
@@ -446,12 +446,12 @@ Future<(bool, String)> _runEvaluate(
     for (final entry in domains.entries) {
       final domainGiven = _obj(entry.value);
       final runtime = FireweaveRuntime(
-        InMemoryAdapter.fromFlagsJson(_obj(domainGiven['flags'])),
+        InMemoryAdapter.fromFlagsJson(_obj(domainGiven['controlPoints'])),
       );
       await _provisionState(runtime, domainGiven['providerState']?.toString());
       if (entry.key == requested) {
         final decision = runtime.evaluate(
-          when['flagKey']?.toString() ?? '',
+          when['controlPointKey']?.toString() ?? '',
           _expectedFlagType(when['flagType']?.toString() ?? 'boolean'),
           when['defaultValue'],
           context: _evaluationContext(when['invocationContext']),
@@ -471,7 +471,7 @@ Future<(bool, String)> _runEvaluate(
   final requireTargetingKey = config['requireTargetingKey'] == true;
 
   ControlPointsBackendAdapter baseAdapter = InMemoryAdapter.fromFlagsJson(
-    _obj(given['flags']),
+    _obj(given['controlPoints']),
   );
   final fault = given['fault'];
   if (fault is Map && (fault['applyTo']?.toString() ?? 'flags') == 'flags') {
@@ -498,7 +498,7 @@ Future<(bool, String)> _runEvaluate(
 
   final includePayload = _obj(when['options'])['includePayload'] == true;
   final decision = runtime.evaluate(
-    when['flagKey']?.toString() ?? '',
+    when['controlPointKey']?.toString() ?? '',
     _expectedFlagType(when['flagType']?.toString() ?? 'boolean'),
     when['defaultValue'],
     context: _evaluationContext(when['invocationContext']),
@@ -556,7 +556,7 @@ Future<(bool, String)> _runInitialize(
     runtime = FireweaveRuntime(adapter);
   } else {
     runtime = FireweaveRuntime(
-      InMemoryAdapter.fromFlagsJson(_obj(given['flags'])),
+      InMemoryAdapter.fromFlagsJson(_obj(given['controlPoints'])),
     );
   }
   await runtime.initialize();
@@ -580,7 +580,7 @@ Future<(bool, String)> _runShutdown(
   Map<String, Object?> expect,
 ) async {
   final runtime = FireweaveRuntime(
-    InMemoryAdapter.fromFlagsJson(_obj(given['flags'])),
+    InMemoryAdapter.fromFlagsJson(_obj(given['controlPoints'])),
   );
   await _provisionState(runtime, given['providerState']?.toString());
   await runtime.shutdown();
@@ -597,14 +597,14 @@ Future<(bool, String)> _runReplaceProvider(
   Map<String, Object?> expect,
 ) async {
   final runtimeA = FireweaveRuntime(
-    InMemoryAdapter.fromFlagsJson(_obj(given['flags'])),
+    InMemoryAdapter.fromFlagsJson(_obj(given['controlPoints'])),
   );
   await runtimeA.initialize();
   await runtimeA.shutdown(); // old provider retired before the replacement
 
   final replacement = _obj(given['replacement']);
   final runtimeB = FireweaveRuntime(
-    InMemoryAdapter.fromFlagsJson(_obj(replacement['flags'])),
+    InMemoryAdapter.fromFlagsJson(_obj(replacement['controlPoints'])),
   );
   await runtimeB.initialize();
 
@@ -614,7 +614,7 @@ Future<(bool, String)> _runReplaceProvider(
   }
   final thenMap = _obj(then);
   final decision = runtimeB.evaluate(
-    thenMap['flagKey']?.toString() ?? '',
+    thenMap['controlPointKey']?.toString() ?? '',
     _expectedFlagType(thenMap['flagType']?.toString() ?? 'boolean'),
     thenMap['defaultValue'],
     context: _evaluationContext(thenMap['invocationContext']),
@@ -632,7 +632,7 @@ Future<(bool, String)> _runInvokeCapability(
   Map<String, Object?> expect,
 ) async {
   final runtime = FireweaveRuntime(
-    InMemoryAdapter.fromFlagsJson(_obj(given['flags'])),
+    InMemoryAdapter.fromFlagsJson(_obj(given['controlPoints'])),
   );
   await _provisionState(runtime, given['providerState']?.toString());
   final client = FireweaveClient(runtime);

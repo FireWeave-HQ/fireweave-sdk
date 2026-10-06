@@ -1,6 +1,6 @@
 /**
  * Start profile: the pure resolver (src/start/resolve.ts).
- * Precedence, mode rule, endpoint from channel, key family, flags.
+ * Precedence, mode rule, endpoint from channel, key family, control points.
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -182,17 +182,17 @@ describe('key: resolved, family-checked, overridable', () => {
   });
 });
 
-describe('flags', () => {
+describe('controlPoints', () => {
   it('accepts { key: { local } } and freezes it', () => {
-    const r = resolveStart({ mode: 'local', flags: { 'new-checkout': { local: true, description: 'x' } } }, env({}), PROD);
-    assert.deepEqual(r.flags, { 'new-checkout': { local: true, description: 'x' } });
-    assert.ok(Object.isFrozen(r.flags));
+    const r = resolveStart({ mode: 'local', controlPoints: { 'new-checkout': { local: true, description: 'x' } } }, env({}), PROD);
+    assert.deepEqual(r.controlPoints, { 'new-checkout': { local: true, description: 'x' } });
+    assert.ok(Object.isFrozen(r.controlPoints));
   });
 
   it('rejects a non-boolean local value and an invalid key', () => {
-    assert.match(configMessage(() => resolveStart({ mode: 'local', flags: { a: { local: 'yes' } } }, env({}), PROD)), /flags\['a'\]/);
-    assert.match(configMessage(() => resolveStart({ mode: 'local', flags: { '': { local: true } } }, env({}), PROD)), /not a valid control point key/);
-    assert.match(configMessage(() => resolveStart({ mode: 'local', flags: [] }, env({}), PROD)), /must be an object/);
+    assert.match(configMessage(() => resolveStart({ mode: 'local', controlPoints: { a: { local: 'yes' } } }, env({}), PROD)), /controlPoints\['a'\]/);
+    assert.match(configMessage(() => resolveStart({ mode: 'local', controlPoints: { '': { local: true } } }, env({}), PROD)), /not a valid control point key/);
+    assert.match(configMessage(() => resolveStart({ mode: 'local', controlPoints: [] }, env({}), PROD)), /must be an object/);
   });
 });
 

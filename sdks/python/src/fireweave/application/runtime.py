@@ -14,18 +14,18 @@ from typing import Mapping, Optional
 from ..domain.context import ContextLimits, DEFAULT_RESERVED_ATTRIBUTE_KEYS, EvaluationContext, merge_contexts
 from ..domain.decision import Decision, Reason
 from ..domain.errors import (
-    FLAG_METADATA_ERROR_KIND_KEY,
+    CONTROL_POINT_METADATA_ERROR_KIND_KEY,
     AlreadyClosedError,
     ConfigurationError,
     FireweaveError,
-    FlagNotFoundError,
+    ControlPointNotFoundError,
     InternalError,
     InvalidContextError,
     NotReadyError,
     TypeMismatchError,
     UnsupportedCapabilityError,
 )
-from ..domain.types import FlagMetadata, FlagType
+from ..domain.types import ControlPointMetadata, FlagType
 from ..domain.validation import (
     matches_expected_type,
     validate_context,
@@ -259,7 +259,7 @@ class FireweaveRuntime:
 
     def evaluate(
         self,
-        flag_key: str,
+        control_point_key: str,
         flag_type: FlagType,
         default_value,
         invocation_context: Optional[EvaluationContext] = None,
@@ -273,9 +273,9 @@ class FireweaveRuntime:
         does this reach the adapter (the one I/O call in this method).
 
         ``options.include_payload`` (task-10b item 5) attaches the resolved
-        flag's payload, when any, to ``flag_metadata['fireweave.payload']``.
+        flag's payload, when any, to ``control_point_metadata['fireweave.payload']``.
         """
-        key_result = validate_control_point_key(flag_key)
+        key_result = validate_control_point_key(control_point_key)
         if not key_result.ok:
             return self._error_decision(default_value, key_result.error)
 
@@ -307,7 +307,7 @@ class FireweaveRuntime:
             return self._error_decision(default_value, lifecycle_error)
 
         try:
-            resolution = self._adapter.resolve(flag_key, canonical)
+            resolution = self._adapter.resolve(control_point_key, canonical)
         except FireweaveError as exc:
             return self._error_decision(default_value, exc)
         except Exception as exc:
@@ -331,7 +331,7 @@ class FireweaveRuntime:
             # default/reason DEFAULT — deliberately not an error. Any adapter
             # that reports `matched=False` gets this branch (the strict
             # seam); an adapter signalling a genuine backend-side "unknown
-            # key" instead RAISES FlagNotFoundError, which is caught above
+            # key" instead RAISES ControlPointNotFoundError, which is caught above
             # and takes the ERROR branch below.
             return Decision(value=default_value, variant=None, reason=Reason.DEFAULT)
 
@@ -349,17 +349,17 @@ class FireweaveRuntime:
         else:
             reason = Reason.TARGETING_MATCH
 
-        metadata: FlagMetadata = {}
+        metadata: ControlPointMetadata = {}
         if resolution.version is not None:
-            metadata["fireweave.flagVersion"] = resolution.version
+            metadata["fireweave.controlPointVersion"] = resolution.version
         # Detailed enrichment: only when the backend supplied a flag id, a
         # matched-condition index, AND a reason code together.
         if (
-            resolution.vendor_flag_id is not None
+            resolution.vendor_control_point_id is not None
             and resolution.condition_index is not None
             and resolution.reason_code is not None
         ):
-            metadata["fireweave.vendorFlagId"] = resolution.vendor_flag_id
+            metadata["fireweave.vendorControlPointId"] = resolution.vendor_control_point_id
             metadata["fireweave.reasonCode"] = resolution.reason_code
         if resolution.from_cache:
             metadata["fireweave.fromCache"] = True
@@ -369,11 +369,11 @@ class FireweaveRuntime:
             )
         metadata.update(resolution.extra_metadata)
 
-        return Decision(value=value, variant=resolution.variant, reason=reason, flag_metadata=metadata)
+        return Decision(value=value, variant=resolution.variant, reason=reason, control_point_metadata=metadata)
 
     def _error_decision(self, default_value, error: FireweaveError) -> Decision:
-        metadata: FlagMetadata = {FLAG_METADATA_ERROR_KIND_KEY: error.kind.value}
-        if isinstance(error, FlagNotFoundError) and error.quota_limited:
+        metadata: ControlPointMetadata = {CONTROL_POINT_METADATA_ERROR_KIND_KEY: error.kind.value}
+        if isinstance(error, ControlPointNotFoundError) and error.quota_limited:
             metadata["fireweave.quotaLimited"] = True
         return Decision(
             value=default_value,
@@ -382,5 +382,5 @@ class FireweaveRuntime:
             error_code=error.openfeature_error_code,
             error_message=error.message,
             error_kind=error.kind,
-            flag_metadata=metadata,
+            control_point_metadata=metadata,
         )

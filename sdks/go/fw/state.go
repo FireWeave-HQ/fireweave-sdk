@@ -32,9 +32,9 @@ import (
 // Options configures Start. Every field is optional; the zero Options reads
 // everything from the environment.
 type Options struct {
-	// Flags is every control point the app reads, with its local value
-	// (internal/fireweave/flags.go by convention). Applied in local mode only.
-	Flags Flags
+	// ControlPoints is every control point the app reads, with its local value
+	// (internal/fireweave/control_points.go by convention). Applied in local mode only.
+	ControlPoints LocalControlPoints
 	// Mode forces a mode. Empty: a key means remote; no key means local only
 	// when the environment name is development, dev, local or test.
 	Mode Mode
@@ -69,16 +69,16 @@ const (
 	StateShutdown  State = "shutdown"
 )
 
-// signature is what makes two Starts "the same". Flags count in local mode
+// signature is what makes two Starts "the same". Local control points count in local mode
 // only: remote ignores them, so an implicit env-only start followed by
-// Start(Options{Flags: …}) under a key is not a conflict.
+// Start(Options{ControlPoints: …}) under a key is not a conflict.
 type signature struct {
-	mode         Mode
-	url          string
-	keyHash      string
-	allowedHosts string
-	instanceID   string
-	flags        string
+	mode          Mode
+	url           string
+	keyHash       string
+	allowedHosts  string
+	instanceID    string
+	controlPoints string
 }
 
 func signatureOf(r resolved, instanceID string) signature {
@@ -93,7 +93,7 @@ func signatureOf(r resolved, instanceID string) signature {
 		sig.keyHash = hex.EncodeToString(sum[:])
 	}
 	if r.mode == ModeLocal {
-		sig.flags = flagsSignature(r.flags)
+		sig.controlPoints = controlPointsSignature(r.controlPoints)
 	}
 	return sig
 }
@@ -111,7 +111,7 @@ func (s signature) differs(o signature) []string {
 	add(s.keyHash != o.keyHash, "key")
 	add(s.allowedHosts != o.allowedHosts, "allowed hosts")
 	add(s.instanceID != o.instanceID, "instance id")
-	add(s.flags != o.flags, "flags")
+	add(s.controlPoints != o.controlPoints, "controlPoints")
 	return out
 }
 
@@ -213,19 +213,19 @@ func localLine(r resolved) string {
 	if r.modeSource == modeSourceEnvironment {
 		why = "no " + envKey + "; environment " + strconv.Quote(r.environment) + " from " + r.environmentSource
 	}
-	n := len(r.flags)
-	noun := "flags"
+	n := len(r.controlPoints)
+	noun := "control points"
 	if n == 1 {
-		noun = "flag"
+		noun = "control point"
 	}
-	return "[fireweave:local] Local mode (" + why + "). Serving " + strconv.Itoa(n) + " " + noun + " from your flags; nothing is sent to fw-server."
+	return "[fireweave:local] Local mode (" + why + "). Serving " + strconv.Itoa(n) + " " + noun + " from your control points; nothing is sent to fw-server."
 }
 
 func initOptions(r resolved) fireweave.Options {
 	if r.mode == ModeLocal {
 		return fireweave.Options{
 			Mode:  fireweave.ModeLocal,
-			Local: &fireweave.LocalOptions{ControlPoints: localSeeds(r.flags), Log: infoSink},
+			Local: &fireweave.LocalOptions{ControlPoints: localSeeds(r.controlPoints), Log: infoSink},
 		}
 	}
 	return fireweave.Options{
@@ -356,7 +356,7 @@ func MustStart(opts Options) {
 // acquire returns the running client for one read or registration, starting
 // FireWeave from the environment if nothing has started it yet. On failure
 // it returns the error a read reports instead.
-func acquire(flagKey string, isRead bool) (*fireweave.Client, *fireweave.Error) {
+func acquire(controlPointKey string, isRead bool) (*fireweave.Client, *fireweave.Error) {
 	st.mu.Lock()
 	var lines []logLine
 	if st.state == StateUnstarted && !st.implicitTried {
@@ -371,8 +371,8 @@ func acquire(flagKey string, isRead bool) (*fireweave.Client, *fireweave.Error) 
 		client = st.client
 		r := st.resolved
 		if isRead && r != nil && r.mode == ModeLocal {
-			if _, ok := r.flags[flagKey]; !ok {
-				lines = st.warnOnceLocked(lines, "[fireweave:local] "+strconv.Quote(flagKey)+" is not in your flags ("+flagsFile+"), so it gets its default. Add it there to try it locally.")
+			if _, ok := r.controlPoints[controlPointKey]; !ok {
+				lines = st.warnOnceLocked(lines, "[fireweave:local] "+strconv.Quote(controlPointKey)+" is not in your control points ("+controlPointsFile+"), so it gets its default. Add it there to try it locally.")
 			}
 		}
 	case StateShutdown:
@@ -397,9 +397,9 @@ type forwarder struct{}
 func (forwarder) Initialize(context.Context) error { return nil }
 
 func (forwarder) Resolve(ctx context.Context, req fireweave.ResolveRequest) fireweave.Decision {
-	client, err := acquire(req.FlagKey, true)
+	client, err := acquire(req.ControlPointKey, true)
 	if err != nil {
-		return fireweave.ErrorDecision(req.FlagKey, req.DefaultValue, err, nil)
+		return fireweave.ErrorDecision(req.ControlPointKey, req.DefaultValue, err, nil)
 	}
 	d := client.Runtime().Evaluate(ctx, req)
 	observeRemote(client, d.Error)

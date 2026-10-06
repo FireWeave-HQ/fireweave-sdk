@@ -52,7 +52,7 @@ class RuntimeConfig {
     this.requireTargetingKey = false,
     this.flagsReadyTimeoutMs = defaultFlagsReadyTimeoutMs,
     this.globalContext,
-    this.flagKeys,
+    this.controlPointKeys,
   });
 
   final ContextLimits limits;
@@ -65,7 +65,7 @@ class RuntimeConfig {
   final EvaluationContext? globalContext;
 
   /// Restrict prefetch to a known set of control points.
-  final List<String>? flagKeys;
+  final List<String>? controlPointKeys;
 }
 
 sealed class _RaceOutcome {
@@ -116,7 +116,7 @@ class FireweaveRuntime {
        _reservedAttributeKeys = config.reservedAttributeKeys,
        _requireTargetingKey = config.requireTargetingKey,
        _flagsReadyTimeoutMs = config.flagsReadyTimeoutMs,
-       _flagKeys = config.flagKeys,
+       _controlPointKeys = config.controlPointKeys,
        _globalContext = config.globalContext;
 
   final ControlPointsBackendAdapter _adapter;
@@ -124,7 +124,7 @@ class FireweaveRuntime {
   final Set<String> _reservedAttributeKeys;
   final bool _requireTargetingKey;
   final int _flagsReadyTimeoutMs;
-  final List<String>? _flagKeys;
+  final List<String>? _controlPointKeys;
 
   LifecycleState _state = LifecycleState.uninitialized;
   PrefetchResult _cache = const <String, AdapterResolution>{};
@@ -249,9 +249,9 @@ class FireweaveRuntime {
       return;
     }
 
-    final options = _flagKeys == null
+    final options = _controlPointKeys == null
         ? null
-        : PrefetchOptions(flagKeys: _flagKeys);
+        : PrefetchOptions(controlPointKeys: _controlPointKeys);
 
     final completer = Completer<_RaceOutcome>();
     Timer? ceiling;
@@ -363,7 +363,7 @@ class FireweaveRuntime {
     // 2. The key is ABSENT from the batch entirely — governed by
     //    `adapter.missReason`: local mode's unknown-key row is
     //    `default`/`DEFAULT` (`spec/modes.md`); every other adapter's absent
-    //    key is `default`/`ERROR`/`FlagNotFound`.
+    //    key is `default`/`ERROR`/`ControlPointNotFound`.
     final resolution = _cache[key];
     if (resolution != null) {
       if (!resolution.found) {
@@ -384,17 +384,17 @@ class FireweaveRuntime {
       );
     }
     // A cache miss while STALE is not a missing control point — it is an
-    // unanswered question. Reporting FlagNotFound there would send a caller
+    // unanswered question. Reporting ControlPointNotFound there would send a caller
     // hunting for a flag that may well exist.
     if (_state == LifecycleState.stale) {
       return Decision(
         value: defaultValue,
         variant: 'default',
         reason: DecisionReason.stale,
-        flagMetadata: const <String, Object?>{'fireweave.stale': true},
+        controlPointMetadata: const <String, Object?>{'fireweave.stale': true},
       );
     }
-    return _errorDecision(defaultValue, FireweaveError.flagNotFound());
+    return _errorDecision(defaultValue, FireweaveError.controlPointNotFound());
   }
 
   Decision _decisionFromResolution(
@@ -413,15 +413,15 @@ class FireweaveRuntime {
 
     final metadata = <String, Object?>{};
     if (resolution.version != null) {
-      metadata['fireweave.flagVersion'] = resolution.version;
+      metadata['fireweave.controlPointVersion'] = resolution.version;
     }
     // Detailed enrichment (ruling 11): emit both keys, or neither. The gate
     // itself is applied by the adapter that holds the raw "condition index"
     // signal (InMemoryAdapter); this is a pass-through of a pre-gated pair.
-    final vendorFlagId = resolution.vendorFlagId;
+    final vendorControlPointId = resolution.vendorControlPointId;
     final reasonCode = resolution.reasonCode;
-    if (vendorFlagId != null && reasonCode != null) {
-      metadata['fireweave.vendorFlagId'] = vendorFlagId;
+    if (vendorControlPointId != null && reasonCode != null) {
+      metadata['fireweave.vendorControlPointId'] = vendorControlPointId;
       metadata['fireweave.reasonCode'] = reasonCode;
     }
     if (resolution.fromCache) {
@@ -453,7 +453,7 @@ class FireweaveRuntime {
       value: value,
       variant: resolution.variant,
       reason: reason,
-      flagMetadata: Map<String, Object?>.unmodifiable(metadata),
+      controlPointMetadata: Map<String, Object?>.unmodifiable(metadata),
     );
   }
 
@@ -542,8 +542,8 @@ class FireweaveRuntime {
 
   static Decision _errorDecision(JsonValue defaultValue, FireweaveError error) {
     final metadata = <String, Object?>{
-      flagMetadataErrorKindKey: error.kind.wireName,
-      if (error.kind == ErrorKind.flagNotFound && error.quotaLimited)
+      controlPointMetadataErrorKindKey: error.kind.wireName,
+      if (error.kind == ErrorKind.controlPointNotFound && error.quotaLimited)
         'fireweave.quotaLimited': true,
     };
     return Decision(
@@ -552,7 +552,7 @@ class FireweaveRuntime {
       errorCode: error.openFeatureErrorCode,
       errorMessage: error.message,
       errorKind: error.kind,
-      flagMetadata: Map<String, Object?>.unmodifiable(metadata),
+      controlPointMetadata: Map<String, Object?>.unmodifiable(metadata),
     );
   }
 }

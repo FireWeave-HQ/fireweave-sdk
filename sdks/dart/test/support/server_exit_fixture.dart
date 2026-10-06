@@ -11,7 +11,9 @@ import 'package:fireweave/server.dart';
 Future<void> main(List<String> args) async {
   final remote = args[0] == 'remote';
   await Fireweave.start(
-    flags: defineFlags(<String, Flag>{'new-checkout': const Flag.local(true)}),
+    controlPoints: defineControlPoints(<String, LocalControlPoint>{
+      'new-checkout': const LocalControlPoint.local(true),
+    }),
     env: remote
         ? <String, String>{
             'FIREWEAVE_KEY': 'project-api-key_exitfixture',

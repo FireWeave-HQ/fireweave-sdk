@@ -206,7 +206,7 @@ class ValidationTest {
     void validateControlPointKeyRejectsEmptyTooLongAndControlCharacters() {
         assertEquals(false, Validation.validateControlPointKey("").isOk());
         assertEquals(false, Validation.validateControlPointKey(null).isOk());
-        assertEquals(ErrorKind.FlagNotFound, Validation.validateControlPointKey("").error().kind());
+        assertEquals(ErrorKind.ControlPointNotFound, Validation.validateControlPointKey("").error().kind());
 
         StringBuilder tooLong = new StringBuilder();
         for (int i = 0; i < 257; i++) {

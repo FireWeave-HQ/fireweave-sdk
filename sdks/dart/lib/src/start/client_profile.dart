@@ -15,7 +15,7 @@ import 'package:fireweave/fireweave.dart';
 import 'channel.dart';
 import 'client_defines.dart';
 import 'core.dart';
-import 'flags.dart';
+import 'control_points.dart';
 import 'identity.dart';
 import 'names.dart';
 import 'policy.dart';
@@ -108,7 +108,7 @@ Future<String> _loadDeviceId(
 /// [channel] stands in for this build's release channel. No I/O, no globals
 /// and no throw; [startClient] is this plus the singleton.
 PolicyResult resolveClientStart({
-  required Map<String, Flag> flags,
+  required Map<String, LocalControlPoint> controlPoints,
   required Map<String, String> defines,
   required SdkChannel channel,
   required String sdkVersion,
@@ -132,7 +132,7 @@ PolicyResult resolveClientStart({
       sourced(environment, 'Fireweave.start(environment:)'),
       sourced(defines[environmentVariable], environmentVariable),
     ]),
-    flags: flags,
+    controlPoints: controlPoints,
     channel: channel,
     sdkVersion: sdkVersion,
     environmentChecked:
@@ -143,7 +143,7 @@ PolicyResult resolveClientStart({
 /// Start the client profile. [defines] is the compile-time define map;
 /// tests hand in their own, since defines cannot be set at run time.
 Future<void> startClient({
-  Map<String, Flag>? flags,
+  Map<String, LocalControlPoint>? controlPoints,
   Mode? mode,
   String? environment,
   String? url,
@@ -159,12 +159,12 @@ Future<void> startClient({
     core.log = log;
   }
 
-  final Map<String, Flag> normalized;
+  final Map<String, LocalControlPoint> normalized;
   try {
-    normalized = normalizeFlags(flags);
+    normalized = normalizeControlPoints(controlPoints);
   } on FireweaveError catch (error) {
     return core.fail(
-      const StartProblem('invalid-flags', variable: 'flags'),
+      const StartProblem('invalid-control-points', variable: 'controlPoints'),
       error.message,
     );
   }
@@ -180,7 +180,7 @@ Future<void> startClient({
   }
 
   final policy = resolveClientStart(
-    flags: normalized,
+    controlPoints: normalized,
     mode: mode,
     environment: environment,
     url: url,
@@ -230,7 +230,7 @@ abstract final class Fireweave {
   ///
   /// ```dart
   /// Future<void> main() async {
-  ///   await Fireweave.start(flags: flags);
+  ///   await Fireweave.start(controlPoints: controlPoints);
   ///   runApp(const App());
   /// }
   /// ```
@@ -256,7 +256,7 @@ abstract final class Fireweave {
   /// `dev_<uuid>` id for this run. [transport] and [log] are not part of the
   /// configuration check.
   static Future<void> start({
-    Map<String, Flag>? flags,
+    Map<String, LocalControlPoint>? controlPoints,
     Mode? mode,
     String? environment,
     String? url,
@@ -266,7 +266,7 @@ abstract final class Fireweave {
     HttpTransport? transport,
     LogSink? log,
   }) => startClient(
-    flags: flags,
+    controlPoints: controlPoints,
     mode: mode,
     environment: environment,
     url: url,

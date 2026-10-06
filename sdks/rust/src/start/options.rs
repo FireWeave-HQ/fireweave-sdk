@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::Mode;
 
-use super::flags::Flags;
+use super::control_points::LocalControlPoints;
 
 /// Reads one variable instead of the process environment. Return `None` for
 /// an unset variable and apply no defaults of your own.
@@ -19,21 +19,21 @@ pub type LogFn = Arc<dyn Fn(&str) + Send + Sync>;
 /// Options for [`super::start`].
 ///
 /// ```
-/// use fireweave::start::{define_flags, Flag, StartOptions};
+/// use fireweave::start::{define_control_points, LocalControlPoint, StartOptions};
 /// use fireweave::Mode;
 ///
 /// let options = StartOptions {
-///     flags: define_flags([("new-checkout", Flag::local(true))]),
+///     control_points: define_control_points([("new-checkout", LocalControlPoint::local(true))]),
 ///     mode: Some(Mode::Local),
 ///     ..Default::default()
 /// };
-/// assert_eq!(options.flags.len(), 1);
+/// assert_eq!(options.control_points.len(), 1);
 /// ```
 #[derive(Default, Clone)]
 pub struct StartOptions {
     /// Every control point the app reads, with its local value
-    /// (`src/fireweave_flags.rs` by convention). Applied in local mode only.
-    pub flags: Flags,
+    /// (`src/fireweave_control_points.rs` by convention). Applied in local mode only.
+    pub control_points: LocalControlPoints,
     /// Forces a mode. `None`: a key means remote; no key means local only
     /// when the environment name is `development`, `dev`, `local` or `test`.
     pub mode: Option<Mode>,
@@ -61,7 +61,7 @@ impl std::fmt::Debug for StartOptions {
     /// Never prints the key or the closures.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("StartOptions")
-            .field("flags", &self.flags)
+            .field("control_points", &self.control_points)
             .field("mode", &self.mode)
             .field("environment", &self.environment)
             .field("url", &self.url)

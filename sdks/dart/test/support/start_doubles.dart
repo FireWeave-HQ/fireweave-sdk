@@ -14,7 +14,7 @@ class SeenRequest {
 }
 
 /// Fake fw-server over the [HttpTransport] port: answers
-/// `/v1/flags/evaluate` with [decisions] and `/v1/targets/register` with
+/// `/v1/control-points/evaluate` with [decisions] and `/v1/targets/register` with
 /// 200, unless a status or a throw is configured. Records every request.
 class RoutingTransport implements HttpTransport {
   RoutingTransport({
@@ -25,7 +25,7 @@ class RoutingTransport implements HttpTransport {
     this.throwOnEvaluate,
   }) : decisions = decisions ?? <String, Object?>{};
 
-  /// flagKey -> value served by evaluate.
+  /// controlPointKey -> value served by evaluate.
   Map<String, Object?> decisions;
   int evaluateStatus;
   int registerStatus;
@@ -39,7 +39,7 @@ class RoutingTransport implements HttpTransport {
   final List<SeenRequest> requests = <SeenRequest>[];
 
   List<SeenRequest> get evaluates =>
-      requests.where((r) => r.path == '/v1/flags/evaluate').toList();
+      requests.where((r) => r.path == '/v1/control-points/evaluate').toList();
   List<SeenRequest> get registers =>
       requests.where((r) => r.path == '/v1/targets/register').toList();
 
@@ -71,13 +71,13 @@ class RoutingTransport implements HttpTransport {
   }
 }
 
-/// A `/v1/flags/evaluate` response body serving [values].
+/// A `/v1/control-points/evaluate` response body serving [values].
 String evaluateResponse(Map<String, Object?> values) =>
     jsonEncode(<String, Object?>{
       'decisions': <Object?>[
         for (final entry in values.entries)
           <String, Object?>{
-            'flagKey': entry.key,
+            'controlPointKey': entry.key,
             'found': true,
             'enabled': true,
             'value': entry.value,

@@ -14,8 +14,8 @@ export function start(): void {
   throw serverOnly();
 }
 
-export function defineFlags<T>(flags: T): T {
-  return flags;
+export function defineControlPoints<T>(controlPoints: T): T {
+  return controlPoints;
 }
 
 export async function resetForTests(): Promise<void> {}

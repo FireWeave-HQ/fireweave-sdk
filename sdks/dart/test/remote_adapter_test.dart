@@ -22,9 +22,9 @@ void main() {
     test('vendor metadata surfaces when the server sends both keys', () async {
       final transport = FakeTransport(
         body:
-            '{"decisions":[{"flagKey":"f","value":true,"variant":"on",'
+            '{"decisions":[{"controlPointKey":"f","value":true,"variant":"on",'
             '"reason":"TARGETING_MATCH","found":true,"enabled":true,'
-            '"flagMetadata":{"fireweave.vendorFlagId":1001,'
+            '"controlPointMetadata":{"fireweave.vendorControlPointId":1001,'
             '"fireweave.reasonCode":"condition_match"}}]}',
       );
       final runtime = FireweaveRuntime(await readyAdapter(transport));
@@ -33,16 +33,22 @@ void main() {
       );
       final decision = runtime.evaluate('f', FlagType.boolean, false);
       expect(decision.value, isTrue);
-      expect(decision.flagMetadata['fireweave.vendorFlagId'], 1001);
-      expect(decision.flagMetadata['fireweave.reasonCode'], 'condition_match');
+      expect(
+        decision.controlPointMetadata['fireweave.vendorControlPointId'],
+        1001,
+      );
+      expect(
+        decision.controlPointMetadata['fireweave.reasonCode'],
+        'condition_match',
+      );
     });
 
     test('omits vendor metadata when only one key is present', () async {
       final transport = FakeTransport(
         body:
-            '{"decisions":[{"flagKey":"f","value":true,"variant":"on",'
+            '{"decisions":[{"controlPointKey":"f","value":true,"variant":"on",'
             '"reason":"TARGETING_MATCH","found":true,"enabled":true,'
-            '"flagMetadata":{"fireweave.reasonCode":"condition_match"}}]}',
+            '"controlPointMetadata":{"fireweave.reasonCode":"condition_match"}}]}',
       );
       final runtime = FireweaveRuntime(await readyAdapter(transport));
       await runtime.initialize(
@@ -50,16 +56,18 @@ void main() {
       );
       final decision = runtime.evaluate('f', FlagType.boolean, false);
       expect(
-        decision.flagMetadata.containsKey('fireweave.vendorFlagId'),
+        decision.controlPointMetadata.containsKey(
+          'fireweave.vendorControlPointId',
+        ),
         isFalse,
       );
       expect(
-        decision.flagMetadata.containsKey('fireweave.reasonCode'),
+        decision.controlPointMetadata.containsKey('fireweave.reasonCode'),
         isFalse,
       );
     });
 
-    test('absent key from decisions is FlagNotFound', () async {
+    test('absent key from decisions is ControlPointNotFound', () async {
       final runtime = FireweaveRuntime(
         await readyAdapter(FakeTransport(body: '{"decisions":[]}')),
       );
@@ -67,7 +75,7 @@ void main() {
         context: EvaluationContext(targetingKey: 'user-1'),
       );
       final decision = runtime.evaluate('missing', FlagType.boolean, false);
-      expect(decision.errorKind, ErrorKind.flagNotFound);
+      expect(decision.errorKind, ErrorKind.controlPointNotFound);
     });
 
     test('HTTP status maps to the documented error kind', () async {
@@ -212,13 +220,13 @@ void main() {
         expect(sent['groups'], {'organization': 'org_1'});
         expect(
           transport.lastUrl.toString(),
-          'http://127.0.0.1:9/v1/flags/evaluate',
+          'http://127.0.0.1:9/v1/control-points/evaluate',
         );
       },
     );
 
     test(
-      'quota-limited empty batch is FlagNotFound with quotaLimited',
+      'quota-limited empty batch is ControlPointNotFound with quotaLimited',
       () async {
         final adapter = await readyAdapter(
           FakeTransport(body: '{"decisions":[],"quotaLimited":true}'),
@@ -227,7 +235,7 @@ void main() {
           await adapter.prefetch(EvaluationContext(targetingKey: 'u'));
           fail('expected a throw');
         } on FireweaveError catch (error) {
-          expect(error.kind, ErrorKind.flagNotFound);
+          expect(error.kind, ErrorKind.controlPointNotFound);
           expect(error.quotaLimited, isTrue);
         }
       },

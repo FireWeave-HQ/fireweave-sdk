@@ -3,6 +3,14 @@
 All notable changes to the `fireweave` Dart package. The repository-wide changelog
 (`../../CHANGELOG.md`) carries the cross-language view.
 
+## Unreleased (3.0.0)
+
+BREAKING ([ADR-0013](../../docs/adr/0013-control-point-wire.md)): evaluate calls
+`POST /v1/control-points/evaluate`; `Decision.controlPointMetadata` replaces `flagMetadata`;
+`ErrorKind.controlPointNotFound` replaces `flagNotFound`; metadata keys are
+`fireweave.controlPointVersion` and `fireweave.vendorControlPointId`; `client.flags` is removed;
+the start profile takes `controlPoints` (`defineControlPoints`, `LocalControlPoint`).
+
 ## 2.2.0
 
 Initial package aligned with the other Fireweave SDK manifests. Control-point

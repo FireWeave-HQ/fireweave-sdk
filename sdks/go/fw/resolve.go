@@ -56,9 +56,9 @@ type resolved struct {
 	environment       string
 	environmentSource string
 
-	flags      Flags
-	channel    Channel
-	sdkVersion string
+	controlPoints LocalControlPoints
+	channel       Channel
+	sdkVersion    string
 
 	// Lines to log once each: legacy names, an ignored key.
 	warnings []string
@@ -192,11 +192,11 @@ func noKeyError(env sourced, found bool, lookup lookupFunc) *fireweave.Error {
 // resolve applies the start profile's rules to opts.
 // It returns a Configuration *fireweave.Error naming the source at fault.
 func resolve(opts Options, lookup lookupFunc, build buildInfo) (resolved, *fireweave.Error) {
-	flags, ferr := normalizeFlags(opts.Flags)
+	controlPoints, ferr := normalizeControlPoints(opts.ControlPoints)
 	if ferr != nil {
 		return resolved{}, ferr
 	}
-	r := resolved{flags: flags, channel: build.channel, sdkVersion: build.version, keySource: "none"}
+	r := resolved{controlPoints: controlPoints, channel: build.channel, sdkVersion: build.version, keySource: "none"}
 
 	mode := Mode(strings.ToLower(strings.TrimSpace(string(opts.Mode))))
 	if mode != "" && mode != ModeRemote && mode != ModeLocal {

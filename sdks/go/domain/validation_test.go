@@ -7,14 +7,14 @@ import (
 )
 
 func TestValidateControlPointKey(t *testing.T) {
-	if _, err := ValidateControlPointKey(""); err == nil || err.Kind != KindFlagNotFound {
-		t.Errorf("empty key: got %v, want FlagNotFound", err)
+	if _, err := ValidateControlPointKey(""); err == nil || err.Kind != KindControlPointNotFound {
+		t.Errorf("empty key: got %v, want ControlPointNotFound", err)
 	}
-	if _, err := ValidateControlPointKey(strings.Repeat("k", 257)); err == nil || err.Kind != KindFlagNotFound {
-		t.Errorf("too long: got %v, want FlagNotFound", err)
+	if _, err := ValidateControlPointKey(strings.Repeat("k", 257)); err == nil || err.Kind != KindControlPointNotFound {
+		t.Errorf("too long: got %v, want ControlPointNotFound", err)
 	}
-	if _, err := ValidateControlPointKey("bad\x00key"); err == nil || err.Kind != KindFlagNotFound {
-		t.Errorf("control char: got %v, want FlagNotFound", err)
+	if _, err := ValidateControlPointKey("bad\x00key"); err == nil || err.Kind != KindControlPointNotFound {
+		t.Errorf("control char: got %v, want ControlPointNotFound", err)
 	}
 	if v, err := ValidateControlPointKey("good-key"); err != nil || v != "good-key" {
 		t.Errorf("valid key: got (%q, %v)", v, err)

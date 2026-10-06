@@ -8,7 +8,7 @@ The Fireweave SDK talks only to the endpoint you configure (host-allowlist enfor
 
 Sent in remote mode — on each evaluation, or per context in the SDKs that prefetch (web, Swift); not sent in local mode (or with `InMemoryAdapter`).
 
-**Node:** requests go to fw-server at `POST /v1/flags/evaluate`. No vendor endpoint is contacted from the application process at all. Contains:
+**Node:** requests go to fw-server at `POST /v1/control-points/evaluate`. No vendor endpoint is contacted from the application process at all. Contains:
 
 - `targetingKey` — verbatim.
 - `attributes` — the evaluation-context attributes you supply, minus `groups`/`groupProperties`, `$`-prefixed system directives, and `fireweave.*` carriers.
@@ -56,7 +56,7 @@ caller context ──▶ merge (global→client→invocation) ──▶ bounds+r
                                                             │
                                              host-allowlist-validated endpoint, TLS default-on
                                                             ▼
-                        Node:  fw-server /v1/flags/evaluate · /v1/capture · /v1/targets/register
+                        Node:  fw-server /v1/control-points/evaluate · /v1/capture · /v1/targets/register
 ```
 
 - Egress hosts are allowlist-checked at initialization; the allowlist is **on by default** in every language. Node's `DEFAULT_ALLOWED_HOSTS` names Fireweave's own hosts plus loopback — no vendor hostname appears in the published build at all ([ADR-0006](adr/0006-node-drops-direct-posthog-adapter.md)). The SSRF fixture (`sec-endpoint-ssrf-allowlist`) pins the allowlist *shape*, supplying its own hosts explicitly.

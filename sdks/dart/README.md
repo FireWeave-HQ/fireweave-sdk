@@ -59,19 +59,19 @@ There are two profiles in this package; pick one per app.
 ### Flutter and Dart web apps: `package:fireweave/client.dart`
 
 ```dart
-// lib/fireweave/flags.dart: every control point the app reads, with its local value
+// lib/fireweave/control_points.dart: every control point the app reads, with its local value
 import 'package:fireweave/client.dart';
 
-final flags = defineFlags({
-  'new-checkout': Flag.local(true, description: 'New checkout flow'),
+final controlPoints = defineControlPoints({
+  'new-checkout': LocalControlPoint.local(true, description: 'New checkout flow'),
 });
 
 // lib/main.dart
 import 'package:fireweave/client.dart';
-import 'fireweave/flags.dart';
+import 'fireweave/control_points.dart';
 
 Future<void> main() async {
-  await Fireweave.start(flags: flags); // before runApp; never throws
+  await Fireweave.start(controlPoints: controlPoints); // before runApp; never throws
   runApp(const App());
 }
 ```
@@ -132,10 +132,10 @@ on resume) is planned and not part of this package.
 ```dart
 import 'dart:io';
 import 'package:fireweave/server.dart';
-import 'package:my_server/fireweave/flags.dart';
+import 'package:my_server/fireweave/control_points.dart';
 
 Future<void> main() async {
-  await Fireweave.start(flags: flags); // FIREWEAVE_KEY from the process environment
+  await Fireweave.start(controlPoints: controlPoints); // FIREWEAVE_KEY from the process environment
   ProcessSignal.sigterm.watch().listen((_) async {
     await fw.shutdown(); // closes the connection pool so the VM exits at once
     exit(0);
@@ -174,7 +174,7 @@ unset.
 
 | Option | Client define | Server environment | Default | Notes |
 | --- | --- | --- | --- | --- |
-| `flags` | — | — | `{}` | `defineFlags({...})`, checked with the core's key rule. Served in local mode only; a local read of a key missing from it gets its default and warns once. |
+| `controlPoints` | — | — | `{}` | `defineControlPoints({...})`, checked with the core's key rule. Served in local mode only; a local read of a key missing from it gets its default and warns once. |
 | `mode` | — | — | inferred | `Mode.local` or `Mode.remote`; see the mode rule. |
 | `environment` | `FIREWEAVE_ENV` | `FIREWEAVE_ENV`, then `APP_ENV` | — | Only feeds the mode rule. `FW_ENV` is not read. |
 | `url` | `FIREWEAVE_URL` | `FIREWEAVE_URL`, then legacy `FW_API_URL` / `FW_ATTEST_URL` (one warning) | this build's channel | `-staging.N` builds call `https://staging-app-server.fireweave.ai`, others `https://app-server.fireweave.ai`. https only, except `localhost`, `127.0.0.1` and `::1`. An override is the only extra allowed host. |
@@ -219,7 +219,7 @@ print(fw.status);
 ```
 
 It never contains the key. `problem` says why decisions are defaults: a configuration fault
-(`missing-key`, `server-key`, `wrong-key-family`, `insecure-url`, `invalid-flags`,
+(`missing-key`, `server-key`, `wrong-key-family`, `insecure-url`, `invalid-control-points`,
 `start-failed`) or the last fw-server failure (`key-rejected` for 401/403, `rate-limited`,
 `unreachable`, `unexpected-response`, cleared by a later success). Each kind of fw-server
 failure also logs one line per isolate naming the key's source and the host, and
@@ -299,9 +299,9 @@ To reuse your app's own HTTP client, or to fake the network in tests, pass an
 
 `getBooleanValue` / `getStringValue` / `getNumberValue` / `getObjectValue`, their
 `*Details` counterparts (return the whole `Decision` — `reason`, `errorKind`,
-`flagMetadata`, … — instead of just the value), and the general-form `evaluate`. All
-nine live on `client.controlPoints`; `client.flags` is an identical, deprecated alias
-(`identical(client.flags, client.controlPoints)` holds). `getNumberValue` returns
+`controlPointMetadata`, … — instead of just the value), and the general-form `evaluate`.
+All nine live on `client.controlPoints`; the `client.flags` alias was removed in 3.0.0
+(ADR-0013). `getNumberValue` returns
 `num` — number, not integer, per the spec.
 
 ## Module layout
@@ -313,7 +313,7 @@ nine live on `client.controlPoints`; `client.flags` is an identical, deprecated 
 | `lib/src/application/client.dart` | `FireweaveClient` — `controlPoints`, `registerTarget`, `identify`, `invokeCapability` (degrades; v1 has no supported capabilities). |
 | `lib/src/application/init_fireweave.dart` | `initFireweave` — the single entry point and sanctioned composition root (the only application file allowed to import `infrastructure/`). |
 | `lib/src/application/ports.dart` | The `ControlPointsBackendAdapter` and `HttpTransport` port boundary. |
-| `lib/src/infrastructure/adapters/remote_adapter.dart` | `FireweaveRemoteAdapter` — the production backend (`POST /v1/flags/evaluate`, `POST /v1/targets/register`). |
+| `lib/src/infrastructure/adapters/remote_adapter.dart` | `FireweaveRemoteAdapter` — the production backend (`POST /v1/control-points/evaluate`, `POST /v1/targets/register`). |
 | `lib/src/infrastructure/adapters/local_adapter.dart` | `FireweaveLocalAdapter` — the dev substrate: seeded boolean overrides, no network; `registerTarget` records in-process and traces. |
 | `lib/src/infrastructure/adapters/in_memory_adapter.dart` | Deterministic fixture-driven adapter for tests. |
 | `lib/src/infrastructure/hosts.dart` | SSRF allowlist (on by default; https required off-loopback). |

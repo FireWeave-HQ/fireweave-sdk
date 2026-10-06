@@ -56,7 +56,7 @@ body:
       label: What happened, and what did you expect?
       description: |
         Include the full evaluation details if relevant — value, `reason`, `errorCode`,
-        `errorMessage`, `flagMetadata` (especially `fireweave.errorKind`) — and the
+        `errorMessage`, `controlPointMetadata` (especially `fireweave.errorKind`) — and the
         runtime lifecycle state. **Redact any real API keys.**
     validations:
       required: true

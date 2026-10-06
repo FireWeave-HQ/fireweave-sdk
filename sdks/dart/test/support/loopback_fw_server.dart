@@ -39,7 +39,7 @@ class LoopbackFwServer {
     request.response.statusCode = status;
     request.response.headers.contentType = ContentType.json;
     request.response.write(
-      request.uri.path == '/v1/flags/evaluate'
+      request.uri.path == '/v1/control-points/evaluate'
           ? evaluateResponse(decisions)
           : '{}',
     );

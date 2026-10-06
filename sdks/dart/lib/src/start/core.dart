@@ -15,7 +15,7 @@ import 'dart:async';
 import 'package:fireweave/fireweave.dart';
 
 import 'channel.dart';
-import 'flags.dart';
+import 'control_points.dart';
 import 'names.dart';
 import 'policy.dart';
 import 'transport/owned_transport.dart';
@@ -36,7 +36,7 @@ final class StartProblem {
   const StartProblem(this.reason, {this.variable});
 
   /// `missing-key`, `server-key`, `wrong-key-family`, `insecure-url`,
-  /// `invalid-flags`, `start-failed`, `key-rejected`, `rate-limited`,
+  /// `invalid-control-points`, `start-failed`, `key-rejected`, `rate-limited`,
   /// `unreachable` or `unexpected-response`.
   final String reason;
   final String? variable;
@@ -69,7 +69,7 @@ final class FireweaveStatus {
     this.endpointSource,
     this.keySource,
     this.environment,
-    this.flagCount,
+    this.controlPointCount,
     this.problem,
     this.error,
     this.lastErrorKind,
@@ -100,7 +100,7 @@ final class FireweaveStatus {
 
   /// The environment name, when it chose the mode.
   final String? environment;
-  final int? flagCount;
+  final int? controlPointCount;
   final StartProblem? problem;
 
   /// Why start failed, when it did. Names sources, never values.
@@ -121,7 +121,7 @@ final class FireweaveStatus {
     'endpointSource': endpointSource,
     'keySource': keySource,
     'environment': environment,
-    'flagCount': flagCount,
+    'controlPointCount': controlPointCount,
     'problem': problem?.reason,
     'problemVariable': problem?.variable,
     'error': error,
@@ -159,8 +159,8 @@ Decision _errorDecision(JsonValue defaultValue, FireweaveError error) =>
       errorCode: error.openFeatureErrorCode,
       errorMessage: error.message,
       errorKind: error.kind,
-      flagMetadata: Map<String, Object?>.unmodifiable(<String, Object?>{
-        flagMetadataErrorKindKey: error.kind.wireName,
+      controlPointMetadata: Map<String, Object?>.unmodifiable(<String, Object?>{
+        controlPointMetadataErrorKindKey: error.kind.wireName,
       }),
     );
 
@@ -174,7 +174,7 @@ String startSignature(ResolvedStart config, String? identity) => <String>[
   config.key ?? '',
   (config.allowedHosts ?? const <String>[]).join(','),
   identity ?? '',
-  if (config.mode == Mode.local) flagsSignature(config.flags),
+  if (config.mode == Mode.local) controlPointsSignature(config.controlPoints),
 ].map((part) => '${part.length}:$part').join('|');
 
 /// One profile's singleton for this isolate.
@@ -273,10 +273,10 @@ class StartCore {
         ? 'Fireweave.start(mode: Mode.local)'
         : "no ${profile.keyVariable}; environment '${config.environment}' "
               'from ${config.environmentSource}';
-    final n = config.flags.length;
+    final n = config.controlPoints.length;
     return '[fireweave:local] Local mode ($why). Serving $n '
-        'flag${n == 1 ? '' : 's'} from your flags map; nothing is sent to '
-        'fw-server.';
+        'control point${n == 1 ? '' : 's'} from your control points; nothing is '
+        'sent to fw-server.';
   }
 
   /// Begin a start for [startConfig]. Resolves when the first prefetch
@@ -325,7 +325,7 @@ class StartCore {
       if (startConfig.mode == Mode.local) {
         started = await initFireweave(
           InitFireweaveOptions.local(
-            controlPoints: localSeeds(startConfig.flags),
+            controlPoints: localSeeds(startConfig.controlPoints),
             log: emit,
             context: context,
           ),
@@ -620,10 +620,10 @@ class StartCore {
       final c0 = config;
       if (c0 != null &&
           c0.mode == Mode.local &&
-          !c0.flags.containsKey(key) &&
+          !c0.controlPoints.containsKey(key) &&
           validateControlPointKey(key).isValid) {
         warnOnce(
-          "[fireweave:local] '$key' is not in your flags map ($flagsFile), so "
+          "[fireweave:local] '$key' is not in your control points ($controlPointsFile), so "
           'it gets its default. Add it there to try it locally.',
         );
       }
@@ -651,7 +651,7 @@ class StartCore {
       endpointSource: c?.urlSource,
       keySource: c?.keySource,
       environment: c?.environment,
-      flagCount: c?.flags.length,
+      controlPointCount: c?.controlPoints.length,
       problem: problem,
       error: failure?.message,
       lastErrorKind: lastErrorKind,

@@ -17,10 +17,11 @@ import 'support/start_doubles.dart';
 const String key = 'project-api-key_s3cr3tvalue';
 const String url = 'https://flags.example.com';
 
-final Map<String, Flag> flags = defineFlags(<String, Flag>{
-  'new-checkout': const Flag.local(true),
-  'dark-mode': const Flag.local(false),
-});
+final Map<String, LocalControlPoint> controlPoints =
+    defineControlPoints(<String, LocalControlPoint>{
+      'new-checkout': const LocalControlPoint.local(true),
+      'dark-mode': const LocalControlPoint.local(false),
+    });
 
 Matcher throwsConfiguration(Object messageMatcher) => throwsA(
   isA<FireweaveError>()
@@ -45,10 +46,10 @@ void main() {
 
   group('resolution', () {
     test(
-      'FIREWEAVE_ENV=development and no key: local, serving the flags',
+      'FIREWEAVE_ENV=development and no key: local, serving the controlPoints',
       () async {
         await Fireweave.start(
-          flags: flags,
+          controlPoints: controlPoints,
           env: <String, String>{'FIREWEAVE_ENV': 'development'},
           log: log.call,
         );
@@ -64,7 +65,7 @@ void main() {
         expect(status.modeSource, 'environment');
         expect(status.environment, 'development');
         expect(status.keySource, 'none');
-        expect(status.flagCount, 2);
+        expect(status.controlPointCount, 2);
         expect(status.host, isNull);
         expect(log.containing('[fireweave:local] Local mode'), hasLength(1));
         expect(
@@ -156,7 +157,7 @@ void main() {
         );
         expect(fw.controlPoints.getBooleanValue('new-checkout', false), isTrue);
         final evaluate = transport.evaluates.single;
-        expect(evaluate.url.toString(), '$url/v1/flags/evaluate');
+        expect(evaluate.url.toString(), '$url/v1/control-points/evaluate');
         expect(evaluate.headers['Authorization'], 'Bearer $key');
         expect(evaluate.body['targetingKey'], fw.instanceKey);
 
@@ -312,23 +313,25 @@ void main() {
       );
     });
 
-    test('an invalid flags key throws Configuration', () async {
+    test('an invalid controlPoints key throws Configuration', () async {
       await expectLater(
         Fireweave.start(
-          flags: <String, Flag>{'': const Flag.local(true)},
+          controlPoints: <String, LocalControlPoint>{
+            '': const LocalControlPoint.local(true),
+          },
           env: <String, String>{'FIREWEAVE_ENV': 'dev'},
         ),
-        throwsConfiguration(contains('flags')),
+        throwsConfiguration(contains('controlPoints')),
       );
     });
   });
 
   group('local values', () {
     test(
-      'a key missing from the flags map gets its default and warns once',
+      'a key missing from the control-points map gets its default and warns once',
       () async {
         await Fireweave.start(
-          flags: flags,
+          controlPoints: controlPoints,
           env: <String, String>{'FIREWEAVE_ENV': 'test'},
           log: log.call,
         );
@@ -338,16 +341,18 @@ void main() {
           fw.controlPoints.getBooleanDetails('missing', false).reason,
           DecisionReason.defaultReason,
         );
-        final warnings = log.containing("'missing' is not in your flags map");
+        final warnings = log.containing(
+          "'missing' is not in your control points",
+        );
         expect(warnings, hasLength(1));
-        expect(warnings.single, contains('lib/fireweave/flags.dart'));
+        expect(warnings.single, contains('lib/fireweave/control_points.dart'));
       },
     );
 
     test('remote mode never serves local values', () async {
       transport.decisions = <String, Object?>{};
       await Fireweave.start(
-        flags: flags,
+        controlPoints: controlPoints,
         env: <String, String>{'FIREWEAVE_KEY': key},
         transport: transport,
         log: log.call,
@@ -355,9 +360,9 @@ void main() {
       expect(fw.controlPoints.getBooleanValue('new-checkout', false), isFalse);
       expect(
         fw.controlPoints.getBooleanDetails('new-checkout', false).errorKind,
-        ErrorKind.flagNotFound,
+        ErrorKind.controlPointNotFound,
       );
-      expect(log.containing('not in your flags map'), isEmpty);
+      expect(log.containing('not in your control points'), isEmpty);
     });
   });
 
@@ -384,13 +389,15 @@ void main() {
 
     test('a different second start throws and keeps the first', () async {
       await Fireweave.start(
-        flags: flags,
+        controlPoints: controlPoints,
         env: <String, String>{'FIREWEAVE_ENV': 'dev'},
         log: log.call,
       );
       await expectLater(
         Fireweave.start(
-          flags: <String, Flag>{'new-checkout': const Flag.local(false)},
+          controlPoints: <String, LocalControlPoint>{
+            'new-checkout': const LocalControlPoint.local(false),
+          },
           env: <String, String>{'FIREWEAVE_ENV': 'dev'},
         ),
         throwsConfiguration(contains('different configuration')),
@@ -398,12 +405,19 @@ void main() {
       expect(fw.controlPoints.getBooleanValue('new-checkout', false), isTrue);
     });
 
-    test('in remote mode the flags map is not part of the check', () async {
-      final env = <String, String>{'FIREWEAVE_KEY': key};
-      await Fireweave.start(env: env, transport: transport);
-      await Fireweave.start(flags: flags, env: env, transport: transport);
-      expect(transport.evaluates, hasLength(1));
-    });
+    test(
+      'in remote mode the control-points map is not part of the check',
+      () async {
+        final env = <String, String>{'FIREWEAVE_KEY': key};
+        await Fireweave.start(env: env, transport: transport);
+        await Fireweave.start(
+          controlPoints: controlPoints,
+          env: env,
+          transport: transport,
+        );
+        expect(transport.evaluates, hasLength(1));
+      },
+    );
 
     test('the first start keeps its log sink', () async {
       final second = LogCapture();
@@ -431,7 +445,7 @@ void main() {
 
     test('shutdown, then a fresh start', () async {
       await Fireweave.start(
-        flags: flags,
+        controlPoints: controlPoints,
         env: <String, String>{'FIREWEAVE_ENV': 'dev'},
       );
       await fw.shutdown();
@@ -443,7 +457,9 @@ void main() {
         ErrorKind.alreadyClosed,
       );
       await Fireweave.start(
-        flags: <String, Flag>{'new-checkout': const Flag.local(false)},
+        controlPoints: <String, LocalControlPoint>{
+          'new-checkout': const LocalControlPoint.local(false),
+        },
         env: <String, String>{'FIREWEAVE_ENV': 'dev'},
       );
       expect(fw.status.state, StartState.ready);
@@ -482,7 +498,7 @@ void main() {
 
     test('before start, validation runs first', () {
       final d = fw.controlPoints.getBooleanDetails('', false);
-      expect(d.errorKind, ErrorKind.flagNotFound);
+      expect(d.errorKind, ErrorKind.controlPointNotFound);
       final t = fw.controlPoints.evaluate('k', FlagType.boolean, 'not a bool');
       expect(t.errorKind, ErrorKind.typeMismatch);
     });
@@ -784,7 +800,7 @@ void main() {
       expect(fw.controlPoints.getBooleanValue('new-checkout', false), isTrue);
       expect((await fw.identify('user-1')).ok, isTrue);
       expect(server.requests.map((r) => r.path), <String>[
-        '/v1/flags/evaluate',
+        '/v1/control-points/evaluate',
         '/v1/targets/register',
       ]);
       expect(server.requests.first.authorization, 'Bearer $key');
@@ -839,8 +855,9 @@ void main() {
       'FIREWEAVE_URL': server.url,
     };
 
-    int evaluates() =>
-        server.requests.where((r) => r.path == '/v1/flags/evaluate').length;
+    int evaluates() => server.requests
+        .where((r) => r.path == '/v1/control-points/evaluate')
+        .length;
 
     test('re-fetches on the interval and swaps in new decisions', () async {
       await Fireweave.start(

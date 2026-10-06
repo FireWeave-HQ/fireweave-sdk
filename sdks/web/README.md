@@ -17,7 +17,7 @@ bun add @fireweaveai/web-sdk   # or: npm install @fireweaveai/web-sdk
 ## Quick start (one line: the start profile)
 
 The start profile ([ADR-0012](../../docs/adr/0012-start-profile.md)) replaces the generated
-`fw-harness.ts` / `fw-providers.ts` files with one plugin, one start file and one flags file.
+`fw-harness.ts` / `fw-providers.ts` files with one plugin, one start file and one control-points file.
 The core API below (`initFireweave`) is unchanged.
 
 ```ts
@@ -25,16 +25,16 @@ The core API below (`initFireweave`) is unchanged.
 import { fireweave } from '@fireweaveai/web-sdk/vite';
 export default defineConfig({ plugins: [react(), fireweave()] });
 
-// src/fireweave/flags.ts: every control point the app reads, with its local value
-import { defineFlags } from '@fireweaveai/web-sdk/start';
-export const flags = defineFlags({
+// src/fireweave/control-points.ts: every control point the app reads, with its local value
+import { defineControlPoints } from '@fireweaveai/web-sdk/start';
+export const controlPoints = defineControlPoints({
   'new-checkout': { local: true, description: 'New checkout flow' },
 });
 
 // src/fireweave/start.ts: imported first by your entry module
 import { start } from '@fireweaveai/web-sdk/start';
-import { flags } from './flags';
-export const ready = start({ flags });
+import { controlPoints } from './control-points';
+export const ready = start({ controlPoints });
 
 // src/main.tsx: render once the first prefetch settles, so first render has decisions
 import { ready } from './fireweave/start';
@@ -69,7 +69,7 @@ The build helpers read the process environment and, for Vite, the app's `.env` f
 
 | `start()` option | Build variable | Default | Notes |
 | --- | --- | --- | --- |
-| `flags` | — | `{}` | `defineFlags({...})` from `src/fireweave/flags.ts`. Served in local mode only; a read of a key missing from it warns once. |
+| `controlPoints` | — | `{}` | `defineControlPoints({...})` from `src/fireweave/control-points.ts`. Served in local mode only; a read of a key missing from it warns once. |
 | `mode` | — | inferred | `'remote'` or `'local'`. Without it: a key means remote; no key and a development environment name means local; anything else fails closed. |
 | `environment` | `FIREWEAVE_ENV`, then `APP_ENV` (the dev server and Vitest also use Vite's mode) | — | Only feeds the mode rule. A build never infers local from `--mode development`. |
 | `url` | `FIREWEAVE_URL` | this SDK build's channel | `-staging.N` builds call `https://staging-app-server.fireweave.ai`, others `https://app-server.fireweave.ai`. Also accepts a same-origin proxy path such as `/fw`. https only, except localhost. |
@@ -103,11 +103,11 @@ default. The build is where a fault fails loudly:
 Runtime faults keep their cause in `fw.status().problem`: `key-rejected` (fw-server answered 401/403)
 and `unreachable` (offline, an ad or tracker blocker, a firewall, or a Content-Security-Policy
 `connect-src` rule). Both leave the state `STALE` and reads on their defaults. Point `FIREWEAVE_URL`
-at a same-origin proxy (`/fw`) that forwards `/v1/flags/evaluate`, `/v1/capture` and
+at a same-origin proxy (`/fw`) that forwards `/v1/control-points/evaluate`, `/v1/capture` and
 `/v1/targets/register` to avoid most of them.
 
 On the server side of an SSR app, remote mode does nothing (a server-side singleton would share one
-visitor's identity across requests) and reads return defaults; local mode serves the flags object
+visitor's identity across requests) and reads return defaults; local mode serves the control-points object
 everywhere, so server and client renders agree.
 
 ## Quick start (production path)
@@ -164,7 +164,7 @@ with reason `STALE` rather than blocking.
 | `application/runtime.ts` | `FireweaveWebRuntime` — prefetch-once-per-context cache, lifecycle state, sync reads. |
 | `application/client.ts` | `FireweaveWebClient` — `controlPoints`, `registerTarget`, `identify`. |
 | `application/mode.ts` | `initFireweave` — the single entry point; the only module allowed to import concrete adapters. |
-| `infrastructure/adapters/remote.ts` | `FireweaveRemoteWebAdapter` — the production backend (`/v1/flags/evaluate`, `/v1/targets/register`). |
+| `infrastructure/adapters/remote.ts` | `FireweaveRemoteWebAdapter` — the production backend (`/v1/control-points/evaluate`, `/v1/targets/register`). |
 | `infrastructure/adapters/inmemory.ts` | Deterministic fixture-driven adapter for tests and conformance. |
 | `infrastructure/adapters/local.ts` | `FireweaveLocalWebAdapter` — the DEV substrate `initFireweave({ mode: 'local' })` builds. |
 | `application/ports.ts` | The `WebBackendAdapter` boundary. |

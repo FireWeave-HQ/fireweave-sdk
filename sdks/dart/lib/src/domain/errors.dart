@@ -13,9 +13,9 @@
 ///   default messages never echo credentials in the first place.
 library;
 
-/// `flagMetadata` key carrying the canonical Fireweave kind on error
-/// decisions (`spec/errors.schema.json` `rules.flagMetadataErrorKindKey`).
-const String flagMetadataErrorKindKey = 'fireweave.errorKind';
+/// `controlPointMetadata` key carrying the canonical Fireweave kind on error
+/// decisions (`spec/errors.schema.json` `rules.controlPointMetadataErrorKindKey`).
+const String controlPointMetadataErrorKindKey = 'fireweave.errorKind';
 
 /// Canonical PascalCase error kinds (`spec/errors.schema.json`); exactly 15.
 enum ErrorKind {
@@ -25,7 +25,11 @@ enum ErrorKind {
     'PROVIDER_NOT_READY',
     isRetryable: true,
   ),
-  flagNotFound('FlagNotFound', 'flag not found', 'FLAG_NOT_FOUND'),
+  controlPointNotFound(
+    'ControlPointNotFound',
+    'flag not found',
+    'FLAG_NOT_FOUND',
+  ),
   typeMismatch('TypeMismatch', 'flag type mismatch', 'TYPE_MISMATCH'),
   invalidContext(
     'InvalidContext',
@@ -104,7 +108,7 @@ enum ErrorKind {
 /// constructor keyword args (python) / dedicated struct fields (go/rust/
 /// swift):
 ///
-/// - [quotaLimited] — only meaningful on [ErrorKind.flagNotFound]: the
+/// - [quotaLimited] — only meaningful on [ErrorKind.controlPointNotFound]: the
 ///   backend reported quota limiting for this evaluation
 ///   (`spec/decision.schema.json` `standardMetadataKeys`).
 /// - [initFatal] — only meaningful on [ErrorKind.configuration]: whether
@@ -123,11 +127,14 @@ class FireweaveError implements Exception {
     this.targetingKeyMissing = false,
   }) : message = _normalizeMessage(message ?? kind.defaultMessage);
 
-  /// [ErrorKind.flagNotFound], optionally noting the backend reported quota
+  /// [ErrorKind.controlPointNotFound], optionally noting the backend reported quota
   /// limiting (`contracts/errors.json`: "quota-limited responses resolve as
-  /// FlagNotFound with fireweave.quotaLimited metadata").
-  factory FireweaveError.flagNotFound({bool quotaLimited = false}) =>
-      FireweaveError(ErrorKind.flagNotFound, quotaLimited: quotaLimited);
+  /// ControlPointNotFound with fireweave.quotaLimited metadata").
+  factory FireweaveError.controlPointNotFound({bool quotaLimited = false}) =>
+      FireweaveError(
+        ErrorKind.controlPointNotFound,
+        quotaLimited: quotaLimited,
+      );
 
   /// [ErrorKind.invalidContext] subtype: missing targeting key
   /// (`spec/control-points.md` "Context"). OF code `TARGETING_KEY_MISSING`.

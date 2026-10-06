@@ -1,13 +1,13 @@
 /**
  * Start profile: start(), the singleton and the `fw` facade (src/start/).
- * Idempotency, implicit start, reads never throw, local flags, identity, status.
+ * Idempotency, implicit start, reads never throw, local control points, identity, status.
  */
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { start, fw, defineFlags, resetForTests } from '../../src/start/index.ts';
+import { start, fw, defineControlPoints, resetForTests } from '../../src/start/index.ts';
 
 const KEY = 'project-api-key_abc123';
-const flags = defineFlags({ 'new-checkout': { local: true }, 'old-path': { local: false } });
+const controlPoints = defineControlPoints({ 'new-checkout': { local: true }, 'old-path': { local: false } });
 const DEV = { NODE_ENV: 'development' } as const;
 
 let lines: string[] = [];
@@ -32,23 +32,23 @@ afterEach(async () => {
   Object.assign(process.env, savedEnv);
 });
 
-describe('start(): local mode with a flags object', () => {
+describe('start(): local mode with a control-points object', () => {
   it('serves each local value and logs one local-mode line', async () => {
-    start({ flags, env: DEV, log });
+    start({ controlPoints, env: DEV, log });
     assert.equal(await fw.controlPoints.getBooleanValue('new-checkout', false, { targetingKey: 'u1' }), true);
     assert.equal(await fw.controlPoints.getBooleanValue('old-path', true, { targetingKey: 'u1' }), false);
     assert.equal(lines.filter((l) => l.startsWith('[fireweave:local] Local mode')).length, 1);
   });
 
-  it('a key missing from the flags object gets its default and warns once', async () => {
-    start({ flags, env: DEV, log });
+  it('a key missing from the control-points object gets its default and warns once', async () => {
+    start({ controlPoints, env: DEV, log });
     assert.equal(await fw.controlPoints.getBooleanValue('not-declared', false, { targetingKey: 'u1' }), false);
     assert.equal(await fw.controlPoints.getBooleanValue('not-declared', false, { targetingKey: 'u2' }), false);
-    assert.equal(lines.filter((l) => l.includes("'not-declared' is not in your flags object")).length, 1);
+    assert.equal(lines.filter((l) => l.includes("'not-declared' is not in your control points")).length, 1);
   });
 
   it("mode: 'local' works with no environment name at all", async () => {
-    start({ flags, mode: 'local', env: {}, log });
+    start({ controlPoints, mode: 'local', env: {}, log });
     assert.equal(fw.status().modeSource, 'option');
     assert.equal(await fw.controlPoints.getBooleanValue('new-checkout', false, { targetingKey: 'u1' }), true);
   });
@@ -56,14 +56,14 @@ describe('start(): local mode with a flags object', () => {
 
 describe('start(): idempotency', () => {
   it('a second start with the same config is a no-op', () => {
-    start({ flags, env: DEV, log });
-    assert.doesNotThrow(() => start({ flags, env: DEV, log }));
+    start({ controlPoints, env: DEV, log });
+    assert.doesNotThrow(() => start({ controlPoints, env: DEV, log }));
   });
 
-  it('a second start with different flags throws Configuration', () => {
-    start({ flags, env: DEV, log });
+  it('a second start with different control points throws Configuration', () => {
+    start({ controlPoints, env: DEV, log });
     assert.throws(
-      () => start({ flags: { 'new-checkout': { local: false } }, env: DEV, log }),
+      () => start({ controlPoints: { 'new-checkout': { local: false } }, env: DEV, log }),
       (err: unknown) => (err as { kind?: string }).kind === 'Configuration' && /different configuration/.test((err as Error).message),
     );
   });
@@ -75,9 +75,9 @@ describe('start(): idempotency', () => {
   });
 
   it('the first start() keeps its log sink; a repeat start() cannot swap it', async () => {
-    start({ flags, env: DEV, log });
+    start({ controlPoints, env: DEV, log });
     const other: string[] = [];
-    start({ flags, env: DEV, log: (line) => void other.push(line) });
+    start({ controlPoints, env: DEV, log: (line) => void other.push(line) });
     await fw.controlPoints.getBooleanValue('not-declared', false, { targetingKey: 'u1' });
     assert.ok(lines.some((l) => l.includes("'not-declared'")));
     assert.deepEqual(other, []);
@@ -91,7 +91,7 @@ describe('start(): idempotency', () => {
 describe('reads before start()', () => {
   it('an explicit start() in the same turn wins over the implicit one', async () => {
     const early = fw.controlPoints.getBooleanValue('new-checkout', false, { targetingKey: 'u1' });
-    start({ flags, env: DEV, log });
+    start({ controlPoints, env: DEV, log });
     assert.equal(await early, true);
     assert.equal(fw.status().modeSource, 'environment');
   });
@@ -128,7 +128,7 @@ describe('reads before start()', () => {
     console.warn = () => undefined;
     try {
       await fw.controlPoints.getBooleanValue('new-checkout', false);
-      start({ flags, mode: 'local', env: {}, log });
+      start({ controlPoints, mode: 'local', env: {}, log });
       assert.equal(await fw.controlPoints.getBooleanValue('new-checkout', false, { targetingKey: 'u1' }), true);
     } finally {
       console.warn = original;
@@ -138,21 +138,21 @@ describe('reads before start()', () => {
 
 describe('identity, instance key, status, shutdown', () => {
   it('identify registers a user target and resolves { ok }', async () => {
-    start({ flags, env: DEV, log });
+    start({ controlPoints, env: DEV, log });
     assert.equal((await fw.identify('user-1', { plan: 'pro' })).ok, true);
     assert.ok(lines.some((l) => l.includes('registerTarget user user-1')));
   });
 
   it('instanceKey: option, then FIREWEAVE_INSTANCE_ID, then a host hash; stable within a process', async () => {
-    start({ flags, env: { ...DEV, FIREWEAVE_INSTANCE_ID: 'worker-7' }, log });
+    start({ controlPoints, env: { ...DEV, FIREWEAVE_INSTANCE_ID: 'worker-7' }, log });
     assert.equal(fw.instanceKey(), 'worker-7');
     await resetForTests();
-    start({ flags, env: { ...DEV, HOSTNAME: 'api-pod-1' }, log });
+    start({ controlPoints, env: { ...DEV, HOSTNAME: 'api-pod-1' }, log });
     const key = fw.instanceKey();
     assert.match(key, /^inst_[0-9a-f]{16}$/);
     assert.equal(fw.instanceKey(), key);
     await resetForTests();
-    start({ flags, env: DEV, instanceId: 'cron-1', log });
+    start({ controlPoints, env: DEV, instanceId: 'cron-1', log });
     assert.equal(fw.instanceKey(), 'cron-1');
   });
 
@@ -168,11 +168,11 @@ describe('identity, instance key, status, shutdown', () => {
   });
 
   it('after shutdown reads serve defaults, and start() begins again', async () => {
-    start({ flags, env: DEV, log });
+    start({ controlPoints, env: DEV, log });
     await fw.controlPoints.getBooleanValue('new-checkout', false);
     await fw.shutdown();
     assert.equal(await fw.controlPoints.getBooleanValue('new-checkout', false), false);
-    start({ flags, env: DEV, log });
+    start({ controlPoints, env: DEV, log });
     assert.equal(await fw.controlPoints.getBooleanValue('new-checkout', false, { targetingKey: 'u1' }), true);
   });
 });

@@ -29,7 +29,7 @@ export type DecisionReason =
   | 'ERROR';
 
 export interface Decision {
-  readonly flagKey: string;
+  readonly controlPointKey: string;
   readonly value: JsonValue;
   readonly reason: DecisionReason;
   readonly variant?: string;
@@ -68,7 +68,7 @@ export interface Signal {
   readonly kind: SignalKind;
   readonly name: string;
   readonly targetingKey?: string;
-  readonly flagKey?: string;
+  readonly controlPointKey?: string;
   readonly variant?: string;
   readonly status?: string;
   readonly errorKind?: string;
@@ -81,7 +81,7 @@ export interface Signal {
 }
 
 export interface Exposure {
-  readonly flagKey: string;
+  readonly controlPointKey: string;
   readonly targetingKey: string;
   readonly value: JsonValue;
   readonly variant?: string;

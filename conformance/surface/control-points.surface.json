@@ -14,8 +14,8 @@
       "rust": "control_points",
       "go": "ControlPoints"
     },
-    "deprecatedAlias": "flags",
-    "aliasMustShareIdentity": true
+    "removedAlias": "flags",
+    "$comment": "The flags alias was removed in 3.0.0 (ADR-0013). Every SDK asserts its client has no member of that name in its own casing."
   },
   "methods": [
     { "name": "getBooleanValue",   "returns": "boolean",  "args": ["key", "default", "context?"] },

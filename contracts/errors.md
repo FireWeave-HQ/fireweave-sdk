@@ -16,22 +16,22 @@ Machine-readable twin: [`errors.json`](./errors.json).
 | kind | OF `errorCode` | retryable | class | When |
 | --- | --- | --- | --- | --- |
 | `NotReady` | `PROVIDER_NOT_READY` | yes | transient | Evaluation before successful init / during cold-start gate |
-| `FlagNotFound` | `FLAG_NOT_FOUND` | no | permanent | Flag absent from snapshot / definitions (includes quota-empty as not-found → default) |
+| `ControlPointNotFound` | `FLAG_NOT_FOUND` | no | permanent | Control point absent from snapshot / definitions (includes quota-empty as not-found → default) |
 | `TypeMismatch` | `TYPE_MISMATCH` | no | permanent | Stored type ≠ requested typed getter |
 | `InvalidContext` | `INVALID_CONTEXT` or `TARGETING_KEY_MISSING` | no | permanent | Bad/oversized context; missing targeting key when required |
 | `Authentication` | `GENERAL` | no | permanent | 401 / invalid project or secret key |
-| `Authorization` | `GENERAL` | no | permanent | 403 / key lacks flag permission |
-| `RateLimited` | `GENERAL` | yes | transient | HTTP 429 from the backend (still serve defaults; `/flags` `quotaLimited` is `FlagNotFound`, see quota note) |
-| `Timeout` | `GENERAL` | yes | transient | Flag-request or init deadline exceeded |
+| `Authorization` | `GENERAL` | no | permanent | 403 / key lacks permission |
+| `RateLimited` | `GENERAL` | yes | transient | HTTP 429 from the backend (still serve defaults; `/flags` `quotaLimited` is `ControlPointNotFound`, see quota note) |
+| `Timeout` | `GENERAL` | yes | transient | Evaluate-request or init deadline exceeded |
 | `Network` | `GENERAL` | yes | transient | DNS/connect/reset/TLS transport failure |
 | `BackendUnavailable` | `GENERAL` | yes | transient | 5xx / upstream unavailable |
 | `MalformedResponse` | `PARSE_ERROR` | no | permanent* | Non-JSON or schema-invalid `/flags` or definitions body |
 | `UnsupportedCapability` | `GENERAL` | no | permanent | Extension/capability not implemented in this SDK build |
 | `Configuration` | `PROVIDER_FATAL` (init) / `GENERAL` (runtime) | no | permanent | Invalid host, mutually exclusive options, missing required config |
-| `AlreadyClosed` | `PROVIDER_NOT_READY` | no | permanent | Call after shutdown / close (Fireweave kind preserved in `flagMetadata["fireweave.errorKind"]`) |
+| `AlreadyClosed` | `PROVIDER_NOT_READY` | no | permanent | Call after shutdown / close (Fireweave kind preserved in `controlPointMetadata["fireweave.errorKind"]`) |
 | `Internal` | `GENERAL` | no† | permanent | Unexpected invariant violation |
 
-\* Malformed payloads are treated permanent for a given response; a later poll may succeed — adapters MAY retry the **transport** but MUST NOT invent flag values.  
+\* Malformed payloads are treated permanent for a given response; a later poll may succeed — adapters MAY retry the **transport** but MUST NOT invent values.  
 † `Internal` is not retryable by default; operators may restart the process.
 
 ### OpenFeature code coverage
@@ -42,14 +42,14 @@ All eight OF codes are reachable:
 | --- | --- |
 | `PROVIDER_NOT_READY` | `NotReady`, `AlreadyClosed` (post-shutdown) |
 | `PROVIDER_FATAL` | `Configuration` (init-fatal path) |
-| `FLAG_NOT_FOUND` | `FlagNotFound` |
+| `FLAG_NOT_FOUND` | `ControlPointNotFound` |
 | `PARSE_ERROR` | `MalformedResponse` |
 | `TYPE_MISMATCH` | `TypeMismatch` |
 | `TARGETING_KEY_MISSING` | `InvalidContext` (subtype when targeting key required/missing) |
 | `INVALID_CONTEXT` | `InvalidContext` |
 | `GENERAL` | `Authentication`, `Authorization`, `RateLimited`, `Timeout`, `Network`, `BackendUnavailable`, `UnsupportedCapability`, `Internal`, non-fatal `Configuration` |
 
-Fireweave may attach `flagMetadata["fireweave.errorKind"]` with the canonical `kind` for diagnostics (never secrets).
+Fireweave may attach `controlPointMetadata["fireweave.errorKind"]` with the canonical `kind` for diagnostics (never secrets).
 
 ### `InvalidContext` subtype selection
 
@@ -58,7 +58,7 @@ Fireweave may attach `flagMetadata["fireweave.errorKind"]` with the canonical `k
 
 ### Quota limiting note
 
-PostHog `/flags?v=2` may return HTTP 200 with `quotaLimited: ["feature_flags"]` and empty `flags`. Evaluation MUST return the **default** with `FlagNotFound` / `FLAG_NOT_FOUND` and set `flagMetadata["fireweave.quotaLimited"] = true`. Do not treat as outage/`BackendUnavailable`.
+PostHog `/flags?v=2` may return HTTP 200 with `quotaLimited: ["feature_flags"]` and empty `flags`. Evaluation MUST return the **default** with `ControlPointNotFound` / `FLAG_NOT_FOUND` and set `controlPointMetadata["fireweave.quotaLimited"] = true`. Do not treat as outage/`BackendUnavailable`.
 
 ### Message guidelines
 
@@ -73,4 +73,4 @@ Forbidden examples:
 
 - `"invalid key phc_abc…"`
 - `"Authorization: Bearer …"`
-- Full response bodies that may embed PII from flag definitions
+- Full response bodies that may embed PII from control-point definitions

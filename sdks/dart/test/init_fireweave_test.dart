@@ -74,7 +74,8 @@ void main() {
           allowedHosts: const ['127.0.0.1'],
           context: EvaluationContext(targetingKey: 'anon'),
           httpTransport: FakeTransport(
-            body: '{"decisions":[{"flagKey":"f","value":true,"found":true}]}',
+            body:
+                '{"decisions":[{"controlPointKey":"f","value":true,"found":true}]}',
           ),
         ),
       );

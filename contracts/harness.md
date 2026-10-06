@@ -35,29 +35,29 @@ never a mock of the client itself:
 
 - **In-memory backend** (evaluation / context / lifecycle / security suites, and the one
   runnable extensions fixture): a deterministic, fixture-driven adapter (node/go/java:
-  `InMemoryAdapter`; python: `InMemoryAdapter`) seeded from `given.flags`, wired directly into
+  `InMemoryAdapter`; python: `InMemoryAdapter`) seeded from `given.controlPoints`, wired directly into
   the language's runtime + client types (`FireweaveRuntime`/`Runtime` + `FireweaveClient`/
   `Client`). This is the "local mode" leg of the pipeline: the runner does not go through the
   `initFireweave`/`Fireweave.init`/`init_fireweave` entry point for these fixtures, because that
   entry point's local-mode adapter (`FireweaveLocalAdapter`) accepts only a
   `Record<string, boolean>` override map — it cannot carry the rich, multi-type, condition-
-  matching flag definitions (variant, metadata, payload, matchAttribute/matchGroups/
+  matching control-point definitions (variant, metadata, payload, matchAttribute/matchGroups/
   matchPerson, fault injection) the fixtures need. `initFireweave` itself (both modes) is
   exercised end-to-end by each language's own unit-test suite, which the language's `verify`/
   `test` command already runs alongside the conformance suite.
 - **Remote backend** (faults suite): the real `FireweaveRemoteAdapter`/`Adapter` speaking
-  `POST /v1/flags/evaluate` over real HTTP — this is the "remote mode" leg. The HTTP peer
+  `POST /v1/control-points/evaluate` over real HTTP — this is the "remote mode" leg. The HTTP peer
   differs by language for environmental reasons (see "test-server role" below), but the
   adapter, the wire protocol, and the client invocation are all real; `fault-stale-cache`
   is the one faults-suite fixture that runs on the in-memory backend instead, since cache
-  staleness is provisioned directly (`given.flags[*].fromCache` + `providerState: STALE`),
+  staleness is provisioned directly (`given.controlPoints[*].fromCache` + `providerState: STALE`),
   not over HTTP.
 
 Comparator library responsibilities (one per language, same rules):
 
 - Drop excluded fields (timestamps, stacks, vendor `requestId`, nondeterministic metadata).
 - Redact secrets in messages.
-- Canonical-JSON serialize for structured `value` / `flagMetadata`.
+- Canonical-JSON serialize for structured `value` / `controlPointMetadata`.
 - Enforce `compatibility` vs observed status matrix (extended vocabulary — see "Statuses" below).
 
 ## Per-language runners
@@ -75,14 +75,14 @@ Comparator library responsibilities (one per language, same rules):
 
 Node and Python are close enough to a real subprocess `test-server` that they use it directly;
 Go and Java's canonical CI environment cannot, so they substitute a same-language stand-in that
-speaks the identical wire contract (`POST /v1/flags/evaluate`, `{decisions:[...], quotaLimited}`)
+speaks the identical wire contract (`POST /v1/control-points/evaluate`, `{decisions:[...], quotaLimited}`)
 — this is a packaging-environment difference, not a behavioral one.
 
 ### Start-profile suite (`contracts/start/`)
 
 A separate suite for the opt-in start profile (`spec/start-profile.md`, ADR-0012), outside the
 65 like `contracts/web/`. Its fixtures drive each SDK's pure start-profile resolution — mode,
-sources, endpoint, key families, instance key, flags, release channel — with injected
+sources, endpoint, key families, instance key, local control points, release channel — with injected
 environment, build values and host name, so no network is involved. Every SDK runs it from its
 own test command and writes `compatibility-report.start.<lang>.json` (gitignored);
 `tools/conformance/compare-start.mjs` validates the fixtures and aggregates reports. Format,
@@ -215,7 +215,7 @@ done here (out of this rewrite's scope).
 ## test-server role
 
 `test-server/implementation/server.mjs` speaks the Fireweave-native remote protocol
-(`POST /v1/flags/evaluate`) plus its admin control plane
+(`POST /v1/control-points/evaluate`) plus its admin control plane
 (`POST /_test/fault`, `/_test/flags`, `/_test/reset`). Node and Python spawn it directly (an
 `npm`/`bun` and a `python` toolchain both have a `node` binary available, or install one, so
 this is the norm). Go and Java's canonical CI containers

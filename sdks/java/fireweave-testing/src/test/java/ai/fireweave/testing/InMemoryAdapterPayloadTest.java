@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * (contracts/evaluation/eval-payload-attached.json): {@link InMemoryAdapter} previously had no
  * {@code payload} field on {@link InMemoryAdapter.FlagDefinition} at all, and
  * {@link EvaluationOptions} was an inert marker with no {@code includePayload} equivalent, so
- * {@code fireweave.payload} was never attached to flagMetadata.
+ * {@code fireweave.payload} was never attached to controlPointMetadata.
  */
 class InMemoryAdapterPayloadTest {
 
@@ -50,7 +50,7 @@ class InMemoryAdapterPayloadTest {
         InMemoryAdapter adapter = new InMemoryAdapter(Map.of("f", booleanFlag(JsonValue.ofObject(payload))));
 
         Decision d = evaluate(adapter, EvaluationOptions.withIncludePayload(true));
-        assertEquals("{\"a\":2,\"b\":1}", d.flagMetadata().get("fireweave.payload"));
+        assertEquals("{\"a\":2,\"b\":1}", d.controlPointMetadata().get("fireweave.payload"));
     }
 
     @Test
@@ -59,7 +59,7 @@ class InMemoryAdapterPayloadTest {
                 Map.of("f", booleanFlag(JsonValue.ofObject(Map.of("a", JsonValue.of(1))))));
 
         Decision d = evaluate(adapter, EvaluationOptions.defaults());
-        assertFalse(d.flagMetadata().containsKey("fireweave.payload"));
+        assertFalse(d.controlPointMetadata().containsKey("fireweave.payload"));
     }
 
     @Test
@@ -68,7 +68,7 @@ class InMemoryAdapterPayloadTest {
                 Map.of("f", booleanFlag(JsonValue.ofObject(Map.of("a", JsonValue.of(1))))));
 
         Decision d = evaluate(adapter, null);
-        assertFalse(d.flagMetadata().containsKey("fireweave.payload"));
+        assertFalse(d.controlPointMetadata().containsKey("fireweave.payload"));
     }
 
     @Test
@@ -76,7 +76,7 @@ class InMemoryAdapterPayloadTest {
         InMemoryAdapter adapter = new InMemoryAdapter(Map.of("f", booleanFlag(null)));
 
         Decision d = evaluate(adapter, EvaluationOptions.withIncludePayload(true));
-        assertFalse(d.flagMetadata().containsKey("fireweave.payload"));
+        assertFalse(d.controlPointMetadata().containsKey("fireweave.payload"));
     }
 
     @Test
@@ -99,6 +99,6 @@ class InMemoryAdapterPayloadTest {
         InMemoryAdapter adapter = new InMemoryAdapter(Map.of("f", booleanFlag(JsonValue.of(raw))));
 
         Decision d = evaluate(adapter, EvaluationOptions.withIncludePayload(true));
-        assertEquals(raw, d.flagMetadata().get("fireweave.payload"));
+        assertEquals(raw, d.controlPointMetadata().get("fireweave.payload"));
     }
 }

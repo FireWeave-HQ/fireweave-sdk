@@ -6,7 +6,7 @@ import Foundation
 /// One `StartCore` lives for the life of the process (tests build their own
 /// with injected `StartSources`). `startFireweave` resolves the configuration
 /// synchronously and starts the core client in a detached task; until that
-/// client is installed, reads are answered here: local mode from the flags,
+/// client is installed, reads are answered here: local mode from the control points,
 /// remote mode with the caller's default (`NotReady`).
 ///
 /// A configuration fault throws on the server profile only. On the app
@@ -30,7 +30,7 @@ final class StartCore: @unchecked Sendable {
     var generation: UInt64
     var config: ResolvedStart
     var signature: StartSignature
-    /// The flags' local values, answered before the local client exists.
+    /// The control points' local values, answered before the local client exists.
     var seeds: [String: Bool]
     /// The anonymous key: the device id (app) or the instance key (server).
     var subject: String
@@ -251,7 +251,7 @@ final class StartCore: @unchecked Sendable {
       generation: current,
       config: config,
       signature: signature,
-      seeds: localSeeds(config.flags),
+      seeds: localSeeds(config.controlPoints),
       subject: subject,
       currentKey: subject,
       persistence: options.persistence,
@@ -425,9 +425,9 @@ final class StartCore: @unchecked Sendable {
     run current: Run,
     lines: inout [LogLine]
   ) {
-    if current.config.mode == .local && current.config.flags[key] == nil {
+    if current.config.mode == .local && current.config.controlPoints[key] == nil {
       warnOnceLocked(
-        "[fireweave:local] \"\(key)\" is not in your flags (\(StartNames.flagsFile)), so it"
+        "[fireweave:local] \"\(key)\" is not in your control points (\(StartNames.controlPointsFile)), so it"
           + " gets its default. Add it there to try it locally.",
         into: &lines
       )
@@ -778,7 +778,7 @@ final class StartCore: @unchecked Sendable {
       state: stateLocked(),
       channel: sources.channel,
       sdkVersion: sources.sdkVersion,
-      flagCount: 0
+      controlPointCount: 0
     )
     guard phase != .notStarted else { return status }
     guard let current = run else {
@@ -797,7 +797,7 @@ final class StartCore: @unchecked Sendable {
     status.modeSource = config.modeSource
     status.keySource = config.keySource
     status.environment = config.environment
-    status.flagCount = config.flags.count
+    status.controlPointCount = config.controlPoints.count
     if let url = config.url {
       status.host = URLComponents(string: url)?.host
       status.endpointSource = config.urlSource
@@ -863,7 +863,7 @@ struct StartSignature: Equatable {
   var allowedHosts: [String]?
   var deviceId: String?
   var instanceId: String?
-  var flags: String?
+  var controlPoints: String?
 
   init(config: ResolvedStart, deviceId: String?, instanceId: String?) {
     profile = config.profile
@@ -873,7 +873,7 @@ struct StartSignature: Equatable {
     allowedHosts = config.allowedHosts
     self.deviceId = deviceId
     self.instanceId = instanceId
-    flags = config.mode == .local ? flagsSignature(config.flags) : nil
+    controlPoints = config.mode == .local ? controlPointsSignature(config.controlPoints) : nil
   }
 
   /// The names of the fields that differ, never their values.
@@ -886,7 +886,7 @@ struct StartSignature: Equatable {
     if allowedHosts != other.allowedHosts { names.append("allowed hosts") }
     if deviceId != other.deviceId { names.append("device id") }
     if instanceId != other.instanceId { names.append("instance id") }
-    if flags != other.flags { names.append("flags") }
+    if controlPoints != other.controlPoints { names.append("controlPoints") }
     return names
   }
 }
@@ -901,10 +901,10 @@ func localModeLine(_ config: ResolvedStart) -> String {
     let source = config.environmentSource ?? "the environment"
     why = "no key; environment \"\(name)\" from \(source)"
   }
-  let count = config.flags.count
-  let noun = count == 1 ? "flag" : "flags"
+  let count = config.controlPoints.count
+  let noun = count == 1 ? "control point" : "control points"
   return phrase(
-    "[fireweave:local] Local mode (\(why)). Serving \(count) \(noun) from your flags;",
+    "[fireweave:local] Local mode (\(why)). Serving \(count) \(noun) from your control points;",
     "nothing is sent to fw-server."
   )
 }

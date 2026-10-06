@@ -87,7 +87,7 @@ func TestRetryableClassification(t *testing.T) {
 			t.Errorf("%s should be retryable", k)
 		}
 	}
-	permanent := []ErrorKind{KindFlagNotFound, KindTypeMismatch, KindInvalidContext, KindAuthentication,
+	permanent := []ErrorKind{KindControlPointNotFound, KindTypeMismatch, KindInvalidContext, KindAuthentication,
 		KindAuthorization, KindMalformedResponse, KindUnsupportedCapability, KindConfiguration,
 		KindAlreadyClosed, KindInternal}
 	for _, k := range permanent {
@@ -99,13 +99,13 @@ func TestRetryableClassification(t *testing.T) {
 
 func TestDefaultMessagesMatchContracts(t *testing.T) {
 	want := map[ErrorKind]string{
-		KindNotReady:          "provider not ready",
-		KindFlagNotFound:      "flag not found",
-		KindTypeMismatch:      "flag type mismatch",
-		KindAlreadyClosed:     "provider already closed",
-		KindConfiguration:     "invalid configuration",
-		KindMalformedResponse: "malformed backend response",
-		KindTimeout:           "request timed out",
+		KindNotReady:             "provider not ready",
+		KindControlPointNotFound: "flag not found",
+		KindTypeMismatch:         "flag type mismatch",
+		KindAlreadyClosed:        "provider already closed",
+		KindConfiguration:        "invalid configuration",
+		KindMalformedResponse:    "malformed backend response",
+		KindTimeout:              "request timed out",
 	}
 	for k, msg := range want {
 		if got := DefaultMessage(k); got != msg {

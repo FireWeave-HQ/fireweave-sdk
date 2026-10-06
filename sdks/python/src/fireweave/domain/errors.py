@@ -26,7 +26,7 @@ __all__ = [
     "ErrorKind",
     "FireweaveError",
     "NotReadyError",
-    "FlagNotFoundError",
+    "ControlPointNotFoundError",
     "TypeMismatchError",
     "InvalidContextError",
     "TargetingKeyMissingError",
@@ -44,17 +44,17 @@ __all__ = [
     "default_message",
     "openfeature_error_code",
     "redact_secrets",
-    "FLAG_METADATA_ERROR_KIND_KEY",
+    "CONTROL_POINT_METADATA_ERROR_KIND_KEY",
 ]
 
-FLAG_METADATA_ERROR_KIND_KEY = "fireweave.errorKind"
+CONTROL_POINT_METADATA_ERROR_KIND_KEY = "fireweave.errorKind"
 
 
 class ErrorKind(str, enum.Enum):
     """Canonical PascalCase error kinds (spec/errors.schema.json)."""
 
     NOT_READY = "NotReady"
-    FLAG_NOT_FOUND = "FlagNotFound"
+    CONTROL_POINT_NOT_FOUND = "ControlPointNotFound"
     TYPE_MISMATCH = "TypeMismatch"
     INVALID_CONTEXT = "InvalidContext"
     AUTHENTICATION = "Authentication"
@@ -72,7 +72,7 @@ class ErrorKind(str, enum.Enum):
 
 _DEFAULT_MESSAGES = {
     ErrorKind.NOT_READY: "provider not ready",
-    ErrorKind.FLAG_NOT_FOUND: "flag not found",
+    ErrorKind.CONTROL_POINT_NOT_FOUND: "flag not found",
     ErrorKind.TYPE_MISMATCH: "flag type mismatch",
     ErrorKind.INVALID_CONTEXT: "invalid evaluation context",
     ErrorKind.AUTHENTICATION: "authentication failed",
@@ -94,7 +94,7 @@ _DEFAULT_MESSAGES = {
 # required and missing.
 _OF_ERROR_CODES = {
     ErrorKind.NOT_READY: "PROVIDER_NOT_READY",
-    ErrorKind.FLAG_NOT_FOUND: "FLAG_NOT_FOUND",
+    ErrorKind.CONTROL_POINT_NOT_FOUND: "FLAG_NOT_FOUND",
     ErrorKind.TYPE_MISMATCH: "TYPE_MISMATCH",
     ErrorKind.INVALID_CONTEXT: "INVALID_CONTEXT",
     ErrorKind.AUTHENTICATION: "GENERAL",
@@ -216,8 +216,8 @@ class NotReadyError(FireweaveError):
     kind = ErrorKind.NOT_READY
 
 
-class FlagNotFoundError(FireweaveError):
-    kind = ErrorKind.FLAG_NOT_FOUND
+class ControlPointNotFoundError(FireweaveError):
+    kind = ErrorKind.CONTROL_POINT_NOT_FOUND
 
     def __init__(self, message: Optional[str] = None, *, quota_limited: bool = False):
         super().__init__(message)

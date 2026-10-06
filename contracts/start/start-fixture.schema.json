@@ -79,8 +79,8 @@
             {
               "type": "object",
               "additionalProperties": false,
-              "required": ["operation", "flags"],
-              "properties": { "operation": { "const": "defineFlags" }, "flags": { "type": "object" } }
+              "required": ["operation", "controlPoints"],
+              "properties": { "operation": { "const": "defineControlPoints" }, "controlPoints": { "type": "object" } }
             },
             {
               "type": "object",

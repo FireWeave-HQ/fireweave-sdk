@@ -32,8 +32,8 @@ public let defaultServerRefreshInterval: Duration = .seconds(30)
 /// value reads everything from Info.plist (app) or the environment (server).
 public struct FireweaveStartOptions: Sendable {
   /// Every control point the app reads, with its local value
-  /// (`defineFlags`). Served in local mode only.
-  public var flags: FireweaveFlags
+  /// (`defineControlPoints`). Served in local mode only.
+  public var controlPoints: FireweaveLocalControlPoints
   /// Forces a mode. Nil: a key means remote; no key means local only when
   /// the environment name is development, dev, local or test.
   public var mode: Mode?
@@ -78,7 +78,7 @@ public struct FireweaveStartOptions: Sendable {
   public var transport: (any RemoteHTTPTransport)?
 
   public init(
-    flags: FireweaveFlags = [:],
+    controlPoints: FireweaveLocalControlPoints = [:],
     mode: Mode? = nil,
     environment: String? = nil,
     url: String? = nil,
@@ -93,7 +93,7 @@ public struct FireweaveStartOptions: Sendable {
     infoPlist: (@Sendable (String) -> String?)? = nil,
     transport: (any RemoteHTTPTransport)? = nil
   ) {
-    self.flags = flags
+    self.controlPoints = controlPoints
     self.mode = mode
     self.environment = environment
     self.url = url
@@ -124,7 +124,7 @@ public let fw = FireweaveHandle(core: StartCore(sources: .live))
 /// Vapor `configure(_:)` or `main`.
 ///
 /// ```swift
-/// init() { startFireweave(flags: appFlags) }
+/// init() { startFireweave(controlPoints: appControlPoints) }
 /// ```
 ///
 /// Synchronous and never throws: it resolves the configuration before any
@@ -151,7 +151,7 @@ public let fw = FireweaveHandle(core: StartCore(sources: .live))
 ///   throwing `try startFireweave(FireweaveStartOptions(...))` instead.
 @discardableResult
 public func startFireweave(
-  flags: FireweaveFlags = [:],
+  controlPoints: FireweaveLocalControlPoints = [:],
   mode: Mode? = nil,
   environment: String? = nil,
   url: String? = nil,
@@ -164,7 +164,7 @@ public func startFireweave(
   refreshInterval: Duration = defaultServerRefreshInterval
 ) -> FireweaveHandle {
   let options = FireweaveStartOptions(
-    flags: flags,
+    controlPoints: controlPoints,
     mode: mode,
     environment: environment,
     url: url,
@@ -190,7 +190,7 @@ public func startFireweave(
 /// `infoPlist`, `transport`). The server's form of the call:
 ///
 /// ```swift
-/// try startFireweave(FireweaveStartOptions(flags: appFlags))
+/// try startFireweave(FireweaveStartOptions(controlPoints: appControlPoints))
 /// ```
 ///
 /// - Throws: on the **server profile** only, a `FireweaveError` of kind

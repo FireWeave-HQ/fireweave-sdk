@@ -126,17 +126,17 @@ struct RecordedRequest: Sendable {
   var body: JSONValue
 }
 
-/// Answers `/v1/flags/evaluate` with the current decisions and every other
+/// Answers `/v1/control-points/evaluate` with the current decisions and every other
 /// path with `{}`, after an optional delay, recording what was sent. The
 /// status and the decisions can change mid-test.
 final class StartFakeTransport: RemoteHTTPTransport, @unchecked Sendable {
   static let newCheckoutOn = """
-    {"decisions":[{"flagKey":"new-checkout","value":true,"variant":"on",\
+    {"decisions":[{"controlPointKey":"new-checkout","value":true,"variant":"on",\
     "reason":"TARGETING_MATCH","found":true,"enabled":true}]}
     """
 
   static let newCheckoutOff = """
-    {"decisions":[{"flagKey":"new-checkout","value":false,"variant":"off",\
+    {"decisions":[{"controlPointKey":"new-checkout","value":false,"variant":"off",\
     "reason":"TARGETING_MATCH","found":true,"enabled":true}]}
     """
 
@@ -161,7 +161,7 @@ final class StartFakeTransport: RemoteHTTPTransport, @unchecked Sendable {
   }
 
   func evaluations() -> [RecordedRequest] {
-    requests.filter { $0.path.hasSuffix("/v1/flags/evaluate") }
+    requests.filter { $0.path.hasSuffix("/v1/control-points/evaluate") }
   }
 
   func registrations() -> [RecordedRequest] {
@@ -198,7 +198,7 @@ final class StartFakeTransport: RemoteHTTPTransport, @unchecked Sendable {
       recorded.append(record)
       return (statusCode, decisionsJSON)
     }
-    let json = path.hasSuffix("/v1/flags/evaluate") ? decisions : "{}"
+    let json = path.hasSuffix("/v1/control-points/evaluate") ? decisions : "{}"
     let response = HTTPURLResponse(
       url: request.url!,
       statusCode: status,

@@ -69,12 +69,16 @@ export 'src/domain/context.dart'
         mergeContexts;
 export 'src/domain/decision.dart' show Decision, DecisionReason;
 export 'src/domain/errors.dart'
-    show ErrorKind, FireweaveError, flagMetadataErrorKindKey, redactSecrets;
+    show
+        ErrorKind,
+        FireweaveError,
+        controlPointMetadataErrorKindKey,
+        redactSecrets;
 export 'src/domain/mode.dart' show Mode;
 export 'src/domain/target.dart' show TargetKind;
 export 'src/domain/types.dart'
     show
-        FlagMetadata,
+        ControlPointMetadata,
         FlagType,
         JsonObject,
         JsonValue,

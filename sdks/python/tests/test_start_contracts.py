@@ -1,7 +1,7 @@
 """The shared start-profile suite (contracts/start/, spec/start-profile.md) on
 Python. Python has only the server profile (plus the ``any`` fixtures): drives
 the pure resolver (fireweave/start/_resolve.py), the instance-key derivation
-with an injected host name, define_flags and channel_for_version, compares by
+with an injected host name, define_control_points and channel_for_version, compares by
 the rules in contracts/start/README.md, and writes
 conformance/compatibility-report.start.python.json (gitignored).
 
@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 import pytest
 
 from fireweave import ConfigurationError
-from fireweave.start import define_flags
+from fireweave.start import define_control_points
 from fireweave.start._build_info import channel_for_version
 from fireweave.start._env import env_from_mapping
 from fireweave.start._instance import derive_instance_key
@@ -111,9 +111,9 @@ def run_instance_key(case: Dict[str, Any]) -> Outcome:
     return Outcome(fields={"value": key.value})
 
 
-def run_define_flags(case: Dict[str, Any]) -> Outcome:
+def run_define_control_points(case: Dict[str, Any]) -> Outcome:
     try:
-        define_flags(case["when"]["flags"])
+        define_control_points(case["when"]["controlPoints"])
     except ConfigurationError as err:
         return Outcome(error=err)
     return Outcome(fields={"ok": True})
@@ -126,7 +126,7 @@ def run_channel_for_version(case: Dict[str, Any]) -> Outcome:
 _OPERATIONS = {
     "resolve": run_resolve,
     "instanceKey": run_instance_key,
-    "defineFlags": run_define_flags,
+    "defineControlPoints": run_define_control_points,
     "channelForVersion": run_channel_for_version,
 }
 

@@ -18,22 +18,22 @@ func TestDeterministicResolution(t *testing.T) {
 	ctx := context.Background()
 	ec := domain.NewEvaluationContext("u", nil)
 
-	d := a.Resolve(ctx, domain.ResolveRequest{FlagKey: "fw-on", Type: domain.FlagTypeBoolean, DefaultValue: false, Context: ec})
-	if d.Value != true || d.Reason != domain.ReasonTargetingMatch || d.Metadata[domain.MetaFlagVersion] != int64(3) {
+	d := a.Resolve(ctx, domain.ResolveRequest{ControlPointKey: "fw-on", Type: domain.FlagTypeBoolean, DefaultValue: false, Context: ec})
+	if d.Value != true || d.Reason != domain.ReasonTargetingMatch || d.Metadata[domain.MetaControlPointVersion] != int64(3) {
 		t.Fatalf("on = %+v", d)
 	}
 
-	d = a.Resolve(ctx, domain.ResolveRequest{FlagKey: "fw-off", Type: domain.FlagTypeBoolean, DefaultValue: true, Context: ec})
+	d = a.Resolve(ctx, domain.ResolveRequest{ControlPointKey: "fw-off", Type: domain.FlagTypeBoolean, DefaultValue: true, Context: ec})
 	if d.Value != false || d.Reason != domain.ReasonDisabled {
 		t.Fatalf("off = %+v", d)
 	}
 
-	d = a.Resolve(ctx, domain.ResolveRequest{FlagKey: "nope", Type: domain.FlagTypeBoolean, DefaultValue: true, Context: ec})
-	if d.Error == nil || d.Error.Kind != domain.KindFlagNotFound || d.Value != true {
+	d = a.Resolve(ctx, domain.ResolveRequest{ControlPointKey: "nope", Type: domain.FlagTypeBoolean, DefaultValue: true, Context: ec})
+	if d.Error == nil || d.Error.Kind != domain.KindControlPointNotFound || d.Value != true {
 		t.Fatalf("missing = %+v", d)
 	}
 
-	d = a.Resolve(ctx, domain.ResolveRequest{FlagKey: "fw-on", Type: domain.FlagTypeString, DefaultValue: "x", Context: ec})
+	d = a.Resolve(ctx, domain.ResolveRequest{ControlPointKey: "fw-on", Type: domain.FlagTypeString, DefaultValue: "x", Context: ec})
 	if d.Error == nil || d.Error.Kind != domain.KindTypeMismatch {
 		t.Fatalf("mismatch = %+v", d)
 	}
@@ -46,12 +46,12 @@ func TestMatchConditions(t *testing.T) {
 	}))
 	ctx := context.Background()
 
-	hit := a.Resolve(ctx, domain.ResolveRequest{FlagKey: "fw-m", Type: domain.FlagTypeString, DefaultValue: "miss",
+	hit := a.Resolve(ctx, domain.ResolveRequest{ControlPointKey: "fw-m", Type: domain.FlagTypeString, DefaultValue: "miss",
 		Context: domain.NewEvaluationContext("u1", map[string]any{"tier": "gold"})})
 	if hit.Value != "hit" {
 		t.Fatalf("hit = %+v", hit)
 	}
-	miss := a.Resolve(ctx, domain.ResolveRequest{FlagKey: "fw-m", Type: domain.FlagTypeString, DefaultValue: "miss",
+	miss := a.Resolve(ctx, domain.ResolveRequest{ControlPointKey: "fw-m", Type: domain.FlagTypeString, DefaultValue: "miss",
 		Context: domain.NewEvaluationContext("u1", map[string]any{"tier": "bronze"})})
 	if miss.Value != "miss" || miss.Reason != domain.ReasonDefault {
 		t.Fatalf("miss = %+v", miss)
@@ -63,7 +63,7 @@ func TestFromCacheReportsStaleReason(t *testing.T) {
 		"fw-stale": {Type: domain.FlagTypeBoolean, Enabled: true, Value: true, FromCache: true},
 	}))
 	d := a.Resolve(context.Background(), domain.ResolveRequest{
-		FlagKey: "fw-stale", Type: domain.FlagTypeBoolean, DefaultValue: false,
+		ControlPointKey: "fw-stale", Type: domain.FlagTypeBoolean, DefaultValue: false,
 		Context: domain.NewEvaluationContext("u", nil),
 	})
 	if d.Reason != domain.ReasonStale || d.Metadata[domain.MetaFromCache] != true {
@@ -81,7 +81,7 @@ func TestConcurrentUse(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_ = a.Resolve(context.Background(), domain.ResolveRequest{
-				FlagKey: "fw", Type: domain.FlagTypeBoolean, DefaultValue: false,
+				ControlPointKey: "fw", Type: domain.FlagTypeBoolean, DefaultValue: false,
 				Context: domain.NewEvaluationContext("u", nil),
 			})
 		}()
@@ -111,17 +111,17 @@ func TestNumberValuePreservesIntegersBeyondSafeInteger(t *testing.T) {
 		"fw-fractional":         {Type: domain.FlagTypeNumber, Enabled: true, Variant: "frac", Value: json.Number("2.5")},
 	}))
 
-	d := a.Resolve(context.Background(), domain.ResolveRequest{FlagKey: "fw-big-int-jsonnumber", Type: domain.FlagTypeNumber, DefaultValue: 0, Context: ec})
+	d := a.Resolve(context.Background(), domain.ResolveRequest{ControlPointKey: "fw-big-int-jsonnumber", Type: domain.FlagTypeNumber, DefaultValue: 0, Context: ec})
 	if got, ok := d.Value.(int64); !ok || got != huge {
 		t.Fatalf("json.Number path: want int64(%d), got %T(%v)", huge, d.Value, d.Value)
 	}
 
-	d = a.Resolve(context.Background(), domain.ResolveRequest{FlagKey: "fw-big-int-int64", Type: domain.FlagTypeNumber, DefaultValue: 0, Context: ec})
+	d = a.Resolve(context.Background(), domain.ResolveRequest{ControlPointKey: "fw-big-int-int64", Type: domain.FlagTypeNumber, DefaultValue: 0, Context: ec})
 	if got, ok := d.Value.(int64); !ok || got != huge {
 		t.Fatalf("int64 path: want int64(%d), got %T(%v)", huge, d.Value, d.Value)
 	}
 
-	d = a.Resolve(context.Background(), domain.ResolveRequest{FlagKey: "fw-fractional", Type: domain.FlagTypeNumber, DefaultValue: 0, Context: ec})
+	d = a.Resolve(context.Background(), domain.ResolveRequest{ControlPointKey: "fw-fractional", Type: domain.FlagTypeNumber, DefaultValue: 0, Context: ec})
 	if got, ok := d.Value.(float64); !ok || got != 2.5 {
 		t.Fatalf("fractional path: want float64(2.5), got %T(%v)", d.Value, d.Value)
 	}
@@ -145,7 +145,7 @@ func TestIncludePayloadAttachesSortedKeyJSON(t *testing.T) {
 	}))
 
 	d := a.Resolve(context.Background(), domain.ResolveRequest{
-		FlagKey: "fw-payload", Type: domain.FlagTypeBoolean, DefaultValue: false, Context: ec, IncludePayload: true,
+		ControlPointKey: "fw-payload", Type: domain.FlagTypeBoolean, DefaultValue: false, Context: ec, IncludePayload: true,
 	})
 	want := `{"maxRetries":2,"rolloutId":"rollout_1"}`
 	if got, _ := d.Metadata[domain.MetaPayload].(string); got != want {
@@ -153,14 +153,14 @@ func TestIncludePayloadAttachesSortedKeyJSON(t *testing.T) {
 	}
 
 	d = a.Resolve(context.Background(), domain.ResolveRequest{
-		FlagKey: "fw-payload", Type: domain.FlagTypeBoolean, DefaultValue: false, Context: ec, IncludePayload: false,
+		ControlPointKey: "fw-payload", Type: domain.FlagTypeBoolean, DefaultValue: false, Context: ec, IncludePayload: false,
 	})
 	if _, ok := d.Metadata[domain.MetaPayload]; ok {
 		t.Fatalf("payload metadata must be absent when IncludePayload is false, got %+v", d.Metadata)
 	}
 
 	d = a.Resolve(context.Background(), domain.ResolveRequest{
-		FlagKey: "fw-no-payload", Type: domain.FlagTypeBoolean, DefaultValue: false, Context: ec, IncludePayload: true,
+		ControlPointKey: "fw-no-payload", Type: domain.FlagTypeBoolean, DefaultValue: false, Context: ec, IncludePayload: true,
 	})
 	if _, ok := d.Metadata[domain.MetaPayload]; ok {
 		t.Fatalf("payload metadata must be absent when the flag has no payload, got %+v", d.Metadata)
@@ -184,7 +184,7 @@ func TestIncludePayloadPassesThroughRawStringVerbatim(t *testing.T) {
 	}))
 
 	d := a.Resolve(context.Background(), domain.ResolveRequest{
-		FlagKey: "fw-string-payload", Type: domain.FlagTypeBoolean, DefaultValue: false, Context: ec, IncludePayload: true,
+		ControlPointKey: "fw-string-payload", Type: domain.FlagTypeBoolean, DefaultValue: false, Context: ec, IncludePayload: true,
 	})
 	if got, _ := d.Metadata[domain.MetaPayload].(string); got != raw {
 		t.Fatalf("payload metadata = %q, want verbatim %q (must not be re-serialized/double-encoded)", got, raw)

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from .errors import ErrorKind
-from .types import FlagMetadata
+from .types import ControlPointMetadata
 
 __all__ = ["Decision", "Reason"]
 
@@ -36,7 +36,7 @@ class Decision:
     error_code: Optional[str] = None
     error_message: Optional[str] = None
     error_kind: Optional[ErrorKind] = None
-    flag_metadata: FlagMetadata = field(default_factory=dict)
+    control_point_metadata: ControlPointMetadata = field(default_factory=dict)
 
     @property
     def is_error(self) -> bool:

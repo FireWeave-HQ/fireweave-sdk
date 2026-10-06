@@ -42,7 +42,7 @@ def _redirect_pair(status=302):
     class Target(http.server.BaseHTTPRequestHandler):
         def do_POST(self):  # noqa: N802
             received.append((self.path, dict(self.headers)))
-            body = b'{"decisions":[{"flagKey":"x","value":true,"found":true}]}'
+            body = b'{"decisions":[{"controlPointKey":"x","value":true,"found":true}]}'
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -106,7 +106,7 @@ def test_proxies_still_come_from_the_environment(monkeypatch):
     class Proxy(http.server.BaseHTTPRequestHandler):
         def do_POST(self):  # noqa: N802
             seen.append(self.path)  # a proxied request carries the absolute URL
-            body = b'{"decisions":[{"flagKey":"x","value":true,"found":true}]}'
+            body = b'{"decisions":[{"controlPointKey":"x","value":true,"found":true}]}'
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -123,6 +123,6 @@ def test_proxies_still_come_from_the_environment(monkeypatch):
             assert client.control_points.get_boolean_value("x", False, CTX) is True
         finally:
             client.shutdown()
-    assert seen == ["http://127.0.0.1:9/v1/flags/evaluate"]
+    assert seen == ["http://127.0.0.1:9/v1/control-points/evaluate"]
     redirects = [h for h in remote._opener().handlers if isinstance(h, urllib.request.HTTPRedirectHandler)]
     assert redirects and all(isinstance(h, remote._RefuseRedirects) for h in redirects)

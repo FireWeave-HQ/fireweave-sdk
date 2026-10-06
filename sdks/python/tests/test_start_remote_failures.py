@@ -34,7 +34,7 @@ def answering(*answers):
         if answer == "ok":
             if url.endswith("/v1/targets/register"):
                 return 200, {"ok": True}
-            return 200, {"decisions": [{"flagKey": k, "value": True, "found": True} for k in body["flagKeys"]]}
+            return 200, {"decisions": [{"controlPointKey": k, "value": True, "found": True} for k in body["controlPointKeys"]]}
         return answer, {}
 
     return transport

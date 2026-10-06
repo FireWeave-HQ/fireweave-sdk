@@ -49,7 +49,7 @@ from fireweave import (
 
 from ._build_info import SDK_CHANNEL, SDK_VERSION
 from ._env import EnvReader, env_from_mapping, host_name, process_env
-from ._flags import FlagDefinition, flags_file, to_local_control_points
+from ._control_points import ControlPointDefinition, control_points_file, to_local_control_points
 from ._instance import InstanceKey, derive_instance_key
 from ._names import LOGGER_NAME
 from ._resolve import ResolvedStart, StartMode, resolve_start
@@ -75,7 +75,7 @@ class FireweaveStatus:
     endpoint_source: Optional[str] = None
     key_source: Optional[str] = None
     environment: Optional[str] = None
-    flag_count: Optional[int] = None
+    control_point_count: Optional[int] = None
     #: Why start failed, when it did. Already redacted.
     error: Optional[str] = None
     #: The latest fw-server failure a read or identify() saw in remote mode
@@ -99,7 +99,7 @@ class _Slot:
         self.transport: Any = None
         self.instance_id_option: Optional[str] = None
         self.instance: Optional[InstanceKey] = None
-        self.flags_file: Optional[str] = None
+        self.control_points_file: Optional[str] = None
         self.log: Optional[LogSink] = None
         self.pid: Optional[int] = None
         self.warned: set = set()
@@ -192,7 +192,7 @@ class _FailedStartAdapter:
     def initialize(self) -> None:
         raise self._error
 
-    def resolve(self, flag_key: str, context: Any) -> Any:
+    def resolve(self, control_point_key: str, context: Any) -> Any:
         raise self._error
 
     def shutdown(self, timeout_ms: int) -> None:
@@ -212,7 +212,7 @@ def _build_client(r: ResolvedStart, transport: Any) -> FireweaveClient:
     if r.mode == "local":
         return init_fireweave(
             mode="local",
-            local={"control_points": to_local_control_points(r.flags), "log": _local_trace},
+            local={"control_points": to_local_control_points(r.control_points), "log": _local_trace},
         )
     options: Dict[str, Any] = {"mode": "remote", "api_key": r.key, "api_url": r.url}
     if r.allowed_hosts is not None:
@@ -230,15 +230,15 @@ def _signature(r: ResolvedStart, instance_id: Optional[str]) -> Tuple[Any, ...]:
         r.allowed_hosts,
         instance_id,
         # Local values only matter in local mode; remote ignores them, so an
-        # env-only implicit start followed by start(flags=...) under a key is
+        # env-only implicit start followed by start(control_points=...) under a key is
         # not a different configuration.
-        tuple(sorted(to_local_control_points(r.flags).items())) if r.mode == "local" else None,
+        tuple(sorted(to_local_control_points(r.control_points).items())) if r.mode == "local" else None,
     )
 
 
 def _local_banner(r: ResolvedStart) -> _Message:
-    n = len(r.flags)
-    served = f"Serving {n} flag{'' if n == 1 else 's'} from your flags object; nothing is sent to fw-server."
+    n = len(r.control_points)
+    served = f"Serving {n} control point{'' if n == 1 else 's'} from your control-points object; nothing is sent to fw-server."
     if r.mode_source == "option":
         return logging.INFO, f"[fireweave:local] Local mode (start(mode='local')). {served}"
     # Inferred from an environment name: WARNING, so it shows at Python's
@@ -258,7 +258,7 @@ def _install(
     implicit: bool,
     read: EnvReader,
     transport: Any,
-    flags_source: Any,
+    control_points_source: Any,
 ) -> List[_Message]:
     """Under the lock: make ``client`` the process client. Returns the lines
     to log once the lock is released."""
@@ -272,7 +272,7 @@ def _install(
     s.last_error_kind = None
     s.read = read
     s.transport = transport
-    s.flags_file = flags_file(flags_source)
+    s.control_points_file = control_points_file(control_points_source)
     s.pid = os.getpid()
     _register_fork_hook()
     messages: List[_Message] = [(logging.WARNING, w) for w in r.warnings]
@@ -286,7 +286,7 @@ def _install(
 
 def start(
     *,
-    flags: Optional[Mapping[str, FlagDefinition]] = None,
+    control_points: Optional[Mapping[str, ControlPointDefinition]] = None,
     mode: Optional[StartMode] = None,
     environment: Optional[str] = None,
     url: Optional[str] = None,
@@ -325,7 +325,7 @@ def start(
         environment=environment,
         url=url,
         key=key,
-        flags=flags,
+        control_points=control_points,
     )
     signature = _signature(resolved, instance_option)
 
@@ -359,7 +359,7 @@ def start(
             if s.state in ("ready", "failed") and s.client is not None:
                 replaced = s.client
             messages = _install(
-                resolved, signature, client, implicit=False, read=read, transport=transport, flags_source=flags
+                resolved, signature, client, implicit=False, read=read, transport=transport, control_points_source=control_points
             )
             if replacing:
                 messages.append(
@@ -427,7 +427,7 @@ def _implicit_start() -> FireweaveClient:
                 implicit=True,
                 read=read,
                 transport=None,
-                flags_source=None,
+                control_points_source=None,
             )
             host = urlparse(resolved.url).hostname if resolved.url else None
             messages.append(
@@ -563,12 +563,12 @@ def instance_key() -> str:
         return s.instance.value
 
 
-def local_flags() -> Optional[Tuple[Mapping[str, FlagDefinition], Optional[str]]]:
-    """In local mode: the flags object and the file that declared it."""
+def local_control_points() -> Optional[Tuple[Mapping[str, ControlPointDefinition], Optional[str]]]:
+    """In local mode: the control-points object and the file that declared it."""
     r = _S.resolved
     if r is None or r.mode != "local" or _S.state != "ready":
         return None
-    return r.flags, _S.flags_file
+    return r.control_points, _S.control_points_file
 
 
 def current_status() -> FireweaveStatus:
@@ -582,7 +582,7 @@ def current_status() -> FireweaveStatus:
             mode=r.mode,
             mode_source=r.mode_source,
             key_source=r.key_source,
-            flag_count=len(r.flags),
+            control_point_count=len(r.control_points),
             environment=r.environment,
         )
         if r.url is not None:

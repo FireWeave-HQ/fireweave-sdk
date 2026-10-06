@@ -11,7 +11,7 @@
 import { FireweaveError, assertHostAllowed } from '../index.js';
 import type { EnvReader } from './env.js';
 import { quiet } from './env.js';
-import { normalizeFlags, type FlagMap } from './flags.js';
+import { normalizeControlPoints, type ControlPointMap } from './control-points.js';
 import {
   CHANNEL_URLS,
   DEV_ENVIRONMENTS,
@@ -30,7 +30,7 @@ export interface ResolveInput {
   readonly environment?: unknown;
   readonly url?: unknown;
   readonly key?: unknown;
-  readonly flags?: unknown;
+  readonly controlPoints?: unknown;
 }
 
 export interface BuildInfo {
@@ -52,7 +52,7 @@ export interface ResolvedStart {
   /** Set when the environment name was consulted (no key, no mode option). */
   readonly environment?: string;
   readonly environmentSource?: string;
-  readonly flags: FlagMap;
+  readonly controlPoints: ControlPointMap;
   readonly channel: SdkChannel;
   readonly sdkVersion: string;
   /** Lines to log once each: legacy names, ignored keys. */
@@ -191,8 +191,8 @@ function noKeyError(env: Sourced | undefined, read: EnvReader): FireweaveError {
  */
 export function resolveStart(input: ResolveInput, read: EnvReader, build: BuildInfo): ResolvedStart {
   const warnings: string[] = [];
-  const flags = normalizeFlags(input.flags);
-  const base = { flags, channel: build.channel, sdkVersion: build.version };
+  const controlPoints = normalizeControlPoints(input.controlPoints);
+  const base = { controlPoints, channel: build.channel, sdkVersion: build.version };
 
   if (input.mode !== undefined && input.mode !== 'remote' && input.mode !== 'local') {
     throw configError(`[fireweave] start({ mode }) must be 'remote' or 'local'.`);

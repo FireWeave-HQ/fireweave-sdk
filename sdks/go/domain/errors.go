@@ -20,7 +20,7 @@ type ErrorKind string
 
 const (
 	KindNotReady              ErrorKind = "NotReady"
-	KindFlagNotFound          ErrorKind = "FlagNotFound"
+	KindControlPointNotFound  ErrorKind = "ControlPointNotFound"
 	KindTypeMismatch          ErrorKind = "TypeMismatch"
 	KindInvalidContext        ErrorKind = "InvalidContext"
 	KindAuthentication        ErrorKind = "Authentication"
@@ -38,7 +38,7 @@ const (
 
 // AllErrorKinds lists every canonical kind. Useful for exhaustiveness tests.
 var AllErrorKinds = []ErrorKind{
-	KindNotReady, KindFlagNotFound, KindTypeMismatch, KindInvalidContext,
+	KindNotReady, KindControlPointNotFound, KindTypeMismatch, KindInvalidContext,
 	KindAuthentication, KindAuthorization, KindRateLimited, KindTimeout,
 	KindNetwork, KindBackendUnavailable, KindMalformedResponse,
 	KindUnsupportedCapability, KindConfiguration, KindAlreadyClosed,
@@ -47,7 +47,7 @@ var AllErrorKinds = []ErrorKind{
 
 var defaultMessages = map[ErrorKind]string{
 	KindNotReady:              "provider not ready",
-	KindFlagNotFound:          "flag not found",
+	KindControlPointNotFound:  "flag not found",
 	KindTypeMismatch:          "flag type mismatch",
 	KindInvalidContext:        "invalid evaluation context",
 	KindAuthentication:        "authentication failed",
@@ -126,7 +126,7 @@ func (e *Error) Is(target error) bool {
 // Sentinel errors, one per canonical kind, for use with errors.Is.
 var (
 	ErrNotReady              = &Error{Kind: KindNotReady}
-	ErrFlagNotFound          = &Error{Kind: KindFlagNotFound}
+	ErrControlPointNotFound  = &Error{Kind: KindControlPointNotFound}
 	ErrTypeMismatch          = &Error{Kind: KindTypeMismatch}
 	ErrInvalidContext        = &Error{Kind: KindInvalidContext}
 	ErrAuthentication        = &Error{Kind: KindAuthentication}

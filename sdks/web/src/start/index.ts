@@ -2,14 +2,14 @@
  * @fireweaveai/web-sdk/start: one start() call for a browser app.
  *
  * ```ts
- * // src/fireweave/flags.ts
- * import { defineFlags } from '@fireweaveai/web-sdk/start';
- * export const flags = defineFlags({ 'new-checkout': { local: true } });
+ * // src/fireweave/control-points.ts
+ * import { defineControlPoints } from '@fireweaveai/web-sdk/start';
+ * export const controlPoints = defineControlPoints({ 'new-checkout': { local: true } });
  *
  * // src/fireweave/start.ts — the first import of your entry module
  * import { start } from '@fireweaveai/web-sdk/start';
- * import { flags } from './flags';
- * export const ready = start({ flags });
+ * import { controlPoints } from './control-points';
+ * export const ready = start({ controlPoints });
  *
  * // anywhere
  * import { fw } from '@fireweaveai/web-sdk/start';
@@ -27,8 +27,8 @@ export { start, resetForTests } from './state.js';
 export type { StartOptions, StartState, StartProblem, FireweaveWebStatus } from './state.js';
 export { fw } from './fw.js';
 export type { FireweaveWebStart, ControlPoints, IdentifyOptions } from './fw.js';
-export { defineFlags } from './flags.js';
-export type { FlagDefinition, FlagMap } from './flags.js';
+export { defineControlPoints } from './control-points.js';
+export type { ControlPointDefinition, ControlPointMap } from './control-points.js';
 export type { Persistence } from './identity.js';
 export type { StartMode, SdkChannel } from './policy.js';
 export { SDK_VERSION, SDK_CHANNEL } from './build-info.js';

@@ -28,7 +28,7 @@ Full contract: [spec/remote-protocol.md](../spec/remote-protocol.md). Auth is `A
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/v1/flags/evaluate` | evaluate control points for one targeting key |
+| `POST` | `/v1/control-points/evaluate` | evaluate control points for one targeting key |
 | `POST` | `/v1/capture` | batched exposures / signals / events |
 | `POST` | `/v1/targets/register` | durable targeting properties for a user or device |
 
@@ -54,7 +54,7 @@ Adapters without the capability (`InMemoryAdapter`) report `UnsupportedCapabilit
 | unparseable body | `MalformedResponse` | `PARSE_ERROR` |
 | transport failure | `Network` | `GENERAL` |
 | deadline exceeded | `Timeout` | `GENERAL` |
-| `quotaLimited: true`, control point absent | `FlagNotFound` + `fireweave.quotaLimited` | `FLAG_NOT_FOUND` |
+| `quotaLimited: true`, control point absent | `ControlPointNotFound` + `fireweave.quotaLimited` | `FLAG_NOT_FOUND` |
 
 Evaluation never throws — every one of these surfaces as an `ERROR` decision carrying your default value. Full taxonomy: [contracts/errors.md](../contracts/errors.md).
 
@@ -63,7 +63,7 @@ Evaluation never throws — every one of these surfaces as an `ERROR` decision c
 ```bash
 node test-server/implementation/server.mjs
 # listens on http://127.0.0.1:3901
-# serves /v1/flags/evaluate, /v1/capture
+# serves /v1/control-points/evaluate, /v1/capture
 ```
 
 ```bash

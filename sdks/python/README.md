@@ -17,10 +17,10 @@ registration, the two v1 capabilities (spec/control-points.md "Scope of v1").
 Most apps need only this ([ADR-0012](../../docs/adr/0012-start-profile.md)). One small module and one call:
 
 ```python
-# src/fireweave_setup/flags.py: every control point the app reads, with its local value
-from fireweave.start import define_flags
+# src/fireweave_setup/control_points.py: every control point the app reads, with its local value
+from fireweave.start import define_control_points
 
-flags = define_flags({
+control_points = define_control_points({
     "new-checkout": {"local": True, "description": "One-page checkout"},  # served only in local mode
 })
 ```
@@ -28,9 +28,9 @@ flags = define_flags({
 ```python
 # the process entrypoint, FIRST thing: main.py, wsgi.py + asgi.py, create_app(), the Celery app module
 from fireweave.start import start
-from fireweave_setup.flags import flags
+from fireweave_setup.control_points import control_points
 
-start(flags=flags)
+start(control_points=control_points)
 ```
 
 ```python
@@ -63,7 +63,7 @@ then default. Empty and whitespace-only values count as unset.
 
 | Option | Env var | Default | What it does |
 | --- | --- | --- | --- |
-| `flags` | — | `{}` | Local values per control point. Ignored in remote mode. |
+| `control_points` | — | `{}` | Local values per control point. Ignored in remote mode. |
 | `mode` | — | inferred | `'remote'` or `'local'`. Overrides inference. `'remote'` without a key is a start error; `'local'` ignores a key, with one warning. |
 | `environment` | `FIREWEAVE_ENV`, `APP_ENV` | — | Environment name used for inference when there is no key and no `mode`. Pass your own, e.g. `environment=settings.DEPLOY_STAGE`. `ENVIRONMENT`, `ENV`, `NODE_ENV` and the retired `FW_ENV` are not read. |
 | `url` | `FIREWEAVE_URL` (legacy `FW_API_URL`, `FW_ATTEST_URL`) | from the installed version | A prerelease (`X.Y.ZaN`, how staging builds are versioned) calls `staging-app-server.fireweave.ai`; any other calls `app-server.fireweave.ai`. Set it for a self-hosted or local fw-server: https is required except on localhost, and the host allowlist follows it. |
@@ -91,8 +91,8 @@ variables to options for anything every process needs.
 
 **Reads never raise.** If start fails, reads return your default (`evaluate` and the `*_details`
 forms return an `ERROR` decision with the `Configuration` error) and `fw.identify()` returns
-`ok=False`. In local mode, reading a key that is not in your flags object returns the default and
-warns once, naming the flags file.
+`ok=False`. In local mode, reading a key that is not in your control points returns the default and
+warns once, naming the file that declared them.
 
 **Debugging.** `fw.status()` reports what start decided: `state`, `started_by`, `mode` and
 `mode_source`, `channel`, `sdk_version`, `host`, `endpoint_source`, `key_source`, `environment`,
@@ -165,10 +165,10 @@ client.shutdown()
 
 `get_boolean_value` / `get_string_value` / `get_number_value` /
 `get_object_value`, their `*_details` counterparts (return the whole
-`Decision` — `reason`, `error_kind`, `flag_metadata`, ... — instead of just
-the value), and the general-form `evaluate`. All nine live under
-`client.control_points`; `client.flags` is an identical, fully-supported
-alias (`client.flags is client.control_points`).
+`Decision` — `reason`, `error_kind`, `control_point_metadata`, ... — instead of
+just the value), and the general-form `evaluate`. All nine live under
+`client.control_points`; the `client.flags` alias was removed in 3.0.0
+(ADR-0013).
 
 `get_integer_value` is a deprecated alias of `get_number_value` — spec fixes
 the method as **number**, not integer (`Decision.value` is `jsonValue`). It
@@ -184,11 +184,11 @@ per process the first time it's called.
 | `application/client.py` | `FireweaveClient` — `control_points`, `register_target`, `invoke_capability` (degrades; v1 has no supported capabilities). |
 | `application/mode.py` | `init_fireweave` — the single entry point and sanctioned composition root (the only file allowed to import concrete adapters). |
 | `application/ports.py` | The `BackendAdapter` boundary. |
-| `infrastructure/adapters/remote.py` | `FireweaveRemoteAdapter` — the production backend (`POST /v1/flags/evaluate`, `POST /v1/targets/register`). |
+| `infrastructure/adapters/remote.py` | `FireweaveRemoteAdapter` — the production backend (`POST /v1/control-points/evaluate`, `POST /v1/targets/register`). |
 | `infrastructure/adapters/local.py` | `FireweaveLocalAdapter` — the dev substrate: seeded boolean overrides, no network. `register_target` records in-process and traces the call. |
 | `infrastructure/adapters/memory.py` | Deterministic fixture-driven adapter for tests. |
 | `infrastructure/hosts.py` | SSRF allowlist (on by default; https required off-loopback). |
-| `start/` | The opt-in start profile (`from fireweave.start import start, fw, define_flags`). Built on the public `fireweave` API only; `start/_env.py` is the one file that reads the environment or the host name. The core never imports it. |
+| `start/` | The opt-in start profile (`from fireweave.start import start, fw, define_control_points`). Built on the public `fireweave` API only; `start/_env.py` is the one file that reads the environment or the host name. The core never imports it. |
 
 ## Development
 

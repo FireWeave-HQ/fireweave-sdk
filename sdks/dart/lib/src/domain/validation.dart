@@ -64,15 +64,15 @@ bool _hasControlCharacters(String key) =>
 /// (`spec/control-points.md` rule 1, the first check in the fixed order).
 ///
 /// No taxonomy kind names "malformed key" explicitly (the return-discipline
-/// table's closest row is "key unknown to the backend" -> `FlagNotFound`):
+/// table's closest row is "key unknown to the backend" -> `ControlPointNotFound`):
 /// a key that can never identify a flag is treated the same as one the
-/// backend doesn't recognise, so this maps to [ErrorKind.flagNotFound] too
+/// backend doesn't recognise, so this maps to [ErrorKind.controlPointNotFound] too
 /// — the same controller-ruled interim mapping node/rust/swift carry.
 Validated validateControlPointKey(String key) {
   if (key.isEmpty) {
     return Invalid(
       FireweaveError(
-        ErrorKind.flagNotFound,
+        ErrorKind.controlPointNotFound,
         message: 'control point key must be a non-empty string',
       ),
     );
@@ -80,7 +80,7 @@ Validated validateControlPointKey(String key) {
   if (key.runes.length > _maxControlPointKeyLength) {
     return Invalid(
       FireweaveError(
-        ErrorKind.flagNotFound,
+        ErrorKind.controlPointNotFound,
         message: 'control point key exceeds maximum length',
       ),
     );
@@ -88,7 +88,7 @@ Validated validateControlPointKey(String key) {
   if (_hasControlCharacters(key)) {
     return Invalid(
       FireweaveError(
-        ErrorKind.flagNotFound,
+        ErrorKind.controlPointNotFound,
         message: 'control point key contains control characters',
       ),
     );

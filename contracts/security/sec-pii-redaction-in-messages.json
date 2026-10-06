@@ -10,11 +10,11 @@
       "mode": "httpStatus",
       "status": 500
     },
-    "flags": {}
+    "controlPoints": {}
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-sec",
+    "controlPointKey": "fw-sec",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {
@@ -35,7 +35,7 @@
       "alice@example.com",
       "+1-555-0100"
     ],
-    "flagMetadata": {
+    "controlPointMetadata": {
       "fireweave.errorKind": "BackendUnavailable"
     }
   },

@@ -158,20 +158,20 @@ public final class FireweaveRuntime implements AutoCloseable {
      * Evaluate a flag. Merge order (later wins): config global context → {@code clientContext} →
      * {@code invocationContext}. Never throws.
      */
-    public Decision evaluate(String flagKey,
+    public Decision evaluate(String controlPointKey,
                              FlagType type,
                              JsonValue defaultValue,
                              EvaluationContext clientContext,
                              EvaluationContext invocationContext,
                              EvaluationOptions options) {
-        Validated<String> keyResult = Validation.validateControlPointKey(flagKey);
+        Validated<String> keyResult = Validation.validateControlPointKey(controlPointKey);
         if (!keyResult.isOk()) {
-            return errorDecision(flagKey, defaultValue, keyResult.error());
+            return errorDecision(controlPointKey, defaultValue, keyResult.error());
         }
 
         Validated<JsonValue> defaultResult = Validation.validateDefaultValue(type, defaultValue);
         if (!defaultResult.isOk()) {
-            return errorDecision(flagKey, defaultValue, defaultResult.error());
+            return errorDecision(controlPointKey, defaultValue, defaultResult.error());
         }
 
         EvaluationContext merged = config.globalContext()
@@ -181,22 +181,22 @@ public final class FireweaveRuntime implements AutoCloseable {
         Validated<EvaluationContext> contextResult = Validation.validateContext(
                 merged, config.requireTargetingKey(), config.limits(), reservedAttributeKeys);
         if (!contextResult.isOk()) {
-            return errorDecision(flagKey, defaultValue, contextResult.error());
+            return errorDecision(controlPointKey, defaultValue, contextResult.error());
         }
         EvaluationContext canonical = contextResult.value();
 
         FireweaveException gate = lifecycleGate();
         if (gate != null) {
-            return errorDecision(flagKey, defaultValue, gate);
+            return errorDecision(controlPointKey, defaultValue, gate);
         }
 
-        EvaluationRequest request = new EvaluationRequest(flagKey, type, defaultValue, canonical, options);
+        EvaluationRequest request = new EvaluationRequest(controlPointKey, type, defaultValue, canonical, options);
         try {
             return adapter.evaluate(request);
         } catch (FireweaveException e) {
-            return errorDecision(flagKey, defaultValue, e);
+            return errorDecision(controlPointKey, defaultValue, e);
         } catch (RuntimeException e) {
-            return errorDecision(flagKey, defaultValue,
+            return errorDecision(controlPointKey, defaultValue,
                     new FireweaveException(ErrorKind.Internal, ErrorKind.Internal.defaultMessage(), e));
         }
     }
@@ -217,8 +217,8 @@ public final class FireweaveRuntime implements AutoCloseable {
         }
     }
 
-    static Decision errorDecision(String flagKey, JsonValue defaultValue, FireweaveException e) {
-        Decision.Builder b = Decision.builder(flagKey)
+    static Decision errorDecision(String controlPointKey, JsonValue defaultValue, FireweaveException e) {
+        Decision.Builder b = Decision.builder(controlPointKey)
                 .value(defaultValue)
                 .reason(Reasons.ERROR)
                 .error(FireweaveError.from(e))

@@ -11,7 +11,7 @@
  */
 import { FireweaveError, initFireweave, type FireweaveWebClient, type LifecycleState } from '../index.js';
 import { SDK_CHANNEL, SDK_VERSION } from './build-info.js';
-import { normalizeFlags, toLocalControlPoints, type FlagMap } from './flags.js';
+import { normalizeControlPoints, toLocalControlPoints, type ControlPointMap } from './control-points.js';
 import {
   clearStoredIdentity,
   loadIdentity,
@@ -36,8 +36,8 @@ import {
 } from './policy.js';
 
 export interface StartOptions {
-  /** Control points and their local values; import from src/fireweave/flags.ts. */
-  readonly flags?: FlagMap;
+  /** Control points and their local values; import from src/fireweave/control-points.ts. */
+  readonly controlPoints?: ControlPointMap;
   /** Force a mode. Without it: a key means remote; no key means local only in a dev environment. */
   readonly mode?: StartMode;
   /** Environment name used to infer the mode. Default: what the fireweave() build plugin injected. */
@@ -59,7 +59,7 @@ export interface StartOptions {
 export type StartState = 'NOT_STARTED' | 'INITIALIZING' | 'READY' | 'STALE' | 'ERROR' | 'FAILED' | 'SHUTDOWN';
 
 export interface StartProblem {
-  readonly reason: PolicyReason | 'invalid-flags' | 'start-failed' | 'key-rejected' | 'unreachable';
+  readonly reason: PolicyReason | 'invalid-control-points' | 'start-failed' | 'key-rejected' | 'unreachable';
   /** The variable or option at fault, when there is one. Never a value. */
   readonly variable?: string;
 }
@@ -75,7 +75,7 @@ export interface FireweaveWebStatus {
   readonly endpointSource?: string;
   readonly keySource?: string;
   readonly environment?: string;
-  readonly flagCount?: number;
+  readonly controlPointCount?: number;
   readonly problem?: StartProblem;
 }
 
@@ -86,7 +86,7 @@ export interface Slot {
   generation: number;
   fingerprint?: string | undefined;
   config?: PolicyConfig | undefined;
-  flags: FlagMap;
+  controlPoints: ControlPointMap;
   persistence: Persistence;
   appDeviceId: boolean;
   identity?: Identity | undefined;
@@ -115,7 +115,7 @@ const freshSlot = (): Slot => ({
   protocol: 1,
   state: 'NOT_STARTED',
   generation: 0,
-  flags: Object.freeze({}),
+  controlPoints: Object.freeze({}),
   persistence: 'localStorage',
   appDeviceId: false,
   ready: Promise.resolve(),
@@ -196,7 +196,7 @@ function stableJson(value: unknown): string {
   return JSON.stringify(value ?? null);
 }
 
-function fingerprintOf(config: PolicyConfig, flags: FlagMap, deviceId: string | undefined): string {
+function fingerprintOf(config: PolicyConfig, controlPoints: ControlPointMap, deviceId: string | undefined): string {
   return stableJson({
     mode: config.mode,
     url: config.url,
@@ -204,7 +204,7 @@ function fingerprintOf(config: PolicyConfig, flags: FlagMap, deviceId: string | 
     allowedHosts: config.allowedHosts,
     deviceId,
     // Local values only matter in local mode.
-    flags: config.mode === 'local' ? toLocalControlPoints(flags) : undefined,
+    controlPoints: config.mode === 'local' ? toLocalControlPoints(controlPoints) : undefined,
   });
 }
 
@@ -231,13 +231,13 @@ function absolutize(config: PolicyConfig): PolicyConfig {
   return { ...config, url: `${origin}${config.url}`, allowedHosts: [globalThis.location.hostname, ...LOOPBACK_HOSTS] };
 }
 
-function localLine(config: PolicyConfig, flags: FlagMap): string {
+function localLine(config: PolicyConfig, controlPoints: ControlPointMap): string {
   const why =
     config.modeSource === 'option'
       ? "mode 'local'"
       : `no key; environment '${config.environment ?? ''}' from ${config.environmentSource ?? 'the build config'}`;
-  const n = Object.keys(flags).length;
-  return `[fireweave:local] Local mode (${why}). Serving ${n} flag${n === 1 ? '' : 's'} from your flags object; nothing is sent to fw-server.`;
+  const n = Object.keys(controlPoints).length;
+  return `[fireweave:local] Local mode (${why}). Serving ${n} control point${n === 1 ? '' : 's'} from your control-points object; nothing is sent to fw-server.`;
 }
 
 /**
@@ -300,11 +300,11 @@ export function start(options: StartOptions = {}): Promise<void> {
     s.log = options.log;
   }
 
-  let flags: FlagMap;
+  let controlPoints: ControlPointMap;
   try {
-    flags = normalizeFlags(options.flags);
+    controlPoints = normalizeControlPoints(options.controlPoints);
   } catch (err) {
-    return fail(s, { reason: 'invalid-flags', variable: 'flags' }, (err as Error).message);
+    return fail(s, { reason: 'invalid-control-points', variable: 'controlPoints' }, (err as Error).message);
   }
 
   const injected = injectedConfig();
@@ -327,7 +327,7 @@ export function start(options: StartOptions = {}): Promise<void> {
   if (policy.config.mode === 'remote' && !hasDom()) return Promise.resolve();
 
   const config = absolutize(policy.config);
-  const fingerprint = fingerprintOf(config, flags, options.deviceId);
+  const fingerprint = fingerprintOf(config, controlPoints, options.deviceId);
   if (isActive(s.state)) {
     if (fingerprint !== s.fingerprint) {
       errorOnce(s, '[fireweave] start() was already called with a different configuration; keeping the first one. Call start() once, from src/fireweave/start.ts.');
@@ -339,7 +339,7 @@ export function start(options: StartOptions = {}): Promise<void> {
   s.generation = generation;
   s.fingerprint = fingerprint;
   s.config = config;
-  s.flags = flags;
+  s.controlPoints = controlPoints;
   s.problem = undefined;
   s.client = undefined;
   s.persistence = options.persistence === 'memory' ? 'memory' : 'localStorage';
@@ -354,7 +354,7 @@ export function start(options: StartOptions = {}): Promise<void> {
       : loadIdentity(s.persistence, options.deviceId);
   s.identity = identity;
   s.currentKey = identity.user ?? identity.deviceId;
-  if (config.mode === 'local') s.log(localLine(config, flags));
+  if (config.mode === 'local') s.log(localLine(config, controlPoints));
   setState(s, 'INITIALIZING');
 
   const base = options.fetch ?? globalThis.fetch?.bind(globalThis);
@@ -362,7 +362,7 @@ export function start(options: StartOptions = {}): Promise<void> {
     config.mode === 'local'
       ? initFireweave({
           mode: 'local',
-          local: { controlPoints: toLocalControlPoints(flags), log: (line) => s.log(line) },
+          local: { controlPoints: toLocalControlPoints(controlPoints), log: (line) => s.log(line) },
           context: { targetingKey: s.currentKey },
         })
       : initFireweave({
@@ -410,7 +410,7 @@ export function currentStatus(): FireweaveWebStatus {
           mode: c.mode,
           modeSource: c.modeSource,
           keySource: c.keySource,
-          flagCount: Object.keys(s.flags).length,
+          controlPointCount: Object.keys(s.controlPoints).length,
           ...(c.url !== undefined && c.urlSource !== undefined ? { host: new URL(c.url).hostname, endpointSource: c.urlSource } : {}),
           ...(c.environment !== undefined ? { environment: c.environment } : {}),
         }

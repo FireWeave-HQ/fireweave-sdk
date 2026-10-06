@@ -2,7 +2,7 @@
 //!
 //! Resolution is purely definition-driven — no hashing, no percentage
 //! bucketing. A flag definition is a JSON object shaped like
-//! `contracts/README.md`'s fixture `given.flags.<key>` entries:
+//! `contracts/README.md`'s fixture `given.controlPoints.<key>` entries:
 //! `enabled`, `variant`, `value`, `payload`, `reason.{code,condition_index}`,
 //! `metadata.{version,id}`, `fireweaveReason`, `fromCache`,
 //! `matchTargetingKey`, `matchAttribute`, `matchGroups`, `matchPerson`.
@@ -30,7 +30,7 @@ pub struct FlagDefinition {
     pub reason_code: Option<String>,
     pub condition_index: Option<i64>,
     pub version: Option<i64>,
-    pub vendor_flag_id: Option<i64>,
+    pub vendor_control_point_id: Option<i64>,
     pub fireweave_reason: Option<String>,
     pub from_cache: bool,
     pub match_targeting_key: Option<String>,
@@ -83,7 +83,7 @@ fn definition_from_json(value: &JsonValue) -> FlagDefinition {
         version: metadata
             .and_then(|m| m.get("version"))
             .and_then(JsonValue::as_i64),
-        vendor_flag_id: metadata
+        vendor_control_point_id: metadata
             .and_then(|m| m.get("id"))
             .and_then(JsonValue::as_i64),
         fireweave_reason: obj
@@ -115,7 +115,7 @@ fn definition_from_json(value: &JsonValue) -> FlagDefinition {
 
 impl InMemoryAdapter {
     /// Builds an adapter from the raw fixture JSON shape
-    /// (`given.flags: {key: {...}}`).
+    /// (`given.controlPoints: {key: {...}}`).
     pub fn new(flags: serde_json::Map<String, JsonValue>) -> Self {
         let definitions = flags
             .iter()
@@ -201,7 +201,7 @@ impl BackendAdapter for InMemoryAdapter {
 
     fn resolve(
         &self,
-        flag_key: &str,
+        control_point_key: &str,
         context: &EvaluationContext,
     ) -> Result<FlagResolution, FireweaveError> {
         if let Some(fault) = self.fault.lock().expect("fault lock poisoned").clone() {
@@ -209,17 +209,17 @@ impl BackendAdapter for InMemoryAdapter {
         }
 
         let definitions = self.definitions.read().expect("definitions lock poisoned");
-        let definition = match definitions.get(flag_key) {
-            // key genuinely unknown to this backend -> ERROR/FlagNotFound
+        let definition = match definitions.get(control_point_key) {
+            // key genuinely unknown to this backend -> ERROR/ControlPointNotFound
             // (spec/control-points.md return-discipline table), distinct
             // from "conditions did not select this caller" below.
-            None => return Err(FireweaveError::new(ErrorKind::FlagNotFound)),
+            None => return Err(FireweaveError::new(ErrorKind::ControlPointNotFound)),
             Some(def) => def,
         };
 
         let matched = Self::conditions_match(definition, context);
         // Ruling 11 gate (spec/decision.schema.json `standardMetadataKeys`):
-        // fireweave.vendorFlagId + fireweave.reasonCode are emitted only
+        // fireweave.vendorControlPointId + fireweave.reasonCode are emitted only
         // when the fixture reports a vendor flag id, a matched-condition
         // index, AND a reason code together — this adapter is the one
         // place that raw "condition index" signal exists (fixture
@@ -229,8 +229,8 @@ impl BackendAdapter for InMemoryAdapter {
         // `application::ports::FlagResolution`'s doc comment for why
         // FireweaveRemoteAdapter does not — and must not — replicate this
         // gate (task-12 review finding).
-        let (vendor_flag_id, reason_code) = match (
-            definition.vendor_flag_id,
+        let (vendor_control_point_id, reason_code) = match (
+            definition.vendor_control_point_id,
             definition.condition_index,
             definition.reason_code.clone(),
         ) {
@@ -243,7 +243,7 @@ impl BackendAdapter for InMemoryAdapter {
             enabled: definition.enabled,
             matched,
             version: definition.version,
-            vendor_flag_id,
+            vendor_control_point_id,
             reason_code,
             payload: definition.payload.clone(),
             fireweave_reason: definition.fireweave_reason.clone(),
@@ -276,7 +276,7 @@ mod tests {
         let err = adapter
             .resolve("nope", &EvaluationContext::new())
             .unwrap_err();
-        assert_eq!(err.kind, ErrorKind::FlagNotFound);
+        assert_eq!(err.kind, ErrorKind::ControlPointNotFound);
     }
 
     #[test]

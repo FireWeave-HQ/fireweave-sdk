@@ -42,7 +42,7 @@ type (
 
 const (
 	KindNotReady              = domain.KindNotReady
-	KindFlagNotFound          = domain.KindFlagNotFound
+	KindControlPointNotFound  = domain.KindControlPointNotFound
 	KindTypeMismatch          = domain.KindTypeMismatch
 	KindInvalidContext        = domain.KindInvalidContext
 	KindAuthentication        = domain.KindAuthentication
@@ -66,7 +66,7 @@ var (
 	Redact         = domain.Redact
 
 	ErrNotReady              = domain.ErrNotReady
-	ErrFlagNotFound          = domain.ErrFlagNotFound
+	ErrControlPointNotFound  = domain.ErrControlPointNotFound
 	ErrTypeMismatch          = domain.ErrTypeMismatch
 	ErrInvalidContext        = domain.ErrInvalidContext
 	ErrAuthentication        = domain.ErrAuthentication
@@ -105,12 +105,12 @@ const (
 	ReasonStale          = domain.ReasonStale
 	ReasonError          = domain.ReasonError
 
-	MetaErrorKind    = domain.MetaErrorKind
-	MetaFlagVersion  = domain.MetaFlagVersion
-	MetaVendorFlagID = domain.MetaVendorFlagID
-	MetaReasonCode   = domain.MetaReasonCode
-	MetaQuotaLimited = domain.MetaQuotaLimited
-	MetaFromCache    = domain.MetaFromCache
+	MetaErrorKind            = domain.MetaErrorKind
+	MetaControlPointVersion  = domain.MetaControlPointVersion
+	MetaVendorControlPointID = domain.MetaVendorControlPointID
+	MetaReasonCode           = domain.MetaReasonCode
+	MetaQuotaLimited         = domain.MetaQuotaLimited
+	MetaFromCache            = domain.MetaFromCache
 )
 
 var ErrorDecision = domain.ErrorDecision
@@ -135,7 +135,7 @@ var (
 
 // ValidateControlPointKey is the read-path key rule (non-empty, <=256
 // characters, no control characters), exported as node exports
-// validateControlPointKey, so the start profile (package fw) checks a flags
+// validateControlPointKey, so the start profile (package fw) checks a control-points
 // map with the core's own rule instead of a copy of it.
 var ValidateControlPointKey = domain.ValidateControlPointKey
 

@@ -44,7 +44,7 @@ void _defaultLogSink(String message) => print(message);
 ///   caller's own default with reason `DEFAULT` — not an error
 ///   (`spec/modes.md` "Behaviour per mode": local's unknown-key row is
 ///   deliberately `default`/`DEFAULT`, unlike remote's
-///   `default`/`ERROR`/`FlagNotFound`).
+///   `default`/`ERROR`/`ControlPointNotFound`).
 class FireweaveLocalAdapter implements ControlPointsBackendAdapter {
   FireweaveLocalAdapter({
     Map<String, bool> devFlags = const <String, bool>{},

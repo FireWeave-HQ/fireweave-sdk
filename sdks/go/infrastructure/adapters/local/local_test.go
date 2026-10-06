@@ -13,7 +13,7 @@ func TestSeededKeyResolvesStatic(t *testing.T) {
 	ctx := context.Background()
 
 	d := a.Resolve(ctx, domain.ResolveRequest{
-		FlagKey: "checkout-v2", Type: domain.FlagTypeBoolean, DefaultValue: false,
+		ControlPointKey: "checkout-v2", Type: domain.FlagTypeBoolean, DefaultValue: false,
 		Context: domain.NewEvaluationContext("u", nil),
 	})
 	if d.Value != true || d.Reason != domain.ReasonStatic || d.Variant != "on" {
@@ -21,7 +21,7 @@ func TestSeededKeyResolvesStatic(t *testing.T) {
 	}
 
 	d = a.Resolve(ctx, domain.ResolveRequest{
-		FlagKey: "beta-off", Type: domain.FlagTypeBoolean, DefaultValue: true,
+		ControlPointKey: "beta-off", Type: domain.FlagTypeBoolean, DefaultValue: true,
 		Context: domain.NewEvaluationContext("u", nil),
 	})
 	if d.Value != false || d.Reason != domain.ReasonStatic || d.Variant != "off" {
@@ -31,11 +31,11 @@ func TestSeededKeyResolvesStatic(t *testing.T) {
 
 // modes.md "Behaviour per mode": local's unknown-key row is
 // default/DEFAULT — deliberately NOT an error, unlike remote's
-// default/ERROR/FlagNotFound.
+// default/ERROR/ControlPointNotFound.
 func TestUnknownKeyMissesAsDefaultNotError(t *testing.T) {
 	a := New(map[string]bool{}, nil)
 	d := a.Resolve(context.Background(), domain.ResolveRequest{
-		FlagKey: "does-not-exist", Type: domain.FlagTypeBoolean, DefaultValue: false,
+		ControlPointKey: "does-not-exist", Type: domain.FlagTypeBoolean, DefaultValue: false,
 		Context: domain.NewEvaluationContext("u", nil),
 	})
 	if d.Error != nil {
@@ -49,7 +49,7 @@ func TestUnknownKeyMissesAsDefaultNotError(t *testing.T) {
 func TestSeededKeyReadAsWrongTypeIsTypeMismatch(t *testing.T) {
 	a := New(map[string]bool{"checkout-v2": true}, nil)
 	d := a.Resolve(context.Background(), domain.ResolveRequest{
-		FlagKey: "checkout-v2", Type: domain.FlagTypeString, DefaultValue: "x",
+		ControlPointKey: "checkout-v2", Type: domain.FlagTypeString, DefaultValue: "x",
 		Context: domain.NewEvaluationContext("u", nil),
 	})
 	if d.Error == nil || d.Error.Kind != domain.KindTypeMismatch {

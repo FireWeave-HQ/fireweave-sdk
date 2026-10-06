@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The shared start-profile suite (contracts/start/, spec/start-profile.md) on Java: drives the
  * pure {@link StartResolver}, the instance-key derivation with an injected host name,
- * {@link Fw#defineFlags} and {@link BuildInfo#channelForVersion} with each case's inputs, compares
+ * {@link Fw#defineControlPoints} and {@link BuildInfo#channelForVersion} with each case's inputs, compares
  * by the rules in contracts/start/README.md, and writes
  * {@code target/compatibility-report.start.java.json} (gitignored). Ported from node's reference
  * runner, sdks/node/test/unit/start-contracts.test.ts.
@@ -178,8 +178,8 @@ class StartContractsTest {
                 return runResolve(when);
             case "instanceKey":
                 return runInstanceKey(when);
-            case "defineFlags":
-                return runDefineFlags(when);
+            case "defineControlPoints":
+                return runDefineControlPoints(when);
             case "channelForVersion":
                 return runChannelForVersion(when);
             default:
@@ -285,20 +285,20 @@ class StartContractsTest {
         return out;
     }
 
-    private static Outcome runDefineFlags(JsonNode when) {
-        Map<String, Flag> flags = new LinkedHashMap<>();
-        Iterator<Map.Entry<String, JsonNode>> it = when.get("flags").fields();
+    private static Outcome runDefineControlPoints(JsonNode when) {
+        Map<String, LocalControlPoint> controlPoints = new LinkedHashMap<>();
+        Iterator<Map.Entry<String, JsonNode>> it = when.get("controlPoints").fields();
         while (it.hasNext()) {
             Map.Entry<String, JsonNode> e = it.next();
             JsonNode spec = e.getValue();
             boolean local = spec.get("local").booleanValue();
-            flags.put(e.getKey(), spec.has("description")
-                    ? Flag.local(local, spec.get("description").asText())
-                    : Flag.local(local));
+            controlPoints.put(e.getKey(), spec.has("description")
+                    ? LocalControlPoint.local(local, spec.get("description").asText())
+                    : LocalControlPoint.local(local));
         }
         Outcome out = new Outcome();
         try {
-            Fw.defineFlags(flags);
+            Fw.defineControlPoints(controlPoints);
             out.fields.put("ok", NODES.booleanNode(true));
         } catch (FireweaveException e) {
             out.errorKind = e.kind().name();

@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from fireweave import ConfigurationError, ErrorKind, EvaluationContext, FireweaveClient, FlagType, LifecycleState
-from fireweave.start import define_flags, fw, start
+from fireweave.start import define_control_points, fw, start
 from fireweave.start import _state
 
 pytestmark = pytest.mark.usefixtures("start_profile")
@@ -25,7 +25,7 @@ URL = "https://fw.example.com"
 DEV = {"FIREWEAVE_ENV": "development"}
 CTX = EvaluationContext("user-1")
 
-FLAGS = define_flags(
+CONTROL_POINTS = define_control_points(
     {
         "new-checkout": {"local": True, "description": "One-page checkout"},
         "old-banner": {"local": False},
@@ -40,8 +40,8 @@ def remote_transport(calls, value=True):
             return 200, {"ok": True}
         return 200, {
             "decisions": [
-                {"flagKey": k, "value": value, "found": True, "enabled": True, "reason": "TARGETING_MATCH"}
-                for k in body["flagKeys"]
+                {"controlPointKey": k, "value": value, "found": True, "enabled": True, "reason": "TARGETING_MATCH"}
+                for k in body["controlPointKeys"]
             ]
         }
 
@@ -51,51 +51,51 @@ def remote_transport(calls, value=True):
 class TestLocalMode:
     def test_serves_each_local_value_and_logs_one_local_line(self):
         lines = []
-        start(flags=FLAGS, env=DEV, log=lines.append)
+        start(control_points=CONTROL_POINTS, env=DEV, log=lines.append)
         assert fw.control_points.get_boolean_value("new-checkout", False, CTX) is True
         assert fw.control_points.get_boolean_value("old-banner", True, CTX) is False
         decision = fw.control_points.get_boolean_details("new-checkout", False, CTX)
         assert (decision.value, decision.reason) == (True, "STATIC")
         assert len([line for line in lines if "Local mode" in line]) == 1
-        assert "Serving 2 flags" in lines[0]
+        assert "Serving 2 control points" in lines[0]
 
-    def test_a_key_missing_from_the_flags_object_gets_its_default_and_warns_once_naming_the_file(self):
+    def test_a_key_missing_from_the_control_points_object_gets_its_default_and_warns_once_naming_the_file(self):
         lines = []
-        start(flags=FLAGS, env=DEV, log=lines.append)
+        start(control_points=CONTROL_POINTS, env=DEV, log=lines.append)
         assert fw.control_points.get_boolean_value("not-declared", False, CTX) is False
         assert fw.control_points.get_boolean_value("not-declared", False, CTX) is False
-        warnings = [line for line in lines if "'not-declared' is not in your flags object" in line]
+        warnings = [line for line in lines if "'not-declared' is not in your control points" in line]
         assert len(warnings) == 1
         assert Path(__file__).name in warnings[0]
 
     def test_mode_local_works_with_no_environment_name(self):
-        start(flags=FLAGS, mode="local", env={})
+        start(control_points=CONTROL_POINTS, mode="local", env={})
         assert fw.control_points.get_boolean_value("new-checkout", False, CTX) is True
         assert fw.status().mode_source == "option"
 
     def test_the_inferred_local_banner_is_a_warning_on_the_fireweave_start_logger(self, caplog):
         caplog.set_level(logging.INFO, logger="fireweave.start")
-        start(flags=FLAGS, env=DEV)
+        start(control_points=CONTROL_POINTS, env=DEV)
         banner = [r for r in caplog.records if "Local mode" in r.getMessage()]
         assert [r.levelno for r in banner] == [logging.WARNING]
 
     def test_a_logger_can_be_the_log_sink(self, caplog):
         caplog.set_level(logging.INFO, logger="app.flags")
-        start(flags=FLAGS, mode="local", env={}, log=logging.getLogger("app.flags"))
+        start(control_points=CONTROL_POINTS, mode="local", env={}, log=logging.getLogger("app.flags"))
         assert any("Local mode" in r.getMessage() for r in caplog.records if r.name == "app.flags")
 
 
 class TestIdempotency:
     def test_a_second_identical_start_is_a_no_op(self):
-        start(flags=FLAGS, env=DEV)
+        start(control_points=CONTROL_POINTS, env=DEV)
         client = fw.client()
-        start(flags=FLAGS, env=DEV)
+        start(control_points=CONTROL_POINTS, env=DEV)
         assert fw.client() is client
 
-    def test_a_second_start_with_different_flags_raises_configuration(self):
-        start(flags=FLAGS, env=DEV)
+    def test_a_second_start_with_different_control_points_raises_configuration(self):
+        start(control_points=CONTROL_POINTS, env=DEV)
         with pytest.raises(ConfigurationError, match="already called with a different configuration"):
-            start(flags={"new-checkout": {"local": False}}, env=DEV)
+            start(control_points={"new-checkout": {"local": False}}, env=DEV)
 
     def test_a_different_key_is_a_conflict_and_the_log_sink_is_not_part_of_the_check(self):
         start(key=KEY, env={}, log=lambda line: None)
@@ -104,14 +104,14 @@ class TestIdempotency:
             start(key="project-api-key_other", env={})
         assert KEY not in info.value.message
 
-    def test_flags_do_not_count_in_remote_mode(self):
+    def test_control_points_do_not_count_in_remote_mode(self):
         start(key=KEY, env={})
-        start(key=KEY, env={}, flags=FLAGS)
+        start(key=KEY, env={}, control_points=CONTROL_POINTS)
 
     def test_the_first_start_keeps_its_log_sink(self):
         first, second = [], []
-        start(flags=FLAGS, env=DEV, log=first.append)
-        start(flags=FLAGS, env=DEV, log=second.append)
+        start(control_points=CONTROL_POINTS, env=DEV, log=first.append)
+        start(control_points=CONTROL_POINTS, env=DEV, log=second.append)
         fw.control_points.get_boolean_value("undeclared", False, CTX)
         assert any("undeclared" in line for line in first)
         assert second == []
@@ -123,11 +123,11 @@ class TestIdempotency:
 
     def test_options_are_keyword_only(self):
         with pytest.raises(TypeError):
-            start(FLAGS)  # type: ignore[misc]
+            start(CONTROL_POINTS)  # type: ignore[misc]
         params = inspect.signature(start).parameters.values()
         assert all(p.kind is p.KEYWORD_ONLY for p in params)
         assert [p.name for p in params][:8] == [
-            "flags", "mode", "environment", "url", "key", "instance_id", "env", "log",
+            "control_points", "mode", "environment", "url", "key", "instance_id", "env", "log",
         ]
 
     @pytest.mark.parametrize(
@@ -153,7 +153,7 @@ class TestImplicitStart:
         monkeypatch.setenv("FIREWEAVE_ENV", "development")
         lines = []
         captured = fw.control_points
-        assert captured.get_boolean_value("new-checkout", False, CTX) is False  # implicit: no flags
+        assert captured.get_boolean_value("new-checkout", False, CTX) is False  # implicit: no control points
         provisional = fw.client()
         at_shutdown = []
         real_shutdown = provisional.shutdown
@@ -164,7 +164,7 @@ class TestImplicitStart:
             real_shutdown()
 
         monkeypatch.setattr(provisional, "shutdown", spy_shutdown)
-        start(flags=FLAGS, log=lines.append)
+        start(control_points=CONTROL_POINTS, log=lines.append)
         assert at_shutdown == [(False, False)]
         assert captured.get_boolean_value("new-checkout", False, CTX) is True
         assert fw.client() is not provisional
@@ -176,7 +176,7 @@ class TestImplicitStart:
         assert provisional.control_points.get_boolean_details("x", False, CTX).error_kind is ErrorKind.ALREADY_CLOSED
         assert fw.status().started_by == "explicit"
         with pytest.raises(ConfigurationError):
-            start(flags={"other": {"local": True}})
+            start(control_points={"other": {"local": True}})
 
     @pytest.mark.parametrize(
         ("call", "expected"),
@@ -202,7 +202,7 @@ class TestImplicitStart:
             client = real()
             if not raced:
                 raced.append(client)
-                start(flags=FLAGS, log=lambda line: None)
+                start(control_points=CONTROL_POINTS, log=lambda line: None)
             return client
 
         monkeypatch.setattr(_state, "current_client", load_then_lose_the_race)
@@ -210,7 +210,7 @@ class TestImplicitStart:
         assert raced == [provisional] and provisional.runtime.state is LifecycleState.SHUTDOWN
 
     def test_after_shutdown_a_read_does_not_retry_into_a_new_client(self):
-        start(flags=FLAGS, env=DEV)
+        start(control_points=CONTROL_POINTS, env=DEV)
         fw.shutdown()
         decision = fw.control_points.get_boolean_details("new-checkout", False, CTX)
         assert decision.error_kind is ErrorKind.ALREADY_CLOSED
@@ -219,7 +219,7 @@ class TestImplicitStart:
     def test_a_failed_implicit_client_is_shut_down_when_start_replaces_it(self):
         fw.control_points.get_boolean_value("x", False, CTX)  # no key, no env: failed implicit start
         failed = fw.client()
-        start(flags=FLAGS, env=DEV)
+        start(control_points=CONTROL_POINTS, env=DEV)
         assert failed.runtime.state is LifecycleState.SHUTDOWN
         assert fw.control_points.get_boolean_value("new-checkout", False, CTX) is True
 
@@ -249,7 +249,7 @@ class TestImplicitStart:
             assert decision.reason == "ERROR"
             assert decision.error_kind is ErrorKind.CONFIGURATION
             assert "FIREWEAVE_KEY" in decision.error_message
-            assert decision.flag_metadata == {"fireweave.errorKind": "Configuration"}
+            assert decision.control_point_metadata == {"fireweave.errorKind": "Configuration"}
         result = fw.identify("user-1")
         assert result.ok is False and result.error.kind is ErrorKind.CONFIGURATION
         status = fw.status()
@@ -259,7 +259,7 @@ class TestImplicitStart:
 
     def test_an_explicit_start_recovers_after_a_failed_implicit_start(self):
         assert fw.control_points.get_boolean_value("new-checkout", False, CTX) is False
-        start(flags=FLAGS, env=DEV)
+        start(control_points=CONTROL_POINTS, env=DEV)
         assert fw.control_points.get_boolean_value("new-checkout", False, CTX) is True
         assert fw.status().state == "ready"
 
@@ -283,13 +283,13 @@ class TestImplicitStart:
 
 class TestReadsNeverRaise:
     def test_a_dict_context_is_an_invalid_context_not_an_exception(self):
-        start(flags=FLAGS, env=DEV)
+        start(control_points=CONTROL_POINTS, env=DEV)
         assert fw.control_points.get_boolean_value("new-checkout", False, {"targeting_key": "u"}) is False
         decision = fw.control_points.get_boolean_details("new-checkout", False, {"targeting_key": "u"})
         assert decision.reason == "ERROR" and decision.error_kind is ErrorKind.INVALID_CONTEXT
 
     def test_bad_keys_and_defaults_serve_the_default(self):
-        start(flags=FLAGS, env=DEV)
+        start(control_points=CONTROL_POINTS, env=DEV)
         assert fw.control_points.get_boolean_value(None, False, CTX) is False  # type: ignore[arg-type]
         assert fw.control_points.get_boolean_details("new-checkout", "nope", CTX).error_kind is ErrorKind.TYPE_MISMATCH
 
@@ -297,7 +297,7 @@ class TestReadsNeverRaise:
         def broken(line):
             raise RuntimeError("sink down")
 
-        start(flags=FLAGS, env=DEV, log=broken)
+        start(control_points=CONTROL_POINTS, env=DEV, log=broken)
         assert fw.control_points.get_boolean_value("undeclared", True, CTX) is True
 
     def test_an_auth_failure_in_remote_mode_is_a_default_and_a_decision(self):
@@ -309,15 +309,15 @@ class TestReadsNeverRaise:
 class TestRemoteThroughTransport:
     def test_reads_and_identify_go_to_the_configured_endpoint_with_the_key(self):
         calls = []
-        start(key=KEY, url=URL, env={}, flags={"x": {"local": False}}, transport=remote_transport(calls))
-        assert fw.control_points.get_boolean_value("x", False, CTX) is True  # flags ignored in remote
+        start(key=KEY, url=URL, env={}, control_points={"x": {"local": False}}, transport=remote_transport(calls))
+        assert fw.control_points.get_boolean_value("x", False, CTX) is True  # local control points ignored in remote
         assert fw.identify("user-1", {"plan": "pro"}, kind="user").ok is True
-        assert calls[0][0] == f"{URL}/v1/flags/evaluate"
+        assert calls[0][0] == f"{URL}/v1/control-points/evaluate"
         assert calls[0][2]["Authorization"] == f"Bearer {KEY}"
         assert calls[1][0] == f"{URL}/v1/targets/register"
         assert calls[1][1] == {"targetingKey": "user-1", "kind": "user", "properties": {"plan": "pro"}}
 
-    def test_a_key_missing_from_flags_does_not_warn_in_remote_mode(self):
+    def test_a_key_missing_from_control_points_does_not_warn_in_remote_mode(self):
         lines = []
         start(key=KEY, url=URL, env={}, log=lines.append, transport=remote_transport([]))
         fw.control_points.get_boolean_value("undeclared", False, CTX)
@@ -331,7 +331,7 @@ class TestStatus:
         assert (status.mode, status.mode_source, status.key_source) == ("remote", "key", "start(key=...)")
         assert (status.host, status.endpoint_source) == ("fw.example.com", "start(url=...)")
         assert status.channel in ("production", "staging") and status.sdk_version
-        assert status.flag_count == 0 and status.error is None
+        assert status.control_point_count == 0 and status.error is None
         assert "SENTINEL" not in repr(status) and "SENTINEL" not in repr(fw)
         assert "SENTINEL" not in json.dumps(status.__dict__)
 
@@ -349,18 +349,18 @@ class TestStatus:
 
 class TestInstanceKey:
     def test_the_option_wins(self):
-        start(flags=FLAGS, env={**DEV, "FIREWEAVE_INSTANCE_ID": "env-id"}, instance_id="checkout-api")
+        start(control_points=CONTROL_POINTS, env={**DEV, "FIREWEAVE_INSTANCE_ID": "env-id"}, instance_id="checkout-api")
         assert fw.instance_key() == "checkout-api"
 
     def test_then_fireweave_instance_id(self):
-        start(flags=FLAGS, env={**DEV, "FIREWEAVE_INSTANCE_ID": "env-id"})
+        start(control_points=CONTROL_POINTS, env={**DEV, "FIREWEAVE_INSTANCE_ID": "env-id"})
         assert fw.instance_key() == "env-id"
 
     def test_then_a_hash_of_the_host_name_stable_within_the_process(self, monkeypatch):
         from fireweave.start._instance import fnv1a64
 
         monkeypatch.setattr(_state, "host_name", lambda: "web-1")
-        start(flags=FLAGS, env=DEV)
+        start(control_points=CONTROL_POINTS, env=DEV)
         assert fw.instance_key() == f"inst_{fnv1a64('web-1')}"
         assert fw.instance_key() == fw.instance_key()
 
@@ -386,38 +386,38 @@ class TestInstanceKey:
         monkeypatch.setattr(_state, "host_name", lambda: "web-1")
         fw.instance_key()
         with pytest.raises(ConfigurationError, match="instance_key"):
-            start(flags=FLAGS, env=DEV, instance_id="other")
+            start(control_points=CONTROL_POINTS, env=DEV, instance_id="other")
 
 
 class TestIdentify:
     def test_identify_registers_a_user_target_locally(self):
         lines = []
-        start(flags=FLAGS, env=DEV, log=lines.append)
+        start(control_points=CONTROL_POINTS, env=DEV, log=lines.append)
         result = fw.identify("user-1", {"plan": "pro"})
         assert result.ok is True
         assert any("registerTarget user user-1" in line for line in lines)
 
     def test_kind_is_keyword_only_and_passed_through(self):
         lines = []
-        start(flags=FLAGS, env=DEV, log=lines.append)
+        start(control_points=CONTROL_POINTS, env=DEV, log=lines.append)
         assert fw.identify("device-9", kind="device").ok is True
         assert any("registerTarget device device-9" in line for line in lines)
         assert inspect.signature(fw.identify).parameters["kind"].kind is inspect.Parameter.KEYWORD_ONLY
 
     def test_identify_never_raises(self):
-        start(flags=FLAGS, env=DEV, log=lambda line: None)
+        start(control_points=CONTROL_POINTS, env=DEV, log=lambda line: None)
         result = fw.identify("user-1", {"when": object()})  # not JSON
         assert result.ok is False and result.error is not None
 
 
 class TestShutdown:
     def test_after_shutdown_reads_serve_defaults_and_start_begins_again(self):
-        start(flags=FLAGS, env=DEV)
+        start(control_points=CONTROL_POINTS, env=DEV)
         fw.shutdown()
         assert fw.status().state == "shutdown"
         assert fw.control_points.get_boolean_value("new-checkout", False, CTX) is False
         assert fw.control_points.get_boolean_details("new-checkout", False, CTX).error_kind is ErrorKind.ALREADY_CLOSED
-        start(flags=FLAGS, env=DEV)
+        start(control_points=CONTROL_POINTS, env=DEV)
         assert fw.control_points.get_boolean_value("new-checkout", False, CTX) is True
 
     def test_shutdown_before_start_is_harmless(self):
@@ -476,7 +476,7 @@ class TestFork:
         return os.waitstatus_to_exitcode(status) if hasattr(os, "waitstatus_to_exitcode") else status >> 8
 
     def test_the_child_rebuilds_its_client_and_reads(self):
-        start(flags=FLAGS, env=DEV)
+        start(control_points=CONTROL_POINTS, env=DEV)
         parent_client = fw.client()
 
         def child():
@@ -485,7 +485,7 @@ class TestFork:
         assert self._in_child(child) == 0
 
     def test_a_runtime_lock_held_at_fork_does_not_block_the_child(self):
-        start(flags=FLAGS, env=DEV)
+        start(control_points=CONTROL_POINTS, env=DEV)
         runtime_lock = fw.client().runtime._lock
         held, release = threading.Event(), threading.Event()
 

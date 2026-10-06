@@ -19,7 +19,7 @@ func makeStartClient(
   switch config.mode {
   case .local:
     let options = InitFireweaveLocalOptions(
-      controlPoints: localSeeds(config.flags),
+      controlPoints: localSeeds(config.controlPoints),
       log: log,
       context: context
     )

@@ -2,7 +2,7 @@
 // (ADR-0005) — the default production path. It speaks only the
 // vendor-neutral Fireweave remote protocol to fw-server:
 //
-//	POST /v1/flags/evaluate
+//	POST /v1/control-points/evaluate
 //	POST /v1/targets/register
 //
 // Auth: Authorization: Bearer <apiKey> (project-api-key_…). Which backend
@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	evaluatePath       = "/v1/flags/evaluate"
+	evaluatePath       = "/v1/control-points/evaluate"
 	registerTargetPath = "/v1/targets/register"
 )
 
@@ -95,21 +95,21 @@ type Adapter struct {
 }
 
 type evaluateRequest struct {
-	TargetingKey    string            `json:"targetingKey"`
-	Attributes      map[string]any    `json:"attributes,omitempty"`
-	Groups          map[string]string `json:"groups,omitempty"`
-	GroupProperties map[string]any    `json:"groupProperties,omitempty"`
-	FlagKeys        []string          `json:"flagKeys,omitempty"`
+	TargetingKey     string            `json:"targetingKey"`
+	Attributes       map[string]any    `json:"attributes,omitempty"`
+	Groups           map[string]string `json:"groups,omitempty"`
+	GroupProperties  map[string]any    `json:"groupProperties,omitempty"`
+	ControlPointKeys []string          `json:"controlPointKeys,omitempty"`
 }
 
 type decisionItem struct {
-	FlagKey      string         `json:"flagKey"`
-	Value        any            `json:"value"`
-	Variant      *string        `json:"variant"`
-	Reason       string         `json:"reason"`
-	Found        bool           `json:"found"`
-	Enabled      *bool          `json:"enabled"`
-	FlagMetadata map[string]any `json:"flagMetadata"`
+	ControlPointKey      string         `json:"controlPointKey"`
+	Value                any            `json:"value"`
+	Variant              *string        `json:"variant"`
+	Reason               string         `json:"reason"`
+	Found                bool           `json:"found"`
+	Enabled              *bool          `json:"enabled"`
+	ControlPointMetadata map[string]any `json:"controlPointMetadata"`
 	// Payload mirrors python's/node's remote adapter (both already read an
 	// item-level "payload" field): task-10b item 5 parity. Attached as
 	// fireweave.payload metadata only when the caller's EvaluateOptions sets
@@ -225,13 +225,13 @@ func (a *Adapter) status() *domain.Error {
 // Resolve implements domain.BackendAdapter.
 func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain.Decision {
 	if err := a.status(); err != nil {
-		return domain.ErrorDecision(req.FlagKey, req.DefaultValue, err, nil)
+		return domain.ErrorDecision(req.ControlPointKey, req.DefaultValue, err, nil)
 	}
 	targeting := req.Context.TargetingKey
 	if targeting == "" {
 		err := domain.NewError(domain.KindInvalidContext, "targeting key missing", nil)
 		err.TargetingKeyMissing = true
-		return domain.ErrorDecision(req.FlagKey, req.DefaultValue, err, nil)
+		return domain.ErrorDecision(req.ControlPointKey, req.DefaultValue, err, nil)
 	}
 
 	attrs := map[string]any{}
@@ -243,8 +243,8 @@ func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain
 		attrs[k] = v
 	}
 	body := evaluateRequest{
-		TargetingKey: targeting,
-		FlagKeys:     []string{req.FlagKey},
+		TargetingKey:     targeting,
+		ControlPointKeys: []string{req.ControlPointKey},
 	}
 	if len(attrs) > 0 {
 		body.Attributes = attrs
@@ -263,11 +263,11 @@ func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain
 
 	var resp evaluateResponse
 	if err := a.postJSON(ctx, evaluatePath, body, &resp); err != nil {
-		return domain.ErrorDecision(req.FlagKey, req.DefaultValue, err, nil)
+		return domain.ErrorDecision(req.ControlPointKey, req.DefaultValue, err, nil)
 	}
 	var item *decisionItem
 	for i := range resp.Decisions {
-		if resp.Decisions[i].FlagKey == req.FlagKey {
+		if resp.Decisions[i].ControlPointKey == req.ControlPointKey {
 			item = &resp.Decisions[i]
 			break
 		}
@@ -277,10 +277,10 @@ func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain
 		if resp.QuotaLimited {
 			extra[domain.MetaQuotaLimited] = true
 		}
-		return domain.ErrorDecision(req.FlagKey, req.DefaultValue, domain.NewError(domain.KindFlagNotFound, "", nil), extra)
+		return domain.ErrorDecision(req.ControlPointKey, req.DefaultValue, domain.NewError(domain.KindControlPointNotFound, "", nil), extra)
 	}
 	meta := map[string]any{}
-	for k, v := range item.FlagMetadata {
+	for k, v := range item.ControlPointMetadata {
 		meta[k] = v
 	}
 	if resp.QuotaLimited {
@@ -304,11 +304,11 @@ func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain
 		value = numberValue(value)
 	}
 	return domain.Decision{
-		FlagKey:  req.FlagKey,
-		Value:    value,
-		Variant:  variant,
-		Reason:   reason,
-		Metadata: meta,
+		ControlPointKey: req.ControlPointKey,
+		Value:           value,
+		Variant:         variant,
+		Reason:          reason,
+		Metadata:        meta,
 	}
 }
 

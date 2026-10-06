@@ -7,7 +7,7 @@ public enum FireweaveStartState: String, Sendable, Equatable {
   /// `startFireweave` has not run. Reads serve their defaults.
   case notStarted = "NOT_STARTED"
   /// Started; the first prefetch has not settled. Remote reads serve their
-  /// defaults (`NotReady`); local reads already answer from the flags.
+  /// defaults (`NotReady`); local reads already answer from the control points.
   case initializing = "INITIALIZING"
   case ready = "READY"
   /// The prefetch missed its ceiling, or a re-fetch failed after an earlier
@@ -60,7 +60,7 @@ public struct FireweaveStatus: Sendable, Equatable {
   public var keySource: String?
   /// The environment name, when it chose local mode.
   public var environment: String?
-  public var flagCount: Int
+  public var controlPointCount: Int
   public var problem: FireweaveStartProblem?
   /// The kind of the latest failed fw-server request (`.authentication`,
   /// `.authorization`, `.rateLimited`, `.network`, …; SP-27). It stays after

@@ -52,7 +52,10 @@ void main() {
   group('ErrorKind / FireweaveError', () {
     test('taxonomy has fifteen members', () {
       expect(ErrorKind.values, hasLength(15));
-      expect(ErrorKind.fromWireName('FlagNotFound'), ErrorKind.flagNotFound);
+      expect(
+        ErrorKind.fromWireName('ControlPointNotFound'),
+        ErrorKind.controlPointNotFound,
+      );
       expect(ErrorKind.fromWireName('Nope'), isNull);
     });
 
@@ -110,7 +113,10 @@ void main() {
         message: 'rejected key phc_LEAK',
       );
       expect(err.message, 'rejected key [REDACTED]');
-      expect(FireweaveError(ErrorKind.flagNotFound).message, 'flag not found');
+      expect(
+        FireweaveError(ErrorKind.controlPointNotFound).message,
+        'flag not found',
+      );
     });
 
     test('messages collapse whitespace and trim', () {

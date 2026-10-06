@@ -3,16 +3,16 @@
 /// (docs/adr/0012-start-profile.md).
 ///
 /// ```dart
-/// // lib/fireweave/flags.dart: every control point the app reads
+/// // lib/fireweave/control_points.dart: every control point the app reads
 /// import 'package:fireweave/client.dart';
-/// final flags = defineFlags({'new-checkout': Flag.local(true)});
+/// final controlPoints = defineControlPoints({'new-checkout': LocalControlPoint.local(true)});
 ///
 /// // lib/main.dart
 /// import 'package:fireweave/client.dart';
-/// import 'fireweave/flags.dart';
+/// import 'fireweave/control_points.dart';
 ///
 /// Future<void> main() async {
-///   await Fireweave.start(flags: flags); // before runApp
+///   await Fireweave.start(controlPoints: controlPoints); // before runApp
 ///   runApp(const App());
 /// }
 ///
@@ -56,4 +56,5 @@ export 'src/start/channel.dart' show SdkChannel;
 export 'src/start/client_profile.dart'
     show DeviceIdStore, Fireweave, FireweaveClientStart, fw;
 export 'src/start/core.dart' show FireweaveStatus, StartProblem, StartState;
-export 'src/start/flags.dart' show Flag, defineFlags;
+export 'src/start/control_points.dart'
+    show LocalControlPoint, defineControlPoints;

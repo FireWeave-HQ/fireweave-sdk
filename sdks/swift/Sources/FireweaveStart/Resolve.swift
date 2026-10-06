@@ -44,7 +44,7 @@ struct ResolvedStart: Sendable {
   var profile: FireweaveProfile
   var mode: Mode
   var modeSource: FireweaveModeSource
-  var flags: FireweaveFlags
+  var controlPoints: FireweaveLocalControlPoints
   var channel: FireweaveChannel
   var sdkVersion: String
   /// Remote only.
@@ -104,7 +104,7 @@ func resolveStart(
   channel: FireweaveChannel,
   sdkVersion: String
 ) throws -> ResolvedStart {
-  let flags = try normalizeFlags(options.flags).get()
+  let controlPoints = try normalizeControlPoints(options.controlPoints).get()
   var warnings = retiredKeyWarnings(profile, lookups)
   let keySources = keyOrigins(profile, lookups)
 
@@ -127,7 +127,7 @@ func resolveStart(
       profile: profile,
       mode: .local,
       modeSource: .option,
-      flags: flags,
+      controlPoints: controlPoints,
       channel: channel,
       sdkVersion: sdkVersion,
       warnings: warnings
@@ -153,7 +153,7 @@ func resolveStart(
       profile: profile,
       mode: .remote,
       modeSource: options.mode == .remote ? .option : .key,
-      flags: flags,
+      controlPoints: controlPoints,
       channel: channel,
       sdkVersion: sdkVersion,
       url: endpoint.url,
@@ -175,7 +175,7 @@ func resolveStart(
       profile: profile,
       mode: .local,
       modeSource: .environment,
-      flags: flags,
+      controlPoints: controlPoints,
       channel: channel,
       sdkVersion: sdkVersion,
       environment: environment.value,

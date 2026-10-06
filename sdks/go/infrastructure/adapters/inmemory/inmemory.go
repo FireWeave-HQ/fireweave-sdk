@@ -16,7 +16,7 @@ import (
 )
 
 // Flag is one deterministic flag definition, mirroring the shape used by
-// contracts/ fixtures (given.flags).
+// contracts/ fixtures (given.controlPoints).
 type Flag struct {
 	Type    domain.FlagType
 	Enabled bool
@@ -130,17 +130,17 @@ func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain
 	a.lastCtx.Store(&cp)
 
 	a.mu.RLock()
-	flag, ok := a.flags[req.FlagKey]
+	flag, ok := a.flags[req.ControlPointKey]
 	a.mu.RUnlock()
 
 	if !ok {
-		return domain.ErrorDecision(req.FlagKey, req.DefaultValue, domain.NewError(domain.KindFlagNotFound, "", nil), nil)
+		return domain.ErrorDecision(req.ControlPointKey, req.DefaultValue, domain.NewError(domain.KindControlPointNotFound, "", nil), nil)
 	}
 	if flag.Type != req.Type {
-		return domain.ErrorDecision(req.FlagKey, req.DefaultValue, domain.NewError(domain.KindTypeMismatch, "", nil), nil)
+		return domain.ErrorDecision(req.ControlPointKey, req.DefaultValue, domain.NewError(domain.KindTypeMismatch, "", nil), nil)
 	}
 	if !matches(flag, req.Context) {
-		return domain.Decision{FlagKey: req.FlagKey, Value: req.DefaultValue, Reason: domain.ReasonDefault, Metadata: buildMetadata(flag)}
+		return domain.Decision{ControlPointKey: req.ControlPointKey, Value: req.DefaultValue, Reason: domain.ReasonDefault, Metadata: buildMetadata(flag)}
 	}
 
 	meta := buildMetadata(flag)
@@ -154,11 +154,11 @@ func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain
 	}
 	if !flag.Enabled {
 		return domain.Decision{
-			FlagKey:  req.FlagKey,
-			Value:    convertValue(flag),
-			Variant:  flag.Variant,
-			Reason:   domain.ReasonDisabled,
-			Metadata: meta,
+			ControlPointKey: req.ControlPointKey,
+			Value:           convertValue(flag),
+			Variant:         flag.Variant,
+			Reason:          domain.ReasonDisabled,
+			Metadata:        meta,
 		}
 	}
 
@@ -170,11 +170,11 @@ func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain
 		reason = domain.ReasonStale
 	}
 	return domain.Decision{
-		FlagKey:  req.FlagKey,
-		Value:    convertValue(flag),
-		Variant:  flag.Variant,
-		Reason:   reason,
-		Metadata: meta,
+		ControlPointKey: req.ControlPointKey,
+		Value:           convertValue(flag),
+		Variant:         flag.Variant,
+		Reason:          reason,
+		Metadata:        meta,
 	}
 }
 
@@ -279,12 +279,12 @@ func payloadString(payload any) (string, bool) {
 func buildMetadata(flag Flag) map[string]any {
 	meta := map[string]any{}
 	if flag.Version != nil {
-		meta[domain.MetaFlagVersion] = *flag.Version
+		meta[domain.MetaControlPointVersion] = *flag.Version
 	}
 	// Vendor flag id + reason code are only exposed together, when the
 	// vendor supplied both an id and a concrete condition index.
 	if flag.VendorID != nil && flag.ConditionIndex != nil {
-		meta[domain.MetaVendorFlagID] = *flag.VendorID
+		meta[domain.MetaVendorControlPointID] = *flag.VendorID
 		meta[domain.MetaReasonCode] = flag.ReasonCode
 	}
 	if flag.FromCache {

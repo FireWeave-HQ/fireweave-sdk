@@ -6,7 +6,7 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-disabled": {
         "type": "boolean",
         "enabled": false,
@@ -24,7 +24,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-disabled",
+    "controlPointKey": "fw-disabled",
     "flagType": "boolean",
     "defaultValue": true,
     "invocationContext": {
@@ -37,8 +37,8 @@
     "reason": "DISABLED",
     "errorCode": null,
     "errorMessage": null,
-    "flagMetadata": {
-      "fireweave.flagVersion": 1
+    "controlPointMetadata": {
+      "fireweave.controlPointVersion": 1
     }
   },
   "schemaVersion": 1,

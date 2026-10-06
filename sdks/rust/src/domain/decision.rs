@@ -1,7 +1,7 @@
 //! Canonical evaluation decision (`spec/decision.schema.json`).
 
 use super::errors::ErrorKind;
-use super::types::{FlagMetadata, JsonValue};
+use super::types::{ControlPointMetadata, JsonValue};
 
 /// Canonical reason strings (`spec/decision.schema.json`).
 pub mod reason {
@@ -26,7 +26,7 @@ pub struct Decision {
     pub error_code: Option<String>,
     pub error_message: Option<String>,
     pub error_kind: Option<ErrorKind>,
-    pub flag_metadata: FlagMetadata,
+    pub control_point_metadata: ControlPointMetadata,
 }
 
 impl Decision {
@@ -40,7 +40,7 @@ impl Decision {
             error_code: None,
             error_message: None,
             error_kind: None,
-            flag_metadata: FlagMetadata::new(),
+            control_point_metadata: ControlPointMetadata::new(),
         }
     }
 

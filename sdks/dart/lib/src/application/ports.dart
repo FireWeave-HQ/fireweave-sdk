@@ -32,11 +32,11 @@ typedef PrefetchResult = Map<String, AdapterResolution>;
 typedef LogSink = void Function(String message);
 
 class PrefetchOptions {
-  const PrefetchOptions({this.flagKeys});
+  const PrefetchOptions({this.controlPointKeys});
 
   /// Restrict the batch to these keys; omit to let the backend return all
   /// it knows.
-  final List<String>? flagKeys;
+  final List<String>? controlPointKeys;
 }
 
 /// Vendor-neutral outcome of resolving one flag, as returned in a
@@ -56,11 +56,11 @@ class PrefetchOptions {
 ///    reports `defaultReason` here too (`spec/modes.md` "Behaviour per
 ///    mode": local mode's unknown-key row), while `FireweaveRemoteAdapter`/
 ///    `InMemoryAdapter` leave `missReason` `null` and an absent key resolves
-///    to `ERROR`/`FlagNotFound` instead.
+///    to `ERROR`/`ControlPointNotFound` instead.
 ///
-/// [vendorFlagId]/[reasonCode] are a PRE-GATED pair
+/// [vendorControlPointId]/[reasonCode] are a PRE-GATED pair
 /// (`spec/decision.schema.json` `standardMetadataKeys`, ruling 11): the
-/// runtime emits `fireweave.vendorFlagId`/`fireweave.reasonCode` together,
+/// runtime emits `fireweave.vendorControlPointId`/`fireweave.reasonCode` together,
 /// or neither — never one alone. The gate is applied where the raw
 /// "condition index" signal exists as adapter input (`InMemoryAdapter`),
 /// before this resolution is constructed.
@@ -74,7 +74,7 @@ class AdapterResolution {
     this.reason,
     this.reasonCode,
     this.version,
-    this.vendorFlagId,
+    this.vendorControlPointId,
     this.payload,
     this.fromCache = false,
   });
@@ -87,7 +87,7 @@ class AdapterResolution {
   final DecisionReason? reason;
   final String? reasonCode;
   final int? version;
-  final int? vendorFlagId;
+  final int? vendorControlPointId;
   final JsonValue payload;
   final bool fromCache;
 
@@ -101,7 +101,7 @@ class AdapterResolution {
     'reason': reason?.wireName,
     'reasonCode': reasonCode,
     'version': version,
-    'vendorFlagId': vendorFlagId,
+    'vendorControlPointId': vendorControlPointId,
     'payload': payload,
     'fromCache': fromCache,
   };
@@ -140,7 +140,7 @@ class RegisterTargetResult {
 ///
 /// [includePayload] is FUNCTIONAL here, as in swift (and unlike web's inert
 /// options): payload attachment is genuine v1 surface
-/// (`Decision.flagMetadata['fireweave.payload']`), this SDK runs the shared
+/// (`Decision.controlPointMetadata['fireweave.payload']`), this SDK runs the shared
 /// 65 fixtures for real (`eval-payload-attached`), and
 /// [AdapterResolution.payload] already carries the raw payload from prefetch
 /// to the read.
@@ -183,9 +183,9 @@ abstract interface class ControlPointsBackendAdapter {
   /// Miss-reason override for a control point ABSENT from the prefetch
   /// result (`spec/modes.md` "Behaviour per mode": local mode's unknown-key
   /// row is `default`/reason `DEFAULT`, not an error — unlike remote's
-  /// `default`/`ERROR`/`FlagNotFound`). `FireweaveLocalAdapter` returns
+  /// `default`/`ERROR`/`ControlPointNotFound`). `FireweaveLocalAdapter` returns
   /// `DecisionReason.defaultReason` here; `FireweaveRemoteAdapter` and
-  /// `InMemoryAdapter` return `null` and keep the FlagNotFound/ERROR path.
+  /// `InMemoryAdapter` return `null` and keep the ControlPointNotFound/ERROR path.
   DecisionReason? get missReason;
 
   /// Bring the backend to a usable state. Throws [FireweaveError] on fatal

@@ -92,7 +92,7 @@ public final class FireweaveHandle: Sendable {
 
   /// What `startFireweave` decided and how it is going: state, profile, mode
   /// and why, channel, SDK version, host, endpoint source, key source,
-  /// environment, flag count, problem and the latest fw-server error kind.
+  /// environment, control-point count, problem and the latest fw-server error kind.
   /// Never the key.
   public var status: FireweaveStatus {
     core.status

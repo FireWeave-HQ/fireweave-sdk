@@ -9,7 +9,7 @@ import Fireweave
 /// from the main actor, and never throw:
 ///
 /// - once the core client is installed, each read is the core's own read;
-/// - before that, local mode answers from the flags (a seeded key with its
+/// - before that, local mode answers from the control points (a seeded key with its
 ///   value and reason `STATIC`, any other key with the caller's default and
 ///   reason `DEFAULT`, exactly as the core local adapter does), and remote
 ///   mode returns the caller's default (`*Details`: an `ERROR` decision with
@@ -173,7 +173,7 @@ struct FallbackReader: Sendable {
   /// The anonymous key the client prefetches under, merged into the context
   /// check as the core merges its global layer.
   var subject: String?
-  /// Local mode only: the flags' local values.
+  /// Local mode only: the control points' local values.
   var seeds: [String: Bool]?
 
   func decide(
@@ -216,8 +216,8 @@ struct FallbackReader: Sendable {
 /// The core runtime's error decision: the caller's default, reason `ERROR`,
 /// and the error's kind, OpenFeature code and redacted message.
 func errorDecision(_ defaultValue: JSONValue, _ error: FireweaveError) -> Decision {
-  var metadata: FlagMetadata = [flagMetadataErrorKindKey: .string(error.kind.rawValue)]
-  if error.kind == .flagNotFound && error.quotaLimited {
+  var metadata: ControlPointMetadata = [controlPointMetadataErrorKindKey: .string(error.kind.rawValue)]
+  if error.kind == .controlPointNotFound && error.quotaLimited {
     metadata["fireweave.quotaLimited"] = .bool(true)
   }
   return Decision(
@@ -226,6 +226,6 @@ func errorDecision(_ defaultValue: JSONValue, _ error: FireweaveError) -> Decisi
     errorCode: error.openFeatureErrorCode,
     errorMessage: error.message,
     errorKind: error.kind,
-    flagMetadata: metadata
+    controlPointMetadata: metadata
   )
 }

@@ -260,7 +260,7 @@ final class StartSingleton {
     private static InitOptions initOptions(StartResolver.Resolved r) {
         if (r.mode == Mode.LOCAL) {
             return InitOptions.builder(Mode.LOCAL)
-                    .controlPoints(r.flags.localValues())
+                    .controlPoints(r.controlPoints.localValues())
                     .log(StartSingleton::info)
                     .build();
         }
@@ -274,8 +274,8 @@ final class StartSingleton {
     // ---------------------------------------------------------------- idempotency
 
     /**
-     * What makes two starts "the same". Flags count in local mode only: remote ignores them, so
-     * an implicit env-only start followed by Fw.start(flags) under a key is not a conflict.
+     * What makes two starts "the same". Local control points count in local mode only: remote ignores them, so
+     * an implicit env-only start followed by Fw.start(controlPoints) under a key is not a conflict.
      */
     static String signatureOf(StartResolver.Resolved r, String instanceId) {
         List<String> parts = new ArrayList<>();
@@ -284,7 +284,7 @@ final class StartSingleton {
         parts.add(r.key == null ? "" : sha256(r.key));
         parts.add(r.allowedHosts == null ? "" : String.join(",", r.allowedHosts));
         parts.add(StartEnv.trim(instanceId));
-        parts.add(r.mode == Mode.LOCAL ? r.flags.signature() : "");
+        parts.add(r.mode == Mode.LOCAL ? r.controlPoints.signature() : "");
         StringBuilder sb = new StringBuilder();
         for (String p : parts) {
             sb.append(p.length()).append(':').append(p).append('|');
@@ -292,7 +292,7 @@ final class StartSingleton {
         return sb.toString();
     }
 
-    private static final String[] SIGNATURE_FIELDS = {"mode", "url", "key", "allowed hosts", "instance id", "flags"};
+    private static final String[] SIGNATURE_FIELDS = {"mode", "url", "key", "allowed hosts", "instance id", "controlPoints"};
 
     /** Names the fields that differ, never their values. */
     private static List<String> differs(String a, String b) {
@@ -350,14 +350,14 @@ final class StartSingleton {
 
     /**
      * Returns the running client, starting FireWeave from the environment if nothing has started
-     * it yet. {@code flagKey} is null for a registration.
+     * it yet. {@code controlPointKey} is null for a registration.
      */
-    private static Acquired acquire(String flagKey) {
+    private static Acquired acquire(String controlPointKey) {
         Run current = run;
         if (current != null) {
             if (current.resolved.mode == Mode.LOCAL) {
                 List<Line> lines = new ArrayList<>(1);
-                noteLocalKey(current.resolved, flagKey, lines);
+                noteLocalKey(current.resolved, controlPointKey, lines);
                 emit(lines);
             }
             return new Acquired(current.client, current.resolved.mode, null);
@@ -370,7 +370,7 @@ final class StartSingleton {
             }
             Run r = run;
             if (state == StartState.READY && r != null) {
-                noteLocalKey(r.resolved, flagKey, lines);
+                noteLocalKey(r.resolved, controlPointKey, lines);
                 out = new Acquired(r.client, r.resolved.mode, null);
             } else if (state == StartState.SHUTDOWN) {
                 out = new Acquired(null, null, new FireweaveException(ErrorKind.AlreadyClosed));
@@ -383,12 +383,12 @@ final class StartSingleton {
         return out;
     }
 
-    /** Local mode: a key missing from the flags gets its default, with one warning. */
-    private static void noteLocalKey(StartResolver.Resolved r, String flagKey, List<Line> lines) {
-        if (flagKey == null || r.mode != Mode.LOCAL || r.flags.contains(flagKey)) {
+    /** Local mode: a key missing from the control points gets its default, with one warning. */
+    private static void noteLocalKey(StartResolver.Resolved r, String controlPointKey, List<Line> lines) {
+        if (controlPointKey == null || r.mode != Mode.LOCAL || r.controlPoints.contains(controlPointKey)) {
             return;
         }
-        warnOnce(lines, "[fireweave:local] \"" + flagKey + "\" is not in your flags (" + Names.FLAGS_FILE
+        warnOnce(lines, "[fireweave:local] \"" + controlPointKey + "\" is not in your control points (" + Names.CONTROL_POINTS_FILE
                 + "), so it gets its default. Add it there to try it locally.");
     }
 
@@ -412,13 +412,13 @@ final class StartSingleton {
 
         @Override
         public Decision evaluate(EvaluationRequest request) {
-            Acquired a = acquire(request.flagKey());
+            Acquired a = acquire(request.controlPointKey());
             if (a.error != null) {
                 throw a.error;
             }
             // The context is already merged and validated by the permanent runtime; the real
             // runtime validates it again (idempotent) and applies its own lifecycle gate.
-            Decision d = a.client.runtime().evaluate(request.flagKey(), request.type(), request.defaultValue(),
+            Decision d = a.client.runtime().evaluate(request.controlPointKey(), request.type(), request.defaultValue(),
                     EvaluationContext.empty(), request.context(), request.options());
             observeRemote(d.error());
             return d;
@@ -517,7 +517,7 @@ final class StartSingleton {
             Decision d = PERMANENT.controlPoints().getBooleanDetails(VERIFY_KEY, false,
                     EvaluationContext.builder().targetingKey(VERIFY_KEY).build());
             FireweaveError e = d.error();
-            if (e == null || e.kind() == ErrorKind.FlagNotFound) {
+            if (e == null || e.kind() == ErrorKind.ControlPointNotFound) {
                 // fw-server accepted the key; the probe key simply is not a control point.
                 return VerifyResult.success();
             }
@@ -567,7 +567,7 @@ final class StartSingleton {
             String host = hostOf(r.url);
             String endpointSource = r.url == null ? null : r.urlSource;
             return new StartStatus(state, r.mode, r.modeSource, r.channel, r.sdkVersion, host, endpointSource,
-                    r.keySource, r.environment, r.flags.size(), err, lastErrorKind);
+                    r.keySource, r.environment, r.controlPoints.size(), err, lastErrorKind);
         }
     }
 
@@ -578,9 +578,9 @@ final class StartSingleton {
         if (StartResolver.MODE_SOURCE_ENVIRONMENT.equals(r.modeSource)) {
             why = "no " + Names.ENV_KEY + "; environment \"" + r.environment + "\" from " + r.environmentSource;
         }
-        int n = r.flags.size();
-        return "[fireweave:local] Local mode (" + why + "). Serving " + n + (n == 1 ? " flag" : " flags")
-                + " from your flags; nothing is sent to fw-server.";
+        int n = r.controlPoints.size();
+        return "[fireweave:local] Local mode (" + why + "). Serving " + n + (n == 1 ? " control point" : " control points")
+                + " from your control points; nothing is sent to fw-server.";
     }
 
     /** Appends {@code line} unless this process already logged it. */

@@ -1,7 +1,7 @@
 /**
  * The shared start-profile suite (contracts/start/, spec/start-profile.md) on
  * web. Web has only the client profile: client fixtures plus the `any`
- * defineFlags fixtures. Drives the pure policy (src/start/policy.ts) with the
+ * defineControlPoints fixtures. Drives the pure policy (src/start/policy.ts) with the
  * input start() builds in src/start/state.ts, compares by the rules in
  * contracts/start/README.md, and writes
  * test/conformance/compatibility-report.start.web.json (gitignored).
@@ -18,7 +18,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { firstOf, resolvePolicy, sourced, type InjectedConfig, type SdkChannel } from '../../src/start/policy.ts';
 import { BUILD_ENV } from '../../src/start/names.ts';
-import { defineFlags } from '../../src/start/flags.ts';
+import { defineControlPoints } from '../../src/start/control-points.ts';
 
 const LANG = 'web';
 const here = dirname(fileURLToPath(import.meta.url));
@@ -113,14 +113,14 @@ function runResolve(c: Case): Outcome {
 }
 
 /**
- * Web's defineFlags rejects a bad flags object with a TypeError naming the
+ * Web's defineControlPoints rejects a bad control-points object with a TypeError naming the
  * entry (the core's FireweaveError carries fixed messages only); start() maps
- * the same rejection to problem 'invalid-flags' and a Configuration status.
+ * the same rejection to problem 'invalid-control-points' and a Configuration status.
  * Only that deliberate rejection counts as the Configuration fault.
  */
-function runDefineFlags(c: Case): Outcome {
+function runDefineControlPoints(c: Case): Outcome {
   try {
-    defineFlags(c.when.flags as never);
+    defineControlPoints(c.when.controlPoints as never);
     return { fields: { ok: true }, warnings: [] };
   } catch (err) {
     if (!(err instanceof TypeError) || !err.message.startsWith('[fireweave]')) throw err;
@@ -132,8 +132,8 @@ function run(c: Case): Outcome {
   switch (c.when.operation) {
     case 'resolve':
       return runResolve(c);
-    case 'defineFlags':
-      return runDefineFlags(c);
+    case 'defineControlPoints':
+      return runDefineControlPoints(c);
     default:
       throw new Error(`operation ${c.when.operation} is not applicable to ${LANG}`);
   }

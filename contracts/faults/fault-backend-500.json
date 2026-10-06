@@ -10,7 +10,7 @@
       "mode": "httpStatus",
       "status": 500
     },
-    "flags": {
+    "controlPoints": {
       "fw-t": {
         "type": "boolean",
         "enabled": true,
@@ -21,7 +21,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-t",
+    "controlPointKey": "fw-t",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {
@@ -34,7 +34,7 @@
     "reason": "ERROR",
     "errorCode": "GENERAL",
     "errorMessage": "backend unavailable",
-    "flagMetadata": {
+    "controlPointMetadata": {
       "fireweave.errorKind": "BackendUnavailable"
     }
   },

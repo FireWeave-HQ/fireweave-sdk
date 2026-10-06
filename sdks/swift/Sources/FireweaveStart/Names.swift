@@ -50,9 +50,9 @@ enum StartNames {
   static let deviceIdPrefix = "dev_"
   static let instanceKeyPrefix = "inst_"
 
-  /// Where an app's flags live by convention; named in the local-mode
+  /// Where an app's control points live by convention; named in the local-mode
   /// "missing key" warning.
-  static let flagsFile = "FireweaveFlags.swift"
+  static let controlPointsFile = "FireweaveLocalControlPoints.swift"
 
   // Option names, as messages and `FireweaveStatus` sources spell them.
 

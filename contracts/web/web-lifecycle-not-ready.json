@@ -5,11 +5,11 @@
   "tags": ["lifecycle", "gating"],
   "given": {
     "providerState": "UNINITIALIZED",
-    "flags": { "web-any": { "type": "boolean", "enabled": true, "value": true } }
+    "controlPoints": { "web-any": { "type": "boolean", "enabled": true, "value": true } }
   },
   "when": {
     "operation": "evaluateSync",
-    "flagKey": "web-any",
+    "controlPointKey": "web-any",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": { "targetingKey": "user_web_1" }

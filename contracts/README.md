@@ -32,13 +32,13 @@ Each fixture is a single JSON file:
   "schemaVersion": 1,
   "id": "eval-bool-success",
   "suite": "evaluation",
-  "description": "Boolean flag resolves to true with TARGETING_MATCH",
+  "description": "Boolean control point resolves to true with TARGETING_MATCH",
   "tags": ["boolean", "success"],
   "provisional": false,
   "given": {
     "providerState": "READY",
-    "flags": {
-      "my-flag": {
+    "controlPoints": {
+      "my-control-point": {
         "type": "boolean",
         "enabled": true,
         "variant": "on",
@@ -54,7 +54,7 @@ Each fixture is a single JSON file:
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "my-flag",
+    "controlPointKey": "my-control-point",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {
@@ -67,8 +67,8 @@ Each fixture is a single JSON file:
     "reason": "TARGETING_MATCH",
     "errorCode": null,
     "errorMessage": null,
-    "flagMetadata": {
-      "fireweave.flagVersion": 3
+    "controlPointMetadata": {
+      "fireweave.controlPointVersion": 3
     }
   },
   "compatibility": {
@@ -116,7 +116,7 @@ Rules:
 
 | `operation` | Suite | Semantics |
 | --- | --- | --- |
-| `evaluate` | evaluation, context, faults, security | Typed flag evaluation |
+| `evaluate` | evaluation, context, faults, security | Typed control-point evaluation |
 | `initialize` | lifecycle | Provider init |
 | `shutdown` | lifecycle | Provider shutdown |
 | `replaceProvider` | lifecycle | Swap provider under a domain |
@@ -141,15 +141,15 @@ Before comparing actual vs `expect`, harnesses **MUST** strip or rewrite nondete
 
 ### Preserve (must match)
 
-- Flag `value`, `variant`, `reason` (OpenFeature reason string)
+- Decision `value`, `variant`, `reason` (OpenFeature reason string)
 - `errorCode` (OpenFeature code)
 - Normalized `errorMessage` (see secrets rule)
-- Declared `flagMetadata` keys that are fixture-stable (e.g. `fireweave.flagVersion`)
+- Declared `controlPointMetadata` keys that are fixture-stable (e.g. `fireweave.controlPointVersion`)
 - Typed IDs present in the fixture itself (`stmp_*`, `chg_*`, `rolloutId`, `sfc_*`)
 
 ### Vendor-metadata gating (ruling 11, ratified)
 
-`fireweave.vendorFlagId` and `fireweave.reasonCode` are emitted in `flagMetadata` **only when the backend reports BOTH a vendor flag id AND a condition index** for the evaluation (e.g. `metadata.id` + `reason.condition_index` in `eval-detailed-fields`). If either is absent, **neither** key is emitted — implementations MUST NOT emit one without the other, and the comparator treats a lone `fireweave.vendorFlagId` or `fireweave.reasonCode` as undeclared metadata drift (fail). Canonical wording also lives in `spec/decision.schema.json` (`standardMetadataKeys`).
+`fireweave.vendorControlPointId` and `fireweave.reasonCode` are emitted in `controlPointMetadata` **only when the backend reports BOTH a vendor control-point id AND a condition index** for the evaluation (e.g. `metadata.id` + `reason.condition_index` in `eval-detailed-fields`). If either is absent, **neither** key is emitted — implementations MUST NOT emit one without the other, and the comparator treats a lone `fireweave.vendorControlPointId` or `fireweave.reasonCode` as undeclared metadata drift (fail). Canonical wording also lives in `spec/decision.schema.json` (`standardMetadataKeys`).
 
 ### Error message normalization
 
@@ -164,7 +164,7 @@ Before comparing actual vs `expect`, harnesses **MUST** strip or rewrite nondete
 3. Sort object keys in harness serialization before hashing/diffing (canonical JSON).
 4. Floating-point comparisons use exact JSON numbers as written; fixtures avoid values that require epsilon unless tagged `numeric-coercion`.
 5. Context merge fixtures declare every layer explicitly; harnesses must not inject host identity.
-6. Exposure dedup fixtures use fixed `(distinct_id, flag, value)` triples.
+6. Exposure dedup fixtures use fixed `(distinct_id, control point, value)` triples.
 7. If a language cannot produce a bit-identical structured value (Node `number` vs int/float; Java long via double), mark `skipped-with-documented-limitation` — never silently coerce in the comparator.
 
 ## CI: fail on silent divergence
@@ -183,7 +183,7 @@ Silent skip of a `pass` fixture is forbidden. Skips require the documented-limit
 ## How language harnesses consume fixtures
 
 1. Discover `contracts/<suite>/*.json` (exclude `README` / non-JSON).
-2. For each fixture, set up the in-memory / test-server backend from `given` (flags, state, fault mode).
+2. For each fixture, set up the in-memory / test-server backend from `given` (control points, state, fault mode).
 3. Apply context layers in OpenFeature merge order: **global → transaction → client → invocation** (transaction optional; fixtures omit unless testing it).
 4. Invoke `when.operation` through the SDK under test's **real** runtime + client (`controlPoints.evaluate` / `invokeCapability`, or runtime `initialize` / `shutdown` for lifecycle fixtures) — not a mock of the client. See [`harness.md`](./harness.md).
 5. Capture evaluation details / lifecycle outcome / extension result.

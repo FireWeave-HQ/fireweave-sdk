@@ -17,16 +17,16 @@ registration, the two v1 capabilities (spec/control-points.md "Scope of v1").
 ## Quick start (one line: the start profile)
 
 Most apps need only this ([ADR-0012](../../docs/adr/0012-start-profile.md)). The
-`fireweave::start` module is an opt-in layer over the unchanged core: one flags file, one
+`fireweave::start` module is an opt-in layer over the unchanged core: one control-points file, one
 call in `main`, then reads from anywhere. It adds no dependency.
 
 ```rust
-// src/fireweave_flags.rs: every control point the app reads, with its local value
-use fireweave::start::{define_flags, Flag, Flags};
+// src/fireweave_control_points.rs: every control point the app reads, with its local value
+use fireweave::start::{define_control_points, LocalControlPoint, LocalControlPoints};
 
-pub fn flags() -> Flags {
-    define_flags([
-        ("new-checkout", Flag::local(true).describe("new checkout flow")), // served only in local mode
+pub fn control_points() -> LocalControlPoints {
+    define_control_points([
+        ("new-checkout", LocalControlPoint::local(true).describe("new checkout flow")), // served only in local mode
     ])
 }
 ```
@@ -36,7 +36,7 @@ pub fn flags() -> Flags {
 use fireweave::start::StartOptions;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    fireweave::start::start(StartOptions { flags: fireweave_flags::flags(), ..Default::default() })?;
+    fireweave::start::start(StartOptions { control_points: fireweave_control_points::control_points(), ..Default::default() })?;
     serve();
     fireweave::start::shutdown();
     Ok(())
@@ -75,7 +75,7 @@ default. Empty and whitespace-only values count as unset.
 
 | Option | Env var | Default | What it does |
 | --- | --- | --- | --- |
-| `flags` | — | none | Local values per control point (`define_flags`). Ignored in remote mode. |
+| `control_points` | — | none | Local values per control point (`define_control_points`). Ignored in remote mode. |
 | `mode` | — | inferred | `Some(Mode::Remote)` or `Some(Mode::Local)`. Overrides inference. Remote without a key is a start error; local ignores a key (one warning). |
 | `environment` | `FIREWEAVE_ENV`, `APP_ENV` | — | Environment name used for inference when there is no key and no `mode`. Pass your own, e.g. a deploy-stage setting. `NODE_ENV` and `FW_ENV` are not read, and debug builds are never treated as development. |
 | `url` | `FIREWEAVE_URL` (legacy `FW_API_URL`, `FW_ATTEST_URL`) | from the crate version | A `-staging.N` crate version calls `staging-app-server.fireweave.ai`; any other calls `app-server.fireweave.ai`. Set it for a self-hosted or local fw-server: https is required except on localhost, and the allowlist becomes that host plus loopback. |
@@ -213,11 +213,10 @@ assert_eq!(local_adapter.registered_targets()[0].targeting_key, "user_42");
 
 `get_boolean_value` / `get_string_value` / `get_number_value` /
 `get_object_value`, their `*_details` counterparts (return the whole
-`Decision` — `reason`, `error_kind`, `flag_metadata`, ... — instead of just
-the value), and the general-form `evaluate`. All nine live on
-`client.control_points`; `client.flags()` is an identical, fully-supported
-alias returning a reference to the same field
-(`std::ptr::eq(&client.control_points, client.flags())` holds).
+`Decision` — `reason`, `error_kind`, `control_point_metadata`, ... — instead of
+just the value), and the general-form `evaluate`. All nine live on
+`client.control_points`; the `client.flags()` alias was removed in 3.0.0
+(ADR-0013).
 
 ## Module layout
 
@@ -228,7 +227,7 @@ alias returning a reference to the same field
 | `application/client.rs` | `FireweaveClient` — `control_points`, `register_target`, `invoke_capability` (degrades; v1 has no supported capabilities). |
 | `application/mode.rs` | `init_fireweave` — the single entry point and sanctioned composition root (the only file allowed to import concrete adapters). |
 | `application/ports.rs` | The `BackendAdapter` trait boundary + `AsAny` (checked downcast back to a concrete adapter, e.g. `FireweaveLocalAdapter`). |
-| `infrastructure/adapters/remote.rs` | `FireweaveRemoteAdapter` — the production backend (`POST /v1/flags/evaluate`, `POST /v1/targets/register`) over `ureq`. |
+| `infrastructure/adapters/remote.rs` | `FireweaveRemoteAdapter` — the production backend (`POST /v1/control-points/evaluate`, `POST /v1/targets/register`) over `ureq`. |
 | `infrastructure/adapters/local.rs` | `FireweaveLocalAdapter` — the dev substrate: seeded boolean overrides, no network. `register_target` records in-process and traces the call. |
 | `infrastructure/adapters/memory.rs` | Deterministic fixture-driven adapter for tests. |
 | `infrastructure/hosts.rs` | SSRF allowlist (on by default; https required off-loopback). |

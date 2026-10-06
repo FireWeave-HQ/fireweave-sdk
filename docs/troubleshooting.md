@@ -1,6 +1,6 @@
 # Troubleshooting
 
-First diagnostic step, always: read the **details** of a failing evaluation, not just the value. `errorCode`, `reason`, and `flagMetadata['fireweave.errorKind']` name the failure precisely ([concepts.md](concepts.md#error-taxonomy)).
+First diagnostic step, always: read the **details** of a failing evaluation, not just the value. `errorCode`, `reason`, and `controlPointMetadata['fireweave.errorKind']` name the failure precisely ([concepts.md](concepts.md#error-taxonomy)).
 
 ## "I always get the default value"
 
@@ -35,4 +35,4 @@ Reproduce against the deterministic stub with scripted faults (401/429/500/delay
 
 ## Still stuck
 
-See [SUPPORT.md](../SUPPORT.md). Include: language + SDK version, runtime (Node / Bun / Deno + version), adapter and mode (in-memory / Fireweave remote), the full evaluation details (value, reason, errorCode, flagMetadata), and runtime state at the time (`runtime.getState()` / `runtime.state()` / `runtime.State()`).
+See [SUPPORT.md](../SUPPORT.md). Include: language + SDK version, runtime (Node / Bun / Deno + version), adapter and mode (in-memory / Fireweave remote), the full evaluation details (value, reason, errorCode, controlPointMetadata), and runtime state at the time (`runtime.getState()` / `runtime.state()` / `runtime.State()`).

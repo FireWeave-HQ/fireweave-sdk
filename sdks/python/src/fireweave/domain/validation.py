@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from typing import Any, Generic, Mapping, Optional, TypeVar
 
 from .context import ALLOWED_FIREWEAVE_CONTEXT_KEYS, DEFAULT_RESERVED_ATTRIBUTE_KEYS, ContextLimits, EvaluationContext
-from .errors import ConfigurationError, FireweaveError, FlagNotFoundError, InvalidContextError, TargetingKeyMissingError, TypeMismatchError
+from .errors import ConfigurationError, FireweaveError, ControlPointNotFoundError, InvalidContextError, TargetingKeyMissingError, TypeMismatchError
 from .types import FlagType, JsonValue
 
 __all__ = [
@@ -84,26 +84,26 @@ def validate_control_point_key(key: Any) -> Validated[str]:
     (spec/control-points.md rule 1, the first check in the fixed order).
 
     No taxonomy kind names "malformed key" explicitly (the return-discipline
-    table's closest row is "key unknown to the backend" -> FlagNotFound): a
+    table's closest row is "key unknown to the backend" -> ControlPointNotFound): a
     key that can never identify a flag is treated the same as one the backend
-    doesn't recognise, so this maps to FlagNotFound too.
+    doesn't recognise, so this maps to ControlPointNotFound too.
 
     Controller-ruled interim mapping (carried over from the node reference,
     Task 3 review): the 15-kind taxonomy in errors.schema.json is frozen at
     exactly 15 entries, InvalidContext is textually scoped to the evaluation
     *context* (not the key), and the schema already maps another non-literal
-    case — quota-limited responses — onto FlagNotFound rather than adding a
-    kind for it. FlagNotFound is therefore the least-wrong existing kind, not
+    case — quota-limited responses — onto ControlPointNotFound rather than adding a
+    kind for it. ControlPointNotFound is therefore the least-wrong existing kind, not
     a literal fit. Other-language implementations copying node as the
     reference SHOULD use the same mapping rather than each independently
     guessing a different one.
     """
     if not isinstance(key, str) or len(key) == 0:
-        return _fail(FlagNotFoundError("control point key must be a non-empty string"))
+        return _fail(ControlPointNotFoundError("control point key must be a non-empty string"))
     if len(key) > _MAX_CONTROL_POINT_KEY_LENGTH:
-        return _fail(FlagNotFoundError("control point key exceeds maximum length"))
+        return _fail(ControlPointNotFoundError("control point key exceeds maximum length"))
     if _has_control_characters(key):
-        return _fail(FlagNotFoundError("control point key contains control characters"))
+        return _fail(ControlPointNotFoundError("control point key contains control characters"))
     return _ok(key)
 
 

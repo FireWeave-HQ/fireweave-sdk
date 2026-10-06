@@ -5,7 +5,7 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-old": {
         "type": "boolean",
         "enabled": true,
@@ -14,7 +14,7 @@
       }
     },
     "replacement": {
-      "flags": {
+      "controlPoints": {
         "fw-new": {
           "type": "boolean",
           "enabled": true,
@@ -27,7 +27,7 @@
   "when": {
     "operation": "replaceProvider",
     "thenEvaluate": {
-      "flagKey": "fw-new",
+      "controlPointKey": "fw-new",
       "flagType": "boolean",
       "defaultValue": false,
       "invocationContext": {

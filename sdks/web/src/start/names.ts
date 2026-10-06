@@ -48,8 +48,8 @@ export const STORAGE_KEYS = Object.freeze({
   deviceRegistered: 'fireweave.device-registered',
 });
 
-/** Where the flags object lives by convention; named in warnings. */
-export const FLAGS_FILE = 'src/fireweave/flags.ts';
+/** Where the control-points object lives by convention; named in warnings. */
+export const CONTROL_POINTS_FILE = 'src/fireweave/control-points.ts';
 
 /** The identifier the build helpers define and the browser reads behind a typeof guard. */
 export const INJECTED_CONFIG_NAME = '__FIREWEAVE_WEB_CONFIG__';

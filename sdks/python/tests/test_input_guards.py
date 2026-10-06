@@ -24,7 +24,7 @@ def _remote(calls):
         calls.append(body)
         if url.endswith("/v1/targets/register"):
             return 200, {"ok": True}
-        return 200, {"decisions": [{"flagKey": k, "value": True, "found": True} for k in body["flagKeys"]]}
+        return 200, {"decisions": [{"controlPointKey": k, "value": True, "found": True} for k in body["controlPointKeys"]]}
 
     return init_fireweave(
         mode="remote", api_key="project-api-key_guards", api_url="http://127.0.0.1:1", transport=transport
@@ -71,7 +71,7 @@ def test_a_bad_context_is_invalid_context_on_every_read(client_and_calls, method
     result = getattr(client.control_points, method)("x", default, context)
     if details:
         assert (result.value, result.reason, result.error_kind) == (default, "ERROR", ErrorKind.INVALID_CONTEXT)
-        assert result.flag_metadata == {"fireweave.errorKind": "InvalidContext"}
+        assert result.control_point_metadata == {"fireweave.errorKind": "InvalidContext"}
     else:
         assert result == default
     assert calls == []  # nothing reached the backend

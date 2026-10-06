@@ -18,12 +18,12 @@ public final class StartStatus {
     private final String endpointSource;
     private final String keySource;
     private final String environment;
-    private final int flagCount;
+    private final int controlPointCount;
     private final String error;
     private final ErrorKind lastErrorKind;
 
     StartStatus(StartState state, Mode mode, String modeSource, SdkChannel channel, String sdkVersion,
-                String host, String endpointSource, String keySource, String environment, int flagCount,
+                String host, String endpointSource, String keySource, String environment, int controlPointCount,
                 String error, ErrorKind lastErrorKind) {
         this.state = state;
         this.mode = mode;
@@ -34,7 +34,7 @@ public final class StartStatus {
         this.endpointSource = endpointSource;
         this.keySource = keySource;
         this.environment = environment;
-        this.flagCount = flagCount;
+        this.controlPointCount = controlPointCount;
         this.error = error;
         this.lastErrorKind = lastErrorKind;
     }
@@ -84,8 +84,8 @@ public final class StartStatus {
         return environment;
     }
 
-    public int flagCount() {
-        return flagCount;
+    public int controlPointCount() {
+        return controlPointCount;
     }
 
     /** Why start failed, when it did (already redacted); null otherwise. */
@@ -115,7 +115,7 @@ public final class StartStatus {
                 + ", endpointSource=" + endpointSource
                 + ", keySource=" + keySource
                 + ", environment=" + environment
-                + ", flagCount=" + flagCount
+                + ", controlPointCount=" + controlPointCount
                 + ", error=" + error
                 + ", lastErrorKind=" + lastErrorKind + "}";
     }

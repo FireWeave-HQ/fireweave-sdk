@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 from fireweave import ConfigurationError, assert_host_allowed
 
 from ._env import EnvReader
-from ._flags import FlagDefinition, normalize_flags
+from ._control_points import ControlPointDefinition, normalize_control_points
 from ._names import (
     CHANNEL_URLS,
     DEV_ENVIRONMENTS,
@@ -43,7 +43,7 @@ class ResolvedStart:
     key_source: str
     channel: str
     sdk_version: str
-    flags: Dict[str, FlagDefinition] = field(default_factory=dict)
+    control_points: Dict[str, ControlPointDefinition] = field(default_factory=dict)
     #: Remote only.
     url: Optional[str] = None
     url_source: Optional[str] = None
@@ -182,7 +182,7 @@ def resolve_start(
     environment: Any = None,
     url: Any = None,
     key: Any = None,
-    flags: Any = None,
+    control_points: Any = None,
 ) -> ResolvedStart:
     """Resolve ``start()`` options against the environment.
 
@@ -190,8 +190,8 @@ def resolve_start(
     fault, never its value.
     """
     warnings: List[str] = []
-    normalized = normalize_flags(flags)
-    base: Dict[str, Any] = {"flags": normalized, "channel": channel, "sdk_version": sdk_version}
+    normalized = normalize_control_points(control_points)
+    base: Dict[str, Any] = {"control_points": normalized, "channel": channel, "sdk_version": sdk_version}
 
     if mode is not None and mode not in ("remote", "local"):
         raise _config_error("[fireweave] start(mode=...) must be 'remote' or 'local'.")

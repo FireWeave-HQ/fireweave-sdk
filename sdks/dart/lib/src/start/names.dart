@@ -62,5 +62,5 @@ const String browserKeyPrefix = 'fw_public_';
 /// The server-family key prefix, named in the client's "server key" message.
 const String serverKeyPrefix = 'project-api-key_';
 
-/// Where the flags map lives by convention; named in warnings.
-const String flagsFile = 'lib/fireweave/flags.dart';
+/// Where the control-points map lives by convention; named in warnings.
+const String controlPointsFile = 'lib/fireweave/control_points.dart';

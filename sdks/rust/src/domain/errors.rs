@@ -18,15 +18,15 @@
 //! (`spec/control-points.md` "Scope of v1" forbids the latter, not the
 //! shared error-code spelling).
 
-/// `flagMetadata` key carrying the canonical Fireweave kind on error
-/// decisions (`spec/errors.schema.json` `rules.flagMetadataErrorKindKey`).
-pub const FLAG_METADATA_ERROR_KIND_KEY: &str = "fireweave.errorKind";
+/// `controlPointMetadata` key carrying the canonical Fireweave kind on error
+/// decisions (`spec/errors.schema.json` `rules.controlPointMetadataErrorKindKey`).
+pub const CONTROL_POINT_METADATA_ERROR_KIND_KEY: &str = "fireweave.errorKind";
 
 /// Canonical PascalCase error kinds (`spec/errors.schema.json`); exactly 15.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ErrorKind {
     NotReady,
-    FlagNotFound,
+    ControlPointNotFound,
     TypeMismatch,
     InvalidContext,
     Authentication,
@@ -47,7 +47,7 @@ impl ErrorKind {
     pub fn as_str(&self) -> &'static str {
         match self {
             ErrorKind::NotReady => "NotReady",
-            ErrorKind::FlagNotFound => "FlagNotFound",
+            ErrorKind::ControlPointNotFound => "ControlPointNotFound",
             ErrorKind::TypeMismatch => "TypeMismatch",
             ErrorKind::InvalidContext => "InvalidContext",
             ErrorKind::Authentication => "Authentication",
@@ -68,7 +68,7 @@ impl ErrorKind {
     pub fn default_message(&self) -> &'static str {
         match self {
             ErrorKind::NotReady => "provider not ready",
-            ErrorKind::FlagNotFound => "flag not found",
+            ErrorKind::ControlPointNotFound => "flag not found",
             ErrorKind::TypeMismatch => "flag type mismatch",
             ErrorKind::InvalidContext => "invalid evaluation context",
             ErrorKind::Authentication => "authentication failed",
@@ -106,7 +106,7 @@ impl ErrorKind {
     fn base_openfeature_error_code(&self) -> &'static str {
         match self {
             ErrorKind::NotReady => "PROVIDER_NOT_READY",
-            ErrorKind::FlagNotFound => "FLAG_NOT_FOUND",
+            ErrorKind::ControlPointNotFound => "FLAG_NOT_FOUND",
             ErrorKind::TypeMismatch => "TYPE_MISMATCH",
             ErrorKind::InvalidContext => "INVALID_CONTEXT",
             ErrorKind::Authentication => "GENERAL",
@@ -138,7 +138,7 @@ impl std::fmt::Display for ErrorKind {
 /// booleans thread the subtype/behavioral flags the reference SDKs model as
 /// constructor keyword args (python) / dedicated struct fields (go):
 ///
-/// - `quota_limited` — only meaningful on `FlagNotFound`: the backend
+/// - `quota_limited` — only meaningful on `ControlPointNotFound`: the backend
 ///   reported quota limiting for this evaluation
 ///   (`spec/decision.schema.json` `standardMetadataKeys`).
 /// - `init_fatal` — only meaningful on `Configuration`: whether this
@@ -180,11 +180,11 @@ impl FireweaveError {
         }
     }
 
-    /// `FlagNotFound`, optionally noting the backend reported quota limiting
+    /// `ControlPointNotFound`, optionally noting the backend reported quota limiting
     /// (`contracts/errors.json`: "quota-limited responses resolve as
-    /// FlagNotFound with fireweave.quotaLimited metadata").
+    /// ControlPointNotFound with fireweave.quotaLimited metadata").
     pub fn flag_not_found(quota_limited: bool) -> Self {
-        let mut err = FireweaveError::new(ErrorKind::FlagNotFound);
+        let mut err = FireweaveError::new(ErrorKind::ControlPointNotFound);
         err.quota_limited = quota_limited;
         err
     }
@@ -532,7 +532,7 @@ mod tests {
     fn error_kind_taxonomy_has_fifteen_members() {
         let all = [
             ErrorKind::NotReady,
-            ErrorKind::FlagNotFound,
+            ErrorKind::ControlPointNotFound,
             ErrorKind::TypeMismatch,
             ErrorKind::InvalidContext,
             ErrorKind::Authentication,

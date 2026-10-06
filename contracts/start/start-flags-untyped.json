@@ -12,8 +12,8 @@
     {
       "name": "non-boolean-local-rejected",
       "when": {
-        "operation": "defineFlags",
-        "flags": {
+        "operation": "defineControlPoints",
+        "controlPoints": {
           "new-checkout": {
             "local": "yes"
           }
@@ -28,8 +28,8 @@
     {
       "name": "missing-local-rejected",
       "when": {
-        "operation": "defineFlags",
-        "flags": {
+        "operation": "defineControlPoints",
+        "controlPoints": {
           "new-checkout": {}
         }
       },
@@ -42,8 +42,8 @@
     {
       "name": "non-string-description-rejected",
       "when": {
-        "operation": "defineFlags",
-        "flags": {
+        "operation": "defineControlPoints",
+        "controlPoints": {
           "new-checkout": {
             "local": true,
             "description": 5

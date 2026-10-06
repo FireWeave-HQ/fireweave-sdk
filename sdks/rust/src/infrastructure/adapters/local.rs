@@ -16,7 +16,7 @@
 //!   into the caller's own default with reason `DEFAULT` — not an error
 //!   (`spec/modes.md` "Behaviour per mode": local's unknown-key row is
 //!   deliberately `default`/`DEFAULT`, unlike remote's
-//!   `default`/`ERROR`/`FlagNotFound`).
+//!   `default`/`ERROR`/`ControlPointNotFound`).
 
 use std::collections::HashMap;
 use std::sync::{Mutex, RwLock};
@@ -94,16 +94,16 @@ impl BackendAdapter for FireweaveLocalAdapter {
     /// A miss returns `matched: false` — the strict, typed seam
     /// `FireweaveRuntime::decision_from_resolution` reads to return the
     /// caller's default with reason `DEFAULT` instead of falling through
-    /// to the generic FlagNotFound/ERROR path. This adapter never returns
+    /// to the generic ControlPointNotFound/ERROR path. This adapter never returns
     /// `Err` on a miss — that would be indistinguishable, from the
     /// runtime's perspective, from a genuine backend failure, and would
     /// produce the wrong (ERROR) reason.
     fn resolve(
         &self,
-        flag_key: &str,
+        control_point_key: &str,
         _context: &EvaluationContext,
     ) -> Result<FlagResolution, FireweaveError> {
-        match self.dev_flags.get(flag_key) {
+        match self.dev_flags.get(control_point_key) {
             None => Ok(FlagResolution::miss()),
             Some(&override_value) => Ok(FlagResolution {
                 value: JsonValue::Bool(override_value),

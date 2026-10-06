@@ -5,7 +5,7 @@
   "tags": ["context", "identity", "events"],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "web-gated": {
         "type": "boolean",
         "enabled": true,
@@ -16,7 +16,7 @@
   },
   "when": {
     "operation": "setContextThenEvaluate",
-    "flagKey": "web-gated",
+    "controlPointKey": "web-gated",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": { "targetingKey": "user_web_1" },

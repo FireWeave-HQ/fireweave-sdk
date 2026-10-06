@@ -13,14 +13,14 @@
 ///   (`contracts/errors.json` `rules.redaction`); canonical default
 ///   messages never echo credentials in the first place.
 
-/// `flagMetadata` key carrying the canonical Fireweave kind on error
-/// decisions (`spec/errors.schema.json` `rules.flagMetadataErrorKindKey`).
-public let flagMetadataErrorKindKey = "fireweave.errorKind"
+/// `controlPointMetadata` key carrying the canonical Fireweave kind on error
+/// decisions (`spec/errors.schema.json` `rules.controlPointMetadataErrorKindKey`).
+public let controlPointMetadataErrorKindKey = "fireweave.errorKind"
 
 /// Canonical PascalCase error kinds (`spec/errors.schema.json`); exactly 15.
 public enum ErrorKind: String, Sendable, Equatable, CaseIterable {
   case notReady = "NotReady"
-  case flagNotFound = "FlagNotFound"
+  case controlPointNotFound = "ControlPointNotFound"
   case typeMismatch = "TypeMismatch"
   case invalidContext = "InvalidContext"
   case authentication = "Authentication"
@@ -39,7 +39,7 @@ public enum ErrorKind: String, Sendable, Equatable, CaseIterable {
   var defaultMessage: String {
     switch self {
     case .notReady: return "provider not ready"
-    case .flagNotFound: return "flag not found"
+    case .controlPointNotFound: return "flag not found"
     case .typeMismatch: return "flag type mismatch"
     case .invalidContext: return "invalid evaluation context"
     case .authentication: return "authentication failed"
@@ -74,7 +74,7 @@ public enum ErrorKind: String, Sendable, Equatable, CaseIterable {
   fileprivate var baseOpenFeatureErrorCode: String {
     switch self {
     case .notReady: return "PROVIDER_NOT_READY"
-    case .flagNotFound: return "FLAG_NOT_FOUND"
+    case .controlPointNotFound: return "FLAG_NOT_FOUND"
     case .typeMismatch: return "TYPE_MISMATCH"
     case .invalidContext: return "INVALID_CONTEXT"
     case .authentication, .authorization, .rateLimited, .timeout, .network,
@@ -95,7 +95,7 @@ public enum ErrorKind: String, Sendable, Equatable, CaseIterable {
 /// booleans thread the subtype/behavioral flags the reference SDKs model as
 /// constructor keyword args (python) / dedicated struct fields (go/rust):
 ///
-/// - `quotaLimited` — only meaningful on `.flagNotFound`: the backend
+/// - `quotaLimited` — only meaningful on `.controlPointNotFound`: the backend
 ///   reported quota limiting for this evaluation
 ///   (`spec/decision.schema.json` `standardMetadataKeys`).
 /// - `initFatal` — only meaningful on `.configuration`: whether this
@@ -126,11 +126,11 @@ public struct FireweaveError: Error, Sendable, Equatable {
     self.targetingKeyMissing = targetingKeyMissing
   }
 
-  /// `.flagNotFound`, optionally noting the backend reported quota
+  /// `.controlPointNotFound`, optionally noting the backend reported quota
   /// limiting (`contracts/errors.json`: "quota-limited responses resolve
-  /// as FlagNotFound with fireweave.quotaLimited metadata").
-  public static func flagNotFound(quotaLimited: Bool = false) -> FireweaveError {
-    FireweaveError(kind: .flagNotFound, quotaLimited: quotaLimited)
+  /// as ControlPointNotFound with fireweave.quotaLimited metadata").
+  public static func controlPointNotFound(quotaLimited: Bool = false) -> FireweaveError {
+    FireweaveError(kind: .controlPointNotFound, quotaLimited: quotaLimited)
   }
 
   /// `.invalidContext` subtype: missing targeting key

@@ -79,7 +79,7 @@ func remoteDiagnosis(_ failure: RemoteFailure, config: ResolvedStart) -> RemoteD
       "fw-server: check the endpoint. \(serve)."
     )
     return RemoteDiagnosis(group: "unexpected-response", line: line)
-  case .notReady, .flagNotFound, .typeMismatch, .invalidContext, .unsupportedCapability,
+  case .notReady, .controlPointNotFound, .typeMismatch, .invalidContext, .unsupportedCapability,
     .configuration, .alreadyClosed, .internalError:
     return nil
   }

@@ -169,7 +169,7 @@ func TestTheSignalIsOncePerProcessAcrossARestart(t *testing.T) {
 // Local mode never talks to fw-server, so nothing is signalled.
 func TestLocalModeNeverSignals(t *testing.T) {
 	rec, log := fresh(t)
-	mustStart(t, Options{Mode: ModeLocal, Env: noVars, Log: log, Flags: Flags{"new-checkout": {Local: true}}})
+	mustStart(t, Options{Mode: ModeLocal, Env: noVars, Log: log, ControlPoints: LocalControlPoints{"new-checkout": {Local: true}}})
 	ControlPoints().GetBooleanValue("new-checkout", false, For("user-1"))
 	ControlPoints().GetBooleanValue("missing", false, nil)
 	if k := Status().LastErrorKind; k != "" {

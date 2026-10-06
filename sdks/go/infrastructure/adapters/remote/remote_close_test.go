@@ -26,7 +26,7 @@ func evaluateServer(t *testing.T) *httptest.Server {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"decisions": []map[string]any{{"flagKey": "checkout-v2", "value": true, "reason": "TARGETING_MATCH", "found": true}},
+			"decisions": []map[string]any{{"controlPointKey": "checkout-v2", "value": true, "reason": "TARGETING_MATCH", "found": true}},
 		})
 	}))
 	t.Cleanup(srv.Close)
@@ -40,10 +40,10 @@ func TestRemoteCloseDuringConcurrentReadsIsRaceFree(t *testing.T) {
 		t.Fatal(err)
 	}
 	req := domain.ResolveRequest{
-		FlagKey:      "checkout-v2",
-		Type:         domain.FlagTypeBoolean,
-		DefaultValue: false,
-		Context:      domain.NewEvaluationContext("user-1", nil),
+		ControlPointKey: "checkout-v2",
+		Type:            domain.FlagTypeBoolean,
+		DefaultValue:    false,
+		Context:         domain.NewEvaluationContext("user-1", nil),
 	}
 
 	var (
@@ -103,7 +103,7 @@ func TestRemoteCloseReleasesIdleConnections(t *testing.T) {
 	)
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"decisions": []map[string]any{{"flagKey": "checkout-v2", "value": true, "reason": "TARGETING_MATCH", "found": true}},
+			"decisions": []map[string]any{{"controlPointKey": "checkout-v2", "value": true, "reason": "TARGETING_MATCH", "found": true}},
 		})
 	}))
 	srv.Config.ConnState = func(_ net.Conn, s http.ConnState) {
@@ -124,7 +124,7 @@ func TestRemoteCloseReleasesIdleConnections(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := a.Resolve(context.Background(), domain.ResolveRequest{
-		FlagKey: "checkout-v2", Type: domain.FlagTypeBoolean, DefaultValue: false,
+		ControlPointKey: "checkout-v2", Type: domain.FlagTypeBoolean, DefaultValue: false,
 		Context: domain.NewEvaluationContext("user-1", nil),
 	})
 	if d.Error != nil {

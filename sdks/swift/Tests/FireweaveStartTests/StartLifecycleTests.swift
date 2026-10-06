@@ -54,8 +54,8 @@ struct StartLifecycleTests {
   @Test func localModeAnswersFromTheFirstReadExactlyAsTheCoreDoes() async throws {
     let log = LogCollector()
     let handle = server()
-    let flags: FireweaveFlags = ["new-checkout": true, "old-banner": false]
-    try handle.core.start(FireweaveStartOptions(flags: flags, mode: .local, log: log.sink))
+    let controlPoints: FireweaveLocalControlPoints = ["new-checkout": true, "old-banner": false]
+    try handle.core.start(FireweaveStartOptions(controlPoints: controlPoints, mode: .local, log: log.sink))
 
     // Answered synchronously, whether or not the client is installed yet.
     let first = handle.controlPoints.getBooleanDetails("new-checkout", default: false)
@@ -75,7 +75,7 @@ struct StartLifecycleTests {
     let reader = FallbackReader(
       error: FireweaveError(kind: .notReady),
       subject: handle.instanceKey(),
-      seeds: localSeeds(flags)
+      seeds: localSeeds(controlPoints)
     )
     let probes: [(key: String, type: FlagType, fallback: JSONValue)] = [
       ("new-checkout", .boolean, .bool(false)),
@@ -93,7 +93,7 @@ struct StartLifecycleTests {
 
     let localLine = "[fireweave:local] Local mode (startFireweave(mode: .local))"
     #expect(log.count(containing: localLine) == 1)
-    #expect(log.count(containing: "\"unknown\" is not in your flags (FireweaveFlags.swift)") == 1)
+    #expect(log.count(containing: "\"unknown\" is not in your control points (FireweaveLocalControlPoints.swift)") == 1)
     await handle.shutdown()
   }
 
@@ -157,15 +157,15 @@ struct StartLifecycleTests {
 
   @Test func anIdenticalSecondStartIsANoOpAndADifferentOneThrows() async throws {
     let handle = server()
-    let options = FireweaveStartOptions(flags: ["a": true], mode: .local, log: LogCollector().sink)
+    let options = FireweaveStartOptions(controlPoints: ["a": true], mode: .local, log: LogCollector().sink)
     try handle.core.start(options)
     try handle.core.start(options)
 
-    let changed = FireweaveStartOptions(flags: ["a": false], mode: .local)
+    let changed = FireweaveStartOptions(controlPoints: ["a": false], mode: .local)
     let thrown = startError { try handle.core.start(changed) }
     let error = try #require(thrown)
     #expect(error.kind == .configuration)
-    #expect(error.message.contains("(flags)"))
+    #expect(error.message.contains("(controlPoints)"))
     // The running configuration survives a conflicting start.
     #expect(handle.controlPoints.getBooleanValue("a", default: false))
     await handle.shutdown()
@@ -176,7 +176,7 @@ struct StartLifecycleTests {
     let handle = server()
     let log = LogCollector()
     let first = FireweaveStartOptions(
-      flags: ["a": true],
+      controlPoints: ["a": true],
       key: "project-api-key_first",
       log: log.sink,
       transport: transport
@@ -207,7 +207,7 @@ struct StartLifecycleTests {
   @Test func shutdownThenRestartWithAnyConfiguration() async throws {
     let log = LogCollector()
     let handle = server()
-    try handle.core.start(FireweaveStartOptions(flags: ["a": true], mode: .local, log: log.sink))
+    try handle.core.start(FireweaveStartOptions(controlPoints: ["a": true], mode: .local, log: log.sink))
     await handle.ready()
     await handle.shutdown()
 
@@ -274,7 +274,7 @@ struct StartLifecycleTests {
     let env = ["FIREWEAVE_KEY": testProjectKey, "FIREWEAVE_URL": "http://127.0.0.1:9"]
     let handle = server(env: env)
     let options = FireweaveStartOptions(
-      flags: ["a": true],
+      controlPoints: ["a": true],
       log: LogCollector().sink,
       transport: transport
     )
@@ -291,7 +291,7 @@ struct StartLifecycleTests {
     #expect(status.keySource == "FIREWEAVE_KEY")
     #expect(status.channel == .production)
     #expect(status.sdkVersion == "2.2.0")
-    #expect(status.flagCount == 1)
+    #expect(status.controlPointCount == 1)
     #expect(status.problem == nil)
     #expect(!String(describing: status).contains(testProjectKey))
     await handle.shutdown()
@@ -514,15 +514,15 @@ struct GlobalStartTests {
   @Test func startFireweaveReturnsTheProcessWideHandle() async throws {
     await resetFireweaveForTesting()
     let log = LogCollector()
-    let handle = startFireweave(flags: ["new-checkout": true], mode: .local, log: log.sink)
+    let handle = startFireweave(controlPoints: ["new-checkout": true], mode: .local, log: log.sink)
     #expect(handle === fw)
     #expect(fw.controlPoints.getBooleanValue("new-checkout", default: false))
 
-    let again = startFireweave(flags: ["new-checkout": true], mode: .local)
+    let again = startFireweave(controlPoints: ["new-checkout": true], mode: .local)
     #expect(again === fw)
 
     // The throwing form with the same configuration is the same no-op.
-    let same = FireweaveStartOptions(flags: ["new-checkout": true], mode: .local)
+    let same = FireweaveStartOptions(controlPoints: ["new-checkout": true], mode: .local)
     let viaOptions = try startFireweave(same)
     #expect(viaOptions === fw)
 

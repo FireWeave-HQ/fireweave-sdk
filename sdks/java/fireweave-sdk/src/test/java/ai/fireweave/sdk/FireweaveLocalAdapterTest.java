@@ -40,7 +40,7 @@ final class FireweaveLocalAdapterTest {
     /**
      * spec/modes.md "Behaviour per mode": local mode's unknown-key row is
      * default/reason DEFAULT — deliberately NOT an error, unlike remote's
-     * default/ERROR/FlagNotFound (FireweaveRemoteAdapterTest / RegisterTargetTest cover the
+     * default/ERROR/ControlPointNotFound (FireweaveRemoteAdapterTest / RegisterTargetTest cover the
      * remote side). This is the strict, typed seam: a miss RETURNS a plain Decision rather than
      * throwing, so the runtime can never confuse "no decision for this key" with "the backend
      * failed".

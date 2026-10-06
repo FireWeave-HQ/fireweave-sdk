@@ -34,13 +34,13 @@ func newStub(t *testing.T, key string) *stubServer {
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		switch r.URL.Path {
-		case "/v1/flags/evaluate":
+		case "/v1/control-points/evaluate":
 			values := map[string]any{"fw-bool-on": true, "fw-string-theme": "dark"}
 			var decisions []map[string]any
-			for _, k := range body["flagKeys"].([]any) {
+			for _, k := range body["controlPointKeys"].([]any) {
 				key := k.(string)
 				v, found := values[key]
-				decisions = append(decisions, map[string]any{"flagKey": key, "value": v, "found": found, "reason": "TARGETING_MATCH"})
+				decisions = append(decisions, map[string]any{"controlPointKey": key, "value": v, "found": found, "reason": "TARGETING_MATCH"})
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"decisions": decisions})
 		case "/v1/targets/register":
@@ -62,24 +62,24 @@ func TestRemoteStartEvaluatesOverTheWireAndIgnoresFlagValues(t *testing.T) {
 	srv := newStub(t, key)
 
 	mustStart(t, Options{
-		Key:   key,
-		URL:   srv.URL,
-		Env:   envMap(map[string]string{"APP_ENV": "production"}),
-		Flags: Flags{"fw-bool-on": {Local: false}},
-		Log:   log,
+		Key:           key,
+		URL:           srv.URL,
+		Env:           envMap(map[string]string{"APP_ENV": "production"}),
+		ControlPoints: LocalControlPoints{"fw-bool-on": {Local: false}},
+		Log:           log,
 	})
 	if !ControlPoints().GetBooleanValue("fw-bool-on", false, For("user-1")) {
-		t.Fatal("remote value must win over the flags' local value")
+		t.Fatal("remote value must win over the control points' local value")
 	}
 	if got := ControlPoints().GetStringValue("fw-string-theme", "light", For("user-1")); got != "dark" {
 		t.Fatalf("string = %q, want dark", got)
 	}
 	d := ControlPoints().GetBooleanDetails("not-there", false, For("user-1"))
-	if d.Error == nil || d.Error.Kind != fireweave.KindFlagNotFound {
-		t.Fatalf("unknown key in remote mode: %+v, want FlagNotFound", d)
+	if d.Error == nil || d.Error.Kind != fireweave.KindControlPointNotFound {
+		t.Fatalf("unknown key in remote mode: %+v, want ControlPointNotFound", d)
 	}
-	if rec.count(`"not-there" is not in your flags`) != 0 {
-		t.Fatal("the missing-from-flags warning is local mode only")
+	if rec.count(`"not-there" is not in your control points`) != 0 {
+		t.Fatal("the missing-from-controlPoints warning is local mode only")
 	}
 
 	if err := Identify(context.Background(), "user-1", map[string]any{"plan": "pro"}); err != nil {

@@ -32,7 +32,7 @@ use crate::{
 use super::channel::{sdk_channel, sdk_version, Channel};
 use super::env::{lookup_from, process_hostname, Lookup};
 use super::instance::{derive_instance_key, SOURCE_RANDOM};
-use super::names::{ENV_INSTANCE_ID, ENV_KEY, ENV_URL, FLAGS_FILE, OPT_INSTANCE_ID};
+use super::names::{CONTROL_POINTS_FILE, ENV_INSTANCE_ID, ENV_KEY, ENV_URL, OPT_INSTANCE_ID};
 use super::options::{LogFn, StartOptions};
 use super::resolve::{config_error, resolve, BuildInfo, Resolved, MODE_SOURCE_ENVIRONMENT};
 
@@ -65,9 +65,9 @@ impl std::fmt::Display for StartState {
     }
 }
 
-/// What makes two starts "the same". Flags count in local mode only: remote
+/// What makes two starts "the same". Local control points count in local mode only: remote
 /// ignores them, so an implicit env-only start followed by
-/// `start(StartOptions { flags, .. })` under a key is not a conflict. Holds
+/// `start(StartOptions { control_points, .. })` under a key is not a conflict. Holds
 /// the key to compare it; no `Debug`, and `differs` names fields only.
 #[derive(Clone, PartialEq)]
 struct Signature {
@@ -76,7 +76,7 @@ struct Signature {
     key: Option<String>,
     allowed_hosts: Option<Vec<String>>,
     instance_id: Option<String>,
-    flags: Option<BTreeMap<String, bool>>,
+    control_points: Option<BTreeMap<String, bool>>,
 }
 
 fn trimmed_option(value: Option<&str>) -> Option<String> {
@@ -94,7 +94,7 @@ impl Signature {
             key: r.key.clone(),
             allowed_hosts: r.allowed_hosts.clone(),
             instance_id: trimmed_option(instance_id),
-            flags: (r.mode == Mode::Local).then(|| r.flags.local_values()),
+            control_points: (r.mode == Mode::Local).then(|| r.control_points.local_values()),
         }
     }
 
@@ -111,7 +111,10 @@ impl Signature {
         add(self.key != other.key, "key");
         add(self.allowed_hosts != other.allowed_hosts, "allowed hosts");
         add(self.instance_id != other.instance_id, "instance id");
-        add(self.flags != other.flags, "flags");
+        add(
+            self.control_points != other.control_points,
+            "control_points",
+        );
         out
     }
 }
@@ -350,16 +353,19 @@ fn local_line(r: &Resolved) -> String {
     } else {
         "StartOptions.mode Local".to_string()
     };
-    let n = r.flags.len();
-    let noun = if n == 1 { "flag" } else { "flags" };
-    format!("[fireweave:local] Local mode ({why}). Serving {n} {noun} from your flags; nothing is sent to fw-server.")
+    let n = r.control_points.len();
+    let noun = if n == 1 {
+        "control point"
+    } else {
+        "control points"
+    };
+    format!("[fireweave:local] Local mode ({why}). Serving {n} {noun} from your control points; nothing is sent to fw-server.")
 }
 
 fn init_options(r: &Resolved) -> InitOptions {
     match r.mode {
-        Mode::Local => {
-            InitOptions::local_with_control_points(r.flags.local_seeds()).with_log(route_line)
-        }
+        Mode::Local => InitOptions::local_with_control_points(r.control_points.local_seeds())
+            .with_log(route_line),
         Mode::Remote => {
             let options = InitOptions::remote(
                 r.key.clone().unwrap_or_default(),
@@ -392,11 +398,11 @@ fn init_options(r: &Resolved) -> InitOptions {
 /// the option or variable at fault, never a key.
 ///
 /// ```
-/// use fireweave::start::{define_flags, env_map, start, Flag, StartOptions};
+/// use fireweave::start::{define_control_points, env_map, start, LocalControlPoint, StartOptions};
 /// # fireweave::start::reset_for_tests();
 ///
 /// start(StartOptions {
-///     flags: define_flags([("new-checkout", Flag::local(true))]),
+///     control_points: define_control_points([("new-checkout", LocalControlPoint::local(true))]),
 ///     env: Some(env_map([("FIREWEAVE_ENV", "development")])),
 ///     log: Some(std::sync::Arc::new(|_line: &str| {})),
 ///     ..Default::default()
@@ -418,7 +424,7 @@ pub fn start(options: StartOptions) -> Result<(), FireweaveError> {
 /// The running client for one read or registration, starting FireWeave from
 /// the environment if nothing has started it yet. On failure, the error a
 /// read reports instead.
-fn acquire(flag_key: Option<&str>) -> Result<Arc<FireweaveClient>, FireweaveError> {
+fn acquire(control_point_key: Option<&str>) -> Result<Arc<FireweaveClient>, FireweaveError> {
     let (result, lines, log) = {
         let mut st = lock();
         let mut lines = Vec::new();
@@ -428,15 +434,14 @@ fn acquire(flag_key: Option<&str>) -> Result<Arc<FireweaveClient>, FireweaveErro
         }
         let result = match st.state {
             StartState::Ready => {
-                if let Some(key) = flag_key {
-                    let missing = st
-                        .resolved
-                        .as_ref()
-                        .is_some_and(|r| r.mode == Mode::Local && !r.flags.contains_key(key));
+                if let Some(key) = control_point_key {
+                    let missing = st.resolved.as_ref().is_some_and(|r| {
+                        r.mode == Mode::Local && !r.control_points.contains_key(key)
+                    });
                     if missing {
                         st.warn_once(
                             &mut lines,
-                            format!("[fireweave:local] {key:?} is not in your flags ({FLAGS_FILE}), so it gets its default. Add it there to try it locally."),
+                            format!("[fireweave:local] {key:?} is not in your control points ({CONTROL_POINTS_FILE}), so it gets its default. Add it there to try it locally."),
                         );
                     }
                 }
@@ -524,14 +529,14 @@ impl BackendAdapter for Forwarder {
 
     fn resolve(
         &self,
-        flag_key: &str,
+        control_point_key: &str,
         context: &EvaluationContext,
     ) -> Result<FlagResolution, FireweaveError> {
-        let client = acquire(Some(flag_key))?;
+        let client = acquire(Some(control_point_key))?;
         let runtime = client.runtime();
         match runtime.state() {
             LifecycleState::Ready | LifecycleState::Stale => {
-                let resolution = runtime.adapter().resolve(flag_key, context);
+                let resolution = runtime.adapter().resolve(control_point_key, context);
                 if let Err(err) = &resolution {
                     observe_remote(err.kind);
                 }
@@ -733,7 +738,7 @@ pub struct Status {
     pub key_source: Option<String>,
     /// The environment name, when it chose the mode.
     pub environment: Option<String>,
-    pub flag_count: usize,
+    pub control_point_count: usize,
     /// Why start failed, when it did. Already redacted.
     pub error: Option<String>,
     /// The latest failure the started client got back from fw-server that
@@ -765,7 +770,7 @@ pub fn status() -> Status {
         endpoint_source: None,
         key_source: None,
         environment: None,
-        flag_count: 0,
+        control_point_count: 0,
         error: st.err.as_ref().map(|e| e.message.clone()),
         last_error_kind: st.last_error_kind,
     };
@@ -778,7 +783,7 @@ pub fn status() -> Status {
         s.endpoint_source = r.url_source.clone();
         s.key_source = Some(r.key_source.clone());
         s.environment = r.environment.clone();
-        s.flag_count = r.flags.len();
+        s.control_point_count = r.control_points.len();
     }
     s
 }

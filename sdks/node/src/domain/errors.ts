@@ -9,7 +9,7 @@
 
 export type FireweaveErrorKind =
   | 'NotReady'
-  | 'FlagNotFound'
+  | 'ControlPointNotFound'
   | 'TypeMismatch'
   | 'InvalidContext'
   | 'Authentication'
@@ -53,7 +53,7 @@ const spec = (
 
 export const ERROR_TAXONOMY: Readonly<Record<FireweaveErrorKind, ErrorKindSpec>> = Object.freeze({
   NotReady: spec('NotReady', 'PROVIDER_NOT_READY', true, 'transient', 'provider not ready'),
-  FlagNotFound: spec('FlagNotFound', 'FLAG_NOT_FOUND', false, 'permanent', 'flag not found'),
+  ControlPointNotFound: spec('ControlPointNotFound', 'FLAG_NOT_FOUND', false, 'permanent', 'flag not found'),
   TypeMismatch: spec('TypeMismatch', 'TYPE_MISMATCH', false, 'permanent', 'flag type mismatch'),
   InvalidContext: spec('InvalidContext', 'INVALID_CONTEXT', false, 'permanent', 'invalid evaluation context'),
   Authentication: spec('Authentication', 'GENERAL', false, 'permanent', 'authentication failed'),

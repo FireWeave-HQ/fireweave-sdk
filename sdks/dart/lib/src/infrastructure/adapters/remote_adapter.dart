@@ -3,7 +3,7 @@
 /// Real HTTP client (`dart:io` on the VM and Flutter mobile/desktop, the
 /// browser's `fetch` via `dart:js_interop` on the web — both Dart SDK
 /// libraries, no third-party HTTP package) for fw-server
-/// `POST /v1/flags/evaluate` and `POST /v1/targets/register`. Auth:
+/// `POST /v1/control-points/evaluate` and `POST /v1/targets/register`. Auth:
 /// `Authorization: Bearer <apiKey>`.
 /// Speaks only the vendor-neutral Fireweave remote protocol
 /// (`spec/remote-protocol.md`) — no vendor SDK, key, or host ever enters the
@@ -11,7 +11,7 @@
 ///
 /// [prefetch] is the ONE place this adapter does network I/O — never a
 /// per-call `evaluate()`, which is why the read surface can be synchronous.
-/// One `POST /v1/flags/evaluate` fetches every decision for a context in a
+/// One `POST /v1/control-points/evaluate` fetches every decision for a context in a
 /// single round trip; `FireweaveRuntime` then reads the resulting cache
 /// synchronously.
 library;
@@ -60,7 +60,7 @@ class FireweaveRemoteAdapter implements ControlPointsBackendAdapter {
       _timeout = Duration(milliseconds: config.requestTimeoutMs),
       _transport = transport ?? createDefaultHttpTransport();
 
-  static const String _evaluatePath = '/v1/flags/evaluate';
+  static const String _evaluatePath = '/v1/control-points/evaluate';
   static const String _registerTargetPath = '/v1/targets/register';
 
   String _apiUrl;
@@ -181,9 +181,9 @@ class FireweaveRemoteAdapter implements ControlPointsBackendAdapter {
     }
 
     final body = <String, Object?>{'targetingKey': targetingKey};
-    final flagKeys = options?.flagKeys;
-    if (flagKeys != null) {
-      body['flagKeys'] = flagKeys;
+    final controlPointKeys = options?.controlPointKeys;
+    if (controlPointKeys != null) {
+      body['controlPointKeys'] = controlPointKeys;
     }
 
     final attributes = <String, Object?>{};
@@ -226,27 +226,27 @@ class FireweaveRemoteAdapter implements ControlPointsBackendAdapter {
       if (item is! Map) {
         continue;
       }
-      final flagKey = item['flagKey'];
-      if (flagKey is! String) {
+      final controlPointKey = item['controlPointKey'];
+      if (controlPointKey is! String) {
         continue;
       }
       // "found: false" on the wire means genuinely unknown to the backend —
       // leave the key OUT of the batch entirely (this adapter's `missReason`
-      // is null, so an absent key resolves to ERROR/FlagNotFound at read
+      // is null, so an absent key resolves to ERROR/ControlPointNotFound at read
       // time), rather than inserting a `found: false` entry — that shape is
       // reserved for InMemoryAdapter's "conditions didn't match" signal.
       if (item['found'] == false) {
         continue;
       }
-      final meta = item['flagMetadata'];
+      final meta = item['controlPointMetadata'];
       final metaMap = meta is Map ? meta : const <Object?, Object?>{};
       final reason = item['reason'];
       final enabled = item['enabled'];
       final variant = item['variant'];
       final reasonCode = metaMap['fireweave.reasonCode'];
-      final version = metaMap['fireweave.flagVersion'];
-      final vendorFlagId = metaMap['fireweave.vendorFlagId'];
-      result[flagKey] = AdapterResolution(
+      final version = metaMap['fireweave.controlPointVersion'];
+      final vendorControlPointId = metaMap['fireweave.vendorControlPointId'];
+      result[controlPointKey] = AdapterResolution(
         found: true,
         enabled: enabled is bool ? enabled : true,
         value: item['value'],
@@ -254,17 +254,19 @@ class FireweaveRemoteAdapter implements ControlPointsBackendAdapter {
         reason: reason is String ? DecisionReason.fromWireName(reason) : null,
         reasonCode: reasonCode is String ? reasonCode : null,
         version: version is num ? version.toInt() : null,
-        vendorFlagId: vendorFlagId is num ? vendorFlagId.toInt() : null,
+        vendorControlPointId: vendorControlPointId is num
+            ? vendorControlPointId.toInt()
+            : null,
         payload: item['payload'],
         fromCache: false,
       );
     }
     if (quotaLimited && result.isEmpty) {
-      // Quota-limited responses resolve as FlagNotFound with
+      // Quota-limited responses resolve as ControlPointNotFound with
       // fireweave.quotaLimited metadata (`contracts/errors.json`) — surfaced
       // via the thrown error when the WHOLE batch is quota-limited and
       // returned nothing.
-      throw FireweaveError.flagNotFound(quotaLimited: true);
+      throw FireweaveError.controlPointNotFound(quotaLimited: true);
     }
     return result;
   }

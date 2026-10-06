@@ -72,7 +72,7 @@ final class StartResolver {
         String environment;
         String environmentSource;
 
-        Flags flags = Flags.none();
+        LocalControlPoints controlPoints = LocalControlPoints.none();
         SdkChannel channel;
         String sdkVersion;
 
@@ -96,7 +96,7 @@ final class StartResolver {
                             SdkChannel channel) {
         StartOptions opts = options == null ? StartOptions.defaults() : options;
         Resolved r = new Resolved();
-        r.flags = opts.flags();
+        r.controlPoints = opts.controlPoints();
         r.channel = channel;
         r.sdkVersion = sdkVersion;
 

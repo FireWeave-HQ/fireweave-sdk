@@ -11,7 +11,9 @@ void main() {
       expect(decision.reason, DecisionReason.error);
       expect(decision.errorKind, ErrorKind.notReady);
       expect(decision.value, isFalse);
-      expect(decision.flagMetadata, {'fireweave.errorKind': 'NotReady'});
+      expect(decision.controlPointMetadata, {
+        'fireweave.errorKind': 'NotReady',
+      });
     });
 
     test('evaluate after shutdown is AlreadyClosed', () async {
@@ -49,11 +51,11 @@ void main() {
       expect(decision.reason, DecisionReason.targetingMatch);
     });
 
-    test('absent key on InMemoryAdapter is FlagNotFound', () async {
+    test('absent key on InMemoryAdapter is ControlPointNotFound', () async {
       final runtime = FireweaveRuntime(InMemoryAdapter());
       await runtime.initialize(context: EvaluationContext(targetingKey: 't1'));
       final decision = runtime.evaluate('missing', FlagType.boolean, false);
-      expect(decision.errorKind, ErrorKind.flagNotFound);
+      expect(decision.errorKind, ErrorKind.controlPointNotFound);
       expect(decision.errorCode, 'FLAG_NOT_FOUND');
       expect(decision.value, isFalse);
     });
@@ -68,9 +70,9 @@ void main() {
     });
 
     /// A flag PRESENT in the batch whose conditions do not select the caller
-    /// is DEFAULT, never FlagNotFound — for EVERY adapter, not just local.
+    /// is DEFAULT, never ControlPointNotFound — for EVERY adapter, not just local.
     test(
-      'present but non-matching condition is DEFAULT, not FlagNotFound',
+      'present but non-matching condition is DEFAULT, not ControlPointNotFound',
       () async {
         final adapter = InMemoryAdapter.fromFlagsJson({
           'gated': {
@@ -108,9 +110,9 @@ void main() {
         context: EvaluationContext(targetingKey: 't1'),
       );
       final decisionBoth = runtimeBoth.evaluate('f', FlagType.boolean, false);
-      expect(decisionBoth.flagMetadata, {
-        'fireweave.flagVersion': 3,
-        'fireweave.vendorFlagId': 1001,
+      expect(decisionBoth.controlPointMetadata, {
+        'fireweave.controlPointVersion': 3,
+        'fireweave.vendorControlPointId': 1001,
         'fireweave.reasonCode': 'condition_match',
       });
 
@@ -128,11 +130,13 @@ void main() {
       );
       final decisionOne = runtimeOne.evaluate('f', FlagType.boolean, false);
       expect(
-        decisionOne.flagMetadata.containsKey('fireweave.vendorFlagId'),
+        decisionOne.controlPointMetadata.containsKey(
+          'fireweave.vendorControlPointId',
+        ),
         isFalse,
       );
       expect(
-        decisionOne.flagMetadata.containsKey('fireweave.reasonCode'),
+        decisionOne.controlPointMetadata.containsKey('fireweave.reasonCode'),
         isFalse,
       );
     });
@@ -190,7 +194,10 @@ void main() {
         final runtime = FireweaveRuntime(adapter);
         await runtime.initialize();
         final without = runtime.evaluate('f', FlagType.boolean, false);
-        expect(without.flagMetadata.containsKey('fireweave.payload'), isFalse);
+        expect(
+          without.controlPointMetadata.containsKey('fireweave.payload'),
+          isFalse,
+        );
         final with_ = runtime.evaluate(
           'f',
           FlagType.boolean,
@@ -198,7 +205,7 @@ void main() {
           options: const EvaluateOptions(includePayload: true),
         );
         expect(
-          with_.flagMetadata['fireweave.payload'],
+          with_.controlPointMetadata['fireweave.payload'],
           '{"maxRetries":2,"rolloutId":"r1"}',
         );
       },
@@ -414,7 +421,7 @@ void main() {
         final decision = runtime.evaluate('anything', FlagType.boolean, false);
         expect(decision.reason, DecisionReason.stale);
         expect(decision.variant, 'default');
-        expect(decision.flagMetadata, {'fireweave.stale': true});
+        expect(decision.controlPointMetadata, {'fireweave.stale': true});
       },
     );
 

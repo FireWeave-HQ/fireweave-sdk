@@ -30,10 +30,9 @@ type surfaceMethod struct {
 
 type surfaceDescriptor struct {
 	Namespace struct {
-		Documented             string            `json:"documented"`
-		Casing                 map[string]string `json:"casing"`
-		DeprecatedAlias        string            `json:"deprecatedAlias"`
-		AliasMustShareIdentity bool              `json:"aliasMustShareIdentity"`
+		Documented   string            `json:"documented"`
+		Casing       map[string]string `json:"casing"`
+		RemovedAlias string            `json:"removedAlias"`
 	} `json:"namespace"`
 	Methods []surfaceMethod `json:"methods"`
 	Client  struct {
@@ -119,18 +118,14 @@ func TestControlPointsExposesAllNineMethodsAtDescriptorArity(t *testing.T) {
 	}
 }
 
-func TestTheDeprecatedFlagsAliasSharesIdentityWithControlPoints(t *testing.T) {
+func TestTheFlagsAliasIsGone(t *testing.T) {
 	d := loadDescriptor(t)
-	if d.Namespace.DeprecatedAlias != "flags" {
-		t.Fatalf("deprecatedAlias = %q, want flags", d.Namespace.DeprecatedAlias)
+	if d.Namespace.RemovedAlias != "flags" {
+		t.Fatalf("removedAlias = %q, want flags", d.Namespace.RemovedAlias)
 	}
-	if !d.Namespace.AliasMustShareIdentity {
-		t.Fatal("aliasMustShareIdentity must be true")
-	}
-
 	c := testClient(t)
-	if c.ControlPoints() != c.Flags() {
-		t.Fatal("Client.Flags() must return the identical *ControlPoints as Client.ControlPoints()")
+	if _, ok := reflect.TypeOf(c).MethodByName("Flags"); ok {
+		t.Fatal("Client.Flags() was removed in 3.0.0 (ADR-0013)")
 	}
 }
 
@@ -145,8 +140,8 @@ func TestDetailsReturnsADecisionValueReturnsTheBareValue(t *testing.T) {
 	if details.Value != false {
 		t.Errorf("details.Value = %v, want false", details.Value)
 	}
-	if details.FlagKey != "absent" {
-		t.Errorf("details.FlagKey = %q, want absent", details.FlagKey)
+	if details.ControlPointKey != "absent" {
+		t.Errorf("details.ControlPointKey = %q, want absent", details.ControlPointKey)
 	}
 	if details.Reason == "" {
 		t.Error("details.Reason must be set")

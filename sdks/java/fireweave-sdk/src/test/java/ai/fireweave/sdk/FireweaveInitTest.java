@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * — any behavioural difference between modes lives entirely in the adapter seam (spec/modes.md
  * "Behaviour per mode"), never in a mode check downstream of it. That table has one deliberately
  * DIVERGENT row — an unknown control point resolves default/DEFAULT in local mode but
- * default/ERROR/FlagNotFound in remote — asserted per-mode below, not as a shared shape.
+ * default/ERROR/ControlPointNotFound in remote — asserted per-mode below, not as a shared shape.
  * {@code registerTarget} genuinely IS shape-identical across modes (resolves ok:true, never
  * throws), which is also asserted below. The registerTarget wiring itself (recording + the
  * {@code [fireweave:local]} trace) is NOT re-implemented here — it is
@@ -156,9 +156,9 @@ final class FireweaveInitTest {
     void remoteModeSelectsRemoteAdapterAndEvaluatesOverEvaluatePath() throws Exception {
         List<String> lastAuth = new ArrayList<>();
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/v1/flags/evaluate", exchange -> {
+        server.createContext("/v1/control-points/evaluate", exchange -> {
             lastAuth.add(exchange.getRequestHeaders().getFirst("Authorization"));
-            byte[] resp = ("{\"decisions\":[{\"flagKey\":\"checkout-v2\",\"value\":true,"
+            byte[] resp = ("{\"decisions\":[{\"controlPointKey\":\"checkout-v2\",\"value\":true,"
                     + "\"reason\":\"TARGETING_MATCH\",\"found\":true,\"enabled\":true}]}")
                     .getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
@@ -187,7 +187,7 @@ final class FireweaveInitTest {
     @Test
     void remoteModeExplicitAllowedHostsOverridePermitsASelfHostedApiUrl() throws Exception {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/v1/flags/evaluate", exchange -> {
+        server.createContext("/v1/control-points/evaluate", exchange -> {
             byte[] resp = "{\"decisions\":[]}".getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(200, resp.length);
             try (OutputStream os = exchange.getResponseBody()) {
@@ -213,7 +213,7 @@ final class FireweaveInitTest {
     @Test
     void readsNeverThrowInEitherModeButTheUnknownKeyRowIsDeliberatelyDivergent() throws Exception {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/v1/flags/evaluate", exchange -> {
+        server.createContext("/v1/control-points/evaluate", exchange -> {
             byte[] resp = "{\"decisions\":[]}".getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(200, resp.length);
             try (OutputStream os = exchange.getResponseBody()) {
@@ -237,7 +237,7 @@ final class FireweaveInitTest {
                 EvaluationContext.builder().targetingKey("user-1").build());
         assertEquals(false, remoteDecision.value().asBoolean());
         assertEquals("ERROR", remoteDecision.reason());
-        assertEquals(ErrorKind.FlagNotFound, remoteDecision.error().kind());
+        assertEquals(ErrorKind.ControlPointNotFound, remoteDecision.error().kind());
 
         local.close();
         remote.close();

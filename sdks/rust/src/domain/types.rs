@@ -12,14 +12,14 @@
 /// hazard to guard against.
 pub type JsonValue = serde_json::Value;
 
-/// `flagMetadata` values per `spec/decision.schema.json`: `bool | string | number`.
+/// `controlPointMetadata` values per `spec/decision.schema.json`: `bool | string | number`.
 ///
 /// `serde_json::Map`'s default (no `preserve_order` feature) backing store
 /// is a `BTreeMap`, so keys serialize in sorted order — exactly the
 /// deterministic ordering `spec/decision.schema.json`'s `fireweave.payload`
 /// stable-JSON-string requirement needs (see
 /// `application::runtime::stable_json`), with no extra dependency.
-pub type FlagMetadata = serde_json::Map<String, JsonValue>;
+pub type ControlPointMetadata = serde_json::Map<String, JsonValue>;
 
 /// Requested flag value type for typed evaluation
 /// (`spec/control-points.md` "The nine methods"). Exactly four members:

@@ -22,24 +22,24 @@ Supported Java: **11+** (CI: Temurin 11 and 25). Do not raise the floor without 
 
 Most apps need only this ([ADR-0012](../../docs/adr/0012-start-profile.md)). Package
 `ai.fireweave.sdk.start` (in the same `fireweave-sdk` artifact) is an opt-in layer over the
-unchanged core: one flags class, one call in `main`, then reads from anywhere.
+unchanged core: one control-points class, one call in `main`, then reads from anywhere.
 
 ```java
-// FireweaveFlags.java: every control point the app reads, with its local value
-import ai.fireweave.sdk.start.Flag;
-import ai.fireweave.sdk.start.Flags;
+// FireweaveControlPoints.java: every control point the app reads, with its local value
+import ai.fireweave.sdk.start.LocalControlPoint;
+import ai.fireweave.sdk.start.LocalControlPoints;
 import ai.fireweave.sdk.start.Fw;
 
-public final class FireweaveFlags {
-    public static final Flags FLAGS = Fw.defineFlags(Map.of(
-            "new-checkout", Flag.local(true, "new checkout flow"))); // served only in local mode
+public final class FireweaveControlPoints {
+    public static final LocalControlPoints CONTROL_POINTS = Fw.defineControlPoints(Map.of(
+            "new-checkout", LocalControlPoint.local(true, "new checkout flow"))); // served only in local mode
 }
 ```
 
 ```java
 // main(): first thing, after the app's own config loading
 public static void main(String[] args) {
-    Fw.start(StartOptions.builder().flags(FireweaveFlags.FLAGS).build());
+    Fw.start(StartOptions.builder().controlPoints(FireweaveControlPoints.CONTROL_POINTS).build());
     serve();
 }
 ```
@@ -65,7 +65,7 @@ for all of 2.x), then default. Empty and whitespace-only values count as unset.
 
 | Option | Env var | Default | What it does |
 | --- | --- | --- | --- |
-| `flags` | — | none | Local values per control point (`Fw.defineFlags`, keys checked with the core's key rule). Ignored in remote mode. |
+| `controlPoints` | — | none | Local values per control point (`Fw.defineControlPoints`, keys checked with the core's key rule). Ignored in remote mode. |
 | `mode` | — | inferred | `Mode.REMOTE` or `Mode.LOCAL`. Overrides inference. Remote without a key is a start error; local ignores a key (one warning). |
 | `environment` | `FIREWEAVE_ENV`, `APP_ENV` | — | Environment name used for inference when there is no key and no `mode`. Pass your own, e.g. a deploy-stage setting. `NODE_ENV` and `FW_ENV` are not read. |
 | `url` | `FIREWEAVE_URL` (legacy `FW_API_URL`, `FW_ATTEST_URL`) | from the SDK build | A `-staging.N` artifact calls `staging-app-server.fireweave.ai`; any other version (including `-SNAPSHOT`) calls `app-server.fireweave.ai`. Set it for a self-hosted or local fw-server: https is required except on localhost, credentials, a query or a fragment are refused, and the allowlist becomes that host plus loopback. |
@@ -122,7 +122,7 @@ if (!v.ok()) {
 
 | Module | Contents |
 | --- | --- |
-| `fireweave-sdk` | `Fireweave.init` (the entry point), `FireweaveRuntime`, `FireweaveClient` (`controlPoints()`/`flags()`, `registerTarget`), `FireweaveRemoteAdapter`, `FireweaveLocalAdapter`, canonical types — layered into `ai.fireweave.sdk.{domain,application,infrastructure}`. Zero runtime dependencies. |
+| `fireweave-sdk` | `Fireweave.init` (the entry point), `FireweaveRuntime`, `FireweaveClient` (`controlPoints()`, `registerTarget`), `FireweaveRemoteAdapter`, `FireweaveLocalAdapter`, canonical types — layered into `ai.fireweave.sdk.{domain,application,infrastructure}`. Zero runtime dependencies. |
 | `fireweave-testing` | `InMemoryAdapter` and the conformance runner (not published — `central.skipPublishing=true`). |
 
 ## Direct client (control points)
@@ -154,17 +154,14 @@ runtime.initialize();
 FireweaveClient client = new FireweaveClient(runtime);
 ```
 
-`client.flags()` is the same object as `client.controlPoints()` (ADR-0007). It is `@Deprecated` in
-Javadoc only and is not scheduled for removal. Silent at runtime — no log line, no env gate —
-because the SDK reads no environment variables regardless (spec/modes.md); the deprecation is
-conveyed by Javadoc only.
+The `client.flags()` alias was removed in 3.0.0 (ADR-0013); use `client.controlPoints()`.
 
 ## Local development
 
 No credentials, no network. `FireweaveLocalAdapter` seeds a `Map<String, Boolean>`: a present key
 resolves with reason `STATIC`; an unknown key resolves to the **caller's default** with reason
 `DEFAULT` — never an error, and never a throw (spec/modes.md "Behaviour per mode" — deliberately
-divergent from remote mode's unknown-key row, `default`/`ERROR`/`FlagNotFound`).
+divergent from remote mode's unknown-key row, `default`/`ERROR`/`ControlPointNotFound`).
 
 ```java
 FireweaveClient client = Fireweave.init(InitOptions.local(Map.of("new-checkout", true)));
@@ -185,7 +182,7 @@ FireweaveRuntime runtime = new FireweaveRuntime(config, new FireweaveRemoteAdapt
 runtime.initialize();
 ```
 
-Auth: `Authorization: Bearer <FW_PROJECT_API_KEY>`. Endpoints: `POST /v1/flags/evaluate`, `/v1/targets/register`.
+Auth: `Authorization: Bearer <FW_PROJECT_API_KEY>`. Endpoints: `POST /v1/control-points/evaluate`, `/v1/targets/register`.
 
 ## Lifecycle
 

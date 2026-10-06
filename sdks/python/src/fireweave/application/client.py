@@ -42,8 +42,8 @@ def _failure(err: FireweaveError, degraded: bool = False) -> ExtensionResult:
 
 class _ControlPointsNamespace:
     """Typed evaluation helpers — the nine methods (spec/control-points.md
-    "The nine methods"). Documented as ``client.control_points``;
-    ``client.flags`` is an identical alias retained for compatibility.
+    "The nine methods"), as ``client.control_points``. The ``client.flags``
+    alias was removed in 3.0.0 (ADR-0013).
     """
 
     def __init__(self, runtime: FireweaveRuntime) -> None:
@@ -51,7 +51,7 @@ class _ControlPointsNamespace:
 
     def evaluate(
         self,
-        flag_key: str,
+        control_point_key: str,
         flag_type: FlagType,
         default: Any,
         context: Optional[EvaluationContext] = None,
@@ -65,50 +65,50 @@ class _ControlPointsNamespace:
         ``evaluate(key, type, default, context?, options?)`` across every
         language). ``options.include_payload`` (task-10b item 5) is the one
         real field: it attaches the resolved flag's payload, when any, to
-        ``flag_metadata['fireweave.payload']`` — a deterministic sorted-key
+        ``control_point_metadata['fireweave.payload']`` — a deterministic sorted-key
         JSON string, matching node's ``EvaluateOptions.includePayload``. The
         python control-point surface is synchronous (server SDK — blocking
         I/O like node's ``await`` is fine), so there is no in-flight-call
         `signal` to carry, and v1 reads are side-effect-free by design (no
         per-call exposure opt-in to carry either) — those two remain N/A.
         """
-        return self._runtime.evaluate(flag_key, flag_type, default, context, options)
+        return self._runtime.evaluate(control_point_key, flag_type, default, context, options)
 
-    def get_boolean_value(self, flag_key: str, default: bool, context: Optional[EvaluationContext] = None) -> bool:
-        return self.evaluate(flag_key, FlagType.BOOLEAN, default, context).value
+    def get_boolean_value(self, control_point_key: str, default: bool, context: Optional[EvaluationContext] = None) -> bool:
+        return self.evaluate(control_point_key, FlagType.BOOLEAN, default, context).value
 
-    def get_string_value(self, flag_key: str, default: str, context: Optional[EvaluationContext] = None) -> str:
-        return self.evaluate(flag_key, FlagType.STRING, default, context).value
+    def get_string_value(self, control_point_key: str, default: str, context: Optional[EvaluationContext] = None) -> str:
+        return self.evaluate(control_point_key, FlagType.STRING, default, context).value
 
-    def get_number_value(self, flag_key: str, default: Any, context: Optional[EvaluationContext] = None) -> Any:
-        return self.evaluate(flag_key, FlagType.NUMBER, default, context).value
+    def get_number_value(self, control_point_key: str, default: Any, context: Optional[EvaluationContext] = None) -> Any:
+        return self.evaluate(control_point_key, FlagType.NUMBER, default, context).value
 
     def get_object_value(
-        self, flag_key: str, default: JsonValue, context: Optional[EvaluationContext] = None
+        self, control_point_key: str, default: JsonValue, context: Optional[EvaluationContext] = None
     ) -> JsonValue:
-        return self.evaluate(flag_key, FlagType.OBJECT, default, context).value
+        return self.evaluate(control_point_key, FlagType.OBJECT, default, context).value
 
     def get_boolean_details(
-        self, flag_key: str, default: bool, context: Optional[EvaluationContext] = None
+        self, control_point_key: str, default: bool, context: Optional[EvaluationContext] = None
     ) -> Decision:
-        return self.evaluate(flag_key, FlagType.BOOLEAN, default, context)
+        return self.evaluate(control_point_key, FlagType.BOOLEAN, default, context)
 
     def get_string_details(
-        self, flag_key: str, default: str, context: Optional[EvaluationContext] = None
+        self, control_point_key: str, default: str, context: Optional[EvaluationContext] = None
     ) -> Decision:
-        return self.evaluate(flag_key, FlagType.STRING, default, context)
+        return self.evaluate(control_point_key, FlagType.STRING, default, context)
 
     def get_number_details(
-        self, flag_key: str, default: Any, context: Optional[EvaluationContext] = None
+        self, control_point_key: str, default: Any, context: Optional[EvaluationContext] = None
     ) -> Decision:
-        return self.evaluate(flag_key, FlagType.NUMBER, default, context)
+        return self.evaluate(control_point_key, FlagType.NUMBER, default, context)
 
     def get_object_details(
-        self, flag_key: str, default: JsonValue, context: Optional[EvaluationContext] = None
+        self, control_point_key: str, default: JsonValue, context: Optional[EvaluationContext] = None
     ) -> Decision:
-        return self.evaluate(flag_key, FlagType.OBJECT, default, context)
+        return self.evaluate(control_point_key, FlagType.OBJECT, default, context)
 
-    def get_integer_value(self, flag_key: str, default: int, context: Optional[EvaluationContext] = None) -> int:
+    def get_integer_value(self, control_point_key: str, default: int, context: Optional[EvaluationContext] = None) -> int:
         """Deprecated alias of :meth:`get_number_value`.
 
         spec/control-points.md fixed the method as **number**, not integer
@@ -121,7 +121,7 @@ class _ControlPointsNamespace:
         warning.
         """
         _note_deprecated_get_integer_value()
-        return self.get_number_value(flag_key, default, context)
+        return self.get_number_value(control_point_key, default, context)
 
 
 # Names invoke_capability will dispatch instead of degrading with
@@ -136,21 +136,7 @@ SUPPORTED_CAPABILITIES: FrozenSet[str] = frozenset()
 # wholesale and then ignored. Unconditional (no env gate): the SDK reads no
 # environment variables (spec/modes.md "The SDK reads no environment
 # variables", unscoped).
-_flags_alias_warned = False
 _get_integer_value_warned = False
-
-
-def _note_deprecated_flags_alias() -> None:
-    global _flags_alias_warned
-    if _flags_alias_warned:
-        return
-    _flags_alias_warned = True
-    warnings.warn(
-        "client.flags has been renamed to client.control_points. "
-        "The old name remains fully supported — no migration is required.",
-        DeprecationWarning,
-        stacklevel=3,
-    )
 
 
 def _note_deprecated_get_integer_value() -> None:
@@ -178,17 +164,6 @@ class FireweaveClient:
     def __init__(self, runtime: FireweaveRuntime) -> None:
         self._runtime = runtime
         self.control_points = _ControlPointsNamespace(runtime)
-
-    @property
-    def flags(self) -> _ControlPointsNamespace:
-        """Control-point evaluation under its former name.
-
-        Identical to :attr:`control_points` — ``client.flags is
-        client.control_points``. Not scheduled for removal. Logs one notice
-        per process the first time this getter is used.
-        """
-        _note_deprecated_flags_alias()
-        return self.control_points
 
     @property
     def runtime(self) -> FireweaveRuntime:

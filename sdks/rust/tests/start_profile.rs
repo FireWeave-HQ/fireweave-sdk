@@ -9,7 +9,9 @@
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use fireweave::start::{self, define_flags, env_map, Flag, LogFn, StartOptions, StartState};
+use fireweave::start::{
+    self, define_control_points, env_map, LocalControlPoint, LogFn, StartOptions, StartState,
+};
 use fireweave::{reason, ErrorKind, EvaluationContext, FlagType, JsonValue, Mode};
 
 static TEST_LOCK: Mutex<()> = Mutex::new(());
@@ -51,9 +53,12 @@ const DEV: [(&str, &str); 1] = [("FIREWEAVE_ENV", "development")];
 
 fn local_options(rec: &Recorder) -> StartOptions {
     StartOptions {
-        flags: define_flags([
-            ("fw-on", Flag::local(true)),
-            ("fw-off", Flag::local(false).describe("kept off locally")),
+        control_points: define_control_points([
+            ("fw-on", LocalControlPoint::local(true)),
+            (
+                "fw-off",
+                LocalControlPoint::local(false).describe("kept off locally"),
+            ),
         ]),
         env: Some(env_map(DEV)),
         log: Some(rec.sink()),
@@ -123,7 +128,7 @@ fn start_local_serves_each_flag_and_logs_one_local_line() {
     );
     assert_eq!(
         rec.count(
-            r#"no FIREWEAVE_KEY; environment "development" from FIREWEAVE_ENV). Serving 2 flags"#
+            r#"no FIREWEAVE_KEY; environment "development" from FIREWEAVE_ENV). Serving 2 control points"#
         ),
         1,
         "{:?}",
@@ -141,14 +146,16 @@ fn a_local_read_of_an_undeclared_key_gets_the_default_and_warns_once() {
     let d = cp.get_boolean_details("not-declared", false, None);
     assert_eq!(d.reason, reason::DEFAULT);
     assert_eq!(
-        rec.count(r#""not-declared" is not in your flags (src/fireweave_flags.rs)"#),
+        rec.count(
+            r#""not-declared" is not in your control points (src/fireweave_control_points.rs)"#
+        ),
         1,
         "{:?}",
         rec.lines()
     );
     // A declared key never warns.
     let _ = cp.get_boolean_value("fw-on", false, None);
-    assert_eq!(rec.count("is not in your flags"), 1);
+    assert_eq!(rec.count("is not in your control points"), 1);
 }
 
 #[test]
@@ -157,7 +164,7 @@ fn mode_local_needs_no_environment_name_and_ignores_a_key_once() {
     let key = "project-api-key_should_never_print";
     start::start(StartOptions {
         mode: Some(Mode::Local),
-        flags: define_flags([("fw-on", Flag::local(true))]),
+        control_points: define_control_points([("fw-on", LocalControlPoint::local(true))]),
         env: Some(env_map([("FIREWEAVE_KEY", key), ("APP_ENV", "production")])),
         log: Some(rec.sink()),
         ..Default::default()
@@ -188,11 +195,6 @@ fn control_points_is_the_core_namespace_on_the_permanent_client() {
         start::control_points()
     ));
     assert!(std::ptr::eq(client_before, start::client()));
-    // The deprecated alias still shares identity, as on any core client.
-    assert!(std::ptr::eq(
-        start::client().flags(),
-        start::control_points()
-    ));
 }
 
 #[test]
@@ -249,12 +251,12 @@ fn a_second_start_with_different_flags_is_a_conflict_and_keeps_the_running_clien
     let (_g, rec) = fresh();
     start::start(local_options(&rec)).unwrap();
     let mut other = local_options(&rec);
-    other.flags = define_flags([("fw-on", Flag::local(false))]);
+    other.control_points = define_control_points([("fw-on", LocalControlPoint::local(false))]);
     let err = start::start(other).unwrap_err();
     assert_eq!(err.kind, ErrorKind::Configuration);
     assert!(
         err.message
-            .contains("already called with a different configuration (flags)"),
+            .contains("already called with a different configuration (control_points)"),
         "{}",
         err.message
     );
@@ -300,7 +302,7 @@ fn the_first_start_keeps_its_log_sink() {
     again.log = Some(second.sink());
     start::start(again).unwrap();
     let _ = start::control_points().get_boolean_value("undeclared", false, None);
-    assert_eq!(rec.count("\"undeclared\" is not in your flags"), 1);
+    assert_eq!(rec.count("\"undeclared\" is not in your control points"), 1);
     assert!(second.lines().is_empty(), "{:?}", second.lines());
 }
 
@@ -344,9 +346,10 @@ fn bad_config_fails_start_and_reads_serve_defaults() {
 #[test]
 fn a_bad_flag_declaration_is_a_configuration_error_not_a_read_failure() {
     let (_g, _rec) = fresh();
-    let err = start::try_define_flags([("bad\nkey", Flag::local(true))]).unwrap_err();
+    let err = start::try_define_control_points([("bad\nkey", LocalControlPoint::local(true))])
+        .unwrap_err();
     assert_eq!(err.kind, ErrorKind::Configuration);
-    let result = catch_unwind(|| define_flags([("", Flag::local(true))]));
+    let result = catch_unwind(|| define_control_points([("", LocalControlPoint::local(true))]));
     assert!(result.is_err());
 }
 
@@ -357,14 +360,14 @@ fn a_read_before_start_starts_from_the_process_environment() {
     let (_g, rec) = fresh();
     with_process_env(&[("FIREWEAVE_ENV", "development")], || {
         assert_eq!(start::status().state, StartState::Unstarted);
-        // Implicit start: local, no flags, so the default.
+        // Implicit start: local, no control points, so the default.
         assert!(!start::control_points().get_boolean_value("x", false, None));
         let s = start::status();
         assert_eq!(s.state, StartState::Ready);
         assert_eq!(s.mode, Some(Mode::Local));
         assert_eq!(s.environment.as_deref(), Some("development"));
 
-        // An explicit start that agrees is a no-op (flags differ, but they
+        // An explicit start that agrees is a no-op (control_points differ, but they
         // are part of the signature in local mode: none == none here).
         start::start(StartOptions {
             log: Some(rec.sink()),
@@ -380,7 +383,11 @@ fn a_read_before_start_starts_from_the_process_environment() {
             "{}",
             err.message
         );
-        assert!(err.message.contains("differs in flags"), "{}", err.message);
+        assert!(
+            err.message.contains("differs in control_points"),
+            "{}",
+            err.message
+        );
     });
 }
 
@@ -427,13 +434,16 @@ fn a_captured_client_works_across_start_shutdown_and_restart() {
     assert!(!cp.get_boolean_value("fw-on", false, None));
     start::shutdown(); // idempotent
 
-    // A restart starts fresh, here with different flags: no conflict.
+    // A restart starts fresh, here with different control_points: no conflict.
     let mut again = local_options(&rec);
-    again.flags = define_flags([("fw-on", Flag::local(false)), ("fw-new", Flag::local(true))]);
+    again.control_points = define_control_points([
+        ("fw-on", LocalControlPoint::local(false)),
+        ("fw-new", LocalControlPoint::local(true)),
+    ]);
     start::start(again).unwrap();
     assert!(!cp.get_boolean_value("fw-on", true, None));
     assert!(cp.get_boolean_value("fw-new", false, None));
-    assert_eq!(start::status().flag_count, 2);
+    assert_eq!(start::status().control_point_count, 2);
 }
 
 #[test]
@@ -586,7 +596,7 @@ fn status_before_any_start() {
     assert_eq!(s.mode, None);
     assert_eq!(s.sdk_version, start::sdk_version());
     assert_eq!(s.channel, start::sdk_channel());
-    assert_eq!(s.flag_count, 0);
+    assert_eq!(s.control_point_count, 0);
     assert!(s.error.is_none());
 }
 
@@ -602,7 +612,7 @@ fn status_reports_the_local_decision() {
     assert_eq!(s.key_source.as_deref(), Some("none"));
     assert_eq!(s.host, None);
     assert_eq!(s.endpoint_source, None);
-    assert_eq!(s.flag_count, 2);
+    assert_eq!(s.control_point_count, 2);
 }
 
 #[test]

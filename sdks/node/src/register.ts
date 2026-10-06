@@ -5,7 +5,7 @@
  *   node --import @fireweaveai/server-sdk/register app.js
  *   bun --preload @fireweaveai/server-sdk/register app.ts
  *
- * Use src/fireweave/start.ts instead when you pass flags or other options.
+ * Use src/fireweave/start.ts instead when you pass control points or other options.
  */
 import { start } from './start/index.js';
 

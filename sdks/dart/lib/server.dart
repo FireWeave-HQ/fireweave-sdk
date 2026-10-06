@@ -2,15 +2,15 @@
 /// server start profile (docs/adr/0012-start-profile.md).
 ///
 /// ```dart
-/// // lib/fireweave/flags.dart: every control point the app reads
+/// // lib/fireweave/control_points.dart: every control point the app reads
 /// import 'package:fireweave/server.dart';
-/// final flags = defineFlags({'nightly-reindex': Flag.local(true)});
+/// final controlPoints = defineControlPoints({'nightly-reindex': LocalControlPoint.local(true)});
 ///
 /// // bin/server.dart
 /// import 'package:fireweave/server.dart';
 ///
 /// Future<void> main() async {
-///   await Fireweave.start(flags: flags); // FIREWEAVE_KEY from the environment
+///   await Fireweave.start(controlPoints: controlPoints); // FIREWEAVE_KEY from the environment
 ///   // serve; on SIGTERM: await fw.shutdown();
 /// }
 ///
@@ -48,6 +48,7 @@ export 'fireweave.dart'
 export 'src/start/build_info.dart' show buildSdkChannel, buildSdkVersion;
 export 'src/start/channel.dart' show SdkChannel;
 export 'src/start/core.dart' show FireweaveStatus, StartProblem, StartState;
-export 'src/start/flags.dart' show Flag, defineFlags;
+export 'src/start/control_points.dart'
+    show LocalControlPoint, defineControlPoints;
 export 'src/start/server_profile.dart'
     show Fireweave, FireweaveServerStart, defaultServerRefreshInterval, fw;

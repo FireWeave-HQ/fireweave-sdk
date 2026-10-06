@@ -135,8 +135,8 @@ type StartStatus struct {
 	// local mode.
 	KeySource string
 	// Environment is the environment name, when it chose the mode.
-	Environment string
-	FlagCount   int
+	Environment       string
+	ControlPointCount int
 	// Error is why start failed, when it did. Already redacted.
 	Error string
 	// LastErrorKind is the latest fw-server failure a read or Identify saw
@@ -149,7 +149,7 @@ type StartStatus struct {
 
 // Status reports the singleton's state and what Start decided: mode and why,
 // channel, SDK version, host, endpoint source, key source, environment and
-// flag count, and the latest fw-server failure (LastErrorKind). It never includes the key, so it is safe to log.
+// control-point count, and the latest fw-server failure (LastErrorKind). It never includes the key, so it is safe to log.
 //
 //	log.Printf("fireweave: %+v", fw.Status())
 func Status() StartStatus {
@@ -162,7 +162,7 @@ func Status() StartStatus {
 		s.Channel = r.channel
 		s.SDKVersion = r.sdkVersion
 		s.KeySource = r.keySource
-		s.FlagCount = len(r.flags)
+		s.ControlPointCount = len(r.controlPoints)
 		s.Environment = r.environment
 		if r.url != "" {
 			if u, err := url.Parse(r.url); err == nil {

@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** The channel rule, the build resource, flag validation and the instance-key derivation. */
+/** The channel rule, the build resource, control-point validation and the instance-key derivation. */
 class StartBuildingBlocksTest {
 
     // ---------------------------------------------------------------- channel
@@ -60,51 +60,51 @@ class StartBuildingBlocksTest {
         assertEquals(BuildInfo.channelForVersion(version), Fw.sdkChannel());
     }
 
-    // ---------------------------------------------------------------- flags
+    // ---------------------------------------------------------------- controlPoints
 
     @Test
-    void defineFlagsValidatesWithTheCoreKeyRuleAndReturnsAnImmutableSortedCopy() {
-        Map<String, Flag> input = new LinkedHashMap<>();
-        input.put("zeta", Flag.local(false));
-        input.put("new-checkout", Flag.local(true, "new checkout flow"));
-        Flags flags = Fw.defineFlags(input);
-        assertEquals(List.of("new-checkout", "zeta"), List.copyOf(flags.asMap().keySet()));
-        assertTrue(flags.contains("new-checkout"));
-        assertFalse(flags.contains("other"));
-        assertEquals(2, flags.size());
-        assertEquals("new checkout flow", flags.asMap().get("new-checkout").description());
-        assertEquals(Map.of("new-checkout", true, "zeta", false), flags.localValues());
-        input.put("late", Flag.local(true));
-        assertEquals(2, flags.size(), "a copy, not a view");
-        assertThrows(UnsupportedOperationException.class, () -> flags.asMap().put("x", Flag.local(true)));
-        assertSame(Flags.none(), Fw.defineFlags(Map.of()));
+    void defineControlPointsValidatesWithTheCoreKeyRuleAndReturnsAnImmutableSortedCopy() {
+        Map<String, LocalControlPoint> input = new LinkedHashMap<>();
+        input.put("zeta", LocalControlPoint.local(false));
+        input.put("new-checkout", LocalControlPoint.local(true, "new checkout flow"));
+        LocalControlPoints controlPoints = Fw.defineControlPoints(input);
+        assertEquals(List.of("new-checkout", "zeta"), List.copyOf(controlPoints.asMap().keySet()));
+        assertTrue(controlPoints.contains("new-checkout"));
+        assertFalse(controlPoints.contains("other"));
+        assertEquals(2, controlPoints.size());
+        assertEquals("new checkout flow", controlPoints.asMap().get("new-checkout").description());
+        assertEquals(Map.of("new-checkout", true, "zeta", false), controlPoints.localValues());
+        input.put("late", LocalControlPoint.local(true));
+        assertEquals(2, controlPoints.size(), "a copy, not a view");
+        assertThrows(UnsupportedOperationException.class, () -> controlPoints.asMap().put("x", LocalControlPoint.local(true)));
+        assertSame(LocalControlPoints.none(), Fw.defineControlPoints(Map.of()));
     }
 
     @Test
-    void defineFlagsRejectsBadKeysAsConfigurationErrors() {
-        Map<String, Flag> nullKey = new HashMap<>();
-        nullKey.put(null, Flag.local(true));
-        Map<String, Flag> nullFlag = new HashMap<>();
+    void defineControlPointsRejectsBadKeysAsConfigurationErrors() {
+        Map<String, LocalControlPoint> nullKey = new HashMap<>();
+        nullKey.put(null, LocalControlPoint.local(true));
+        Map<String, LocalControlPoint> nullFlag = new HashMap<>();
         nullFlag.put("ok-key", null);
-        Map<String, Flag> tooLong = Map.of("k".repeat(257), Flag.local(true));
-        Map<String, Flag> control = Map.of("bad\u0007key", Flag.local(true));
-        Map<String, Flag> empty = Map.of("", Flag.local(true));
+        Map<String, LocalControlPoint> tooLong = Map.of("k".repeat(257), LocalControlPoint.local(true));
+        Map<String, LocalControlPoint> control = Map.of("bad\u0007key", LocalControlPoint.local(true));
+        Map<String, LocalControlPoint> empty = Map.of("", LocalControlPoint.local(true));
 
-        for (Map<String, Flag> bad : List.of(nullKey, nullFlag, tooLong, control, empty)) {
-            FireweaveException e = assertThrows(FireweaveException.class, () -> Fw.defineFlags(bad));
+        for (Map<String, LocalControlPoint> bad : List.of(nullKey, nullFlag, tooLong, control, empty)) {
+            FireweaveException e = assertThrows(FireweaveException.class, () -> Fw.defineControlPoints(bad));
             assertEquals(ErrorKind.Configuration, e.kind());
-            assertTrue(e.getMessage().startsWith("flags: "), e.getMessage());
+            assertTrue(e.getMessage().startsWith("controlPoints: "), e.getMessage());
         }
-        FireweaveException e = assertThrows(FireweaveException.class, () -> Fw.defineFlags(control));
+        FireweaveException e = assertThrows(FireweaveException.class, () -> Fw.defineControlPoints(control));
         assertTrue(e.getMessage().contains("\"bad\\u0007key\""), "control characters are escaped: " + e.getMessage());
-        assertThrows(FireweaveException.class, () -> Fw.defineFlags(null));
+        assertThrows(FireweaveException.class, () -> Fw.defineControlPoints(null));
     }
 
     @Test
-    void theFlagsSignatureCoversKeysAndLocalValuesOnly() {
-        Flags a = Fw.defineFlags(Map.of("a", Flag.local(true, "one")));
-        Flags b = Fw.defineFlags(Map.of("a", Flag.local(true, "two")));
-        Flags c = Fw.defineFlags(Map.of("a", Flag.local(false)));
+    void theControlPointsSignatureCoversKeysAndLocalValuesOnly() {
+        LocalControlPoints a = Fw.defineControlPoints(Map.of("a", LocalControlPoint.local(true, "one")));
+        LocalControlPoints b = Fw.defineControlPoints(Map.of("a", LocalControlPoint.local(true, "two")));
+        LocalControlPoints c = Fw.defineControlPoints(Map.of("a", LocalControlPoint.local(false)));
         assertEquals(a.signature(), b.signature());
         assertNotEquals(a.signature(), c.signature());
     }

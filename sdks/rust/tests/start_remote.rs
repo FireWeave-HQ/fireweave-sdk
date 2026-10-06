@@ -10,7 +10,9 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
-use fireweave::start::{self, define_flags, env_map, Flag, LogFn, StartOptions, StartState};
+use fireweave::start::{
+    self, define_control_points, env_map, LocalControlPoint, LogFn, StartOptions, StartState,
+};
 use fireweave::{redact_secrets, ErrorKind, EvaluationContext, JsonValue, Mode};
 
 static TEST_LOCK: Mutex<()> = Mutex::new(());
@@ -48,7 +50,7 @@ fn fresh() -> (MutexGuard<'static, ()>, Recorder) {
 }
 
 /// A loopback fw-server stub: checks the bearer key, answers
-/// `/v1/flags/evaluate` from a fixed value table and records
+/// `/v1/control-points/evaluate` from a fixed value table and records
 /// `/v1/targets/register` bodies.
 struct Stub {
     url: String,
@@ -184,9 +186,13 @@ fn handle(
     }
     let body: JsonValue = serde_json::from_str(&body).unwrap_or(JsonValue::Null);
     match path.as_str() {
-        "/v1/flags/evaluate" => {
+        "/v1/control-points/evaluate" => {
             let mut decisions = Vec::new();
-            for k in body["flagKeys"].as_array().cloned().unwrap_or_default() {
+            for k in body["controlPointKeys"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+            {
                 let k = k.as_str().unwrap_or_default().to_string();
                 let value = match k.as_str() {
                     "fw-bool-on" => Some(JsonValue::Bool(true)),
@@ -194,7 +200,7 @@ fn handle(
                     _ => None,
                 };
                 decisions.push(serde_json::json!({
-                    "flagKey": k,
+                    "controlPointKey": k,
                     "value": value.clone().unwrap_or(JsonValue::Null),
                     "found": value.is_some(),
                     "enabled": true,
@@ -262,7 +268,7 @@ fn remote_start_evaluates_over_the_wire_and_ignores_flag_values() {
         key: Some(key.into()),
         url: Some(stub.url.clone()),
         env: Some(env_map([("APP_ENV", "production")])),
-        flags: define_flags([("fw-bool-on", Flag::local(false))]),
+        control_points: define_control_points([("fw-bool-on", LocalControlPoint::local(false))]),
         log: Some(rec.sink()),
         ..Default::default()
     })
@@ -271,18 +277,18 @@ fn remote_start_evaluates_over_the_wire_and_ignores_flag_values() {
     let cp = start::control_points();
     assert!(
         cp.get_boolean_value("fw-bool-on", false, Some(&ctx("user-1"))),
-        "the remote value must win over the flags' local value"
+        "the remote value must win over the control points' local value"
     );
     assert_eq!(
         cp.get_string_value("fw-string-theme", "light", Some(&ctx("user-1"))),
         "dark"
     );
     let d = cp.get_boolean_details("not-there", false, Some(&ctx("user-1")));
-    assert_eq!(d.error_kind, Some(ErrorKind::FlagNotFound));
+    assert_eq!(d.error_kind, Some(ErrorKind::ControlPointNotFound));
     assert_eq!(
-        rec.count("is not in your flags"),
+        rec.count("is not in your control points"),
         0,
-        "the missing-from-flags warning is local mode only"
+        "the missing-from-control-points warning is local mode only"
     );
     // Remote mode needs a targeting key: the core's InvalidContext, served
     // as the default.
@@ -304,7 +310,7 @@ fn remote_start_evaluates_over_the_wire_and_ignores_flag_values() {
     assert_eq!(s.endpoint_source.as_deref(), Some("StartOptions.url"));
     assert_eq!(s.host.as_deref(), Some(stub.host.as_str()));
     assert_eq!(s.key_source.as_deref(), Some("StartOptions.key"));
-    assert_eq!(s.flag_count, 1);
+    assert_eq!(s.control_point_count, 1);
     let rendered = format!("{s:?}");
     assert!(!rendered.contains(key), "{rendered}");
     assert!(rec.lines().iter().all(|l| !l.contains(key)));
@@ -398,9 +404,12 @@ fn an_implicit_start_reads_the_key_and_url_from_the_process_environment() {
             assert_eq!(s.endpoint_source.as_deref(), Some("FIREWEAVE_URL"));
 
             // An explicit start that resolves to the same config is a no-op,
-            // flags included: remote mode ignores them.
+            // control_points included: remote mode ignores them.
             start::start(StartOptions {
-                flags: define_flags([("fw-bool-on", Flag::local(true))]),
+                control_points: define_control_points([(
+                    "fw-bool-on",
+                    LocalControlPoint::local(true),
+                )]),
                 ..Default::default()
             })
             .unwrap();

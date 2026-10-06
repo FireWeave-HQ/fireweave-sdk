@@ -65,7 +65,7 @@ export function resolveBuild(
 export function summaryLine(config: PolicyConfig): string {
   if (config.mode === 'local') {
     const why = config.modeSource === 'environment' ? `environment '${config.environment ?? ''}' from ${config.environmentSource ?? ''}` : 'mode option';
-    return `[fireweave] local mode (${why}): flags come from your flags object; nothing is sent to fw-server.`;
+    return `[fireweave] local mode (${why}): values come from your control-points object; nothing is sent to fw-server.`;
   }
   const host = config.url !== undefined && !config.url.startsWith('/') ? new URL(config.url).host : config.url;
   return `[fireweave] remote mode: browser key from ${config.keySource}, fw-server ${host} (${config.urlSource ?? ''}).`;

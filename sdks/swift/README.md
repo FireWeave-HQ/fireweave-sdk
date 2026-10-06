@@ -33,14 +33,14 @@ embedded framework that both link it statically each get their own `fw`.
 ## Quick start (one line: the start profile)
 
 The start profile ([ADR-0012](../../docs/adr/0012-start-profile.md)) replaces the generated
-`FwHarness.swift` / `FwProviders.swift` files with one call and one flags file. The core API
+`FwHarness.swift` / `FwProviders.swift` files with one call and one control-points file. The core API
 below (`initFireweave`) is unchanged.
 
 ```swift
-// FireweaveFlags.swift: every control point the app reads, with its local value
+// FireweaveLocalControlPoints.swift: every control point the app reads, with its local value
 import FireweaveStart
 
-let appFlags = defineFlags([
+let appControlPoints = defineControlPoints([
   "new-checkout": .local(true, description: "New checkout flow"),  // served only in local mode
 ])
 ```
@@ -52,7 +52,7 @@ let appFlags = defineFlags([
 import FireweaveStart
 
 @main struct ShopApp: App {
-  init() { startFireweave(flags: appFlags) }
+  init() { startFireweave(controlPoints: appControlPoints) }
   var body: some Scene { WindowGroup { RootView() } }
 }
 ```
@@ -67,14 +67,14 @@ missing or wrong key, a bad endpoint) sets `fw.status.state` to `.failed` with t
 import FireweaveStart
 
 public func configure(_ app: Application) async throws {
-  try startFireweave(FireweaveStartOptions(flags: appFlags))  // throws on a misconfiguration
+  try startFireweave(FireweaveStartOptions(controlPoints: appControlPoints))  // throws on a misconfiguration
   await fw.ready()  // the first request sees decisions
 }
 ```
 
 A server fails loudly, so a deploy without its key never starts: the `FireweaveStartOptions`
 form throws a `FireweaveError` of kind `.configuration`, and the one-line
-`startFireweave(flags:)` form stops the process at launch with the same message.
+`startFireweave(controlPoints:)` form stops the process at launch with the same message.
 
 **Anywhere** (the core's nine read methods, unchanged; synchronous, never throw):
 
@@ -93,7 +93,7 @@ for await state in fw.updates { rerender() }             // after start, identif
 
 `startFireweave` is synchronous: it resolves the configuration before any network I/O and
 starts the first prefetch in the background. Until that prefetch settles, remote reads return
-your default; local reads answer from your flags from the very first read. SwiftUI does not
+your default; local reads answer from your control points from the very first read. SwiftUI does not
 re-render when decisions arrive: `await fw.ready()` before the first screen, or observe
 `fw.updates`.
 
@@ -134,7 +134,7 @@ whitespace-only values count as unset.
 
 | Option | App (Info.plist) | Server (environment) | Default | What it does |
 | --- | --- | --- | --- | --- |
-| `flags` | — | — | `[:]` | Local values per control point (`defineFlags`). Served in local mode only; a read of a key missing from them warns once. |
+| `controlPoints` | — | — | `[:]` | Local values per control point (`defineControlPoints`). Served in local mode only; a read of a key missing from them warns once. |
 | `mode` | — | — | inferred | `.remote` or `.local`. Remote without a key is a configuration fault; local ignores a key (one warning). |
 | `environment` | `FIREWEAVE_ENV` | `FIREWEAVE_ENV`, then `APP_ENV` | — | Only feeds the mode rule. `FW_ENV` is not read. |
 | `url` | `FIREWEAVE_URL` (legacy `FWApiUrl`) | `FIREWEAVE_URL` (legacy `FW_API_URL`, `FW_ATTEST_URL`) | this SDK build's channel | A `-staging.N` build calls `https://staging-app-server.fireweave.ai`, any other `https://app-server.fireweave.ai`. https is required except on localhost; an override's allowlist is its own host plus loopback. |

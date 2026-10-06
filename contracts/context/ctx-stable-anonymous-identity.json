@@ -6,7 +6,7 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-anon": {
         "type": "boolean",
         "enabled": true,
@@ -21,7 +21,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-anon",
+    "controlPointKey": "fw-anon",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {

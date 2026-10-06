@@ -5,7 +5,7 @@ import Testing
 
 // The shared start-profile suite (`contracts/start/`, `spec/start-profile.md`)
 // on Swift. Drives the pure resolver, the instance-key derivation,
-// `defineFlags` and the channel rule with each case's inputs, and compares
+// `defineControlPoints` and the channel rule with each case's inputs, and compares
 // by the rules in `contracts/start/README.md`. A port of the Node reference
 // runner (`sdks/node/test/unit/start-contracts.test.ts`). It writes no
 // report: nothing consumes a Swift start report yet.
@@ -97,7 +97,7 @@ private struct CaseInput: Decodable {
   var build: [String: String]?
   var channel: String?
   var hostName: String?
-  var flags: [String: CanonicalFlag]?
+  var controlPoints: [String: CanonicalFlag]?
   var version: String?
 }
 
@@ -265,21 +265,21 @@ private func runInstanceKey(_ when: CaseInput) -> Outcome {
   return outcome
 }
 
-/// `defineFlags` checks keys with an `assertionFailure`, which would stop a
-/// debug test run, so the verdict comes from `normalizeFlags`: the check
-/// `defineFlags` makes and `startFireweave` reports as a Configuration error.
-/// `defineFlags` itself runs only on flags that pass it.
+/// `defineControlPoints` checks keys with an `assertionFailure`, which would stop a
+/// debug test run, so the verdict comes from `normalizeControlPoints`: the check
+/// `defineControlPoints` makes and `startFireweave` reports as a Configuration error.
+/// `defineControlPoints` itself runs only on controlPoints that pass it.
 private func runDefineFlags(_ when: CaseInput) -> Outcome {
-  var flags: FireweaveFlags = [:]
-  for (key, flag) in when.flags ?? [:] {
-    flags[key] = FireweaveFlag(localValue: flag.local, description: flag.description)
+  var controlPoints: FireweaveLocalControlPoints = [:]
+  for (key, flag) in when.controlPoints ?? [:] {
+    controlPoints[key] = FireweaveLocalControlPoint(localValue: flag.local, description: flag.description)
   }
-  switch normalizeFlags(flags) {
+  switch normalizeControlPoints(controlPoints) {
   case .failure(let error):
     return Outcome(error: error)
   case .success:
     var outcome = Outcome()
-    outcome.ok = defineFlags(flags) == flags
+    outcome.ok = defineControlPoints(controlPoints) == controlPoints
     return outcome
   }
 }
@@ -296,7 +296,7 @@ private func run(_ when: CaseInput, fixtureProfile: String) -> Outcome {
     return runResolve(when, fixtureProfile: fixtureProfile)
   case "instanceKey":
     return runInstanceKey(when)
-  case "defineFlags":
+  case "defineControlPoints":
     return runDefineFlags(when)
   case "channelForVersion":
     return runChannelForVersion(when)

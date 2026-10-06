@@ -42,7 +42,7 @@ rejected). In short:
 | --- | --- | --- |
 | `resolve` | `options`, `env` (server), `build` (client), `channel` (default `production`) | The start profile's resolver with that configuration, **no I/O**. Server: `env` replaces the process environment. Client: `build` holds the build-time values (web: what the `fireweave()` plugin injects; Dart: compile-time defines; Swift: Info.plist values). A client runner treats the build as a **release** build (no debug fallback, SP-11). |
 | `instanceKey` | `options.instanceId`, `env`, `hostName` (`null` = the host name is unavailable) | The instance-key derivation with that host name injected. |
-| `defineFlags` | `flags` (canonical `{ key: { local, description? } }`) | The language's `defineFlags` / `define_flags`, translated to its own types. |
+| `defineControlPoints` | `controlPoints` (canonical `{ key: { local, description? } }`) | The language's `defineControlPoints` / `define_control_points`, translated to its own types. |
 | `channelForVersion` | `version` | The pure version → channel rule. |
 
 Option names are canonical (`key`, `url`, `environment`, `mode`, `instanceId`); a runner maps
@@ -59,8 +59,8 @@ Only the fields present in `expect` are checked.
 | `allowedHosts` | `null` means the SDK passes no allowlist (the core default applies). A list is compared as a **set**. |
 | `error` | The resolver signals a configuration fault — by throwing the core's Configuration error (servers) or by returning a failure (client profiles that never throw). `mentions`: each name appears in the error message. `mustNotMention`: none appears (this is how "never echo a key" is pinned). |
 | `warnings` | Over all warning lines the resolution produced: each `mention` name appears in at least one line; no `mustNotMention` name appears in any line. |
-| `ok` | `defineFlags` returned without an error. |
-| `error` on `defineFlags` | The language's rejection of a bad flags object counts as the Configuration error: a core Configuration error where the core error can carry a message naming the bad key (Node, Python, Go, Java, Rust, Dart, Swift), and a `TypeError` whose message starts with `[fireweave]` on web, whose core errors carry fixed messages only. Any other thrown error fails the case. |
+| `ok` | `defineControlPoints` returned without an error. |
+| `error` on `defineControlPoints` | The language's rejection of a bad control-points object counts as the Configuration error: a core Configuration error where the core error can carry a message naming the bad key (Node, Python, Go, Java, Rust, Dart, Swift), and a `TypeError` whose message starts with `[fireweave]` on web, whose core errors carry fixed messages only. Any other thrown error fails the case. |
 | `prefix` | The value starts with it (the random instance key). |
 
 Message text is never compared: languages word messages differently, and only the names in

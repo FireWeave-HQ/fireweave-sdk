@@ -3,7 +3,7 @@
  *
  * One shape differs from the server port, and it is the difference that makes
  * a synchronous OpenFeature provider possible: the server port has
- * `resolve(flagKey)` — one call per control point — while this port has
+ * `resolve(controlPointKey)` — one call per control point — while this port has
  * `prefetch(context)`, which returns EVERY decision for a context in one round
  * trip. Evaluation then becomes a synchronous map lookup in the runtime.
  *
@@ -36,7 +36,7 @@ export type PrefetchResult = ReadonlyMap<string, AdapterResolution>;
 
 export interface PrefetchOptions {
   /** Restrict the batch to these keys; omit to let the backend return all it knows. */
-  readonly flagKeys?: readonly string[];
+  readonly controlPointKeys?: readonly string[];
   readonly signal?: AbortSignal;
 }
 
@@ -74,14 +74,14 @@ export interface WebBackendAdapter {
    * Miss-reason override for a control point ABSENT from the prefetch result
    * (spec/modes.md "Behaviour per mode": local mode's unknown-key row is
    * `default`/reason `DEFAULT`, not an error — unlike remote's
-   * `default`/`ERROR`/`FlagNotFound`).
+   * `default`/`ERROR`/`ControlPointNotFound`).
    *
    * Node's per-call `resolve()` lets a miss carry its own `reason: 'DEFAULT'`
    * on the resolution object itself. Web's adapter returns EVERY decision for
    * a context in one batch (`prefetch`), so there is no per-key resolution
    * object for a key that was never in the batch at all — the seam instead
    * lives on the adapter. `FireweaveLocalWebAdapter` sets this to `'DEFAULT'`;
-   * every other adapter leaves it undefined and keeps the FlagNotFound/ERROR
+   * every other adapter leaves it undefined and keeps the ControlPointNotFound/ERROR
    * path (`FireweaveWebRuntime.evaluateSync` checks it with strict `===`).
    */
   readonly missReason?: 'DEFAULT';

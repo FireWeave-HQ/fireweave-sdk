@@ -45,6 +45,6 @@ var channelURLs = map[Channel]string{
 // keep working.
 var loopbackHosts = []string{"localhost", "127.0.0.1", "::1"}
 
-// flagsFile is where the app's flags conventionally live; named in the
+// controlPointsFile is where the app's control points conventionally live; named in the
 // local-mode "missing key" warning.
-const flagsFile = "internal/fireweave/flags.go"
+const controlPointsFile = "internal/fireweave/control_points.go"

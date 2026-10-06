@@ -17,8 +17,8 @@ typedef JsonValue = Object?;
 /// A JSON object (`Map<String, Object?>`).
 typedef JsonObject = Map<String, Object?>;
 
-/// `flagMetadata` values per `spec/decision.schema.json`: `bool | String | num`.
-typedef FlagMetadata = Map<String, Object?>;
+/// `controlPointMetadata` values per `spec/decision.schema.json`: `bool | String | num`.
+typedef ControlPointMetadata = Map<String, Object?>;
 
 /// Requested flag value type for typed evaluation (`spec/control-points.md`
 /// "The nine methods"). Exactly four members: boolean, string, number,

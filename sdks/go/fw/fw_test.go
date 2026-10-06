@@ -77,9 +77,9 @@ func clearProcessEnv(t *testing.T) {
 }
 
 var (
-	testFlags = DefineFlags(Flags{"new-checkout": {Local: true}, "old-path": {Local: false}})
-	devEnv    = envMap(map[string]string{"FIREWEAVE_ENV": "development"})
-	noVars    = envMap(nil)
+	testControlPoints = DefineControlPoints(LocalControlPoints{"new-checkout": {Local: true}, "old-path": {Local: false}})
+	devEnv            = envMap(map[string]string{"FIREWEAVE_ENV": "development"})
+	noVars            = envMap(nil)
 )
 
 func mustStart(t *testing.T, opts Options) {
@@ -104,7 +104,7 @@ func wantConfiguration(t *testing.T, err error, substr string) {
 
 func TestStartLocalServesEachFlagAndLogsOneLocalLine(t *testing.T) {
 	rec, log := fresh(t)
-	mustStart(t, Options{Flags: testFlags, Env: devEnv, Log: log})
+	mustStart(t, Options{ControlPoints: testControlPoints, Env: devEnv, Log: log})
 	if !ControlPoints().GetBooleanValue("new-checkout", false, For("u1")) {
 		t.Fatal("new-checkout must be served true locally")
 	}
@@ -115,27 +115,27 @@ func TestStartLocalServesEachFlagAndLogsOneLocalLine(t *testing.T) {
 	if d.Reason != fireweave.ReasonStatic || d.Error != nil {
 		t.Fatalf("decision = %+v, want STATIC", d)
 	}
-	if n := rec.count("[fireweave:local] Local mode (no FIREWEAVE_KEY; environment \"development\" from FIREWEAVE_ENV). Serving 2 flags"); n != 1 {
+	if n := rec.count("[fireweave:local] Local mode (no FIREWEAVE_KEY; environment \"development\" from FIREWEAVE_ENV). Serving 2 control points"); n != 1 {
 		t.Fatalf("local line logged %d times:\n%s", n, rec.all())
 	}
 }
 
 func TestLocalReadOfAnUndeclaredKeyGetsTheDefaultAndWarnsOnce(t *testing.T) {
 	rec, log := fresh(t)
-	mustStart(t, Options{Flags: testFlags, Env: devEnv, Log: log})
+	mustStart(t, Options{ControlPoints: testControlPoints, Env: devEnv, Log: log})
 	for _, user := range []string{"u1", "u2", "u3"} {
 		if ControlPoints().GetBooleanValue("not-declared", false, For(user)) {
 			t.Fatal("an undeclared key must get its default")
 		}
 	}
-	if n := rec.count(`"not-declared" is not in your flags (internal/fireweave/flags.go)`); n != 1 {
+	if n := rec.count(`"not-declared" is not in your control points (internal/fireweave/control_points.go)`); n != 1 {
 		t.Fatalf("missing-key warning logged %d times:\n%s", n, rec.all())
 	}
 }
 
 func TestModeLocalNeedsNoEnvironmentName(t *testing.T) {
 	_, log := fresh(t)
-	mustStart(t, Options{Flags: testFlags, Mode: ModeLocal, Env: noVars, Log: log})
+	mustStart(t, Options{ControlPoints: testControlPoints, Mode: ModeLocal, Env: noVars, Log: log})
 	if s := Status(); s.ModeSource != "option" || s.Mode != ModeLocal {
 		t.Fatalf("status = %+v", s)
 	}
@@ -158,15 +158,15 @@ func TestControlPointsIsTheCoreNamespaceOnThePermanentClient(t *testing.T) {
 
 func TestASecondIdenticalStartIsANoOp(t *testing.T) {
 	_, log := fresh(t)
-	mustStart(t, Options{Flags: testFlags, Env: devEnv, Log: log})
-	mustStart(t, Options{Flags: testFlags, Env: devEnv, Log: log})
+	mustStart(t, Options{ControlPoints: testControlPoints, Env: devEnv, Log: log})
+	mustStart(t, Options{ControlPoints: testControlPoints, Env: devEnv, Log: log})
 }
 
 func TestASecondStartWithDifferentFlagsIsAConflict(t *testing.T) {
 	_, log := fresh(t)
-	mustStart(t, Options{Flags: testFlags, Env: devEnv, Log: log})
-	err := Start(Options{Flags: Flags{"new-checkout": {Local: false}}, Env: devEnv, Log: log})
-	wantConfiguration(t, err, "different configuration (flags)")
+	mustStart(t, Options{ControlPoints: testControlPoints, Env: devEnv, Log: log})
+	err := Start(Options{ControlPoints: LocalControlPoints{"new-checkout": {Local: false}}, Env: devEnv, Log: log})
+	wantConfiguration(t, err, "different configuration (controlPoints)")
 	if !ControlPoints().GetBooleanValue("new-checkout", false, For("u1")) {
 		t.Fatal("a conflicting Start must leave the running client alone")
 	}
@@ -184,9 +184,9 @@ func TestADifferentKeyIsAConflictButTheLogSinkIsNot(t *testing.T) {
 
 func TestTheFirstStartKeepsItsLogSink(t *testing.T) {
 	rec, log := fresh(t)
-	mustStart(t, Options{Flags: testFlags, Env: devEnv, Log: log})
+	mustStart(t, Options{ControlPoints: testControlPoints, Env: devEnv, Log: log})
 	other := &recorder{}
-	mustStart(t, Options{Flags: testFlags, Env: devEnv, Log: slog.New(other)})
+	mustStart(t, Options{ControlPoints: testControlPoints, Env: devEnv, Log: slog.New(other)})
 	ControlPoints().GetBooleanValue("not-declared", false, For("u1"))
 	if rec.count(`"not-declared"`) != 1 || other.all() != "" {
 		t.Fatalf("first sink:\n%s\nsecond sink:\n%s", rec.all(), other.all())
@@ -195,7 +195,7 @@ func TestTheFirstStartKeepsItsLogSink(t *testing.T) {
 
 func TestBadConfigFailsStartAndReadsServeDefaults(t *testing.T) {
 	_, log := fresh(t)
-	err := Start(Options{Flags: testFlags, Env: envMap(map[string]string{"APP_ENV": "production"}), Log: log})
+	err := Start(Options{ControlPoints: testControlPoints, Env: envMap(map[string]string{"APP_ENV": "production"}), Log: log})
 	wantConfiguration(t, err, "FIREWEAVE_KEY is not set")
 	if ControlPoints().GetBooleanValue("new-checkout", false, For("u1")) {
 		t.Fatal("a failed start must serve the default")
@@ -208,7 +208,7 @@ func TestBadConfigFailsStartAndReadsServeDefaults(t *testing.T) {
 		t.Fatalf("status = %+v", s)
 	}
 	// A corrected Start recovers.
-	mustStart(t, Options{Flags: testFlags, Mode: ModeLocal, Env: noVars, Log: log})
+	mustStart(t, Options{ControlPoints: testControlPoints, Mode: ModeLocal, Env: noVars, Log: log})
 	if !ControlPoints().GetBooleanValue("new-checkout", false, For("u1")) {
 		t.Fatal("a corrected Start must recover")
 	}
@@ -257,8 +257,8 @@ func TestAnExplicitStartAfterAnImplicitOneIsANoOpWhenItAgrees(t *testing.T) {
 	clearProcessEnv(t)
 	t.Setenv("FIREWEAVE_KEY", testKey)
 	ControlPoints().GetBooleanValue("anything", false, nil) // implicit remote start; nil context degrades locally, no I/O
-	// Flags do not count in remote mode, so this agrees with the env-only start.
-	mustStart(t, Options{Flags: testFlags, Log: log})
+	// LocalControlPoints do not count in remote mode, so this agrees with the env-only start.
+	mustStart(t, Options{ControlPoints: testControlPoints, Log: log})
 }
 
 func TestAnExplicitStartThatDisagreesWithAnImplicitOneSaysWhy(t *testing.T) {
@@ -266,7 +266,7 @@ func TestAnExplicitStartThatDisagreesWithAnImplicitOneSaysWhy(t *testing.T) {
 	clearProcessEnv(t)
 	t.Setenv("FIREWEAVE_ENV", "development")
 	ControlPoints().GetBooleanValue("new-checkout", false, For("u1"))
-	err := Start(Options{Flags: testFlags, Log: log})
+	err := Start(Options{ControlPoints: testControlPoints, Log: log})
 	wantConfiguration(t, err, "read before fw.Start ran")
 }
 
@@ -311,7 +311,7 @@ func TestAFailedImplicitStartServesDefaultsAndNeverPanics(t *testing.T) {
 		t.Fatalf("start failure logged %d times:\n%s", n, rec.all())
 	}
 	// An explicit Start recovers.
-	mustStart(t, Options{Flags: testFlags, Mode: ModeLocal, Env: noVars, Log: log})
+	mustStart(t, Options{ControlPoints: testControlPoints, Mode: ModeLocal, Env: noVars, Log: log})
 	if !ControlPoints().GetBooleanValue("new-checkout", false, For("u1")) {
 		t.Fatal("an explicit Start must recover after a failed implicit one")
 	}
@@ -321,7 +321,7 @@ func TestACapturedClientWorksAcrossStartShutdownAndRestart(t *testing.T) {
 	_, log := fresh(t)
 	captured := Client()
 	cp := captured.ControlPoints()
-	mustStart(t, Options{Flags: testFlags, Env: devEnv, Log: log})
+	mustStart(t, Options{ControlPoints: testControlPoints, Env: devEnv, Log: log})
 	if !cp.GetBooleanValue("new-checkout", false, For("u1")) {
 		t.Fatal("a pointer captured before Start must read after it")
 	}
@@ -335,9 +335,9 @@ func TestACapturedClientWorksAcrossStartShutdownAndRestart(t *testing.T) {
 	if Status().State != StateShutdown {
 		t.Fatalf("status = %+v", Status())
 	}
-	mustStart(t, Options{Flags: Flags{"new-checkout": {Local: false}}, Env: devEnv, Log: log})
+	mustStart(t, Options{ControlPoints: LocalControlPoints{"new-checkout": {Local: false}}, Env: devEnv, Log: log})
 	if cp.GetBooleanValue("new-checkout", true, For("u1")) {
-		t.Fatal("a Start after Shutdown begins fresh, with its own flags")
+		t.Fatal("a Start after Shutdown begins fresh, with its own controlPoints")
 	}
 	if Client() != captured {
 		t.Fatal("Client() must be the same pointer for the life of the process")
@@ -361,7 +361,7 @@ func TestNoImplicitStartAfterShutdown(t *testing.T) {
 
 func TestIdentifyRegistersAUserTarget(t *testing.T) {
 	rec, log := fresh(t)
-	mustStart(t, Options{Flags: testFlags, Env: devEnv, Log: log})
+	mustStart(t, Options{ControlPoints: testControlPoints, Env: devEnv, Log: log})
 	if err := Identify(context.Background(), "user-1", map[string]any{"plan": "pro"}); err != nil {
 		t.Fatalf("Identify: %v", err)
 	}
@@ -384,19 +384,19 @@ func TestIdentifyRegistersAUserTarget(t *testing.T) {
 
 func TestInstanceKeyOrder(t *testing.T) {
 	_, log := fresh(t)
-	mustStart(t, Options{Flags: testFlags, Env: envMap(map[string]string{"FIREWEAVE_ENV": "development", "FIREWEAVE_INSTANCE_ID": "worker-7"}), Log: log})
+	mustStart(t, Options{ControlPoints: testControlPoints, Env: envMap(map[string]string{"FIREWEAVE_ENV": "development", "FIREWEAVE_INSTANCE_ID": "worker-7"}), Log: log})
 	if got := InstanceKey(); got != "worker-7" {
 		t.Fatalf("InstanceKey = %q, want worker-7", got)
 	}
 
 	resetForTests()
-	mustStart(t, Options{Flags: testFlags, Env: devEnv, InstanceID: "cron-1", Log: log})
+	mustStart(t, Options{ControlPoints: testControlPoints, Env: devEnv, InstanceID: "cron-1", Log: log})
 	if got := InstanceKey(); got != "cron-1" {
 		t.Fatalf("InstanceKey = %q, want cron-1", got)
 	}
 
 	resetForTests()
-	mustStart(t, Options{Flags: testFlags, Env: devEnv, Log: log})
+	mustStart(t, Options{ControlPoints: testControlPoints, Env: devEnv, Log: log})
 	key := InstanceKey()
 	host := processHostname()
 	if host != "" && key != "inst_"+fnv1a64(host) {
@@ -474,7 +474,7 @@ func TestConcurrentReadsStartsAndStatusAreRaceFree(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			// The implicit start (no flags) and this one may race; whichever
+			// The implicit start (no control points) and this one may race; whichever
 			// loses gets a Configuration conflict, never a crash.
 			_ = Start(Options{Log: log})
 		}()

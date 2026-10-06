@@ -30,7 +30,7 @@ const run = (cmd: string, args: string[], file: string, env: NodeJS.ProcessEnv) 
 
 for (const [cmd, args] of runtimes) {
   describe(`start entrypoints on ${cmd}`, () => {
-    it('first-import layout: a sibling module-scope read sees the flags object', () => {
+    it('first-import layout: a sibling module-scope read sees the control points', () => {
       const r = run(cmd, args, 'entry-first-import.mjs', { ...baseEnv(), NODE_ENV: 'development' });
       assert.equal(r.status, 0, r.stderr);
       assert.deepEqual(JSON.parse(r.out), { early: true, later: true, mode: 'local' });

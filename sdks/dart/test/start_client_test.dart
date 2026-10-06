@@ -13,9 +13,11 @@ import 'support/start_doubles.dart';
 const String browserKey = 'fw_public_s3cr3tvalue';
 const String url = 'https://flags.example.com';
 
-final Map<String, Flag> flags = defineFlags(<String, Flag>{
-  'new-checkout': const Flag.local(true),
-});
+final Map<String, LocalControlPoint> controlPoints = defineControlPoints(
+  <String, LocalControlPoint>{
+    'new-checkout': const LocalControlPoint.local(true),
+  },
+);
 
 /// An in-memory [DeviceIdStore] that can be made to throw.
 class MemoryStore implements DeviceIdStore {
@@ -59,7 +61,7 @@ void main() {
 
   Future<void> start({
     Map<String, String> defines = const <String, String>{},
-    Map<String, Flag>? flags,
+    Map<String, LocalControlPoint>? controlPoints,
     Mode? mode,
     String? environment,
     String? url,
@@ -69,7 +71,7 @@ void main() {
     LogSink? logSink,
   }) => startClient(
     defines: defines,
-    flags: flags,
+    controlPoints: controlPoints,
     mode: mode,
     environment: environment,
     url: url,
@@ -93,7 +95,7 @@ void main() {
   group('resolution from defines', () {
     test('FIREWEAVE_ENV=development and no key: local', () async {
       await start(
-        flags: flags,
+        controlPoints: controlPoints,
         defines: <String, String>{'FIREWEAVE_ENV': 'development'},
       );
       expect(fw.controlPoints.getBooleanValue('new-checkout', false), isTrue);
@@ -103,7 +105,7 @@ void main() {
       expect(status.modeSource, 'environment');
       expect(status.environment, 'development');
       expect(status.keySource, 'none');
-      expect(status.flagCount, 1);
+      expect(status.controlPointCount, 1);
       expect(log.containing('[fireweave:local] Local mode'), hasLength(1));
       expect(transport.requests, isEmpty);
       expect(fw.deviceId, startsWith('dev_'));
@@ -124,7 +126,7 @@ void main() {
       expect(fw.status.host, 'flags.example.com');
       expect(fw.controlPoints.getBooleanValue('new-checkout', false), isTrue);
       final evaluate = transport.evaluates.single;
-      expect(evaluate.url.toString(), '$url/v1/flags/evaluate');
+      expect(evaluate.url.toString(), '$url/v1/control-points/evaluate');
       expect(evaluate.headers['Authorization'], 'Bearer $browserKey');
       expect(evaluate.body['targetingKey'], fw.deviceId);
     });
@@ -198,7 +200,7 @@ void main() {
 
   group('configuration faults never throw', () {
     test('no key and no environment: failed, one line, defaults', () async {
-      await start(flags: flags);
+      await start(controlPoints: controlPoints);
       final status = fw.status;
       expect(status.state, StartState.failed);
       expect(
@@ -264,21 +266,23 @@ void main() {
       );
     });
 
-    test('a bad flags map is refused', () async {
+    test('a bad control-points map is refused', () async {
       await start(
-        flags: <String, Flag>{'': const Flag.local(true)},
+        controlPoints: <String, LocalControlPoint>{
+          '': const LocalControlPoint.local(true),
+        },
         defines: <String, String>{'FIREWEAVE_ENV': 'dev'},
       );
       expect(
         fw.status.problem,
-        const StartProblem('invalid-flags', variable: 'flags'),
+        const StartProblem('invalid-control-points', variable: 'controlPoints'),
       );
     });
 
     test('a corrected start runs after a failed one', () async {
       await start();
       expect(fw.status.state, StartState.failed);
-      await start(flags: flags, environment: 'dev');
+      await start(controlPoints: controlPoints, environment: 'dev');
       expect(fw.status.state, StartState.ready);
       expect(fw.status.problem, isNull);
       expect(fw.controlPoints.getBooleanValue('new-checkout', false), isTrue);
@@ -304,7 +308,7 @@ void main() {
     );
 
     test('a bad repeat start keeps the running client', () async {
-      await start(flags: flags, environment: 'dev');
+      await start(controlPoints: controlPoints, environment: 'dev');
       await start(key: 'project-api-key_s3cr3t');
       expect(fw.status.state, StartState.ready);
       expect(fw.controlPoints.getBooleanValue('new-checkout', false), isTrue);
@@ -356,27 +360,27 @@ void main() {
     test(
       'after shutdown reads serve defaults, and start begins again',
       () async {
-        await start(flags: flags, environment: 'dev');
+        await start(controlPoints: controlPoints, environment: 'dev');
         await fw.shutdown();
         expect(fw.status.state, StartState.shutdown);
         expect(
           fw.controlPoints.getBooleanDetails('new-checkout', false).errorKind,
           ErrorKind.alreadyClosed,
         );
-        await start(flags: flags, environment: 'dev');
+        await start(controlPoints: controlPoints, environment: 'dev');
         expect(fw.controlPoints.getBooleanValue('new-checkout', false), isTrue);
       },
     );
 
     test(
-      'a local read of a key missing from the flags map warns once',
+      'a local read of a key missing from the control-points map warns once',
       () async {
-        await start(flags: flags, environment: 'dev');
+        await start(controlPoints: controlPoints, environment: 'dev');
         expect(fw.controlPoints.getStringValue('copy', 'hello'), 'hello');
         expect(fw.controlPoints.getStringValue('copy', 'hello'), 'hello');
         expect(
           log.containing(
-            "'copy' is not in your flags map (lib/fireweave/flags.dart)",
+            "'copy' is not in your control points (lib/fireweave/control_points.dart)",
           ),
           hasLength(1),
         );

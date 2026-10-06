@@ -6,7 +6,7 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-needs-key": {
         "type": "boolean",
         "enabled": true,
@@ -20,7 +20,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-needs-key",
+    "controlPointKey": "fw-needs-key",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {
@@ -35,7 +35,7 @@
     "reason": "ERROR",
     "errorCode": "TARGETING_KEY_MISSING",
     "errorMessage": "targeting key missing",
-    "flagMetadata": {
+    "controlPointMetadata": {
       "fireweave.errorKind": "InvalidContext"
     }
   },

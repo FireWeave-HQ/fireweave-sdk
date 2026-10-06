@@ -9,7 +9,7 @@ from fireweave import (
     ConfigurationError,
     EvaluationContext,
     FireweaveRemoteAdapter,
-    FlagNotFoundError,
+    ControlPointNotFoundError,
 )
 
 
@@ -27,7 +27,7 @@ def test_resolve_via_transport():
         return 200, {
             "decisions": [
                 {
-                    "flagKey": "checkout-v2",
+                    "controlPointKey": "checkout-v2",
                     "value": True,
                     "reason": "TARGETING_MATCH",
                     "found": True,
@@ -47,7 +47,7 @@ def test_resolve_via_transport():
     )
     assert res.matched is True
     assert res.value is True
-    assert calls[0][0].endswith("/v1/flags/evaluate")
+    assert calls[0][0].endswith("/v1/control-points/evaluate")
     assert calls[0][2]["Authorization"] == "Bearer project-api-key_test"
     assert calls[0][1]["targetingKey"] == "user-1"
     adapter.shutdown(1000)
@@ -65,9 +65,9 @@ def test_auth_error():
     adapter.shutdown(1000)
 
 
-class TestFlagNotFound:
+class TestControlPointNotFound:
     """spec/control-points.md return-discipline table, remote's row: "key
-    unknown to the backend" -> ERROR/FlagNotFound. This is the fix
+    unknown to the backend" -> ERROR/ControlPointNotFound. This is the fix
     ratified in review — the adapter previously returned
     `FlagResolution(matched=False)` for BOTH this case and local mode's
     genuinely-different "no decision, use the caller's default" case,
@@ -89,17 +89,17 @@ class TestFlagNotFound:
         adapter = self._ready_adapter(
             lambda *a: (
                 200,
-                {"decisions": [{"flagKey": "missing", "found": False}]},
+                {"decisions": [{"controlPointKey": "missing", "found": False}]},
             )
         )
-        with pytest.raises(FlagNotFoundError) as exc_info:
+        with pytest.raises(ControlPointNotFoundError) as exc_info:
             adapter.resolve("missing", EvaluationContext(targeting_key="u"))
         assert exc_info.value.quota_limited is False
         adapter.shutdown(1000)
 
     def test_key_absent_from_decisions_raises_flag_not_found(self):
         adapter = self._ready_adapter(lambda *a: (200, {"decisions": []}))
-        with pytest.raises(FlagNotFoundError):
+        with pytest.raises(ControlPointNotFoundError):
             adapter.resolve("missing", EvaluationContext(targeting_key="u"))
         adapter.shutdown(1000)
 
@@ -107,7 +107,7 @@ class TestFlagNotFound:
         adapter = self._ready_adapter(
             lambda *a: (200, {"decisions": [], "quotaLimited": True})
         )
-        with pytest.raises(FlagNotFoundError) as exc_info:
+        with pytest.raises(ControlPointNotFoundError) as exc_info:
             adapter.resolve("missing", EvaluationContext(targeting_key="u"))
         assert exc_info.value.quota_limited is True
         adapter.shutdown(1000)
@@ -119,7 +119,7 @@ class TestFlagNotFound:
                 200,
                 {
                     "decisions": [
-                        {"flagKey": "present", "found": True, "value": True, "enabled": True, "reason": "TARGETING_MATCH"}
+                        {"controlPointKey": "present", "found": True, "value": True, "enabled": True, "reason": "TARGETING_MATCH"}
                     ]
                 },
             )

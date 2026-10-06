@@ -14,7 +14,7 @@ class FlagDefinition {
     this.reasonCode,
     this.conditionIndex,
     this.version,
-    this.vendorFlagId,
+    this.vendorControlPointId,
     this.fireweaveReason,
     this.fromCache = false,
     this.matchTargetingKey,
@@ -36,7 +36,7 @@ class FlagDefinition {
     final reasonCode = reasonMap['code'];
     final conditionIndex = reasonMap['condition_index'];
     final version = metadataMap['version'];
-    final vendorFlagId = metadataMap['id'];
+    final vendorControlPointId = metadataMap['id'];
     final fireweaveReason = obj['fireweaveReason'];
     final matchTargetingKey = obj['matchTargetingKey'];
     return FlagDefinition(
@@ -47,7 +47,9 @@ class FlagDefinition {
       reasonCode: reasonCode is String ? reasonCode : null,
       conditionIndex: conditionIndex is num ? conditionIndex.toInt() : null,
       version: version is num ? version.toInt() : null,
-      vendorFlagId: vendorFlagId is num ? vendorFlagId.toInt() : null,
+      vendorControlPointId: vendorControlPointId is num
+          ? vendorControlPointId.toInt()
+          : null,
       fireweaveReason: fireweaveReason is String
           ? DecisionReason.fromWireName(fireweaveReason)
           : null,
@@ -66,7 +68,7 @@ class FlagDefinition {
   final String? reasonCode;
   final int? conditionIndex;
   final int? version;
-  final int? vendorFlagId;
+  final int? vendorControlPointId;
   final DecisionReason? fireweaveReason;
   final bool fromCache;
   final String? matchTargetingKey;
@@ -204,18 +206,18 @@ class InMemoryAdapter implements ControlPointsBackendAdapter {
       final definition = entry.value;
       final matched = _conditionsMatch(definition, context);
       // Ruling 11 gate (spec/decision.schema.json standardMetadataKeys):
-      // fireweave.vendorFlagId + fireweave.reasonCode are emitted only when
+      // fireweave.vendorControlPointId + fireweave.reasonCode are emitted only when
       // the fixture reports a vendor flag id, a matched-condition index, AND
       // a reason code together — this adapter is the one place that raw
       // "condition index" signal exists, so it applies the gate itself
       // before constructing the AdapterResolution the (adapter-agnostic)
       // runtime reads.
-      int? vendorFlagId;
+      int? vendorControlPointId;
       String? reasonCode;
-      if (definition.vendorFlagId != null &&
+      if (definition.vendorControlPointId != null &&
           definition.conditionIndex != null &&
           definition.reasonCode != null) {
-        vendorFlagId = definition.vendorFlagId;
+        vendorControlPointId = definition.vendorControlPointId;
         reasonCode = definition.reasonCode;
       }
       result[entry.key] = AdapterResolution(
@@ -226,7 +228,7 @@ class InMemoryAdapter implements ControlPointsBackendAdapter {
         reason: definition.fireweaveReason,
         reasonCode: reasonCode,
         version: definition.version,
-        vendorFlagId: vendorFlagId,
+        vendorControlPointId: vendorControlPointId,
         payload: definition.payload,
         fromCache: definition.fromCache,
       );

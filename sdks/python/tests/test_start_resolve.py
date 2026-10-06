@@ -1,5 +1,5 @@
 """Start profile: the pure resolver (fireweave/start/_resolve.py), the
-channel derivation and the flags object. Precedence, the mode rule, the
+channel derivation and the control-points object. Precedence, the mode rule, the
 endpoint from the SDK channel, key families, URL rules.
 """
 
@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from fireweave import ConfigurationError, ErrorKind
-from fireweave.start import define_flags
+from fireweave.start import define_control_points
 from fireweave.start._build_info import channel_for_version
 from fireweave.start._env import env_from_mapping
 from fireweave.start._resolve import resolve_start
@@ -230,17 +230,17 @@ class TestChannel:
         assert SDK_CHANNEL == channel_for_version(SDK_VERSION)
 
 
-class TestFlags:
-    def test_define_flags_returns_its_argument(self):
+class TestControlPoints:
+    def test_define_control_points_returns_its_argument(self):
         mapping = {"new-checkout": {"local": True, "description": "One-page checkout"}, "old": {"local": False}}
-        assert define_flags(mapping) is mapping
+        assert define_control_points(mapping) is mapping
 
-    def test_resolve_copies_the_flags(self):
-        r = resolve({"APP_ENV": "dev"}, flags={"a": {"local": True, "description": "x"}})
-        assert r.flags == {"a": {"local": True, "description": "x"}}
+    def test_resolve_copies_the_control_points(self):
+        r = resolve({"APP_ENV": "dev"}, control_points={"a": {"local": True, "description": "x"}})
+        assert r.control_points == {"a": {"local": True, "description": "x"}}
 
     @pytest.mark.parametrize(
-        "flags, fragment",
+        "control_points, fragment",
         [
             ({"a": {"local": 1}}, "must be {\"local\": True}"),
             ({"a": {"local": "yes"}}, "must be {\"local\": True}"),
@@ -252,11 +252,11 @@ class TestFlags:
             (["a"], "must be a mapping"),
         ],
     )
-    def test_invalid_flags_are_rejected(self, flags, fragment):
+    def test_invalid_control_points_are_rejected(self, control_points, fragment):
         with pytest.raises(ConfigurationError) as info:
-            define_flags(flags)
+            define_control_points(control_points)
         assert fragment in info.value.message
-        assert fragment in config_message(env={"APP_ENV": "dev"}, flags=flags)
+        assert fragment in config_message(env={"APP_ENV": "dev"}, control_points=control_points)
 
-    def test_flags_are_validated_in_remote_mode_too(self):
-        assert "not a valid control point key" in config_message(key=KEY, flags={"": {"local": True}})
+    def test_control_points_are_validated_in_remote_mode_too(self):
+        assert "not a valid control point key" in config_message(key=KEY, control_points={"": {"local": True}})

@@ -192,7 +192,7 @@ export function resolvePolicy(input: PolicyInput): PolicyResult {
 /**
  * What the build helpers inject as __FIREWEAVE_WEB_CONFIG__: raw values and
  * their source names, re-resolved in the browser so explicit start() options
- * still win. Never carries a server key or the flags object.
+ * still win. Never carries a server key or the control-points object.
  */
 export interface InjectedConfig {
   readonly v: 1;

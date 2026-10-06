@@ -6,12 +6,6 @@ FireweaveClient client() =>
 
 void main() {
   group('FireweaveClient', () {
-    test('flags alias shares identity with controlPoints', () {
-      final fw = client();
-      // ignore: deprecated_member_use_from_same_package
-      expect(identical(fw.flags, fw.controlPoints), isTrue);
-    });
-
     test('invokeCapability degrades unsupported', () async {
       final fw = client();
       await fw.initialize();

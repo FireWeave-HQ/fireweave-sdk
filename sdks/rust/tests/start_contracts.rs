@@ -1,7 +1,7 @@
 //! The shared start-profile suite (`contracts/start/`,
 //! `spec/start-profile.md`) on Rust. Drives the start profile's pure
 //! resolver and instance-key derivation (through the `#[doc(hidden)]` hooks
-//! in `src/start/test_hooks.rs`), `try_define_flags` and
+//! in `src/start/test_hooks.rs`), `try_define_control_points` and
 //! `channel_for_version` with each case's inputs, compares by the rules in
 //! `contracts/start/README.md`, and writes
 //! `conformance/compatibility-report.start.rust.json` (gitignored). A port
@@ -14,7 +14,7 @@ use std::sync::OnceLock;
 
 use fireweave::start::{
     channel_for_version, derive_instance_key_for_tests, env_map, resolve_for_tests,
-    try_define_flags, Channel, Flag, StartOptions,
+    try_define_control_points, Channel, LocalControlPoint, StartOptions,
 };
 use fireweave::{FireweaveError, Mode};
 use serde_json::{json, Map, Value};
@@ -182,16 +182,16 @@ fn run_instance_key(when: &Value) -> Result<Outcome, String> {
     Ok(Outcome::fields(f))
 }
 
-/// Translates the canonical flags object to `Flag`s. A shape Rust's types
+/// Translates the canonical control_points object to `LocalControlPoint`s. A shape Rust's types
 /// cannot express is a runner error: those cases live in
 /// `start-flags-untyped`, which Rust marks not-applicable.
-fn run_define_flags(when: &Value) -> Result<Outcome, String> {
-    let flags = when
-        .get("flags")
+fn run_define_control_points(when: &Value) -> Result<Outcome, String> {
+    let control_points = when
+        .get("controlPoints")
         .and_then(Value::as_object)
-        .ok_or("defineFlags needs a flags object")?;
+        .ok_or("defineControlPoints needs a controlPoints object")?;
     let mut entries = Vec::new();
-    for (key, spec) in flags {
+    for (key, spec) in control_points {
         let spec = spec
             .as_object()
             .ok_or(format!("flag {key:?} is not an object"))?;
@@ -202,7 +202,7 @@ fn run_define_flags(when: &Value) -> Result<Outcome, String> {
             .get("local")
             .and_then(Value::as_bool)
             .ok_or(format!("flag {key:?} has no boolean local"))?;
-        let mut flag = Flag::local(local);
+        let mut flag = LocalControlPoint::local(local);
         match spec.get("description") {
             None => {}
             Some(Value::String(d)) => flag = flag.describe(d.clone()),
@@ -210,7 +210,7 @@ fn run_define_flags(when: &Value) -> Result<Outcome, String> {
         }
         entries.push((key.clone(), flag));
     }
-    Ok(match try_define_flags(entries) {
+    Ok(match try_define_control_points(entries) {
         Ok(_) => {
             let mut f = Map::new();
             f.insert("ok".into(), json!(true));
@@ -237,7 +237,7 @@ fn run(when: &Value) -> Result<Outcome, String> {
     match when.get("operation").and_then(Value::as_str) {
         Some("resolve") => run_resolve(when),
         Some("instanceKey") => run_instance_key(when),
-        Some("defineFlags") => run_define_flags(when),
+        Some("defineControlPoints") => run_define_control_points(when),
         Some("channelForVersion") => run_channel_for_version(when),
         other => Err(format!("operation {other:?} is not applicable to {LANG}")),
     }

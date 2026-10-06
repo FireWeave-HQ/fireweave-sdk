@@ -47,7 +47,7 @@ class FireweaveRuntimeTest {
         assertEquals(Reasons.ERROR, d.reason());
         assertEquals(ErrorKind.NotReady, d.error().kind());
         assertEquals("PROVIDER_NOT_READY", d.error().openFeatureErrorCode());
-        assertEquals("NotReady", d.flagMetadata().get("fireweave.errorKind"));
+        assertEquals("NotReady", d.controlPointMetadata().get("fireweave.errorKind"));
     }
 
     @Test
@@ -176,7 +176,7 @@ class FireweaveRuntimeTest {
         final EvaluationContext[] seen = new EvaluationContext[1];
         adapter.onEvaluate = req -> {
             seen[0] = req.context();
-            return Decision.builder(req.flagKey()).value(JsonValue.of(true))
+            return Decision.builder(req.controlPointKey()).value(JsonValue.of(true))
                     .reason(Reasons.TARGETING_MATCH).build();
         };
         FireweaveRuntime rt = runtime(adapter);
@@ -259,7 +259,7 @@ class FireweaveRuntimeTest {
         final boolean[] called = {false};
         adapter.onEvaluate = req -> {
             called[0] = true;
-            return Decision.builder(req.flagKey()).value(JsonValue.of(true))
+            return Decision.builder(req.controlPointKey()).value(JsonValue.of(true))
                     .reason(Reasons.TARGETING_MATCH).build();
         };
         Decision ok = rt.evaluate("f", FlagType.BOOLEAN, JsonValue.of(false), null,
@@ -287,7 +287,7 @@ class FireweaveRuntimeTest {
         Decision d = rt.evaluate("f", FlagType.BOOLEAN, JsonValue.of(false), null, null, null);
         assertEquals(Reasons.ERROR, d.reason());
         assertEquals("FLAG_NOT_FOUND", d.error().openFeatureErrorCode());
-        assertEquals(Boolean.TRUE, d.flagMetadata().get("fireweave.quotaLimited"));
+        assertEquals(Boolean.TRUE, d.controlPointMetadata().get("fireweave.quotaLimited"));
     }
 
     @Test
@@ -296,7 +296,7 @@ class FireweaveRuntimeTest {
         final boolean[] called = {false};
         adapter.onEvaluate = req -> {
             called[0] = true;
-            return Decision.builder(req.flagKey()).value(JsonValue.of(true)).build();
+            return Decision.builder(req.controlPointKey()).value(JsonValue.of(true)).build();
         };
         FireweaveRuntime rt = new FireweaveRuntime(
                 FireweaveConfig.builder().requireTargetingKey(true).build(), adapter);
@@ -315,7 +315,7 @@ class FireweaveRuntimeTest {
         final boolean[] called = {false};
         adapter.onEvaluate = req -> {
             called[0] = true;
-            return Decision.builder(req.flagKey()).value(JsonValue.of(true)).build();
+            return Decision.builder(req.controlPointKey()).value(JsonValue.of(true)).build();
         };
         FireweaveRuntime rt = runtime(adapter);
         rt.initialize();
@@ -323,7 +323,7 @@ class FireweaveRuntimeTest {
         Decision empty = rt.evaluate("", FlagType.BOOLEAN, JsonValue.of(false), null,
                 EvaluationContext.builder().targetingKey("u").build(), null);
         assertEquals(Reasons.ERROR, empty.reason());
-        assertEquals(ErrorKind.FlagNotFound, empty.error().kind());
+        assertEquals(ErrorKind.ControlPointNotFound, empty.error().kind());
         assertEquals(false, called[0], "adapter must not be called for a malformed key");
 
         StringBuilder tooLong = new StringBuilder();
@@ -332,7 +332,7 @@ class FireweaveRuntimeTest {
         }
         Decision longKey = rt.evaluate(tooLong.toString(), FlagType.BOOLEAN, JsonValue.of(false), null,
                 EvaluationContext.builder().targetingKey("u").build(), null);
-        assertEquals(ErrorKind.FlagNotFound, longKey.error().kind());
+        assertEquals(ErrorKind.ControlPointNotFound, longKey.error().kind());
         rt.shutdown();
     }
 
@@ -350,7 +350,7 @@ class FireweaveRuntimeTest {
         final boolean[] called = {false};
         adapter.onEvaluate = req -> {
             called[0] = true;
-            return Decision.builder(req.flagKey()).value(JsonValue.of(true)).build();
+            return Decision.builder(req.controlPointKey()).value(JsonValue.of(true)).build();
         };
         FireweaveRuntime rt = runtime(adapter);
         rt.initialize();

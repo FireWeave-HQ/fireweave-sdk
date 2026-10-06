@@ -501,14 +501,16 @@ jobs:
             sleep 0.5
           done
           curl -fsS http://127.0.0.1:3901/health
-      - name: Protocol smoke (flags endpoint answers)
+      - name: Protocol smoke (control-points evaluate answers)
         run: |
-          code="$(curl -s -o /tmp/flags.json -w '%{http_code}' -X POST 'http://127.0.0.1:3901/flags?v=2' \
+          code="$(curl -s -o /tmp/evaluate.json -w '%{http_code}' -X POST 'http://127.0.0.1:3901/v1/control-points/evaluate' \
+            -H 'Authorization: Bearer project-api-key_ci' \
             -H 'Content-Type: application/json' \
-            -d '{"api_key":"phc_test","distinct_id":"ci-smoke"}')"
-          echo "POST /flags -> HTTP $code"
-          cat /tmp/flags.json
-          test "$code" != "404"
+            -d '{"targetingKey":"ci-smoke"}')"
+          echo "POST /v1/control-points/evaluate -> HTTP $code"
+          cat /tmp/evaluate.json
+          test "$code" = "200"
+          grep -q '"controlPointKey"' /tmp/evaluate.json
       - name: Node SDK integration tests (exercise the stub protocol via injected fetch)
         working-directory: sdks/node
         run: |

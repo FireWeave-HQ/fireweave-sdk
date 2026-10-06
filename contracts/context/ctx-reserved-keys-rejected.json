@@ -6,7 +6,7 @@
   "provisional": false,
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-any": {
         "type": "boolean",
         "enabled": true,
@@ -23,7 +23,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-any",
+    "controlPointKey": "fw-any",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {
@@ -39,7 +39,7 @@
     "reason": "ERROR",
     "errorCode": "INVALID_CONTEXT",
     "errorMessage": "invalid evaluation context",
-    "flagMetadata": {
+    "controlPointMetadata": {
       "fireweave.errorKind": "InvalidContext"
     }
   },

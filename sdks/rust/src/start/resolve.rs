@@ -11,7 +11,7 @@
 use crate::{is_loopback_hostname, FireweaveError, Mode};
 
 use super::channel::Channel;
-use super::flags::Flags;
+use super::control_points::LocalControlPoints;
 use super::names::{
     DEV_ENVIRONMENTS, ENVIRONMENT_FALLBACKS, ENV_ENVIRONMENT, ENV_KEY, ENV_URL, LEGACY_KEY_NAMES,
     LEGACY_URL_NAMES, LOOPBACK_HOSTS, OPT_ENVIRONMENT, OPT_KEY, OPT_URL, RETIRED_ENVIRONMENT_NAME,
@@ -53,7 +53,7 @@ pub(crate) struct Resolved {
     pub(crate) environment: Option<String>,
     pub(crate) environment_source: Option<String>,
 
-    pub(crate) flags: Flags,
+    pub(crate) control_points: LocalControlPoints,
     pub(crate) channel: Channel,
     pub(crate) sdk_version: String,
 
@@ -325,7 +325,7 @@ pub(crate) fn resolve(
         key_source: "none".to_string(),
         environment: None,
         environment_source: None,
-        flags: options.flags.clone(),
+        control_points: options.control_points.clone(),
         channel: build.channel,
         sdk_version: build.version.clone(),
         warnings: Vec::new(),
@@ -401,7 +401,7 @@ mod tests {
     use std::cell::RefCell;
     use std::collections::HashMap;
 
-    use crate::start::{define_flags, Flag};
+    use crate::start::{define_control_points, LocalControlPoint};
 
     const TEST_KEY: &str = "project-api-key_abc123";
 
@@ -926,18 +926,18 @@ mod tests {
         assert!(key_family_error("fw_ingest_pub_abc", "FIREWEAVE_KEY").is_none());
     }
 
-    // --------------------------------------------------------------- flags
+    // ------------------------------------------------------- control points
 
     #[test]
     fn the_flags_are_carried_in_both_modes() {
         let o = StartOptions {
-            flags: define_flags([("a", Flag::local(true))]),
+            control_points: define_control_points([("a", LocalControlPoint::local(true))]),
             ..opts()
         };
         let r = ok(&o, &env(&[("FIREWEAVE_ENV", "dev")]));
-        assert_eq!(r.flags.len(), 1);
+        assert_eq!(r.control_points.len(), 1);
         let r = ok(&o, &env(&[("FIREWEAVE_KEY", TEST_KEY)]));
-        assert_eq!(r.flags.len(), 1);
+        assert_eq!(r.control_points.len(), 1);
     }
 
     #[test]

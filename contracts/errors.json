@@ -11,7 +11,7 @@
       "Bearer ",
       "FW_PROJECT_API_KEY"
     ],
-    "flagMetadataErrorKindKey": "fireweave.errorKind",
+    "controlPointMetadataErrorKindKey": "fireweave.errorKind",
     "redaction": {
       "description": "How every SDK scrubs text before it reaches an error message, a log line or a signal. Applied in this order: bearer tokens, URL userinfo, named assignments, then key-shaped values. A variable NAME is never redacted on its own; only its value is. Each SDK's redactor MUST turn every vector's `in` into exactly its `out` (start-profile spec SP-26).",
       "placeholder": "[REDACTED]",
@@ -112,12 +112,12 @@
       "description": "Evaluation attempted before successful initialization or while cold-start gate is active"
     },
     {
-      "kind": "FlagNotFound",
+      "kind": "ControlPointNotFound",
       "openFeatureErrorCode": "FLAG_NOT_FOUND",
       "retryable": false,
       "class": "permanent",
       "defaultMessage": "flag not found",
-      "description": "Flag absent from evaluation snapshot or definitions; also used when quotaLimited yields empty flags"
+      "description": "Control point absent from evaluation snapshot or definitions; also used when quotaLimited yields empty flags"
     },
     {
       "kind": "TypeMismatch",
@@ -125,7 +125,7 @@
       "retryable": false,
       "class": "permanent",
       "defaultMessage": "flag type mismatch",
-      "description": "Requested typed getter does not match stored flag value type"
+      "description": "Requested typed getter does not match the stored value type"
     },
     {
       "kind": "InvalidContext",
@@ -152,7 +152,7 @@
       "retryable": false,
       "class": "permanent",
       "defaultMessage": "authorization failed",
-      "description": "HTTP 403 or key lacks required flag permissions"
+      "description": "HTTP 403 or key lacks required permissions"
     },
     {
       "kind": "RateLimited",
@@ -160,7 +160,7 @@
       "retryable": true,
       "class": "transient",
       "defaultMessage": "rate limited",
-      "description": "HTTP 429 from the backend; evaluations still return defaults. Quota-limited flag responses resolve as FlagNotFound with fireweave.quotaLimited metadata"
+      "description": "HTTP 429 from the backend; evaluations still return defaults. Quota-limited responses resolve as ControlPointNotFound with fireweave.quotaLimited metadata"
     },
     {
       "kind": "Timeout",
@@ -168,7 +168,7 @@
       "retryable": true,
       "class": "transient",
       "defaultMessage": "request timed out",
-      "description": "Flag request or initialization deadline exceeded"
+      "description": "Evaluate request or initialization deadline exceeded"
     },
     {
       "kind": "Network",
@@ -219,7 +219,7 @@
       "retryable": false,
       "class": "permanent",
       "defaultMessage": "provider already closed",
-      "description": "Operation invoked after shutdown/close; Fireweave kind preserved in flagMetadata fireweave.errorKind"
+      "description": "Operation invoked after shutdown/close; Fireweave kind preserved in controlPointMetadata fireweave.errorKind"
     },
     {
       "kind": "Internal",

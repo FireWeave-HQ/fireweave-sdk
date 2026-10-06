@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed — BREAKING: the wire and the public names say control point; 3.0.0 for all eight SDKs ([ADR-0013](docs/adr/0013-control-point-wire.md))
+
+- Evaluate calls `POST /v1/control-points/evaluate` with `controlPointKeys`; decisions carry `controlPointKey` and `controlPointMetadata`; capture and signal events (node, web) carry `controlPointKey`. fw-server keeps the 2.x route and names as aliases for 2.x SDKs.
+- Metadata keys `fireweave.flagVersion` and `fireweave.vendorFlagId` are now `fireweave.controlPointVersion` and `fireweave.vendorControlPointId`.
+- The error kind `FlagNotFound` is `ControlPointNotFound` in every SDK (Python `ControlPointNotFoundError`, Go `KindControlPointNotFound` / `ErrControlPointNotFound`, Java `ErrorKind.ControlPointNotFound`, Rust `ErrorKind::ControlPointNotFound`, Dart and Swift `.controlPointNotFound`). OpenFeature's code `FLAG_NOT_FOUND` is unchanged.
+- The public `Decision` says `controlPointKey` (node, web, Go, Java) and `controlPointMetadata` (Python `control_point_metadata`, Rust `control_point_metadata`, Dart, Swift).
+- The `client.flags` alias is removed in every SDK; use `client.controlPoints` (Python and Rust `control_points`, Go `ControlPoints()`).
+- The start profile below (ADR-0012, unreleased) takes `controlPoints` instead of `flags`: `defineControlPoints` (Python and Rust `define_control_points`, Go `DefineControlPoints`), with `LocalControlPoint`/`LocalControlPoints` types in Go, Java, Rust and Dart and `FireweaveLocalControlPoint(s)` in Swift; the status reports `controlPointCount`.
+- Conformance fixtures use `given.controlPoints`, `when.controlPointKey` and `expect.controlPointMetadata`; the surface descriptor records `removedAlias: "flags"`; the test server serves only `/v1/control-points/evaluate`.
+- Swift is changed by review only until CI runs it.
+
 ### Added — `@fireweaveai/server-sdk` start profile ([ADR-0012](docs/adr/0012-start-profile.md), proposed)
 
 - New subpaths `@fireweaveai/server-sdk/start` (`start`, `fw`, `defineFlags`) and `@fireweaveai/server-sdk/register`. One import, one secret (`FIREWEAVE_KEY`) and an optional flags object replace the generated per-repo harness.

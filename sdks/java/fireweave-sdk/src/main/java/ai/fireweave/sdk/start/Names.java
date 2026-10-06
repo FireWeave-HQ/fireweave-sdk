@@ -58,8 +58,8 @@ final class Names {
     static final List<String> LOOPBACK_HOSTS =
             Collections.unmodifiableList(Arrays.asList("localhost", "127.0.0.1", "::1"));
 
-    /** Where the app's flags conventionally live; named in the local-mode "missing key" warning. */
-    static final String FLAGS_FILE = "FireweaveFlags.java";
+    /** Where the app's control points conventionally live; named in the local-mode "missing key" warning. */
+    static final String CONTROL_POINTS_FILE = "FireweaveControlPoints.java";
 
     static String channelUrl(SdkChannel channel) {
         return channel == SdkChannel.STAGING ? STAGING_URL : PRODUCTION_URL;
