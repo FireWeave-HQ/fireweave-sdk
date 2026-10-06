@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://fireweave.ai/spec/0.1.0/remote-register-target.schema.json",
   "title": "FireweaveRemoteRegisterTarget",
-  "description": "Vendor-neutral wire protocol for POST /v1/targets/register (ADR-0005). Auth: Authorization: Bearer <Fireweave project/runtime key>. Registers a targeting target — a user or a device — so flag rules can match on DURABLE properties. Registered properties are stored server-side; `attributes` on POST /v1/flags/evaluate override them for a single evaluation. No provider field names — fw-server maps to the connected provider.",
+  "description": "Vendor-neutral wire protocol for POST /v1/targets/register (ADR-0005). Auth: Authorization: Bearer <Fireweave project/runtime key>. Registers a targeting target — a user or a device — so control-point rules can match on DURABLE properties. Registered properties are stored server-side; `attributes` on POST /v1/control-points/evaluate override them for a single evaluation. No provider field names — fw-server maps to the connected provider.",
   "type": "object",
   "$defs": {
     "jsonValue": {

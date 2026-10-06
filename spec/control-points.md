@@ -20,8 +20,7 @@ Every SDK exposes the surface under a namespace named `controlPoints`, cased for
 language: `controlPoints` (TS, Java, Swift, Dart), `control_points` (Python, Rust),
 `ControlPoints` (Go).
 
-`flags` MAY be retained as a deprecated alias pointing at the same object, per ADR-0007. It
-MUST NOT be the documented name and MUST NOT appear in examples.
+There is no `flags` alias: 3.0.0 removed it (ADR-0013).
 
 ## The nine methods
 
@@ -45,8 +44,9 @@ Naming follows each language's idiom (`get_boolean_value`, `GetBooleanValue`) bu
 **method set and its semantics do not vary**. A language missing any of the nine fails
 `conformance/surface/`.
 
-`flagKey` stays the parameter name at the wire and envelope boundary (ADR-0007) even though
-the namespace is `controlPoints`. That duality is a decision, not an oversight.
+The wire and the envelopes name the key `controlPointKey`, and its metadata
+`controlPointMetadata` (ADR-0013, superseding ADR-0007's `flagKey` boundary). OpenFeature's own
+vocabulary (`FLAG_NOT_FOUND`) appears only in the error mapping column.
 
 ## Return discipline — never throw into a read path
 
@@ -56,7 +56,7 @@ A control-point read MUST NOT raise into the caller. Every failure resolves to t
 | Situation | `value` | `reason` | `error.kind` |
 | --- | --- | --- | --- |
 | decision served | resolved | `TARGETING_MATCH` \| `SPLIT` \| `STATIC` \| `CACHED` | — |
-| key unknown to the backend | `default` | `ERROR` | `FlagNotFound` |
+| key unknown to the backend | `default` | `ERROR` | `ControlPointNotFound` |
 | resolved value is the wrong type | `default` | `ERROR` | `TypeMismatch` |
 | `default` does not match `type` | `default` | `ERROR` | `TypeMismatch` |
 | context fails validation | `default` | `ERROR` | `InvalidContext` |

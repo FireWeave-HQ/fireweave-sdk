@@ -35,7 +35,7 @@ trust). Its build-time values come from a build helper (web: the `fireweave()` V
 | endpoint | `url` | `FIREWEAVE_URL` | `FIREWEAVE_URL` | `FW_API_URL`, then `FW_ATTEST_URL` |
 | environment name | `environment` | `FIREWEAVE_ENV`, then `APP_ENV` | `FIREWEAVE_ENV` | — |
 | instance id | `instanceId` (`instance_id`) | `FIREWEAVE_INSTANCE_ID` | — | — |
-| local values | `flags` | — | — | — |
+| local values | `controlPoints` (`control_points`) | — | — | — |
 | mode override | `mode` | — | — | — |
 
 Option spellings follow each language's convention (`instance_id` in Python and Rust,
@@ -114,20 +114,20 @@ the value. **[SP-16]**
 
 **[SP-17]**
 
-## 7. Flags
+## 7. Local control points
 
-`flags` maps each control-point key to its **local** value (`{ local: boolean, description? }` or
+`controlPoints` maps each control-point key to its **local** value (`{ local: boolean, description? }` or
 the language's equivalent). Keys are validated with the core's control-point key rule; a non-boolean
 local value is an error. Local values are served **only** in local mode; remote ignores them, and a
-call site's default stays `false` (RAMP-1). In local mode a read of a key missing from the flags
-returns the caller's default and warns once, naming the flags file. **[SP-18]**
+call site's default stays `false` (RAMP-1). In local mode a read of a key missing from the map
+returns the caller's default and warns once, naming the file that holds it. **[SP-18]**
 
 ## 8. Singleton, idempotency and reads
 
 - One client per process (per isolate in Dart; per page in browsers). **[SP-19]**
 - A second `start()` with the same effective configuration is a no-op. A different one is an error
   on servers; client profiles log it once and keep the first. The comparison covers mode, url,
-  key, allowed hosts and the instance or device id; flags count only in local mode. **[SP-20]**
+  key, allowed hosts and the instance or device id; local control points count only in local mode. **[SP-20]**
 - Reads never throw. Before start settles, or after it failed, a read returns the caller's default
   (the details forms return an `ERROR` decision). Server profiles in languages where a read can start
   the client (Node, Python, Go, Java, Rust) start it from the environment alone on the first read;

@@ -37,7 +37,7 @@
           "uniqueItems": true
         },
         "noPostHogTypesInPublicApi": { "type": "boolean", "const": true },
-        "noCustomFlagEvaluator": { "type": "boolean", "const": true },
+        "noCustomControlPointEvaluator": { "type": "boolean", "const": true },
         "noAnonymousIdPerEvaluation": { "type": "boolean", "const": true }
       }
     },

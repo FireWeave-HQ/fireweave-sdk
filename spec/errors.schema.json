@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://fireweave.ai/spec/0.1.0/errors.schema.json",
   "title": "FireweaveErrors",
-  "description": "Fireweave canonical 15-kind error taxonomy (PascalCase kinds; languages map idiomatically) and mapping to OpenFeature error codes. Validates the machine-readable instance at contracts/errors.json. Quota-limited flag responses are not a distinct kind: they resolve to the default with FlagNotFound / OF FLAG_NOT_FOUND plus flagMetadata fireweave.quotaLimited: true. AlreadyClosed maps to PROVIDER_NOT_READY (not GENERAL); the Fireweave kind is preserved in decision metadata (flagMetadata fireweave.errorKind).",
+  "description": "Fireweave canonical 15-kind error taxonomy (PascalCase kinds; languages map idiomatically) and mapping to OpenFeature error codes. Validates the machine-readable instance at contracts/errors.json. Quota-limited responses are not a distinct kind: they resolve to the default with ControlPointNotFound / OF FLAG_NOT_FOUND plus controlPointMetadata fireweave.quotaLimited: true. AlreadyClosed maps to PROVIDER_NOT_READY (not GENERAL); the Fireweave kind is preserved in decision metadata (controlPointMetadata fireweave.errorKind).",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "errors"],
@@ -24,10 +24,10 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
         },
-        "flagMetadataErrorKindKey": {
+        "controlPointMetadataErrorKindKey": {
           "type": "string",
           "const": "fireweave.errorKind",
-          "description": "flagMetadata key carrying the canonical Fireweave kind on error decisions."
+          "description": "controlPointMetadata key carrying the canonical Fireweave kind on error decisions."
         },
         "redaction": {
           "type": "object",
@@ -64,7 +64,7 @@
       "items": { "$ref": "#/$defs/errorDefinition" },
       "allOf": [
         { "contains": { "type": "object", "properties": { "kind": { "const": "NotReady" }, "openFeatureErrorCode": { "const": "PROVIDER_NOT_READY" }, "retryable": { "const": true }, "class": { "const": "transient" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
-        { "contains": { "type": "object", "properties": { "kind": { "const": "FlagNotFound" }, "openFeatureErrorCode": { "const": "FLAG_NOT_FOUND" }, "retryable": { "const": false }, "class": { "const": "permanent" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "ControlPointNotFound" }, "openFeatureErrorCode": { "const": "FLAG_NOT_FOUND" }, "retryable": { "const": false }, "class": { "const": "permanent" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
         { "contains": { "type": "object", "properties": { "kind": { "const": "TypeMismatch" }, "openFeatureErrorCode": { "const": "TYPE_MISMATCH" }, "retryable": { "const": false }, "class": { "const": "permanent" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
         { "contains": { "type": "object", "properties": { "kind": { "const": "InvalidContext" }, "openFeatureErrorCode": { "const": "INVALID_CONTEXT" }, "retryable": { "const": false }, "class": { "const": "permanent" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
         { "contains": { "type": "object", "properties": { "kind": { "const": "Authentication" }, "openFeatureErrorCode": { "const": "GENERAL" }, "retryable": { "const": false }, "class": { "const": "permanent" } }, "required": ["kind", "openFeatureErrorCode", "retryable", "class"] } },
@@ -87,7 +87,7 @@
       "description": "Canonical Fireweave error kind (PascalCase).",
       "enum": [
         "NotReady",
-        "FlagNotFound",
+        "ControlPointNotFound",
         "TypeMismatch",
         "InvalidContext",
         "Authentication",
@@ -185,7 +185,7 @@
         "defaultsDoNotThrow": true,
         "noSecretsInMessages": true,
         "secretPatterns": ["phc_", "phx_", "phs_", "Bearer ", "FW_PROJECT_API_KEY"],
-        "flagMetadataErrorKindKey": "fireweave.errorKind"
+        "controlPointMetadataErrorKindKey": "fireweave.errorKind"
       },
       "errors": [
         {
@@ -194,7 +194,7 @@
           "retryable": false,
           "class": "permanent",
           "defaultMessage": "provider already closed",
-          "description": "Operation invoked after shutdown/close; Fireweave kind preserved in flagMetadata fireweave.errorKind"
+          "description": "Operation invoked after shutdown/close; Fireweave kind preserved in controlPointMetadata fireweave.errorKind"
         }
       ]
     }

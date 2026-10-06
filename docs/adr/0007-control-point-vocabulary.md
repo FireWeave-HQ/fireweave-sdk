@@ -1,6 +1,6 @@
 # ADR-0007: "Control point" is the product noun; `flag` stays at fixed boundaries
 
-- **Status:** Accepted
+- **Status:** Accepted; its `flag` wire, envelope and alias boundaries are superseded by ADR-0013 (3.0.0)
 - **Date:** 2026-08-08
 - **Scope:** Node SDK (`sdks/node`) and repo-level documentation. Python / Go / Java adopt the vocabulary when they next take a pass.
 - **Related:** ADR-0003 (OpenFeature boundary), ADR-0006 (Node drops the direct PostHog adapter)

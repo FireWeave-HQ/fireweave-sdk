@@ -17,7 +17,7 @@
     "remote-register-target.schema.json"
   ],
   "remoteProtocol": {
-    "evaluatePath": "/v1/flags/evaluate",
+    "evaluatePath": "/v1/control-points/evaluate",
     "capturePath": "/v1/capture",
     "registerTargetPath": "/v1/targets/register",
     "auth": "Authorization: Bearer <Fireweave project/runtime key>",

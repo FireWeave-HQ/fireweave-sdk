@@ -2,12 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://fireweave.ai/spec/0.1.0/decision.schema.json",
   "title": "FireweaveDecision",
-  "description": "Canonical flag evaluation decision produced by BackendAdapter / FireweaveRuntime. Mapped to OpenFeature ResolutionDetails at the provider boundary. No PostHog types.",
+  "description": "Canonical control-point evaluation decision produced by BackendAdapter / FireweaveRuntime. No PostHog types.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["flagKey", "value", "reason"],
+  "required": ["controlPointKey", "value", "reason"],
   "properties": {
-    "flagKey": {
+    "controlPointKey": {
       "type": "string",
       "minLength": 1,
       "maxLength": 256
@@ -42,9 +42,9 @@
         { "$ref": "https://fireweave.ai/spec/0.1.0/errors.schema.json#/$defs/errorInstance" }
       ]
     },
-    "flagMetadata": {
+    "controlPointMetadata": {
       "type": "object",
-      "description": "OF flagMetadata: string keys → bool | string | number. Fireweave enrichment uses fireweave.* keys.",
+      "description": "Metadata: string keys → bool | string | number. Fireweave enrichment uses fireweave.* keys.",
       "additionalProperties": {
         "oneOf": [
           { "type": "boolean" },
@@ -60,7 +60,7 @@
       "maxProperties": 32
     },
     "payload": {
-      "description": "JSON payload associated with the flag variant, if any.",
+      "description": "JSON payload associated with the control point's variant, if any.",
       "$ref": "#/$defs/jsonValue"
     },
     "exposure": {
@@ -90,7 +90,7 @@
         { "type": "string", "maxLength": 16384 },
         {
           "type": "number",
-          "description": "Cross-language int flags are reliable within ±(2^53−1)."
+          "description": "Cross-language int values are reliable within ±(2^53−1)."
         },
         {
           "type": "array",
@@ -105,7 +105,7 @@
       ]
     },
     "standardMetadataKeys": {
-      "description": "Recommended fireweave.* metadata keys. Vendor-metadata gating (orchestrator ruling 11, ratified): `fireweave.vendorFlagId` and `fireweave.reasonCode` are emitted only when the backend reports BOTH a vendor flag id AND a condition index for the evaluation; if either is absent, NEITHER key is emitted.",
+      "description": "Recommended fireweave.* metadata keys. Vendor-metadata gating (orchestrator ruling 11, ratified): `fireweave.vendorControlPointId` and `fireweave.reasonCode` are emitted only when the backend reports BOTH a vendor control-point id AND a condition index for the evaluation; if either is absent, NEITHER key is emitted.",
       "type": "object",
       "properties": {
         "fireweave.requestId": { "type": "string" },
@@ -115,15 +115,15 @@
           "type": "string",
           "enum": ["fireweave", "posthog", "inmemory", "other"]
         },
-        "fireweave.vendorFlagId": {
+        "fireweave.vendorControlPointId": {
           "type": "number",
-          "description": "Backend vendor flag id. Gated per ruling 11: emitted only together with fireweave.reasonCode, and only when the backend reported both a vendor flag id and a condition index."
+          "description": "Backend vendor control-point id. Gated per ruling 11: emitted only together with fireweave.reasonCode, and only when the backend reported both a vendor control-point id and a condition index."
         },
         "fireweave.reasonCode": {
           "type": "string",
-          "description": "Backend condition/reason code (e.g. condition_match). Gated per ruling 11: emitted only together with fireweave.vendorFlagId, and only when the backend reported both a vendor flag id and a condition index."
+          "description": "Backend condition/reason code (e.g. condition_match). Gated per ruling 11: emitted only together with fireweave.vendorControlPointId, and only when the backend reported both a vendor control-point id and a condition index."
         },
-        "fireweave.flagVersion": { "type": "number" }
+        "fireweave.controlPointVersion": { "type": "number" }
       }
     }
   }

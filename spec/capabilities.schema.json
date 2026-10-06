@@ -41,7 +41,6 @@
           "additionalProperties": { "type": "boolean" },
           "properties": {
             "controlPoints": { "type": "boolean" },
-            "flags": { "type": "boolean", "const": true },
             "releases": { "type": "boolean" },
             "exposures": { "type": "boolean" },
             "signals": { "type": "boolean" },

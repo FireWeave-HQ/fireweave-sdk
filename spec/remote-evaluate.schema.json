@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://fireweave.ai/spec/0.1.0/remote-evaluate.schema.json",
   "title": "FireweaveRemoteEvaluate",
-  "description": "Vendor-neutral wire protocol for POST /v1/flags/evaluate (ADR-0005). Auth: Authorization: Bearer <Fireweave project/runtime key> (project-api-key_… today; fw_runtime_ TBD). No PostHog field names.",
+  "description": "Vendor-neutral wire protocol for POST /v1/control-points/evaluate (ADR-0005). Auth: Authorization: Bearer <Fireweave project/runtime key> (project-api-key_… today; fw_runtime_ TBD). No PostHog field names.",
   "type": "object",
   "$defs": {
     "jsonValue": {
@@ -60,9 +60,9 @@
           },
           "maxProperties": 32
         },
-        "flagKeys": {
+        "controlPointKeys": {
           "type": "array",
-          "description": "Optional subset of flag keys to evaluate. Omitted ⇒ all known flags for the project.",
+          "description": "Optional subset of control-point keys to evaluate. Omitted ⇒ all known control points for the project.",
           "items": {
             "type": "string",
             "minLength": 1,
@@ -74,12 +74,12 @@
       }
     },
     "decisionItem": {
-      "description": "One flag decision. Compatible with decision.schema.json required fields plus adapter-resolution helpers.",
+      "description": "One control-point decision. Compatible with decision.schema.json required fields plus adapter-resolution helpers.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["flagKey", "value", "reason", "found"],
+      "required": ["controlPointKey", "value", "reason", "found"],
       "properties": {
-        "flagKey": {
+        "controlPointKey": {
           "type": "string",
           "minLength": 1,
           "maxLength": 256
@@ -106,14 +106,14 @@
         },
         "found": {
           "type": "boolean",
-          "description": "False when the flag key is unknown to the backend."
+          "description": "False when the control-point key is unknown to the backend."
         },
         "enabled": {
           "type": "boolean",
-          "description": "Flag enabled state when known."
+          "description": "Control point enabled state when known."
         },
         "payload": { "$ref": "#/$defs/jsonValue" },
-        "flagMetadata": {
+        "controlPointMetadata": {
           "type": "object",
           "additionalProperties": {
             "oneOf": [

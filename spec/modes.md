@@ -29,10 +29,10 @@ production is something a human typed.
 
 | | `local` | `remote` |
 | --- | --- | --- |
-| adapter | local, seeded map | remote, `POST /v1/flags/evaluate` |
+| adapter | local, seeded map | remote, `POST /v1/control-points/evaluate` |
 | network | none | fw-server |
 | required options | `local.controlPoints` (may be empty) | `apiKey`, `apiUrl` |
-| unknown key | `default`, `reason: DEFAULT` | `default`, `reason: ERROR`, `FlagNotFound` |
+| unknown key | `default`, `reason: DEFAULT` | `default`, `reason: ERROR`, `ControlPointNotFound` |
 | `registerTarget` | **recorded in-process + traced** — nothing sent | `POST /v1/targets/register` |
 
 Both modes expose the identical nine methods with identical signatures. A call site MUST NOT
