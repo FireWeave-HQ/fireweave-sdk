@@ -34,11 +34,12 @@ The start profile, and only it, may:
 3. **Default the endpoint from its own release channel.** A staging build defaults to
    `https://staging-app-server.fireweave.ai`, any other to `https://app-server.fireweave.ai`.
    The TypeScript SDKs read a stamp `tools/release/version.sh apply server|web` writes into
-   `src/start/build-info.ts` (`-staging.N`). The others need no stamp: Python reads the
-   installed distribution's version (staging builds are PEP 440 `X.Y.ZaN`), Go reads the
-   module version from the binary's build info (`vX.Y.Z-staging.N`), Java reads a
-   Maven-filtered `build.properties` (`${project.version}`), and Rust compiles in
-   `CARGO_PKG_VERSION`.
+   `src/start/build-info.ts` (`-rc.N`). The others need no stamp: Python reads the
+   installed distribution's version (staging builds are PEP 440 `X.Y.ZrcN`; any pre-release
+   or dev release counts), Go reads the module version from the binary's build info
+   (`vX.Y.Z-rc.N`), Java reads a Maven-filtered `build.properties` (`${project.version}`),
+   and Rust compiles in `CARGO_PKG_VERSION`. A version is staging when it contains `-rc.`
+   (spec SP-13); see "Amendment (2026-10-09): rc spelling".
    `url` / `FIREWEAVE_URL` override it, and the host allowlist follows the URL actually used.
 4. **Check the key family** before any request: browser keys (`fw_public_`), analytics
    vendor keys, and org or CLI tokens are rejected at start, naming the source, never the value.
@@ -156,9 +157,52 @@ Both ship a **client** profile and a **server** profile, because both run in app
 
 Distribution: a Swift release now pushes `sdks/swift` to a mirror repository with a root
 `Package.swift` and plain semver tags (`publish-swift-mirror`; the mirror and its deploy key are
-company-side provisioning). Java staging builds publish `X.Y.Z-staging.N` to Maven Central.
+company-side provisioning). Java staging builds publish `X.Y.Z-rc.N` to Maven Central.
 
 Deferred: the `fireweave_flutter` companion (persisted device id, build-mode environment, refresh
 on resume) and the web real-bundler suite, both waiting for local toolchains; Swift's privacy
 manifest and on-device checks. The Swift start profile builds and passes its tests on CI's Linux
 Swift legs; it has not run on an Apple device yet.
+
+## Amendment (2026-10-09): rc spelling
+
+From 3.0.0 a staging build is `X.Y.Z-rc.N` in every ecosystem (Python `X.Y.ZrcN`). The
+`-staging.N` spelling is retired because Maven ranks an unknown qualifier above the release
+(`3.0.0-staging.1 > 3.0.0`), so a staging build on Central would outrank the real release; `rc`
+sorts below its own release in SemVer, PEP 440, Maven and Gradle alike.
+
+- **The channel keeps its name.** Only the version suffix changes. The channel enum is public API
+  in all eight SDKs, `staging` is stored in customers' project files, and `release.yml`'s `channel`
+  input and `release-staging` environment keep their names.
+- **`rc` means staging.** In FireWeave SDKs `rc` is a pre-release that calls the staging
+  fw-server; no production pre-release exists. A production pre-release, if one is ever needed,
+  uses a suffix outside the rule (such as `-beta.N`, which the semver SDKs treat as production).
+- **No `-staging.` alias from 3.0.0.** The rule in the semver SDKs is "contains `-rc.`"; `-staging.N`
+  is production in new code. Python keeps "any PEP 440 pre-release or dev release is staging".
+  Builds published before 3.0.0 keep the rule they shipped with. Side effect, accepted: Go bases a
+  pseudo-version on the highest semver ancestor tag, and `sdks/go/v3.0.0-staging.1` outranks every
+  rc, so every pseudo-version of `main` is `v3.0.0-staging.1.0.<timestamp>-<sha>` until `v3.0.0` is
+  tagged, and calls production, like any untagged development build.
+- **Python rc on PyPI.** Python staging builds publish `X.Y.ZrcN` to pypi.org (no longer
+  TestPyPI), with the production token, on environment `release`. pip, uv, poetry and pipenv skip
+  them unless a requirement names one, so `pip install fireweave` keeps the latest final release.
+  `--pre`, a pre-release specifier or uv `--prerelease allow` can still resolve an rc, which calls
+  staging, and a PyPI version is permanent. Accepted by the owner on 2026-10-09.
+- **Java rc on Maven Central.** Java staging builds publish `X.Y.Z-rc.N` to Central with
+  `autoPublish=true` (decision D4, reaffirmed). An rc never outranks its own release, but Maven
+  ranges, Gradle dynamic versions and Central's `<latest>`/`<release>` include it, so a Java app
+  that resolves a range can get an rc and call staging. The version is permanent. Accepted by the
+  owner on 2026-10-09; production apps write an exact plain version.
+- **Swift is out of rc cuts** until the Swift mirror and its deploy key exist: `release.yml`'s
+  `all` omits swift and a staging `component=swift` is refused. The Swift rule changed with the
+  others, so the code is ready when the mirror is.
+- **The ordering trap.** SemVer sorts `3.0.0-staging.1` above every `3.0.0-rc.N`. npm
+  `3.0.0-staging.1` is deprecated after rc.1 publishes and staging installs pin the exact rc; the
+  Go proxy keeps `v3.0.0-staging.1` as `@latest` until `v3.0.0`, whose `go.mod` retracts it.
+- **One publish path.** The tag-push triggers of `publish-java.yml` (`java/v*`) and
+  `publish-python.yml` (`python/v*`) are retired; `release.yml` dispatch is the routine publish
+  path, and both workflows remain dispatch-only manual recovery for a plain version.
+- **Release commits.** Rust and Dart staging builds are consumed by git tag, and Swift releases by
+  tag alone, so those three tags point at a detached release commit carrying the applied version
+  and stamp (`version.sh release-commit`), not at the unstamped checkout. `rust/v3.0.0-staging.1`
+  and `dart/v3.0.0-staging.1` predate this and call production.

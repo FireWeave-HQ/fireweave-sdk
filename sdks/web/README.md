@@ -72,7 +72,7 @@ The build helpers read the process environment and, for Vite, the app's `.env` f
 | `controlPoints` | — | `{}` | `defineControlPoints({...})` from `src/fireweave/control-points.ts`. Served in local mode only; a read of a key missing from it warns once. |
 | `mode` | — | inferred | `'remote'` or `'local'`. Without it: a key means remote; no key and a development environment name means local; anything else fails closed. |
 | `environment` | `FIREWEAVE_ENV`, then `APP_ENV` (the dev server and Vitest also use Vite's mode) | — | Only feeds the mode rule. A build never infers local from `--mode development`. |
-| `url` | `FIREWEAVE_URL` | this SDK build's channel | `-staging.N` builds call `https://staging-app-server.fireweave.ai`, others `https://app-server.fireweave.ai`. Also accepts a same-origin proxy path such as `/fw`. https only, except localhost. |
+| `url` | `FIREWEAVE_URL` | this SDK build's channel | `-rc.N` builds (`@next`) call `https://staging-app-server.fireweave.ai`, others `https://app-server.fireweave.ai`. Also accepts a same-origin proxy path such as `/fw`. https only, except localhost. |
 | `key` | `FIREWEAVE_BROWSER_KEY` | — | A browser key (`fw_public_…`) only. Server keys (`project-api-key_…`), analytics vendor keys and org/CLI tokens are refused; messages name the source, never the value. |
 | `persistence` | — | `'localStorage'` | `'memory'` stores nothing until `fw.setPersistence('localStorage')`. |
 | `deviceId` | — | stored `dev_<uuid>` | An app-supplied anonymous id (for example the analytics id), used verbatim and not stored. |

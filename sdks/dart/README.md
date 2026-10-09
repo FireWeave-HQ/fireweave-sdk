@@ -177,7 +177,7 @@ unset.
 | `controlPoints` | — | — | `{}` | `defineControlPoints({...})`, checked with the core's key rule. Served in local mode only; a local read of a key missing from it gets its default and warns once. |
 | `mode` | — | — | inferred | `Mode.local` or `Mode.remote`; see the mode rule. |
 | `environment` | `FIREWEAVE_ENV` | `FIREWEAVE_ENV`, then `APP_ENV` | — | Only feeds the mode rule. `FW_ENV` is not read. |
-| `url` | `FIREWEAVE_URL` | `FIREWEAVE_URL`, then legacy `FW_API_URL` / `FW_ATTEST_URL` (one warning) | this build's channel | `-staging.N` builds call `https://staging-app-server.fireweave.ai`, others `https://app-server.fireweave.ai`. https only, except `localhost`, `127.0.0.1` and `::1`. An override is the only extra allowed host. |
+| `url` | `FIREWEAVE_URL` | `FIREWEAVE_URL`, then legacy `FW_API_URL` / `FW_ATTEST_URL` (one warning) | this build's channel | `-rc.N` builds call `https://staging-app-server.fireweave.ai`, others `https://app-server.fireweave.ai`. https only, except `localhost`, `127.0.0.1` and `::1`. An override is the only extra allowed host. |
 | `key` | `FIREWEAVE_BROWSER_KEY` | `FIREWEAVE_KEY`, then legacy `FW_PROJECT_API_KEY` (one warning) | — | Client: browser keys (`fw_public_…`) only; a server key gets a revoke instruction. Server: browser keys, analytics vendor keys and org/CLI tokens are refused. Messages name the source, never the value. |
 | `deviceId` (client) | — | — | in-memory `dev_<uuid>` | App-supplied anonymous id. |
 | `deviceIdStore` (client) | — | — | none | Persists the device id. |

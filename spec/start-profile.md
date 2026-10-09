@@ -79,10 +79,16 @@ A client profile MAY add a build-mode signal that only a debug build can produce
 
 The default endpoint follows the SDK build's own **release channel**: a staging build calls
 `https://staging-app-server.fireweave.ai`; any other build calls `https://app-server.fireweave.ai`.
-**[SP-12]** A version is staging when it carries the staging pre-release used by
-`tools/release/version.sh`: `-staging.N` everywhere except Python, whose staging builds are PEP 440
-pre-releases (`X.Y.ZaN`). An unknown or development version (`(devel)`, `-SNAPSHOT`) is
-production. **[SP-13]**
+**[SP-12]** A version is staging when it contains `-rc.` (the release tooling emits `X.Y.Z-rc.N`).
+Everything else is production: an unknown or development version (`(devel)`, `-SNAPSHOT`, `-rc`
+with no iteration, `-dev.`), any other pre-release (`-beta.N`, and `-staging.N` from 3.0.0 on),
+build metadata (`+rc.1`), and a Go pseudo-version whose base is not an rc. Python is the exception:
+any PEP 440 pre-release or dev release is staging, and the release tooling emits only `X.Y.ZrcN`, to
+PyPI. In FireWeave SDKs `rc` means "a pre-release that calls the staging fw-server"; no production
+pre-release exists. Builds published before 3.0.0 carry their own older rule (`-staging.N`, Python
+`X.Y.ZaN`). Until `v3.0.0` is tagged, every Go pseudo-version of `main` has the base
+`v3.0.0-staging.1` (`v3.0.0-staging.1.0.<timestamp>-<sha>`) and is therefore production, like any
+other untagged development build. **[SP-13]**
 
 How an SDK learns its version is its own business (a stamped build-info file for TypeScript, Dart
 and Swift; the installed distribution for Python; the binary's build info for Go; a filtered

@@ -137,7 +137,7 @@ whitespace-only values count as unset.
 | `controlPoints` | — | — | `[:]` | Local values per control point (`defineControlPoints`). Served in local mode only; a read of a key missing from them warns once. |
 | `mode` | — | — | inferred | `.remote` or `.local`. Remote without a key is a configuration fault; local ignores a key (one warning). |
 | `environment` | `FIREWEAVE_ENV` | `FIREWEAVE_ENV`, then `APP_ENV` | — | Only feeds the mode rule. `FW_ENV` is not read. |
-| `url` | `FIREWEAVE_URL` (legacy `FWApiUrl`) | `FIREWEAVE_URL` (legacy `FW_API_URL`, `FW_ATTEST_URL`) | this SDK build's channel | A `-staging.N` build calls `https://staging-app-server.fireweave.ai`, any other `https://app-server.fireweave.ai`. https is required except on localhost; an override's allowlist is its own host plus loopback. |
+| `url` | `FIREWEAVE_URL` (legacy `FWApiUrl`) | `FIREWEAVE_URL` (legacy `FW_API_URL`, `FW_ATTEST_URL`) | this SDK build's channel | A `-rc.N` build calls `https://staging-app-server.fireweave.ai`, any other `https://app-server.fireweave.ai` (rc builds ship once the Swift mirror exists). https is required except on localhost; an override's allowlist is its own host plus loopback. |
 | `key` | `FIREWEAVE_BROWSER_KEY` | `FIREWEAVE_KEY` (legacy `FW_PROJECT_API_KEY`) | — | App: browser keys only. Server: project keys; browser keys are refused. Analytics vendor keys and org/CLI tokens are refused in both. Messages name the source, never the value. |
 | `profile` | — | — | from the platform | `.app` on iOS, iPadOS, Mac Catalyst and macOS `.app`/`.appex` bundles; `.server` on Linux and bare macOS executables. |
 | `deviceId` | — | — | stored `dev_<UUID>` | App: an app-owned anonymous id (for example your analytics id), used verbatim and never stored. |
