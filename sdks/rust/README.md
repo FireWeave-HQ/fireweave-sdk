@@ -14,6 +14,22 @@ registration, the two v1 capabilities (spec/control-points.md "Scope of v1").
   Fireweave project key and talk to fw-server; which backend fw-server
   forwards to is fw-server's concern.
 
+## Install
+
+```bash
+cargo add fireweave@3          # stable: the latest 3.x from crates.io, recorded as "3"
+```
+
+**Staging builds** are `X.Y.Z-rc.N` and call `staging-app-server.fireweave.ai`. crates.io never
+receives one, so a staging build comes from its git tag, the highest `rust/vX.Y.Z-rc.N`:
+
+```bash
+cargo add fireweave --git https://github.com/FireWeave-HQ/fireweave-sdk --tag rust/v3.0.0-rc.1
+```
+
+This is the one Rust install that records an exact build: Cargo pins the tag. To move to a newer
+staging build, run the command again with the higher `rust/v…-rc.N` tag.
+
 ## Quick start (one line: the start profile)
 
 Most apps need only this ([ADR-0012](../../docs/adr/0012-start-profile.md)). The

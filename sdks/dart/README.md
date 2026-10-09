@@ -47,6 +47,21 @@ dependencies:
     path: ../fireweave-sdk/sdks/dart
 ```
 
+**Staging builds** are `X.Y.Z-rc.N` and call `staging-app-server.fireweave.ai`. pub.dev never
+receives one, so a staging build comes from its git tag, the highest `dart/vX.Y.Z-rc.N`:
+
+```yaml
+dependencies:
+  fireweave:
+    git:
+      url: https://github.com/FireWeave-HQ/fireweave-sdk
+      path: sdks/dart
+      ref: dart/v3.0.0-rc.1
+```
+
+This is the one Dart install that records an exact build: `ref` pins the tag. To move to a newer
+staging build, change `ref` to the higher `dart/v…-rc.N` tag and run `dart pub get`.
+
 ## Quick start (one line: the start profile)
 
 The start profile ([ADR-0012](../../docs/adr/0012-start-profile.md)) is one awaited call over
