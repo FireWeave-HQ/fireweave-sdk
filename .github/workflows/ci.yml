@@ -461,6 +461,10 @@ jobs:
         # no continue-on-error) — a regression in the bump/strip/staging-N
         # logic fails this job, not just the local dry run.
         run: bash tools/release/version.test.sh
+      - name: tools/release/changelog.sh unit tests (previous-tag selection)
+        # Offline scratch repo: a legacy -staging.N / aN tag never starts a
+        # changelog, and an rc tag on a detached release commit is still found.
+        run: bash tools/release/changelog.test.sh
       - name: Validate the start-profile suite (contracts/start, spec/start-profile.md)
         # Schema and cross-field checks only; each SDK's own test job runs its
         # start-contracts runner against these fixtures.
