@@ -28,7 +28,7 @@
   <build>
     <!--
       The start profile reads this SDK's own version at runtime to choose its default fw-server
-      endpoint (docs/adr/0012-start-profile.md, rule 3: a -staging.N build calls staging).
+      endpoint (docs/adr/0012-start-profile.md, rule 3: a -rc.N build calls staging).
       Filtering is enabled for that ONE resource only, so ${...} in any other resource stays
       literal.
     -->

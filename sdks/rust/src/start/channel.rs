@@ -5,7 +5,7 @@
 //! consumer's build of this crate, so it is the version the app resolved
 //! from crates.io (or a path/git dependency's manifest).
 //! `tools/release/version.sh` spells a Rust staging release
-//! `X.Y.Z-staging.N` in `Cargo.toml`.
+//! `X.Y.Z-rc.N` in `Cargo.toml`.
 
 use super::names::{PRODUCTION_URL, STAGING_URL};
 
@@ -40,16 +40,17 @@ impl std::fmt::Display for Channel {
 }
 
 /// The channel rule, as a pure function of a crate version: a version
-/// containing `-staging.` is [`Channel::Staging`]; anything else is
-/// [`Channel::Production`].
+/// containing `-rc.` is [`Channel::Staging`]; anything else is
+/// [`Channel::Production`], including `-staging.N`, which stopped being a
+/// staging spelling at 3.0.0.
 ///
 /// ```
 /// use fireweave::start::{channel_for_version, Channel};
-/// assert_eq!(channel_for_version("2.4.0-staging.3"), Channel::Staging);
+/// assert_eq!(channel_for_version("2.4.0-rc.3"), Channel::Staging);
 /// assert_eq!(channel_for_version("2.4.0"), Channel::Production);
 /// ```
 pub fn channel_for_version(version: &str) -> Channel {
-    if version.contains("-staging.") {
+    if version.contains("-rc.") {
         Channel::Staging
     } else {
         Channel::Production
@@ -57,7 +58,7 @@ pub fn channel_for_version(version: &str) -> Channel {
 }
 
 /// This crate's version, as compiled into the app (`Cargo.toml`'s
-/// `[package].version`, e.g. `2.4.0` or `2.4.0-staging.1`).
+/// `[package].version`, e.g. `2.4.0` or `2.4.0-rc.1`).
 pub fn sdk_version() -> &'static str {
     crate::VERSION
 }
@@ -72,14 +73,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn staging_versions_select_staging() {
-        assert_eq!(channel_for_version("2.4.0-staging.1"), Channel::Staging);
-        assert_eq!(channel_for_version("10.0.12-staging.37"), Channel::Staging);
+    fn rc_versions_select_staging() {
+        assert_eq!(channel_for_version("2.4.0-rc.1"), Channel::Staging);
+        assert_eq!(channel_for_version("10.0.12-rc.37"), Channel::Staging);
     }
 
     #[test]
     fn everything_else_is_production() {
-        for v in ["2.4.0", "2.4.0-rc.1", "2.4.0-staging", "", "staging"] {
+        // -staging.N stopped being a staging spelling at 3.0.0.
+        for v in [
+            "2.4.0",
+            "2.4.0-rc",
+            "2.4.0-staging.1",
+            "10.0.12-staging.37",
+            "2.4.0-staging",
+            "",
+            "staging",
+        ] {
             assert_eq!(channel_for_version(v), Channel::Production, "{v}");
         }
     }

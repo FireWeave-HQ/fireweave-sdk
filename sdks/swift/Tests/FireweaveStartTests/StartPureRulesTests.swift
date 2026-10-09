@@ -8,10 +8,13 @@ struct ChannelTests {
   @Test func theChannelRuleIsAPureFunctionOfTheVersion() {
     let cases: [(version: String, channel: FireweaveChannel)] = [
       ("2.4.0", .production),
-      ("2.4.0-staging.1", .staging),
-      ("2.4.1-staging.12", .staging),
+      ("2.4.0-rc.1", .staging),
+      ("2.4.1-rc.12", .staging),
+      ("2.4.0-rc", .production),
+      // -staging.N stopped being a staging spelling at 3.0.0.
+      ("2.4.0-staging.1", .production),
+      ("2.4.1-staging.12", .production),
       ("2.4.0-staging", .production),
-      ("2.4.0-rc.1", .production),
       ("", .production),
     ]
     for (version, channel) in cases {

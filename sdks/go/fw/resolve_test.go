@@ -16,7 +16,7 @@ import (
 
 var (
 	prodBuild    = buildInfo{version: "v2.4.0", channel: ChannelProduction}
-	stagingBuild = buildInfo{version: "v2.4.0-staging.3", channel: ChannelStaging}
+	stagingBuild = buildInfo{version: "v2.4.0-rc.3", channel: ChannelStaging}
 )
 
 const testKey = "project-api-key_abc123"

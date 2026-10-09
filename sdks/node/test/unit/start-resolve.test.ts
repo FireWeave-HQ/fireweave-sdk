@@ -8,7 +8,7 @@ import { resolveStart, type BuildInfo } from '../../src/start/resolve.ts';
 import { envFromBag, type EnvReader } from '../../src/start/env.ts';
 
 const PROD: BuildInfo = { version: '2.4.0', channel: 'production' };
-const STAGING: BuildInfo = { version: '2.4.0-staging.3', channel: 'staging' };
+const STAGING: BuildInfo = { version: '2.4.0-rc.3', channel: 'staging' };
 const KEY = 'project-api-key_abc123';
 
 const env = (bag: Record<string, string>): EnvReader => envFromBag(bag);

@@ -49,7 +49,7 @@ const Set<String> devEnvironments = <String>{
 /// fw-server host of a production build of this package.
 const String productionUrl = 'https://app-server.fireweave.ai';
 
-/// fw-server host of a `-staging.N` build of this package.
+/// fw-server host of a `-rc.N` build of this package.
 const String stagingUrl = 'https://staging-app-server.fireweave.ai';
 
 /// Hosts always allowed beside a custom endpoint, so local stacks keep

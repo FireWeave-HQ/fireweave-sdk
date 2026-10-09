@@ -2,10 +2,10 @@
 
 The start profile defaults its fw-server host from the channel the installed
 package was released on (docs/adr/0012-start-profile.md, rule 3).
-tools/release/version.sh versions a Python staging build as a PEP 440
-prerelease (``X.Y.ZaN``, because ``-staging.N`` is not a valid Python
-version), so the channel is read from the version itself: any prerelease is
-staging, anything else is production. Nothing is stamped at release time.
+Staging builds are ``X.Y.ZrcN`` on PyPI (tools/release/version.sh), and the
+channel is read from the version itself: any PEP 440 pre-release or dev
+release is staging (the pre-rename ``3.0.0a1`` on TestPyPI included),
+anything else is production. Nothing is stamped at release time.
 """
 
 from __future__ import annotations

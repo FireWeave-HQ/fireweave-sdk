@@ -26,12 +26,15 @@ class StartBuildingBlocksTest {
 
     @Test
     void theChannelRuleIsAPureFunctionOfTheVersion() {
-        // tools/release/version.sh spells a Java staging release X.Y.Z-staging.N.
-        assertEquals(SdkChannel.STAGING, BuildInfo.channelForVersion("2.4.0-staging.1"));
-        assertEquals(SdkChannel.STAGING, BuildInfo.channelForVersion("2.4.0-staging.12"));
+        // tools/release/version.sh spells a Java staging release X.Y.Z-rc.N.
+        assertEquals(SdkChannel.STAGING, BuildInfo.channelForVersion("2.4.0-rc.1"));
+        assertEquals(SdkChannel.STAGING, BuildInfo.channelForVersion("2.4.0-rc.12"));
         assertEquals(SdkChannel.PRODUCTION, BuildInfo.channelForVersion("2.4.0"));
         assertEquals(SdkChannel.PRODUCTION, BuildInfo.channelForVersion("2.4.0-SNAPSHOT"));
-        assertEquals(SdkChannel.PRODUCTION, BuildInfo.channelForVersion("2.4.0-staging"), "no iteration, no staging");
+        assertEquals(SdkChannel.PRODUCTION, BuildInfo.channelForVersion("2.4.0-rc"), "no iteration, no staging");
+        // -staging.N stopped being a staging spelling at 3.0.0.
+        assertEquals(SdkChannel.PRODUCTION, BuildInfo.channelForVersion("2.4.0-staging.1"));
+        assertEquals(SdkChannel.PRODUCTION, BuildInfo.channelForVersion("2.4.0-staging.12"));
         assertEquals(SdkChannel.PRODUCTION, BuildInfo.channelForVersion("2.4.0a1"), "the PEP 440 form is python's");
         assertEquals(SdkChannel.PRODUCTION, BuildInfo.channelForVersion(BuildInfo.DEVEL_VERSION));
         assertEquals(SdkChannel.PRODUCTION, BuildInfo.channelForVersion(null));
@@ -48,7 +51,7 @@ class StartBuildingBlocksTest {
         assertEquals(BuildInfo.DEVEL_VERSION, BuildInfo.versionFrom(null));
         assertEquals(BuildInfo.DEVEL_VERSION, BuildInfo.versionFrom(props("version=${project.version}\n")));
         assertEquals(BuildInfo.DEVEL_VERSION, BuildInfo.versionFrom(props("# nothing\n")));
-        assertEquals("2.4.0-staging.3", BuildInfo.versionFrom(props("version= 2.4.0-staging.3 \n")));
+        assertEquals("2.4.0-rc.3", BuildInfo.versionFrom(props("version= 2.4.0-rc.3 \n")));
     }
 
     @Test

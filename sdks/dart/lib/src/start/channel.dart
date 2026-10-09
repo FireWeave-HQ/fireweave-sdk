@@ -19,10 +19,11 @@ enum SdkChannel {
 }
 
 /// The channel rule as a pure function of a package version:
-/// `tools/release/version.sh` stamps a staging release `X.Y.Z-staging.N`.
-/// Anything else is production.
+/// `tools/release/version.sh` stamps a staging release `X.Y.Z-rc.N`.
+/// Anything else is production, including `-staging.N`, which stopped being
+/// a staging spelling at 3.0.0.
 SdkChannel channelForVersion(String version) =>
-    version.contains('-staging.') ? SdkChannel.staging : SdkChannel.production;
+    version.contains('-rc.') ? SdkChannel.staging : SdkChannel.production;
 
 /// This build's channel, from the stamp `version.sh apply dart` writes.
 SdkChannel get sdkChannel =>
