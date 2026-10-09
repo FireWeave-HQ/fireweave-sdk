@@ -10,7 +10,7 @@ import Foundation
 ///   `FireweaveRuntime`+`FireweaveClient` directly.
 /// - faults: `fault-stale-cache` is the ONE faults-suite fixture that
 ///   transfers for real (staleness is provisioned directly via
-///   `providerState: STALE` + `given.flags[*].fromCache`, not a live
+///   `providerState: STALE` + `given.controlPoints[*].fromCache`, not a live
 ///   per-call fault) — the other 8 are `skipped-with-documented-limitation`.
 /// - extensions: 13 of 14 target namespaces cut from v1 (ADR-0010),
 ///   classified data-driven from `when.operation`, reported
@@ -222,12 +222,12 @@ enum Runner {
       let requested = when["domain"]?.stringValue
       var actual: JSONValue = .object([:])
       for (name, domainGiven) in domains {
-        let adapter = InMemoryAdapter.from(flagsJSON: domainGiven["flags"]?.objectValue ?? [:])
+        let adapter = InMemoryAdapter.from(flagsJSON: domainGiven["controlPoints"]?.objectValue ?? [:])
         let runtime = FireweaveRuntime(adapter: adapter)
         await provisionState(runtime, domainGiven["providerState"]?.stringValue)
         if name == requested {
           let decision = runtime.evaluate(
-            key: when["flagKey"]?.stringValue ?? "",
+            key: when["controlPointKey"]?.stringValue ?? "",
             type: expectedFlagType(from: when["flagType"]?.stringValue ?? "boolean"),
             defaultValue: when["defaultValue"] ?? .null,
             context: evaluationContext(from: when["invocationContext"])
@@ -245,7 +245,7 @@ enum Runner {
     let requireTargetingKey = config["requireTargetingKey"]?.boolValue ?? false
 
     var baseAdapter: any ControlPointsBackendAdapter = InMemoryAdapter.from(
-      flagsJSON: given["flags"]?.objectValue ?? [:]
+      flagsJSON: given["controlPoints"]?.objectValue ?? [:]
     )
     if let fault = given["fault"]?.objectValue,
       (fault["applyTo"]?.stringValue ?? "flags") == "flags"
@@ -270,7 +270,7 @@ enum Runner {
 
     let includePayload = when["options"]?["includePayload"]?.boolValue ?? false
     let decision = runtime.evaluate(
-      key: when["flagKey"]?.stringValue ?? "",
+      key: when["controlPointKey"]?.stringValue ?? "",
       type: expectedFlagType(from: when["flagType"]?.stringValue ?? "boolean"),
       defaultValue: when["defaultValue"] ?? .null,
       context: evaluationContext(from: when["invocationContext"]),
@@ -316,7 +316,7 @@ enum Runner {
       runtime = FireweaveRuntime(adapter: adapter)
     } else {
       runtime = FireweaveRuntime(
-        adapter: InMemoryAdapter.from(flagsJSON: given["flags"]?.objectValue ?? [:]))
+        adapter: InMemoryAdapter.from(flagsJSON: given["controlPoints"]?.objectValue ?? [:]))
     }
     await runtime.initialize()
 
@@ -336,7 +336,7 @@ enum Runner {
     Bool, String
   ) {
     let runtime = FireweaveRuntime(
-      adapter: InMemoryAdapter.from(flagsJSON: given["flags"]?.objectValue ?? [:]))
+      adapter: InMemoryAdapter.from(flagsJSON: given["controlPoints"]?.objectValue ?? [:]))
     await provisionState(runtime, given["providerState"]?.stringValue)
     await runtime.shutdown()
     let actual: JSONValue = .object([
@@ -353,19 +353,19 @@ enum Runner {
     )
   {
     let runtimeA = FireweaveRuntime(
-      adapter: InMemoryAdapter.from(flagsJSON: given["flags"]?.objectValue ?? [:]))
+      adapter: InMemoryAdapter.from(flagsJSON: given["controlPoints"]?.objectValue ?? [:]))
     await runtimeA.initialize()
     await runtimeA.shutdown()  // old provider retired before the replacement takes over
 
     let replacement = given["replacement"] ?? .object([:])
     let runtimeB = FireweaveRuntime(
-      adapter: InMemoryAdapter.from(flagsJSON: replacement["flags"]?.objectValue ?? [:])
+      adapter: InMemoryAdapter.from(flagsJSON: replacement["controlPoints"]?.objectValue ?? [:])
     )
     await runtimeB.initialize()
 
     guard let then = when["thenEvaluate"] else { return (false, "missing when.thenEvaluate") }
     let decision = runtimeB.evaluate(
-      key: then["flagKey"]?.stringValue ?? "",
+      key: then["controlPointKey"]?.stringValue ?? "",
       type: expectedFlagType(from: then["flagType"]?.stringValue ?? "boolean"),
       defaultValue: then["defaultValue"] ?? .null,
       context: evaluationContext(from: then["invocationContext"])
@@ -383,7 +383,7 @@ enum Runner {
     )
   {
     let runtime = FireweaveRuntime(
-      adapter: InMemoryAdapter.from(flagsJSON: given["flags"]?.objectValue ?? [:]))
+      adapter: InMemoryAdapter.from(flagsJSON: given["controlPoints"]?.objectValue ?? [:]))
     await provisionState(runtime, given["providerState"]?.stringValue)
     let client = FireweaveClient(runtime: runtime)
     let capability = when["capability"]?.stringValue ?? "unknown.capability"
@@ -464,7 +464,7 @@ enum Runner {
       "reason": .string(decision.reason.rawValue),
       "errorCode": decision.errorCode.map(JSONValue.string) ?? .null,
       "errorMessage": decision.errorMessage.map(JSONValue.string) ?? .null,
-      "flagMetadata": .object(decision.flagMetadata),
+      "controlPointMetadata": .object(decision.controlPointMetadata),
     ])
   }
 

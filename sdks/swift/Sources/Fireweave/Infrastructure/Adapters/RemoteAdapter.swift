@@ -7,7 +7,7 @@ import Foundation
 /// Fireweave remote backend adapter — default production path.
 ///
 /// Real HTTP client (`URLSession`, part of Foundation — no third-party HTTP
-/// package) for fw-server `POST /v1/flags/evaluate` and
+/// package) for fw-server `POST /v1/control-points/evaluate` and
 /// `POST /v1/targets/register`. Auth: `Authorization: Bearer <apiKey>`.
 /// Speaks only the vendor-neutral Fireweave remote protocol
 /// (`spec/remote-protocol.md`) — no vendor SDK, key, or host ever enters the
@@ -15,7 +15,7 @@ import Foundation
 ///
 /// `prefetch` is the ONE place this adapter does network I/O — never a
 /// per-call `evaluate()`, which is why the read surface can be synchronous
-/// (see `Ports.swift`'s doc comment). One `POST /v1/flags/evaluate` fetches
+/// (see `Ports.swift`'s doc comment). One `POST /v1/control-points/evaluate` fetches
 /// every decision for a context in a single round trip; `FireweaveRuntime`
 /// then reads the resulting cache synchronously.
 public struct RemoteAdapterConfig: Sendable {
@@ -70,7 +70,7 @@ public struct URLSessionTransport: RemoteHTTPTransport {
 }
 
 public final class FireweaveRemoteAdapter: ControlPointsBackendAdapter, @unchecked Sendable {
-  private static let evaluatePath = "/v1/flags/evaluate"
+  private static let evaluatePath = "/v1/control-points/evaluate"
   private static let registerTargetPath = "/v1/targets/register"
 
   private let lock = NSLock()
@@ -192,8 +192,8 @@ public final class FireweaveRemoteAdapter: ControlPointsBackendAdapter, @uncheck
     }
 
     var body: [String: JSONValue] = ["targetingKey": .string(targetingKey)]
-    if let flagKeys = options?.flagKeys {
-      body["flagKeys"] = .array(flagKeys.map(JSONValue.string))
+    if let controlPointKeys = options?.controlPointKeys {
+      body["controlPointKeys"] = .array(controlPointKeys.map(JSONValue.string))
     }
 
     var attributes: [String: JSONValue] = [:]
@@ -221,11 +221,11 @@ public final class FireweaveRemoteAdapter: ControlPointsBackendAdapter, @uncheck
 
     var result: PrefetchResult = [:]
     for item in decisions {
-      guard let obj = item.objectValue, let flagKey = obj["flagKey"]?.stringValue else { continue }
+      guard let obj = item.objectValue, let controlPointKey = obj["controlPointKey"]?.stringValue else { continue }
       // "found: false" on the wire means genuinely unknown to the
       // backend — leave the key OUT of the batch entirely (this
       // adapter's `missReason` is `nil`, so an absent key resolves to
-      // `.error`/`.flagNotFound` at read time), rather than inserting
+      // `.error`/`.controlPointNotFound` at read time), rather than inserting
       // an `AdapterResolution(found: false, ...)` — that shape is
       // reserved for InMemoryAdapter's "conditions didn't match"
       // signal (see `AdapterResolution`'s doc comment); the remote
@@ -234,29 +234,29 @@ public final class FireweaveRemoteAdapter: ControlPointsBackendAdapter, @uncheck
       // targeting server-side.
       if obj["found"]?.boolValue == false { continue }
 
-      let meta = obj["flagMetadata"]?.objectValue
-      result[flagKey] = AdapterResolution(
+      let meta = obj["controlPointMetadata"]?.objectValue
+      result[controlPointKey] = AdapterResolution(
         found: true,
         enabled: obj["enabled"]?.boolValue ?? true,
         value: obj["value"] ?? .null,
         variant: obj["variant"]?.stringValue,
         reason: obj["reason"]?.stringValue.flatMap(DecisionReason.init(rawValue:)),
         reasonCode: meta?["fireweave.reasonCode"]?.stringValue,
-        version: meta?["fireweave.flagVersion"]?.numberValue.map(Int.init),
-        vendorFlagId: meta?["fireweave.vendorFlagId"]?.numberValue.map(Int.init),
+        version: meta?["fireweave.controlPointVersion"]?.numberValue.map(Int.init),
+        vendorControlPointId: meta?["fireweave.vendorControlPointId"]?.numberValue.map(Int.init),
         payload: obj["payload"].flatMap { $0.isNull ? nil : $0 },
         fromCache: false
       )
     }
     if quotaLimited {
-      // Quota-limited responses resolve as FlagNotFound with
+      // Quota-limited responses resolve as ControlPointNotFound with
       // fireweave.quotaLimited metadata (`contracts/errors.json`) —
       // modeled here as an empty batch for any key not already present
-      // (the runtime's absent-key path throws FlagNotFound; the
+      // (the runtime's absent-key path throws ControlPointNotFound; the
       // quota flag itself is surfaced via the thrown error below when
       // the WHOLE batch is quota-limited and returned nothing).
       if result.isEmpty {
-        throw FireweaveError.flagNotFound(quotaLimited: true)
+        throw FireweaveError.controlPointNotFound(quotaLimited: true)
       }
     }
     return result

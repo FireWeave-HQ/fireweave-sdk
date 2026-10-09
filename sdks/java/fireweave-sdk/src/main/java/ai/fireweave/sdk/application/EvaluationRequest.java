@@ -9,26 +9,26 @@ import java.util.Objects;
 /** Immutable evaluation request passed from the runtime to a {@link BackendAdapter}. */
 public final class EvaluationRequest {
 
-    private final String flagKey;
+    private final String controlPointKey;
     private final FlagType type;
     private final JsonValue defaultValue;
     private final EvaluationContext context;
     private final EvaluationOptions options;
 
-    public EvaluationRequest(String flagKey,
+    public EvaluationRequest(String controlPointKey,
                              FlagType type,
                              JsonValue defaultValue,
                              EvaluationContext context,
                              EvaluationOptions options) {
-        this.flagKey = Objects.requireNonNull(flagKey, "flagKey");
+        this.controlPointKey = Objects.requireNonNull(controlPointKey, "controlPointKey");
         this.type = Objects.requireNonNull(type, "type");
         this.defaultValue = Objects.requireNonNull(defaultValue, "defaultValue");
         this.context = Objects.requireNonNull(context, "context");
         this.options = options == null ? EvaluationOptions.defaults() : options;
     }
 
-    public String flagKey() {
-        return flagKey;
+    public String controlPointKey() {
+        return controlPointKey;
     }
 
     public FlagType type() {

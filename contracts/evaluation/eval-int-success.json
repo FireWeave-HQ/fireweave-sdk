@@ -6,7 +6,7 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-int-limit": {
         "type": "integer",
         "enabled": true,
@@ -24,7 +24,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-int-limit",
+    "controlPointKey": "fw-int-limit",
     "flagType": "integer",
     "defaultValue": 0,
     "invocationContext": {
@@ -37,8 +37,8 @@
     "reason": "TARGETING_MATCH",
     "errorCode": null,
     "errorMessage": null,
-    "flagMetadata": {
-      "fireweave.flagVersion": 1
+    "controlPointMetadata": {
+      "fireweave.controlPointVersion": 1
     }
   },
   "schemaVersion": 1,

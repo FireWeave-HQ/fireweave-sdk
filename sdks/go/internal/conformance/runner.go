@@ -15,10 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fireweave"
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/infrastructure/adapters/inmemory"
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/infrastructure/adapters/remote"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/fireweave"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/infrastructure/adapters/inmemory"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/infrastructure/adapters/remote"
 )
 
 // Result is one compatibility-report row.
@@ -241,8 +241,8 @@ func mergeGiven(base Given, override *Given) Given {
 	if override.ProviderState != "" {
 		out.ProviderState = override.ProviderState
 	}
-	if override.Flags != nil {
-		out.Flags = override.Flags
+	if override.ControlPoints != nil {
+		out.ControlPoints = override.ControlPoints
 	}
 	if override.GlobalContext != nil {
 		out.GlobalContext = override.GlobalContext
@@ -473,7 +473,7 @@ type faultyAdapter struct {
 
 func (a *faultyAdapter) Initialize(ctx context.Context) error { return a.inner.Initialize(ctx) }
 func (a *faultyAdapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain.Decision {
-	return domain.ErrorDecision(req.FlagKey, req.DefaultValue, a.err, nil)
+	return domain.ErrorDecision(req.ControlPointKey, req.DefaultValue, a.err, nil)
 }
 func (a *faultyAdapter) Close(ctx context.Context) error { return a.inner.Close(ctx) }
 
@@ -515,7 +515,7 @@ func faultToError(fault map[string]any) *domain.Error {
 
 func executeEvaluate(f Fixture) (map[string]any, string, error) {
 	given := f.Given
-	flags := given.Flags
+	flags := given.ControlPoints
 	state := given.ProviderState
 	when := f.When
 
@@ -530,15 +530,15 @@ func executeEvaluate(f Fixture) (map[string]any, string, error) {
 			if name == when.Domain {
 				continue
 			}
-			otherSess, err := setupSession(Given{ProviderState: other.ProviderState}, other.Flags, other.ProviderState)
+			otherSess, err := setupSession(Given{ProviderState: other.ProviderState}, other.ControlPoints, other.ProviderState)
 			if err != nil {
 				return nil, "", err
 			}
 			defer otherSess.close()
 		}
-		flags = d.Flags
+		flags = d.ControlPoints
 		state = d.ProviderState
-		given = Given{ProviderState: state, Flags: flags}
+		given = Given{ProviderState: state, ControlPoints: flags}
 	}
 
 	s, err := setupSession(given, flags, state)
@@ -594,7 +594,7 @@ func evaluateThrough(s *session, when When, evalCtx domain.EvaluationContext) ma
 	if includePayload, ok := when.Options["includePayload"].(bool); ok {
 		opts.IncludePayload = includePayload
 	}
-	d := s.client.ControlPoints().Evaluate(when.FlagKey, flagType, defaultValue, &evalCtx, &opts)
+	d := s.client.ControlPoints().Evaluate(when.ControlPointKey, flagType, defaultValue, &evalCtx, &opts)
 
 	actual := map[string]any{
 		"value":        d.Value,
@@ -604,7 +604,7 @@ func evaluateThrough(s *session, when When, evalCtx domain.EvaluationContext) ma
 		"errorMessage": decisionErrorMessage(d),
 	}
 	if len(d.Metadata) > 0 {
-		actual["flagMetadata"] = d.Metadata
+		actual["controlPointMetadata"] = d.Metadata
 	}
 	return actual
 }
@@ -622,7 +622,7 @@ func defaultValueFor(flagType string, raw any) any {
 // --- faults ---
 
 // executeFault exercises the remote adapter's real HTTP path
-// (POST /v1/flags/evaluate). Baseline: an injected fake http.RoundTripper
+// (POST /v1/control-points/evaluate). Baseline: an injected fake http.RoundTripper
 // (faults.go) reproducing the Fireweave-native response shape — the
 // canonical dockerized `golang:1.25-alpine` run has no `node` binary to
 // spawn test-server/implementation/server.mjs with, unlike node/python's
@@ -754,7 +754,7 @@ func executeInitialize(f Fixture) (map[string]any, string, error) {
 		}
 		adapter = remote.New(cfg)
 	} else {
-		adapter = inmemoryFrom(f.Given.Flags)
+		adapter = inmemoryFrom(f.Given.ControlPoints)
 	}
 
 	runtime := fireweave.NewRuntime(adapter, fireweave.Config{})
@@ -789,7 +789,7 @@ func executeInitialize(f Fixture) (map[string]any, string, error) {
 }
 
 func executeShutdown(f Fixture) (map[string]any, string, error) {
-	s, err := setupSession(f.Given, f.Given.Flags, f.Given.ProviderState)
+	s, err := setupSession(f.Given, f.Given.ControlPoints, f.Given.ProviderState)
 	if err != nil {
 		return nil, "", err
 	}
@@ -818,7 +818,7 @@ func executeReplaceProvider(f Fixture) (map[string]any, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	runtimeA := fireweave.NewRuntime(inmemoryFrom(f.Given.Flags), fireweave.Config{})
+	runtimeA := fireweave.NewRuntime(inmemoryFrom(f.Given.ControlPoints), fireweave.Config{})
 	if err := runtimeA.Initialize(ctx); err != nil {
 		return nil, "", fmt.Errorf("old provider init: %w", err)
 	}
@@ -826,7 +826,7 @@ func executeReplaceProvider(f Fixture) (map[string]any, string, error) {
 		return nil, "", fmt.Errorf("old provider shutdown: %w", err)
 	}
 
-	adapterB := inmemoryFrom(f.Given.Replacement.Flags)
+	adapterB := inmemoryFrom(f.Given.Replacement.ControlPoints)
 	runtimeB := fireweave.NewRuntime(adapterB, fireweave.Config{})
 	if err := runtimeB.Initialize(ctx); err != nil {
 		return nil, "", fmt.Errorf("replacement init: %w", err)
@@ -845,7 +845,7 @@ func executeReplaceProvider(f Fixture) (map[string]any, string, error) {
 // cutOperationNamespace/v1OutOfScopeNamespace) ---
 
 func executeInvokeCapability(f Fixture) (map[string]any, string, error) {
-	adapter := inmemoryFrom(f.Given.Flags)
+	adapter := inmemoryFrom(f.Given.ControlPoints)
 	client := fireweave.NewClient(fireweave.NewRuntime(adapter, runtimeConfigFrom(f.Given)))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -933,7 +933,7 @@ func codeForKind(kind fireweave.ErrorKind, targetingKeyMissing bool) string {
 	switch kind {
 	case fireweave.KindNotReady, fireweave.KindAlreadyClosed:
 		return "PROVIDER_NOT_READY"
-	case fireweave.KindFlagNotFound:
+	case fireweave.KindControlPointNotFound:
 		return "FLAG_NOT_FOUND"
 	case fireweave.KindTypeMismatch:
 		return "TYPE_MISMATCH"

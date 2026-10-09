@@ -18,7 +18,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -99,16 +98,12 @@ class ControlPointsSurfaceTest {
     }
 
     @Test
-    void theDeprecatedFlagsAliasSharesIdentityWithControlPoints() throws Exception {
-        FireweaveClient fw = client();
-        assertSame(fw.controlPoints(), fw.flags());
-    }
-
-    @Test
-    void deprecatedAliasMatchesDescriptor() throws Exception {
+    void theFlagsAliasIsGone() throws Exception {
         JsonNode namespace = descriptor().get("namespace");
-        assertEquals("flags", namespace.get("deprecatedAlias").asText());
-        assertTrue(namespace.get("aliasMustShareIdentity").asBoolean());
+        assertEquals("flags", namespace.get("removedAlias").asText());
+        for (Method m : FireweaveClient.class.getMethods()) {
+            assertFalse(m.getName().equals("flags"), "flags() was removed in 3.0.0 (ADR-0013)");
+        }
     }
 
     @Test
@@ -120,7 +115,7 @@ class ControlPointsSurfaceTest {
                 ai.fireweave.sdk.domain.EvaluationContext.empty());
         assertEquals(false, value);
         assertEquals(false, details.value().asBoolean());
-        assertEquals("absent", details.flagKey());
+        assertEquals("absent", details.controlPointKey());
         assertNotNull(details.reason());
     }
 

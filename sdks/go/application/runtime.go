@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/domain"
 )
 
 // State is the runtime lifecycle state.
@@ -138,9 +138,9 @@ func (r *Runtime) Initialize(ctx context.Context) error {
 // degrades to the caller's default on the first failure; only once all four
 // pass does this reach the adapter (the one I/O call here).
 func (r *Runtime) Evaluate(ctx context.Context, req ResolveRequest) domain.Decision {
-	key, keyErr := domain.ValidateControlPointKey(req.FlagKey)
+	key, keyErr := domain.ValidateControlPointKey(req.ControlPointKey)
 	if keyErr != nil {
-		return domain.ErrorDecision(req.FlagKey, req.DefaultValue, keyErr, nil)
+		return domain.ErrorDecision(req.ControlPointKey, req.DefaultValue, keyErr, nil)
 	}
 
 	if _, defErr := domain.ValidateDefaultValue(req.Type, req.DefaultValue); defErr != nil {
@@ -162,11 +162,11 @@ func (r *Runtime) Evaluate(ctx context.Context, req ResolveRequest) domain.Decis
 		return domain.ErrorDecision(key, req.DefaultValue, domain.NewError(domain.KindNotReady, "", nil), nil)
 	}
 
-	req.FlagKey = key
+	req.ControlPointKey = key
 	req.Context = canonical
 	d := r.adapter.Resolve(ctx, req)
-	if d.FlagKey == "" {
-		d.FlagKey = key
+	if d.ControlPointKey == "" {
+		d.ControlPointKey = key
 	}
 	if d.Error != nil {
 		if d.Metadata == nil {

@@ -7,7 +7,7 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-numeric-two": {
         "type": "float",
         "enabled": true,
@@ -21,7 +21,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-numeric-two",
+    "controlPointKey": "fw-numeric-two",
     "flagType": "integer",
     "defaultValue": 0,
     "invocationContext": {
@@ -34,7 +34,7 @@
     "reason": "ERROR",
     "errorCode": "TYPE_MISMATCH",
     "errorMessage": "flag type mismatch",
-    "flagMetadata": {
+    "controlPointMetadata": {
       "fireweave.errorKind": "TypeMismatch"
     }
   },

@@ -7,7 +7,7 @@
 // domain imports nothing from application/ or infrastructure/ — it is pure
 // computation (no I/O, no ambient state), so it is reachable and testable
 // offline, mirroring node's domain/ and java's ai.fireweave.sdk.domain
-// package (docs/architecture.md §layers; the layering guard in the
+// package (the layering guard in the
 // fireweave facade package enforces this mechanically).
 package domain
 
@@ -20,7 +20,7 @@ type ErrorKind string
 
 const (
 	KindNotReady              ErrorKind = "NotReady"
-	KindFlagNotFound          ErrorKind = "FlagNotFound"
+	KindControlPointNotFound  ErrorKind = "ControlPointNotFound"
 	KindTypeMismatch          ErrorKind = "TypeMismatch"
 	KindInvalidContext        ErrorKind = "InvalidContext"
 	KindAuthentication        ErrorKind = "Authentication"
@@ -38,7 +38,7 @@ const (
 
 // AllErrorKinds lists every canonical kind. Useful for exhaustiveness tests.
 var AllErrorKinds = []ErrorKind{
-	KindNotReady, KindFlagNotFound, KindTypeMismatch, KindInvalidContext,
+	KindNotReady, KindControlPointNotFound, KindTypeMismatch, KindInvalidContext,
 	KindAuthentication, KindAuthorization, KindRateLimited, KindTimeout,
 	KindNetwork, KindBackendUnavailable, KindMalformedResponse,
 	KindUnsupportedCapability, KindConfiguration, KindAlreadyClosed,
@@ -47,7 +47,7 @@ var AllErrorKinds = []ErrorKind{
 
 var defaultMessages = map[ErrorKind]string{
 	KindNotReady:              "provider not ready",
-	KindFlagNotFound:          "flag not found",
+	KindControlPointNotFound:  "flag not found",
 	KindTypeMismatch:          "flag type mismatch",
 	KindInvalidContext:        "invalid evaluation context",
 	KindAuthentication:        "authentication failed",
@@ -126,7 +126,7 @@ func (e *Error) Is(target error) bool {
 // Sentinel errors, one per canonical kind, for use with errors.Is.
 var (
 	ErrNotReady              = &Error{Kind: KindNotReady}
-	ErrFlagNotFound          = &Error{Kind: KindFlagNotFound}
+	ErrControlPointNotFound  = &Error{Kind: KindControlPointNotFound}
 	ErrTypeMismatch          = &Error{Kind: KindTypeMismatch}
 	ErrInvalidContext        = &Error{Kind: KindInvalidContext}
 	ErrAuthentication        = &Error{Kind: KindAuthentication}
@@ -142,21 +142,37 @@ var (
 	ErrInternal              = &Error{Kind: KindInternal}
 )
 
-// secretPatterns cover the canonical secret shapes from contracts/errors.json:
-// vendor project/personal/secret keys, bearer tokens, and the
-// FW_PROJECT_API_KEY environment variable name.
-var secretPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`ph[cxs]_[A-Za-z0-9_-]*`),
-	regexp.MustCompile(`Bearer\s+\S*`),
-	regexp.MustCompile(`Bearer\s*`),
-	regexp.MustCompile(`FW_PROJECT_API_KEY`),
-}
+// redactedPlaceholder replaces every scrubbed secret
+// (contracts/errors.json rules.redaction.placeholder).
+const redactedPlaceholder = "[REDACTED]"
 
-// Redact removes secret material (API keys, bearer tokens) from a string.
-// It is applied to every error message the SDK emits.
+// The redaction rules of contracts/errors.json rules.redaction, applied in
+// the contract's order: bearer tokens, URL userinfo, named assignments, then
+// key-shaped values. A variable NAME is never redacted on its own; only its
+// value is.
+var (
+	// The token after "Bearer "; the word Bearer stays.
+	bearerToken = regexp.MustCompile(`(Bearer\s+)[A-Za-z0-9._~+/=-]+`)
+	// scheme://userinfo@host: the userinfo goes.
+	urlUserinfo = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://)[^\s/?#@]+@`)
+	// NAME=value, NAME: value, NAME = "value", NAME='value': the value (up
+	// to whitespace, a quote, a comma or a semicolon) goes; the name, the
+	// separator and the quotes stay.
+	namedAssignment = regexp.MustCompile(`\b(FIREWEAVE_KEY|FIREWEAVE_BROWSER_KEY|FW_PROJECT_API_KEY)(\s*[=:]\s*["']?)[^\s"',;]+`)
+	// A value prefix followed by one or more of [A-Za-z0-9_-]. A prefix
+	// followed by anything else (project-api-key_…) is prose and stays.
+	keyShapedValue = regexp.MustCompile(`(?:project-api-key_|fw_public_|fw_ingest_pub_|fw_org_|cli_at_|ph[cxs]_)[A-Za-z0-9_-]+`)
+)
+
+// Redact removes secret material from a string: bearer tokens, URL
+// userinfo, the values of FIREWEAVE_KEY, FIREWEAVE_BROWSER_KEY and
+// FW_PROJECT_API_KEY assignments, and key-shaped values. It is applied to
+// every error message the SDK emits and is the redactor behind
+// contracts/errors.json rules.redaction.
 func Redact(s string) string {
-	for _, re := range secretPatterns {
-		s = re.ReplaceAllString(s, "[redacted]")
-	}
+	s = bearerToken.ReplaceAllString(s, "${1}"+redactedPlaceholder)
+	s = urlUserinfo.ReplaceAllString(s, "${1}"+redactedPlaceholder+"@")
+	s = namedAssignment.ReplaceAllString(s, "${1}${2}"+redactedPlaceholder)
+	s = keyShapedValue.ReplaceAllString(s, redactedPlaceholder)
 	return s
 }

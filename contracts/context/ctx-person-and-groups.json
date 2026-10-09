@@ -6,7 +6,7 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-groups": {
         "type": "boolean",
         "enabled": true,
@@ -23,7 +23,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-groups",
+    "controlPointKey": "fw-groups",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {

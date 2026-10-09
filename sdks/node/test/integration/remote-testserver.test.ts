@@ -1,6 +1,6 @@
 /**
  * Integration: FireweaveRemoteAdapter against the Fireweave-protocol stub
- * (test-server /v1/flags/evaluate + /v1/capture).
+ * (test-server /v1/control-points/evaluate + /v1/capture).
  */
 import assert from 'node:assert/strict';
 import { describe, it, before, after } from 'node:test';
@@ -34,7 +34,7 @@ describe('FireweaveRemoteAdapter ↔ test-server', () => {
     await server.close();
   });
 
-  it('evaluates fixture flags over the Fireweave wire protocol', async () => {
+  it('evaluates fixture control points over the Fireweave wire protocol', async () => {
     const adapter = new FireweaveRemoteAdapter({
       apiUrl: server.url,
       apiKey,
@@ -44,12 +44,12 @@ describe('FireweaveRemoteAdapter ↔ test-server', () => {
     await runtime.initialize();
     const client = new FireweaveClient(runtime);
 
-    const on = await client.flags.getBooleanValue('fw-bool-on', false, {
+    const on = await client.controlPoints.getBooleanValue('fw-bool-on', false, {
       targetingKey: 'user-integration-1',
     });
     assert.equal(on, true);
 
-    const theme = await client.flags.getStringValue('fw-string-theme', 'light', {
+    const theme = await client.controlPoints.getStringValue('fw-string-theme', 'light', {
       targetingKey: 'user-integration-1',
     });
     assert.equal(theme, 'dark');
@@ -65,14 +65,14 @@ describe('FireweaveRemoteAdapter ↔ test-server', () => {
     await adapter.initialize();
     adapter.recordExposure({
       targetingKey: 'user-integration-2',
-      flagKey: 'fw-bool-on',
+      controlPointKey: 'fw-bool-on',
       value: true,
     });
     await adapter.flush();
 
     const res = await fetch(`${server.url}/_test/events`);
-    const body = (await res.json()) as { fwEvents: Array<{ type: string; flagKey: string }> };
-    assert.ok(body.fwEvents.some((e) => e.type === 'exposure' && e.flagKey === 'fw-bool-on'));
+    const body = (await res.json()) as { fwEvents: Array<{ type: string; controlPointKey: string }> };
+    assert.ok(body.fwEvents.some((e) => e.type === 'exposure' && e.controlPointKey === 'fw-bool-on'));
     await adapter.shutdown();
   });
 

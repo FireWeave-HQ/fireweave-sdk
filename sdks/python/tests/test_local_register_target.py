@@ -103,7 +103,7 @@ def test_the_client_surface_reaches_it_too():
 def test_unknown_key_local_mode_returns_default_not_error():
     """spec/modes.md "Behaviour per mode": local's unknown-key row is
     default/DEFAULT — deliberately not an error, unlike remote's
-    default/ERROR/FlagNotFound."""
+    default/ERROR/ControlPointNotFound."""
     from fireweave import ErrorKind, EvaluationContext, FlagType
 
     adapter, _lines = harness()
@@ -114,7 +114,7 @@ def test_unknown_key_local_mode_returns_default_not_error():
     assert decision.value is False
     assert decision.reason == "DEFAULT"
     assert decision.error_kind is None
-    assert decision.error_kind != ErrorKind.FLAG_NOT_FOUND
+    assert decision.error_kind != ErrorKind.CONTROL_POINT_NOT_FOUND
 
 
 def test_init_fireweave_local_mode_wires_the_recording_seam_end_to_end():

@@ -5,11 +5,11 @@
   "tags": ["disabled"],
   "given": {
     "providerState": "READY",
-    "flags": { "web-off": { "type": "boolean", "enabled": false, "value": false } }
+    "controlPoints": { "web-off": { "type": "boolean", "enabled": false, "value": false } }
   },
   "when": {
     "operation": "evaluateSync",
-    "flagKey": "web-off",
+    "controlPointKey": "web-off",
     "flagType": "boolean",
     "defaultValue": true,
     "invocationContext": { "targetingKey": "user_web_1" }

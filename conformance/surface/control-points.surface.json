@@ -9,12 +9,13 @@
       "web": "controlPoints",
       "java": "controlPoints",
       "swift": "controlPoints",
+      "dart": "controlPoints",
       "python": "control_points",
       "rust": "control_points",
       "go": "ControlPoints"
     },
-    "deprecatedAlias": "flags",
-    "aliasMustShareIdentity": true
+    "removedAlias": "flags",
+    "$comment": "The flags alias was removed in 3.0.0 (ADR-0013). Every SDK asserts its client has no member of that name in its own casing."
   },
   "methods": [
     { "name": "getBooleanValue",   "returns": "boolean",  "args": ["key", "default", "context?"] },
@@ -44,6 +45,6 @@
   },
   "compatibility": {
     "node": "green", "web": "green", "python": "green", "java": "green",
-    "go": "green", "rust": "green", "swift": "green"
+    "go": "green", "rust": "green", "swift": "green", "dart": "green"
   }
 }

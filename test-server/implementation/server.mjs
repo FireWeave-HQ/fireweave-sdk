@@ -1,14 +1,14 @@
 /**
- * Fireweave deterministic protocol stub (test-server/README.md,
- * implementation/PLAN.md). Loopback-only Node HTTP server; no dependencies.
+ * Fireweave deterministic protocol stub. Loopback-only Node HTTP server; no
+ * dependencies.
  *
- * PostHog-protocol endpoints (advanced / PostHogAdapter):
+ * PostHog-protocol endpoints (advanced):
  *   POST /flags/?v=2 (and /flags?v=2)      — flags v2 evaluation body
  *   GET  /flags/definitions?token=...      — local-eval definitions (Bearer auth)
  *   POST /batch/ (and /batch)              — event capture, stored in memory
  *
  * Fireweave remote protocol (ADR-0005 / FireweaveRemoteAdapter):
- *   POST /v1/flags/evaluate  — vendor-neutral evaluate (Bearer FW key)
+ *   POST /v1/control-points/evaluate  — vendor-neutral evaluate (Bearer FW key)
  *   POST /v1/capture         — exposures/signals/events batch (Bearer FW key)
  *
  *   GET  /health                           — {"ok":true}
@@ -88,15 +88,16 @@ export async function startTestServer(options = {}) {
   };
 
   /** Map PostHog flags fixture → Fireweave decision items (vendor-neutral). */
-  const flagsToDecisions = (flagsBody, flagKeys) => {
+  const flagsToDecisions = (flagsBody, controlPointKeys) => {
     const all = flagsBody?.flags ?? {};
-    const keys = Array.isArray(flagKeys) && flagKeys.length > 0 ? flagKeys : Object.keys(all);
+    const keys =
+      Array.isArray(controlPointKeys) && controlPointKeys.length > 0 ? controlPointKeys : Object.keys(all);
     const decisions = [];
-    for (const flagKey of keys) {
-      const record = all[flagKey];
+    for (const controlPointKey of keys) {
+      const record = all[controlPointKey];
       if (record === undefined) {
         decisions.push({
-          flagKey,
+          controlPointKey,
           value: null,
           reason: 'ERROR',
           found: false,
@@ -107,9 +108,9 @@ export async function startTestServer(options = {}) {
       const variant = record.variant ?? null;
       const value = enabled ? (variant ?? true) : false;
       const meta = {};
-      if (record.metadata?.version != null) meta['fireweave.flagVersion'] = record.metadata.version;
+      if (record.metadata?.version != null) meta['fireweave.controlPointVersion'] = record.metadata.version;
       if (record.metadata?.id != null && record.reason?.condition_index != null) {
-        meta['fireweave.vendorFlagId'] = record.metadata.id;
+        meta['fireweave.vendorControlPointId'] = record.metadata.id;
         if (record.reason?.code) meta['fireweave.reasonCode'] = record.reason.code;
       }
       meta['fireweave.backend'] = 'other';
@@ -122,13 +123,13 @@ export async function startTestServer(options = {}) {
         }
       }
       const item = {
-        flagKey,
+        controlPointKey,
         value,
         variant,
         reason: enabled ? (variant ? 'SPLIT' : 'TARGETING_MATCH') : 'DISABLED',
         found: true,
         enabled,
-        flagMetadata: meta,
+        controlPointMetadata: meta,
       };
       if (payload !== undefined) item.payload = payload;
       decisions.push(item);
@@ -290,7 +291,7 @@ export async function startTestServer(options = {}) {
 
   const handleFwEvaluate = async (req, res) => {
     const bodyText = await readBody(req);
-    state.requestLog.push({ path: '/v1/flags/evaluate' });
+    state.requestLog.push({ path: '/v1/control-points/evaluate' });
     if (await applyFault('evaluate', res, () => flagsToDecisions(state.flagsBody))) return undefined;
     const key = extractBearer(req);
     if (!key) return sendJson(res, 401, { ok: false, error: 'UNAUTHORIZED' });
@@ -306,7 +307,7 @@ export async function startTestServer(options = {}) {
     if (typeof body.targetingKey !== 'string' || body.targetingKey.length === 0) {
       return sendJson(res, 400, { ok: false, error: 'TARGETING_KEY_REQUIRED' });
     }
-    return sendJson(res, 200, flagsToDecisions(state.flagsBody, body.flagKeys));
+    return sendJson(res, 200, flagsToDecisions(state.flagsBody, body.controlPointKeys));
   };
 
   const handleFwCapture = async (req, res) => {
@@ -374,7 +375,7 @@ export async function startTestServer(options = {}) {
     const route = async () => {
       if (path === '/health') return sendJson(res, 200, { ok: true });
       if (path.startsWith('/_test')) return handleAdmin(req, res, url);
-      if (req.method === 'POST' && path === '/v1/flags/evaluate') return handleFwEvaluate(req, res);
+      if (req.method === 'POST' && path === '/v1/control-points/evaluate') return handleFwEvaluate(req, res);
       if (req.method === 'POST' && path === '/v1/capture') return handleFwCapture(req, res);
       if (req.method === 'POST' && path === '/flags') return handleFlags(req, res);
       if (req.method === 'GET' && path === '/flags/definitions') return handleDefinitions(req, res, url);

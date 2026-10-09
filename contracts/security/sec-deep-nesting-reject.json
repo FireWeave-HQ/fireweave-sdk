@@ -7,7 +7,7 @@
   "provisional": false,
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-sec": {
         "type": "boolean",
         "enabled": true,
@@ -24,7 +24,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-sec",
+    "controlPointKey": "fw-sec",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {
@@ -56,7 +56,7 @@
     "reason": "ERROR",
     "errorCode": "INVALID_CONTEXT",
     "errorMessage": "context exceeds maximum nesting depth",
-    "flagMetadata": {
+    "controlPointMetadata": {
       "fireweave.errorKind": "InvalidContext"
     },
     "networkCalls": 0

@@ -20,7 +20,7 @@
  *                already invoked there.
  *
  * Backends:
- *  - evaluation/context/lifecycle/security → InMemoryAdapter from given.flags,
+ *  - evaluation/context/lifecycle/security → InMemoryAdapter from given.controlPoints,
  *    driving FireweaveRuntime + FireweaveClient directly (the raw construction
  *    path, same as conformance/surface/'s own surface test — NOT
  *    `initFireweave({mode:'local'})`: that entry point's local adapter
@@ -30,9 +30,9 @@
  *    exercised end-to-end by test/unit/init-fireweave.test.ts, part of
  *    `npm run verify` via `npm run test`).
  *  - faults (HTTP semantics) → FireweaveRemoteAdapter against the test-server's
- *    Fireweave-native route (POST /v1/flags/evaluate), fault scope 'evaluate'
+ *    Fireweave-native route (POST /v1/control-points/evaluate), fault scope 'evaluate'
  *    (fault-stale-cache runs on the InMemoryAdapter instead: cache staleness
- *    is provisioned directly per given.flags.fromCache + providerState
+ *    is provisioned directly per given.controlPoints.fromCache + providerState
  *    STALE). Constructed directly (FireweaveRemoteAdapter + FireweaveRuntime),
  *    not via `initFireweave({mode:'remote'})`: fault-timeout needs a
  *    fixture-supplied `requestTimeoutMs`, a knob `initFireweave`'s remote
@@ -68,7 +68,7 @@ import {
   type JsonValue,
   type LifecycleState,
 } from '@fireweaveai/server-sdk';
-// The test-server stub is plain JS by design (test-server/implementation/PLAN.md).
+// The test-server stub is plain JS by design.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore -- no type declarations for the stub
 import { startTestServer } from '../../../../test-server/implementation/server.mjs';
@@ -83,13 +83,13 @@ interface Fixture {
   description: string;
   given: {
     providerState?: string;
-    flags?: Record<string, InMemoryFlagDefinition>;
+    controlPoints?: Record<string, InMemoryFlagDefinition>;
     config?: Record<string, JsonValue>;
     globalContext?: Record<string, JsonValue>;
     clientContext?: Record<string, JsonValue>;
     fault?: { mode: string; status?: number; delayMs?: number; body?: string; quotaLimited?: string[]; applyTo?: string };
-    domains?: Record<string, { providerState?: string; flags?: Record<string, InMemoryFlagDefinition> }>;
-    replacement?: { flags?: Record<string, InMemoryFlagDefinition> };
+    domains?: Record<string, { providerState?: string; controlPoints?: Record<string, InMemoryFlagDefinition> }>;
+    replacement?: { controlPoints?: Record<string, InMemoryFlagDefinition> };
     extensions?: Record<string, boolean>;
   };
   when: Record<string, JsonValue> & { operation: string };
@@ -239,7 +239,7 @@ function deepEqual(a: unknown, b: unknown): boolean {
 const META_EXPECT_KEYS = new Set(['errorMessageMustNotContain', 'recordedMessageMustNotContain']);
 
 /**
- * Subset match (harness.md, getCapabilities exception): every declared key
+ * Subset match: every declared key
  * must match exactly; undeclared keys in `actual` are permitted.
  */
 function subsetMatch(expected: unknown, actual: unknown): boolean {
@@ -347,9 +347,9 @@ function withResolveCounter(adapter: BackendAdapter): { adapter: BackendAdapter;
   const wrapped: BackendAdapter = {
     name: adapter.name,
     initialize: (signal) => adapter.initialize(signal),
-    resolve: (flagKey, context, options) => {
+    resolve: (controlPointKey, context, options) => {
       calls += 1;
-      return adapter.resolve(flagKey, context, options);
+      return adapter.resolve(controlPointKey, context, options);
     },
     shutdown: () => adapter.shutdown(),
     flush: adapter.flush !== undefined ? () => adapter.flush!() : undefined,
@@ -393,14 +393,14 @@ const toExpectedType = (flagType: string): 'boolean' | 'string' | 'number' | 'ob
  * exercised by eval-payload-attached — has somewhere to go, since the sugar
  * methods only take `(key, default, context?)`, no options) and map the
  * returned {@link Decision} back onto the fixture's wire shape
- * (`flagMetadata`, not `metadata` — the fixture-facing name predates the
+ * (`controlPointMetadata`, not `metadata` — the fixture-facing name predates the
  * Decision type's own field rename and stays fixed here rather than in the
  * SDK).
  */
 async function evaluateThroughClient(
   client: FireweaveClient,
   when: {
-    flagKey: string;
+    controlPointKey: string;
     flagType: string;
     defaultValue: JsonValue;
     context: Record<string, JsonValue>;
@@ -408,7 +408,7 @@ async function evaluateThroughClient(
   },
 ): Promise<ActualOutput> {
   const decision: Decision = await client.controlPoints.evaluate(
-    when.flagKey,
+    when.controlPointKey,
     toExpectedType(when.flagType),
     when.defaultValue,
     when.context,
@@ -420,7 +420,7 @@ async function evaluateThroughClient(
     reason: decision.reason ?? null,
     errorCode: decision.errorCode ?? null,
     errorMessage: decision.errorMessage ?? null,
-    flagMetadata: decision.metadata ?? {},
+    controlPointMetadata: decision.metadata ?? {},
   };
 }
 
@@ -438,13 +438,13 @@ async function runEvaluateFixture(fixture: Fixture): Promise<ActualOutput> {
     const requestedDomain = when['domain'] as string;
     let output: ActualOutput = {};
     for (const [domainName, domainGiven] of Object.entries(given.domains)) {
-      const adapter = new InMemoryAdapter({ flags: domainGiven.flags ?? {} });
+      const adapter = new InMemoryAdapter({ flags: domainGiven.controlPoints ?? {} });
       const runtime = new FireweaveRuntime(adapter);
       await provisionState(runtime, domainGiven.providerState);
       const client = new FireweaveClient(runtime);
       if (domainName === requestedDomain) {
         output = await evaluateThroughClient(client, {
-          flagKey: when['flagKey'] as string,
+          controlPointKey: when['controlPointKey'] as string,
           flagType: when['flagType'] as string,
           defaultValue: when['defaultValue'] as JsonValue,
           context: toContext(when['invocationContext'] as Record<string, JsonValue> | undefined),
@@ -458,8 +458,8 @@ async function runEvaluateFixture(fixture: Fixture): Promise<ActualOutput> {
   const gateNeverResolves = new Promise<void>(() => undefined);
   const adapterOptions =
     given.providerState === 'NOT_READY'
-      ? { flags: given.flags ?? {}, initGate: { promise: gateNeverResolves } }
-      : { flags: given.flags ?? {} };
+      ? { flags: given.controlPoints ?? {}, initGate: { promise: gateNeverResolves } }
+      : { flags: given.controlPoints ?? {} };
   const baseAdapter = new InMemoryAdapter(adapterOptions);
   // Security-suite fixtures declare protocol faults but run on the in-memory
   // adapter: model them as thrown FireweaveErrors of the equivalent kind.
@@ -485,7 +485,7 @@ async function runEvaluateFixture(fixture: Fixture): Promise<ActualOutput> {
   const callerContext = toContext(invocationContext);
   const options = when['options'] as { includePayload?: boolean } | undefined;
   const output = await evaluateThroughClient(client, {
-    flagKey: when['flagKey'] as string,
+    controlPointKey: when['controlPointKey'] as string,
     flagType: when['flagType'] as string,
     defaultValue: when['defaultValue'] as JsonValue,
     context: callerContext,
@@ -525,22 +525,22 @@ async function runLifecycleOpFixture(fixture: Fixture): Promise<ActualOutput> {
   const operation = when.operation;
 
   if (operation === 'replaceProvider') {
-    const runtimeA = new FireweaveRuntime(new InMemoryAdapter({ flags: given.flags ?? {} }));
+    const runtimeA = new FireweaveRuntime(new InMemoryAdapter({ flags: given.controlPoints ?? {} }));
     await runtimeA.initialize();
     await runtimeA.shutdown(); // old provider retired before the replacement takes over
 
-    const runtimeB = new FireweaveRuntime(new InMemoryAdapter({ flags: given.replacement?.flags ?? {} }));
+    const runtimeB = new FireweaveRuntime(new InMemoryAdapter({ flags: given.replacement?.controlPoints ?? {} }));
     await runtimeB.initialize();
     const client = new FireweaveClient(runtimeB);
 
     const thenEvaluate = when['thenEvaluate'] as {
-      flagKey: string;
+      controlPointKey: string;
       flagType: string;
       defaultValue: JsonValue;
       invocationContext?: Record<string, JsonValue>;
     };
     const decision = await evaluateThroughClient(client, {
-      flagKey: thenEvaluate.flagKey,
+      controlPointKey: thenEvaluate.controlPointKey,
       flagType: thenEvaluate.flagType,
       defaultValue: thenEvaluate.defaultValue,
       context: toContext(thenEvaluate.invocationContext),
@@ -556,7 +556,7 @@ async function runLifecycleOpFixture(fixture: Fixture): Promise<ActualOutput> {
   }
 
   const config = runtimeConfigFrom(given.config);
-  const runtime = new FireweaveRuntime(new InMemoryAdapter({ flags: given.flags ?? {} }), config);
+  const runtime = new FireweaveRuntime(new InMemoryAdapter({ flags: given.controlPoints ?? {} }), config);
 
   if (operation === 'initialize') {
     let errorCode: string | null = null;
@@ -611,7 +611,7 @@ async function runLifecycleOpFixture(fixture: Fixture): Promise<ActualOutput> {
 async function runExtensionFixture(fixture: Fixture): Promise<ActualOutput> {
   const given = fixture.given;
   const when = fixture.when;
-  const adapter = new InMemoryAdapter({ flags: given.flags ?? {} });
+  const adapter = new InMemoryAdapter({ flags: given.controlPoints ?? {} });
   const runtime = new FireweaveRuntime(adapter);
   await provisionState(runtime, given.providerState ?? 'READY');
   const client = new FireweaveClient(runtime);
@@ -645,10 +645,10 @@ async function runFaultFixture(fixture: Fixture): Promise<ActualOutput> {
     state: { fault: unknown; flagsBody: unknown };
   };
   try {
-    // Provision flags body from given.flags in flags-v2 format.
+    // Provision flags body from given.controlPoints in flags-v2 format.
     const flags: Record<string, unknown> = {};
     let flagId = 1;
-    for (const [key, def] of Object.entries(given.flags ?? {})) {
+    for (const [key, def] of Object.entries(given.controlPoints ?? {})) {
       flags[key] = {
         key,
         enabled: def.enabled,
@@ -665,7 +665,7 @@ async function runFaultFixture(fixture: Fixture): Promise<ActualOutput> {
       quotaLimited: null,
     };
 
-    // Arm fault. Scope is 'evaluate': faults must hit POST /v1/flags/evaluate,
+    // Arm fault. Scope is 'evaluate': faults must hit POST /v1/control-points/evaluate,
     // the Fireweave-native route the remote adapter speaks.
     switch (fault.mode) {
       case 'httpStatus':
@@ -705,7 +705,7 @@ async function runFaultFixture(fixture: Fixture): Promise<ActualOutput> {
     await runtime.initialize();
     const client = new FireweaveClient(runtime);
     const output = await evaluateThroughClient(client, {
-      flagKey: when['flagKey'] as string,
+      controlPointKey: when['controlPointKey'] as string,
       flagType: when['flagType'] as string,
       defaultValue: when['defaultValue'] as JsonValue,
       context: toContext(when['invocationContext'] as Record<string, JsonValue> | undefined),

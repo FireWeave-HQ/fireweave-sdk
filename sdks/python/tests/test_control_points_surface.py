@@ -91,9 +91,9 @@ def test_every_method_matches_the_descriptors_arity_exactly():
     assert offenders == [], f"arity mismatches: {'; '.join(offenders)}"
 
 
-def test_the_deprecated_flags_alias_shares_identity_with_control_points():
+def test_the_flags_alias_is_gone():
     fw = client()
-    assert fw.flags is fw.control_points
+    assert not hasattr(fw, "flags")
 
 
 def test_details_returns_a_decision_value_returns_the_bare_value():
@@ -127,9 +127,9 @@ def test_namespace_is_control_points_per_descriptor_casing():
     assert hasattr(client(), "control_points")
 
 
-def test_deprecated_alias_matches_descriptor():
-    assert DESCRIPTOR["namespace"]["deprecatedAlias"] == "flags"
-    assert DESCRIPTOR["namespace"]["aliasMustShareIdentity"] is True
+def test_removed_alias_matches_descriptor():
+    assert DESCRIPTOR["namespace"]["removedAlias"] == "flags"
+    assert not hasattr(client(), "flags")
 
 
 def test_register_target_exists_with_local_mode_recorded_and_traced():

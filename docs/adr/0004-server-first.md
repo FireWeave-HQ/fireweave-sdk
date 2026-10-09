@@ -48,7 +48,7 @@ Fireweave's product surface includes server, web, and future mobile/harness surf
 |---|---|
 | ~~Browser package~~ | **Superseded by [ADR-0009](0009-browser-control-points.md)** (2026-08-09) — shipped as `@fireweaveai/web-sdk`, remote-only, no secret keys, no `posthog-js`. The rest of this ADR stands: mobile, Dart, and edge remain out of scope |
 | Mobile | No prior art; greenfield after server GA |
-| Dart surface | Enum exists in internal registry with `NO_PROD_VENDORS`; not this repo's phase one |
+| ~~Dart surface~~ | **Superseded by [ADR-0011](0011-dart-control-points.md)** (2026-09-02) — shipped as `fireweave` for Dart (Flutter and the VM) at `sdks/dart`, pure Dart, zero dependencies, synchronous reads over a prefetched cache |
 | Upstream `java` harness surface | File against main FireWeave `SURFACE_REGISTRY` / manifest schemas |
 | Edge / WASM | Evaluate separately; secret handling is the gate |
 

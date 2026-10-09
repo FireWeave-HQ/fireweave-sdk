@@ -9,7 +9,7 @@ public struct FlagDefinition: Sendable, Equatable {
   public var reasonCode: String?
   public var conditionIndex: Int?
   public var version: Int?
-  public var vendorFlagId: Int?
+  public var vendorControlPointId: Int?
   public var fireweaveReason: DecisionReason?
   public var fromCache: Bool
   public var matchTargetingKey: String?
@@ -25,7 +25,7 @@ public struct FlagDefinition: Sendable, Equatable {
     reasonCode: String? = nil,
     conditionIndex: Int? = nil,
     version: Int? = nil,
-    vendorFlagId: Int? = nil,
+    vendorControlPointId: Int? = nil,
     fireweaveReason: DecisionReason? = nil,
     fromCache: Bool = false,
     matchTargetingKey: String? = nil,
@@ -40,7 +40,7 @@ public struct FlagDefinition: Sendable, Equatable {
     self.reasonCode = reasonCode
     self.conditionIndex = conditionIndex
     self.version = version
-    self.vendorFlagId = vendorFlagId
+    self.vendorControlPointId = vendorControlPointId
     self.fireweaveReason = fireweaveReason
     self.fromCache = fromCache
     self.matchTargetingKey = matchTargetingKey
@@ -50,7 +50,7 @@ public struct FlagDefinition: Sendable, Equatable {
   }
 
   /// Builds a definition from the raw fixture JSON shape
-  /// (`given.flags: {key: {...}}`, `contracts/README.md`).
+  /// (`given.controlPoints: {key: {...}}`, `contracts/README.md`).
   public static func from(json value: JSONValue) -> FlagDefinition {
     let obj = value.objectValue ?? [:]
     let reason = obj["reason"]?.objectValue
@@ -63,7 +63,7 @@ public struct FlagDefinition: Sendable, Equatable {
       reasonCode: reason?["code"]?.stringValue,
       conditionIndex: reason?["condition_index"]?.numberValue.map(Int.init),
       version: metadata?["version"]?.numberValue.map(Int.init),
-      vendorFlagId: metadata?["id"]?.numberValue.map(Int.init),
+      vendorControlPointId: metadata?["id"]?.numberValue.map(Int.init),
       fireweaveReason: obj["fireweaveReason"]?.stringValue.flatMap(DecisionReason.init(rawValue:)),
       fromCache: obj["fromCache"]?.boolValue ?? false,
       matchTargetingKey: obj["matchTargetingKey"]?.stringValue,
@@ -92,7 +92,7 @@ public struct InMemoryFault: Sendable, Equatable {
 ///
 /// Resolution is purely definition-driven — no hashing, no percentage
 /// bucketing. A flag definition is shaped like `contracts/README.md`'s
-/// fixture `given.flags.<key>` entries.
+/// fixture `given.controlPoints.<key>` entries.
 ///
 /// `matchPerson` is intentionally identical to `matchAttribute` (both
 /// deep-equality-check plain context attributes) — this mirrors node/go/
@@ -121,7 +121,7 @@ public final class InMemoryAdapter: ControlPointsBackendAdapter, @unchecked Send
   }
 
   /// Builds an adapter from the raw fixture JSON shape
-  /// (`given.flags: {key: {...}}`).
+  /// (`given.controlPoints: {key: {...}}`).
   public static func from(flagsJSON: [String: JSONValue]) -> InMemoryAdapter {
     InMemoryAdapter(flagsJSON.mapValues(FlagDefinition.from(json:)))
   }
@@ -184,7 +184,7 @@ public final class InMemoryAdapter: ControlPointsBackendAdapter, @unchecked Send
     for (key, definition) in currentDefinitions {
       let matched = Self.conditionsMatch(definition, context: context)
       // Ruling 11 gate (spec/decision.schema.json standardMetadataKeys):
-      // fireweave.vendorFlagId + fireweave.reasonCode are emitted only
+      // fireweave.vendorControlPointId + fireweave.reasonCode are emitted only
       // when the fixture reports a vendor flag id, a matched-condition
       // index, AND a reason code together — this adapter is the one
       // place that raw "condition index" signal exists, so it applies
@@ -192,12 +192,12 @@ public final class InMemoryAdapter: ControlPointsBackendAdapter, @unchecked Send
       // (adapter-agnostic) runtime reads, rather than exposing
       // conditionIndex on the shared port type (task-12-report.md
       // fix-report finding 1 — the same fix rust's runtime needed).
-      var vendorFlagId: Int?
+      var vendorControlPointId: Int?
       var reasonCode: String?
-      if let vfi = definition.vendorFlagId, definition.conditionIndex != nil,
+      if let vfi = definition.vendorControlPointId, definition.conditionIndex != nil,
         let rc = definition.reasonCode
       {
-        vendorFlagId = vfi
+        vendorControlPointId = vfi
         reasonCode = rc
       }
       result[key] = AdapterResolution(
@@ -208,7 +208,7 @@ public final class InMemoryAdapter: ControlPointsBackendAdapter, @unchecked Send
         reason: definition.fireweaveReason,
         reasonCode: reasonCode,
         version: definition.version,
-        vendorFlagId: vendorFlagId,
+        vendorControlPointId: vendorControlPointId,
         payload: definition.payload,
         fromCache: definition.fromCache
       )

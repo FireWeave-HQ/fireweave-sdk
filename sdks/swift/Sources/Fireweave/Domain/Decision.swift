@@ -22,7 +22,7 @@ public struct Decision: Sendable, Equatable {
   public var errorCode: String?
   public var errorMessage: String?
   public var errorKind: ErrorKind?
-  public var flagMetadata: FlagMetadata
+  public var controlPointMetadata: ControlPointMetadata
 
   public init(
     value: JSONValue,
@@ -31,7 +31,7 @@ public struct Decision: Sendable, Equatable {
     errorCode: String? = nil,
     errorMessage: String? = nil,
     errorKind: ErrorKind? = nil,
-    flagMetadata: FlagMetadata = [:]
+    controlPointMetadata: ControlPointMetadata = [:]
   ) {
     self.value = value
     self.variant = variant
@@ -39,7 +39,7 @@ public struct Decision: Sendable, Equatable {
     self.errorCode = errorCode
     self.errorMessage = errorMessage
     self.errorKind = errorKind
-    self.flagMetadata = flagMetadata
+    self.controlPointMetadata = controlPointMetadata
   }
 
   public var isError: Bool { reason == .error }

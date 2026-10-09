@@ -12,7 +12,7 @@ import java.util.concurrent.Executors;
 
 /**
  * Minimal in-process HTTP stub speaking the Fireweave-native
- * {@code POST /v1/flags/evaluate} route (spec/remote-protocol.md), for the faults suite.
+ * {@code POST /v1/control-points/evaluate} route (spec/remote-protocol.md), for the faults suite.
  *
  * <p>Pure JDK ({@code com.sun.net.httpserver}) — no external test-server process: the
  * canonical dockerized {@code maven:3.9-eclipse-temurin-21} image has no {@code node} binary
@@ -22,7 +22,7 @@ import java.util.concurrent.Executors;
  */
 public final class FixtureHttpStub implements AutoCloseable {
 
-    /** Fault mode this stub's next /v1/flags/evaluate response should exercise. */
+    /** Fault mode this stub's next /v1/control-points/evaluate response should exercise. */
     public static final class Fault {
         public String mode = "none"; // httpStatus | invalidJson | delay | quotaLimited | none
         public int status = 500;
@@ -48,7 +48,7 @@ public final class FixtureHttpStub implements AutoCloseable {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         ExecutorService executor = Executors.newCachedThreadPool();
         FixtureHttpStub stub = new FixtureHttpStub(server, executor);
-        server.createContext("/v1/flags/evaluate", stub::handleEvaluate);
+        server.createContext("/v1/control-points/evaluate", stub::handleEvaluate);
         server.createContext("/v1/capture", stub::handleCapture);
         server.setExecutor(executor);
         server.start();

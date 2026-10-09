@@ -1,6 +1,6 @@
 # Fireweave SDK Conformance Contracts
 
-Canonical cross-language fixtures, error taxonomy, and harness contract for the Fireweave polyglot OpenFeature providers (`sdks/{node,python,go,java}`).
+Canonical cross-language fixtures, error taxonomy, and harness contract.
 
 Language agents **consume** this tree; they must not edit it. Spec schemas live in `spec/` (Agent D) and are the **source of truth**; fixtures conform to spec. Context bounds were ratified by orchestrator arbitration (Phase 2 exit) — see the ratified limits table below.
 
@@ -10,13 +10,15 @@ Language agents **consume** this tree; they must not edit it. Spec schemas live 
 contracts/
   README.md                 # this file
   errors.md / errors.json   # Fireweave error taxonomy ↔ OpenFeature codes
-  harness.md                # per-language runners, comparator, OF Gherkin slot-in
+  harness.md                # per-language runners, comparator
   evaluation/               # typed evaluation success & failure (14 fixtures)
   context/                  # targeting key, merge, identity, bounds (14 fixtures)
   lifecycle/                # init / shutdown / replace / domains (9 fixtures)
   faults/                   # transport, auth, quota, cache, offline (9 fixtures)
   security/                 # PII, secrets, SSRF, size/depth reject (5 fixtures)
   extensions/               # releases, exposures, signals, capabilities (14 fixtures)
+  web/                      # web-only suite (ADR-0009), outside the 65
+  start/                    # start-profile suite (spec/start-profile.md, ADR-0012), outside the 65 — see start/README.md
 ```
 
 Canonical fixture inventory: **65** fixtures (Phase 5: 63 + `ctx-fireweave-groups-carveout` + `ext-lifecycle-gating`).
@@ -30,13 +32,13 @@ Each fixture is a single JSON file:
   "schemaVersion": 1,
   "id": "eval-bool-success",
   "suite": "evaluation",
-  "description": "Boolean flag resolves to true with TARGETING_MATCH",
+  "description": "Boolean control point resolves to true with TARGETING_MATCH",
   "tags": ["boolean", "success"],
   "provisional": false,
   "given": {
     "providerState": "READY",
-    "flags": {
-      "my-flag": {
+    "controlPoints": {
+      "my-control-point": {
         "type": "boolean",
         "enabled": true,
         "variant": "on",
@@ -52,7 +54,7 @@ Each fixture is a single JSON file:
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "my-flag",
+    "controlPointKey": "my-control-point",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {
@@ -65,8 +67,8 @@ Each fixture is a single JSON file:
     "reason": "TARGETING_MATCH",
     "errorCode": null,
     "errorMessage": null,
-    "flagMetadata": {
-      "fireweave.flagVersion": 3
+    "controlPointMetadata": {
+      "fireweave.controlPointVersion": 3
     }
   },
   "compatibility": {
@@ -114,7 +116,7 @@ Rules:
 
 | `operation` | Suite | Semantics |
 | --- | --- | --- |
-| `evaluate` | evaluation, context, faults, security | Typed flag evaluation |
+| `evaluate` | evaluation, context, faults, security | Typed control-point evaluation |
 | `initialize` | lifecycle | Provider init |
 | `shutdown` | lifecycle | Provider shutdown |
 | `replaceProvider` | lifecycle | Swap provider under a domain |
@@ -139,15 +141,15 @@ Before comparing actual vs `expect`, harnesses **MUST** strip or rewrite nondete
 
 ### Preserve (must match)
 
-- Flag `value`, `variant`, `reason` (OpenFeature reason string)
+- Decision `value`, `variant`, `reason` (OpenFeature reason string)
 - `errorCode` (OpenFeature code)
 - Normalized `errorMessage` (see secrets rule)
-- Declared `flagMetadata` keys that are fixture-stable (e.g. `fireweave.flagVersion`)
+- Declared `controlPointMetadata` keys that are fixture-stable (e.g. `fireweave.controlPointVersion`)
 - Typed IDs present in the fixture itself (`stmp_*`, `chg_*`, `rolloutId`, `sfc_*`)
 
 ### Vendor-metadata gating (ruling 11, ratified)
 
-`fireweave.vendorFlagId` and `fireweave.reasonCode` are emitted in `flagMetadata` **only when the backend reports BOTH a vendor flag id AND a condition index** for the evaluation (e.g. `metadata.id` + `reason.condition_index` in `eval-detailed-fields`). If either is absent, **neither** key is emitted — implementations MUST NOT emit one without the other, and the comparator treats a lone `fireweave.vendorFlagId` or `fireweave.reasonCode` as undeclared metadata drift (fail). Canonical wording also lives in `spec/decision.schema.json` (`standardMetadataKeys`).
+`fireweave.vendorControlPointId` and `fireweave.reasonCode` are emitted in `controlPointMetadata` **only when the backend reports BOTH a vendor control-point id AND a condition index** for the evaluation (e.g. `metadata.id` + `reason.condition_index` in `eval-detailed-fields`). If either is absent, **neither** key is emitted — implementations MUST NOT emit one without the other, and the comparator treats a lone `fireweave.vendorControlPointId` or `fireweave.reasonCode` as undeclared metadata drift (fail). Canonical wording also lives in `spec/decision.schema.json` (`standardMetadataKeys`).
 
 ### Error message normalization
 
@@ -162,7 +164,7 @@ Before comparing actual vs `expect`, harnesses **MUST** strip or rewrite nondete
 3. Sort object keys in harness serialization before hashing/diffing (canonical JSON).
 4. Floating-point comparisons use exact JSON numbers as written; fixtures avoid values that require epsilon unless tagged `numeric-coercion`.
 5. Context merge fixtures declare every layer explicitly; harnesses must not inject host identity.
-6. Exposure dedup fixtures use fixed `(distinct_id, flag, value)` triples.
+6. Exposure dedup fixtures use fixed `(distinct_id, control point, value)` triples.
 7. If a language cannot produce a bit-identical structured value (Node `number` vs int/float; Java long via double), mark `skipped-with-documented-limitation` — never silently coerce in the comparator.
 
 ## CI: fail on silent divergence
@@ -181,14 +183,12 @@ Silent skip of a `pass` fixture is forbidden. Skips require the documented-limit
 ## How language harnesses consume fixtures
 
 1. Discover `contracts/<suite>/*.json` (exclude `README` / non-JSON).
-2. For each fixture, set up the in-memory / test-server backend from `given` (flags, state, fault mode).
+2. For each fixture, set up the in-memory / test-server backend from `given` (control points, state, fault mode).
 3. Apply context layers in OpenFeature merge order: **global → transaction → client → invocation** (transaction optional; fixtures omit unless testing it).
-4. Invoke `when.operation` through the **real** OpenFeature client + Fireweave provider (not a mock of the provider).
+4. Invoke `when.operation` through the SDK under test's **real** runtime + client (`controlPoints.evaluate` / `invokeCapability`, or runtime `initialize` / `shutdown` for lifecycle fixtures) — not a mock of the client. See [`harness.md`](./harness.md).
 5. Capture evaluation details / lifecycle outcome / extension result.
 6. Normalize per rules above; compare to `expect`.
 7. Emit one row per `(fixture.id, language)` into the compatibility report.
-
-Go harnesses must flatten context the same way the Go OF SDK does before asserting provider-boundary fixtures; evaluation fixtures assert **client-visible** details (post-SDK), so flattening is an implementation detail.
 
 ## Compatibility-report format
 
@@ -214,7 +214,7 @@ Harnesses write (or CI aggregates) a report:
       "suite": "evaluation",
       "language": "node",
       "status": "skipped-with-documented-limitation",
-      "limitation": "Node OpenFeature exposes a single number resolver; integers beyond 2^53-1 are not lossless.",
+      "limitation": "Node single number resolver and Java default Long-via-double path cannot losslessly represent integers beyond 2^53-1; Fireweave documents int reliability within Number.MAX_SAFE_INTEGER cross-language.",
       "message": null
     }
   ],
@@ -252,5 +252,3 @@ Oversized / over-deep inputs must yield `InvalidContext` (OF `INVALID_CONTEXT`) 
 
 - Error taxonomy: [`errors.md`](./errors.md) / [`errors.json`](./errors.json)
 - Harness runners: [`harness.md`](./harness.md)
-- Local PostHog protocol stub: [`../test-server/README.md`](../test-server/README.md)
-- Phase 1 decisions: [`../docs/orchestration/decision-brief.md`](../docs/orchestration/decision-brief.md)

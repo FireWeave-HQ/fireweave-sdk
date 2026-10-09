@@ -48,8 +48,7 @@ console.log(`${boolFlag} details:`, {
 
 // 4. Register the durable targeting facts for this user — once per login,
 // not on every evaluation. Resolves `{ ok: false }` rather than throwing (it
-// runs in sign-in paths); the offline default and the --remote stub (which
-// has no /v1/targets/register route) both degrade the same, honest way.
+// runs in sign-in paths).
 const registered = await fireweave.registerTarget(context.targetingKey, {
   kind: 'user',
   properties: { plan: context.plan },

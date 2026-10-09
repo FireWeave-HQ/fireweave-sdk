@@ -40,11 +40,11 @@ struct RuntimeTests {
     #expect(decision.reason == .targetingMatch)
   }
 
-  @Test func absentKeyOnInMemoryAdapterIsFlagNotFound() async {
+  @Test func absentKeyOnInMemoryAdapterIsControlPointNotFound() async {
     let runtime = FireweaveRuntime(adapter: InMemoryAdapter())
     await runtime.initialize(context: EvaluationContext(targetingKey: "t1"))
     let decision = runtime.evaluate(key: "missing", type: .boolean, defaultValue: .bool(false))
-    #expect(decision.errorKind == .flagNotFound)
+    #expect(decision.errorKind == .controlPointNotFound)
     #expect(decision.value == .bool(false))
   }
 
@@ -59,9 +59,9 @@ struct RuntimeTests {
 
   /// The dual-meaning correctness point this task's design had to resolve:
   /// a flag PRESENT in the batch whose conditions do not select the
-  /// caller is `.defaultReason`, never `.flagNotFound` — for EVERY
+  /// caller is `.defaultReason`, never `.controlPointNotFound` — for EVERY
   /// adapter, not just local. See `Runtime.swift`'s evaluate() comment.
-  @Test func presentButNonMatchingConditionIsDefaultNotFlagNotFound() async {
+  @Test func presentButNonMatchingConditionIsDefaultNotControlPointNotFound() async {
     let adapter = InMemoryAdapter.from(flagsJSON: [
       "gated": .object([
         "type": "boolean", "enabled": true, "variant": "on", "value": true,
@@ -90,8 +90,8 @@ struct RuntimeTests {
     let runtimeBoth = FireweaveRuntime(adapter: both)
     await runtimeBoth.initialize(context: EvaluationContext(targetingKey: "t1"))
     let decisionBoth = runtimeBoth.evaluate(key: "f", type: .boolean, defaultValue: .bool(false))
-    #expect(decisionBoth.flagMetadata["fireweave.vendorFlagId"] == .number(1001))
-    #expect(decisionBoth.flagMetadata["fireweave.reasonCode"] == .string("condition_match"))
+    #expect(decisionBoth.controlPointMetadata["fireweave.vendorControlPointId"] == .number(1001))
+    #expect(decisionBoth.controlPointMetadata["fireweave.reasonCode"] == .string("condition_match"))
 
     // Only a vendor id, no condition_index/reason code -> neither key.
     let onlyOne = InMemoryAdapter.from(flagsJSON: [
@@ -103,8 +103,8 @@ struct RuntimeTests {
     let runtimeOne = FireweaveRuntime(adapter: onlyOne)
     await runtimeOne.initialize(context: EvaluationContext(targetingKey: "t1"))
     let decisionOne = runtimeOne.evaluate(key: "f", type: .boolean, defaultValue: .bool(false))
-    #expect(decisionOne.flagMetadata["fireweave.vendorFlagId"] == nil)
-    #expect(decisionOne.flagMetadata["fireweave.reasonCode"] == nil)
+    #expect(decisionOne.controlPointMetadata["fireweave.vendorControlPointId"] == nil)
+    #expect(decisionOne.controlPointMetadata["fireweave.reasonCode"] == nil)
   }
 
   @Test func typeMismatchOnResolvedValue() async {

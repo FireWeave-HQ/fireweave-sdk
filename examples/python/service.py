@@ -54,8 +54,7 @@ def main() -> None:
 
     # 4. Register the durable targeting facts for this user — once per login,
     # not on every evaluation. Resolves ok=False rather than raising (it runs
-    # in sign-in paths); the offline default and the --remote stub (which has
-    # no /v1/targets/register route) both degrade the same, honest way.
+    # in sign-in paths).
     registered = client.register_target(
         "user_42", RegisterTargetOptions(kind="user", properties={"plan": "pro"})
     )

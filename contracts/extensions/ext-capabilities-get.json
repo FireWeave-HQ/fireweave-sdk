@@ -24,7 +24,6 @@
           "providerName": "fireweave"
         },
         "features": {
-          "flags": true,
           "releases": true,
           "exposures": true,
           "signals": true,

@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "id": "start-key-families-client",
+  "suite": "start",
+  "description": "Client key families: browser keys only",
+  "rules": [
+    "SP-16",
+    "SP-17",
+    "SP-26"
+  ],
+  "profile": "client",
+  "provisional": true,
+  "cases": [
+    {
+      "name": "browser-key-accepted",
+      "when": {
+        "operation": "resolve",
+        "build": {
+          "FIREWEAVE_BROWSER_KEY": "fw_public_contracttest01"
+        }
+      },
+      "expect": {
+        "mode": "remote",
+        "keySource": "FIREWEAVE_BROWSER_KEY"
+      }
+    },
+    {
+      "name": "server-key-rejected",
+      "when": {
+        "operation": "resolve",
+        "build": {
+          "FIREWEAVE_BROWSER_KEY": "project-api-key_contracttest01"
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration",
+          "mentions": [
+            "FIREWEAVE_BROWSER_KEY"
+          ],
+          "mustNotMention": [
+            "project-api-key_contracttest01"
+          ]
+        }
+      }
+    },
+    {
+      "name": "analytics-vendor-key-rejected",
+      "when": {
+        "operation": "resolve",
+        "build": {
+          "FIREWEAVE_BROWSER_KEY": "phc_contracttest01"
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration",
+          "mentions": [
+            "FIREWEAVE_BROWSER_KEY"
+          ],
+          "mustNotMention": [
+            "phc_contracttest01"
+          ]
+        }
+      }
+    },
+    {
+      "name": "org-token-rejected",
+      "when": {
+        "operation": "resolve",
+        "build": {
+          "FIREWEAVE_BROWSER_KEY": "fw_org_contracttest01"
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration",
+          "mentions": [
+            "FIREWEAVE_BROWSER_KEY"
+          ],
+          "mustNotMention": [
+            "fw_org_contracttest01"
+          ]
+        }
+      }
+    },
+    {
+      "name": "unknown-shape-rejected",
+      "when": {
+        "operation": "resolve",
+        "build": {
+          "FIREWEAVE_BROWSER_KEY": "custom-key-contracttest01"
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration",
+          "mentions": [
+            "FIREWEAVE_BROWSER_KEY"
+          ],
+          "mustNotMention": [
+            "custom-key-contracttest01"
+          ]
+        }
+      }
+    }
+  ],
+  "compatibility": {
+    "node": "not-applicable",
+    "web": "pass",
+    "python": "not-applicable",
+    "go": "not-applicable",
+    "java": "not-applicable",
+    "rust": "not-applicable",
+    "swift": "pass",
+    "dart": "pass"
+  },
+  "limitations": {
+    "node": "client-profile fixture; this language has only the server profile",
+    "python": "client-profile fixture; this language has only the server profile",
+    "go": "client-profile fixture; this language has only the server profile",
+    "java": "client-profile fixture; this language has only the server profile",
+    "rust": "client-profile fixture; this language has only the server profile"
+  }
+}

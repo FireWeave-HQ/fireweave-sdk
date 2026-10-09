@@ -18,7 +18,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fireweave"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/fireweave"
 )
 
 func main() {
@@ -80,9 +80,7 @@ func main() {
 
 	// 4. Register the durable targeting facts for this user — once per
 	// login, not on every evaluation. Resolves OK: false rather than
-	// erroring (it runs in sign-in paths); the offline default and the
-	// --remote stub (which has no /v1/targets/register route) both degrade
-	// the same, honest way.
+	// erroring (it runs in sign-in paths).
 	registered := client.RegisterTarget(evalCtx.TargetingKey, &fireweave.RegisterTargetOptions{
 		Kind:       fireweave.TargetKindUser,
 		Properties: map[string]any{"plan": "pro"},

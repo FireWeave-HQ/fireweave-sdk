@@ -6,7 +6,7 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-split": {
         "type": "boolean",
         "enabled": true,
@@ -25,7 +25,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-split",
+    "controlPointKey": "fw-split",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {
@@ -38,8 +38,8 @@
     "reason": "SPLIT",
     "errorCode": null,
     "errorMessage": null,
-    "flagMetadata": {
-      "fireweave.flagVersion": 2
+    "controlPointMetadata": {
+      "fireweave.controlPointVersion": 2
     }
   },
   "schemaVersion": 1,

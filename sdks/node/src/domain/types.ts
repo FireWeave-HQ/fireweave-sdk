@@ -18,14 +18,14 @@ export type DecisionReason =
 
 /** Canonical decision (spec/decision.schema.json). */
 export interface Decision {
-  flagKey: string;
+  controlPointKey: string;
   value: JsonValue;
   reason: DecisionReason;
   variant?: string;
   errorCode?: OpenFeatureErrorCode;
   errorKind?: FireweaveErrorKind;
   errorMessage?: string;
-  /** fireweave.* flag metadata surfaced to OpenFeature flagMetadata. */
+  /** fireweave.* flag metadata surfaced to OpenFeature controlPointMetadata. */
   metadata: Record<string, string | number | boolean>;
 }
 
@@ -70,7 +70,7 @@ export interface Signal {
   rolloutId?: string;
   changeId?: string;
   stampId?: string;
-  flagKey?: string;
+  controlPointKey?: string;
   variant?: string;
   traceId?: string;
   role?: 'adoption' | 'guard' | 'quality' | 'custom';
@@ -101,7 +101,7 @@ export interface ReleaseState {
 /** Exposure event (extensions fixtures shape). */
 export interface Exposure {
   targetingKey: string;
-  flagKey: string;
+  controlPointKey: string;
   value: JsonValue;
   variant?: string;
   rolloutId?: string;

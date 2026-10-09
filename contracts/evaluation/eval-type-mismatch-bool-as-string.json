@@ -5,7 +5,7 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-bool-only": {
         "type": "boolean",
         "enabled": true,
@@ -19,7 +19,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-bool-only",
+    "controlPointKey": "fw-bool-only",
     "flagType": "string",
     "defaultValue": "fallback",
     "invocationContext": {
@@ -32,7 +32,7 @@
     "reason": "ERROR",
     "errorCode": "TYPE_MISMATCH",
     "errorMessage": "flag type mismatch",
-    "flagMetadata": {
+    "controlPointMetadata": {
       "fireweave.errorKind": "TypeMismatch"
     }
   },

@@ -1,6 +1,6 @@
 # Contributing to the Fireweave SDK
 
-Thanks for your interest. This document covers the sign-off requirement, how to build and test each language SDK, and the rules that keep the four implementations behaviorally identical.
+Thanks for your interest. This document covers the sign-off requirement, how to build and test each language SDK, and the rules that keep the implementations behaviorally identical.
 
 Also read the [Code of Conduct](CODE_OF_CONDUCT.md) and [GOVERNANCE.md](GOVERNANCE.md).
 
@@ -25,12 +25,12 @@ If you forgot on the last commit: `git commit --amend -s --no-edit`. For a whole
 ## Before you start
 
 - **Bugs / small fixes**: open an issue first if the fix changes observable behavior; otherwise a PR is fine.
-- **Features / API changes**: open an issue for discussion first. Public-API changes must keep the four languages consistent (see [GOVERNANCE.md](GOVERNANCE.md) for the ADR process) — a feature landing in one language needs a plan for the other three.
+- **Features / API changes**: open an issue for discussion first. Public-API changes must keep the languages consistent (see [GOVERNANCE.md](GOVERNANCE.md) for the ADR process).
 - **Cross-cutting design changes** require an ADR under `docs/adr/`.
 
 ## Build & test per language
 
-All four SDKs must pass their unit tests **and** the shared conformance suite (`contracts/`) before a PR is mergeable.
+All SDKs must pass their unit tests **and** the shared conformance suite (`contracts/`) before a PR is mergeable.
 
 ### Node (`sdks/node`, Node ≥ 20.20)
 
@@ -86,7 +86,7 @@ node examples/node/index.mjs
 `spec/*.schema.json` and `contracts/**` are the **canonical cross-language contract**. They are deliberately hard to change:
 
 - `spec/` schemas are the source of truth; fixtures in `contracts/` conform to spec.
-- **Canonical fixture or schema changes land only through orchestrated review**: propose the change in an issue, get maintainer sign-off for all four languages, and land the spec/fixture change together with (or before) the implementation changes. Never edit a fixture to make one language's tests pass.
+- **Canonical fixture or schema changes land only through orchestrated review**: propose the change in an issue, get maintainer sign-off for all languages, and land the spec/fixture change together with (or before) the implementation changes. Never edit a fixture to make one language's tests pass.
 - A fixture skip requires `skipped-with-documented-limitation` status **in the fixture** plus a non-empty `limitations.<lang>` reason. Silent skips are a CI failure (see `contracts/README.md`).
 - Language SDK code must not depend on fixture internals beyond the documented harness contract (`contracts/harness.md`).
 

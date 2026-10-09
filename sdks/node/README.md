@@ -19,7 +19,83 @@ npm install @fireweaveai/server-sdk   # or: bun add …
 import { initFireweave } from 'npm:@fireweaveai/server-sdk';
 ```
 
-## Quick start (production path)
+## Quick start (one line: the start profile)
+
+Most apps need only this ([ADR-0012](../../docs/adr/0012-start-profile.md)). Two small files and one import:
+
+```ts
+// src/fireweave/control-points.ts: every control point the app reads, with its local value
+import { defineControlPoints } from '@fireweaveai/server-sdk/start';
+
+export const controlPoints = defineControlPoints({
+  'new-checkout': { local: true }, // served only in local mode
+});
+```
+
+```ts
+// src/fireweave/start.ts
+import { start } from '@fireweaveai/server-sdk/start';
+import { controlPoints } from './control-points';
+
+start({ controlPoints });
+```
+
+```ts
+// src/main.ts: must be the FIRST import
+import './fireweave/start';
+```
+
+```ts
+// any call site
+import { fw } from '@fireweaveai/server-sdk/start';
+
+// @fireweave-controlpoint new-checkout
+if (await fw.controlPoints.getBooleanValue('new-checkout', false, { targetingKey: user.id })) { /* … */ }
+await fw.identify(user.id, { plan: user.plan });                                   // at sign-in
+await fw.controlPoints.getBooleanValue('nightly-reindex', false, { targetingKey: fw.instanceKey() }); // server as subject
+```
+
+Deployed environments set one variable, `FIREWEAVE_KEY` (the project key, `project-api-key_…`).
+Local development needs nothing when `NODE_ENV` (or `APP_ENV` / `FIREWEAVE_ENV`) is
+`development`, `dev`, `local` or `test`.
+
+### Options and overrides
+
+Every value resolves as: `start()` option, then env var, then legacy name (warns once), then default.
+
+| Option | Env var | Default | What it does |
+| --- | --- | --- | --- |
+| `controlPoints` | — | `{}` | Local values per control point. Ignored in remote mode. |
+| `mode` | — | inferred | `'remote'` or `'local'`. Overrides inference. `'remote'` without a key is a start error; `'local'` ignores a key. |
+| `environment` | `FIREWEAVE_ENV`, `APP_ENV`, `NODE_ENV` | — | Environment name used for inference when there is no key and no `mode`. Pass your own, e.g. `environment: process.env.DEPLOY_STAGE`. |
+| `url` | `FIREWEAVE_URL` (legacy `FW_API_URL`, `FW_ATTEST_URL`) | from the SDK build | A `-staging.N` build calls `staging-app-server.fireweave.ai`; any other calls `app-server.fireweave.ai`. Set it for a self-hosted or local fw-server. |
+| `key` | `FIREWEAVE_KEY` (legacy `FW_PROJECT_API_KEY`) | — | Project key. Pass it to read from your own secret store. Browser keys and vendor keys are rejected at start. |
+| `instanceId` | `FIREWEAVE_INSTANCE_ID` | hash of the host name | Value of `fw.instanceKey()`. Nothing is written to disk. |
+| `env` | — | the process | Read values from this object instead of the environment. |
+| `log` | — | console | Where `[fireweave]` lines go. |
+
+**Mode rule.** `mode` wins. Otherwise: a key means remote. No key and a development
+environment name means local. Anything else (including no environment name at all) throws
+at `start()`, naming the variable, so a deploy that forgot its key fails instead of silently
+serving defaults.
+
+**Reads never throw.** If start fails, reads return your default (`*Details` return an `ERROR`
+decision). `fw.status()` reports the mode, channel, host and key source, never the key.
+`start()` is idempotent; a second call with a different config throws. Zero-config apps can use
+`import '@fireweaveai/server-sdk/register'` (or `node --import`, `bun --preload`) instead of
+`src/fireweave/start.ts`.
+
+**When reads return only defaults.** A revoked or wrong key must not look like a rollout at 0%.
+When fw-server refuses the key (HTTP 401 or 403), rate-limits it (429) or cannot be reached
+(network error, timeout, 5xx), the start profile logs **one** `[fireweave]` line per kind for the
+life of the process, naming where the key came from (`FIREWEAVE_KEY`, `FW_PROJECT_API_KEY` or
+`start({ key })`) or the endpoint host, never the key itself. `fw.status().lastErrorKind` holds
+the kind of the latest failed request (`Authentication`, `Authorization`, `RateLimited`,
+`Network`, `Timeout` or `BackendUnavailable`). It is sticky: once requests succeed again, reads
+return real values, but `lastErrorKind` keeps the last failure and the line is not logged again.
+A fresh `start()` after `fw.shutdown()` clears it.
+
+## Quick start (production path, core API)
 
 ```ts
 import { initFireweave } from '@fireweaveai/server-sdk';
@@ -81,10 +157,8 @@ const fireweave = new FireweaveClient(runtime);
 await fireweave.initialize();
 ```
 
-The per-call parameter is `flagKey`, not `controlPointKey` — that name is fixed by
-`spec/decision.schema.json` and the wire protocol shared with the Python, Go, and Java SDKs.
-"Control point" is the product noun; `flagKey` is its key at those boundaries
-([ADR-0007](../../docs/adr/0007-control-point-vocabulary.md)).
+The key is `controlPointKey` everywhere, on the wire and in `Decision`, from 3.0.0
+([ADR-0013](../../docs/adr/0013-control-point-wire.md)).
 
 ## Module layout
 
@@ -93,7 +167,7 @@ The per-call parameter is `flagKey`, not `controlPointKey` — that name is fixe
 | `application/runtime.ts` | Lifecycle state machine, config validation, context policy, decision construction. Evaluation never throws. |
 | `application/client.ts` | `FireweaveClient` — `controlPoints`, `registerTarget`. |
 | `application/mode.ts` | `initFireweave` — the single entry point; the only module allowed to import concrete adapters. |
-| `infrastructure/adapters/remote.ts` | `FireweaveRemoteAdapter` — the production backend (`/v1/flags/evaluate`, `/v1/targets/register`). |
+| `infrastructure/adapters/remote.ts` | `FireweaveRemoteAdapter` — the production backend (`/v1/control-points/evaluate`, `/v1/targets/register`). |
 | `infrastructure/adapters/inmemory.ts` | Deterministic fixture-driven adapter for tests and conformance. |
 | `infrastructure/adapters/local.ts` | `FireweaveLocalAdapter` — the DEV substrate `initFireweave({ mode: 'local' })` builds. |
 | `application/ports.ts` | The `BackendAdapter` boundary. |
@@ -110,122 +184,12 @@ The SDK reads no environment variables (spec/modes.md) — every option is an ex
 | --- | --- | --- |
 | `apiUrl` | `remote` | fw-server base URL (required) |
 | `apiKey` | `remote` | Fireweave project key (`project-api-key_…`) (required) |
-| `allowedHosts` | `remote` | SSRF allowlist override; defaults to the `apiUrl` host plus loopback |
+| `allowedHosts` | `remote` | SSRF allowlist override |
 | `local.controlPoints` | `local` | seeded boolean overrides; a present key resolves `STATIC`, an absent key misses to the caller's default with reason `DEFAULT` |
 
-## Upgrading from v2.0 to 2.1
+## Upgrading from 2.x: `flags` → `controlPoints`
 
-**Only one change is mandatory.** If you imported the direct vendor adapter, swap it. Everything else from v2 still works, so most of this section exists to tell you what you *don't* have to do.
-
-### Does this affect me?
-
-```bash
-# Mandatory to fix (any hit ⇒ migration required)
-rg -n "@fireweaveai/server-sdk/posthog|PostHogAdapter"
-rg -n '"posthog-node"' package.json
-
-# Configuration that moves
-rg -n "POSTHOG_HOST|POSTHOG_API_KEY|POSTHOG_PROJECT_API_KEY"
-```
-
-No hits? Bump the version; you are done.
-
-### 1. Swap the adapter (required)
-
-```ts
-// before
-import { PostHogAdapter } from '@fireweaveai/server-sdk/posthog';
-const adapter = new PostHogAdapter({
-  projectApiKey: process.env.POSTHOG_API_KEY,
-  host: process.env.POSTHOG_HOST,
-  featureFlagsRequestTimeoutMs: 3000,
-});
-
-// after
-import { initFireweave } from '@fireweaveai/server-sdk';
-const fireweave = await initFireweave({
-  mode: 'remote',
-  apiUrl: process.env.FW_API_URL!,
-  apiKey: process.env.FW_PROJECT_API_KEY!,
-});
-```
-
-| v2 option | 2.1 |
-| --- | --- |
-| `projectApiKey` (`phc_…`) | `apiKey` (`project-api-key_…`) |
-| `host` | `apiUrl` |
-| `featureFlagsRequestTimeoutMs` | `requestTimeoutMs` (adapter-level; `initFireweave` does not expose it directly — use *Lower-level construction* above if you need it) |
-| `shutdownTimeoutMs`, `allowedHosts` | unchanged |
-| `secretApiKey`, `onlyEvaluateLocally`, `featureFlagsPollingInterval`, `waitForLocalDefinitions`, `client` | **no equivalent** — see §4 |
-
-Then:
-
-- Remove `posthog-node` from `package.json` — **unless** you use it for your own analytics capture. Check with `rg "posthog-node"` first.
-- Update deployment config, secret stores, and CI: `POSTHOG_HOST` → `FW_API_URL`, `POSTHOG_API_KEY` → `FW_PROJECT_API_KEY`. **The new key is a Fireweave project key, not a re-labelled vendor key** — it has to be issued from your Fireweave project.
-
-### 2. What you do *not* have to change
-
-| v2 | Status in 2.1 |
-| --- | --- |
-| `client.flags.evaluate` / `getBooleanValue` / … | works — the same object as `client.controlPoints` |
-| `new InMemoryAdapter({ flags })` | unchanged |
-| `Decision.flagKey`, `flagMetadata` | unchanged |
-| `FlagValueType`, `InMemoryFlagDefinition`, `ExpectedFlagType` | unchanged |
-| every other v2 export | unchanged |
-
-`client.flags === client.controlPoints` — a getter returning the same instance, not a copy. It is
-marked `@deprecated` in JSDoc and **is not scheduled for removal in the 2.x line**; retiring it
-would need its own major and its own ADR. Renaming your call sites is cosmetic and can be
-deferred indefinitely. Accessing `client.flags` is silent at runtime — no log line, no env gate —
-because the SDK reads no environment variables regardless (spec/modes.md); the deprecation is
-conveyed by JSDoc only.
-
-### 3. Two type-level narrowings
-
-`'posthog'` is no longer a member of `BackendAdapter['name']` or `Capabilities['runtime']['backend']`.
-
-- A custom adapter declaring `name: 'posthog'` → use `'other'`.
-- An exhaustive `switch` on `backend` with a `case 'posthog'` → that arm is unreachable; remove it.
-
-Both are rare, and `tsc` points straight at them.
-
-### 4. Local evaluation is gone
-
-v2's vendor adapter could evaluate in-process from polled definitions with a secret key. 2.1 has no equivalent: caching is fw-server's concern, and both shipped adapters report `localEvaluation: false`.
-
-If in-process evaluation is load-bearing for you — an air-gapped service, or a latency floor below one network hop — **stay on v2 for now and tell us**. The interface seam (`AdapterRuntimeFeatures.localEvaluation` / `localOnly`, `AdapterResolution.fromCache`, the `STALE` reason) is deliberately preserved for a future Fireweave-native cache ([ADR-0006](../../docs/adr/0006-node-drops-direct-posthog-adapter.md)).
-
-### 5. Worth re-checking
-
-1. **`DEFAULT_ALLOWED_HOSTS` changed contents** while keeping its name. It now lists Fireweave hosts, not vendor hosts. Code doing `allowedHosts: [...DEFAULT_ALLOWED_HOSTS, 'mine.example']` keeps compiling and silently stops permitting the old endpoints. That is intended — verify it matches your deployment.
-2. **Move durable attributes to `registerTarget`.** Attributes you resend on every evaluation can be registered once per login. Per-request attributes still override stored properties, so the two compose — this is an optimization, not a cutover. Note that `registerTarget` returns `{ ok }` rather than throwing (it sits in sign-in paths); log `ok: false`, because a silently unregistered target is exactly how targeting rules end up matching nobody.
-
-### 6. Verify
-
-```bash
-npm install @fireweaveai/server-sdk@latest
-npx tsc --noEmit                                  # catches §3
-<your test command>
-rg -n "@fireweaveai/server-sdk/posthog|PostHogAdapter"   # expect no hits
-```
-
-At runtime, a boolean read against a known-on control point should resolve `true` with reason
-`TARGETING_MATCH`/`SPLIT`/`STATIC` (never `ERROR`); if it resolves the default with reason
-`ERROR`, the remote adapter was never wired in correctly — check `apiUrl`/`apiKey`.
-
-### Rollback
-
-```bash
-npm install @fireweaveai/server-sdk@2   # re-add posthog-node if you removed it
-```
-
-Revert the adapter swap and the env vars. No data migration is involved, so rollback is code and config only.
-
----
-
-## Renaming `flags` → `controlPoints` safely
-
-If you do decide to adopt the new name, scope the edit. `flags` is an ordinary word: your repo very likely contains feature-flag code, config keys, DB columns, and `flags` variables that have nothing to do with this SDK.
+`client.flags` was removed in 3.0.0 ([ADR-0013](../../docs/adr/0013-control-point-wire.md)); use `client.controlPoints`, which is the same object it returned. `Decision.flagKey` is now `Decision.controlPointKey`, the error kind `FlagNotFound` is `ControlPointNotFound`, and the start option `flags` is `controlPoints` (`defineControlPoints`). Scope the edit. `flags` is an ordinary word: your repo very likely contains feature-flag code, config keys, DB columns, and `flags` variables that have nothing to do with this SDK.
 
 **Rename only `.flags` accesses whose receiver is provably a `FireweaveClient`** — traceable to a `new FireweaveClient(...)`/`initFireweave(...)` call, an imported binding assigned from one, or a parameter annotated `FireweaveClient`.
 
@@ -234,12 +198,11 @@ Never rename:
 | Looks similar | Why it stays |
 | --- | --- |
 | `new InMemoryAdapter({ flags: … })` | SDK option key, unchanged |
-| `flagKey`, `flagMetadata`, `FlagValueType`, `InMemoryFlagDefinition` | SDK API, unchanged |
-| `features.flags` in the capability matrix | still `true`; removing it fails conformance |
+| `FlagValueType`, `InMemoryFlagDefinition` | SDK API, unchanged |
 | your own `flags` variables, `featureFlags`, CLI `--flags`, `flags` columns | not this SDK |
 | another vendor's SDK (`ldClient.variation`, flagd, Unleash) | not this SDK |
 
-**Do not run a repo-wide `flags` → `controlPoints` replacement** — not with `sed`, not with editor replace-all. Go call site by call site, and when a receiver is ambiguous, leave it. A missed cosmetic rename costs nothing; a wrong one breaks unrelated code.
+**Do not run a repo-wide `flags` → `controlPoints` replacement** — not with `sed`, not with editor replace-all. Go call site by call site, and when a receiver is ambiguous, leave it. The compiler finds a missed rename; a wrong one breaks unrelated code.
 
 ## Development
 
@@ -256,7 +219,7 @@ deno run --allow-read scripts/smoke-runtimes.mjs
 
 ## Documentation
 
-Full docs live in [`docs/`](../../docs/): [quickstart](../../docs/quickstart.md) · [remote adapter](../../docs/remote.md) · [runtimes](../../docs/runtimes.md) · [testing](../../docs/testing.md) · [migration](../../docs/migration.md) · [troubleshooting](../../docs/troubleshooting.md) · [ADRs](../../docs/adr/).
+Full docs live in [`docs/`](../../docs/): [remote adapter](../../docs/remote.md) · [runtimes](../../docs/runtimes.md) · [testing](../../docs/testing.md) · [troubleshooting](../../docs/troubleshooting.md) · [ADRs](../../docs/adr/).
 
 ## License
 

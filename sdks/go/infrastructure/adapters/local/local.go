@@ -9,7 +9,7 @@ import (
 	"log"
 	"sync"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/domain"
 )
 
 // RegisteredTarget is one target recorded by Adapter.RegisterTarget.
@@ -31,7 +31,7 @@ type RegisteredTarget struct {
 //     application.(*Runtime).Evaluate turns into the caller's own default —
 //     not an error (spec/modes.md "Behaviour per mode": local's
 //     unknown-key row is deliberately default/DEFAULT, unlike remote's
-//     default/ERROR/FlagNotFound). This adapter never returns an error on a
+//     default/ERROR/ControlPointNotFound). This adapter never returns an error on a
 //     miss — a plain Decision with reason DEFAULT is the strict, typed seam
 //     that keeps that distinction from the runtime's perspective.
 type Adapter struct {
@@ -67,18 +67,18 @@ func (a *Adapter) Initialize(ctx context.Context) error { return nil }
 // TypeMismatch rather than silently returning the default (a genuine
 // caller mistake, better surfaced than hidden).
 func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain.Decision {
-	override, ok := a.seed[req.FlagKey]
+	override, ok := a.seed[req.ControlPointKey]
 	if !ok {
-		return domain.Decision{FlagKey: req.FlagKey, Value: req.DefaultValue, Reason: domain.ReasonDefault}
+		return domain.Decision{ControlPointKey: req.ControlPointKey, Value: req.DefaultValue, Reason: domain.ReasonDefault}
 	}
 	if req.Type != domain.FlagTypeBoolean {
-		return domain.ErrorDecision(req.FlagKey, req.DefaultValue, domain.NewError(domain.KindTypeMismatch, "", nil), nil)
+		return domain.ErrorDecision(req.ControlPointKey, req.DefaultValue, domain.NewError(domain.KindTypeMismatch, "", nil), nil)
 	}
 	variant := "off"
 	if override {
 		variant = "on"
 	}
-	return domain.Decision{FlagKey: req.FlagKey, Value: override, Variant: variant, Reason: domain.ReasonStatic}
+	return domain.Decision{ControlPointKey: req.ControlPointKey, Value: override, Variant: variant, Reason: domain.ReasonStatic}
 }
 
 // RegisterTarget implements domain.TargetRegistrar.

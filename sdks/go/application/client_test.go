@@ -2,25 +2,26 @@ package application
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/domain"
 )
 
 func readyClient(t *testing.T) *Client {
 	t.Helper()
 	return NewClient(readyRuntime(t, &stubAdapter{resolveFn: func(_ context.Context, req ResolveRequest) domain.Decision {
-		if req.FlagKey == "fw-on" {
-			return domain.Decision{FlagKey: req.FlagKey, Value: true, Variant: "on", Reason: domain.ReasonTargetingMatch}
+		if req.ControlPointKey == "fw-on" {
+			return domain.Decision{ControlPointKey: req.ControlPointKey, Value: true, Variant: "on", Reason: domain.ReasonTargetingMatch}
 		}
-		return domain.Decision{FlagKey: req.FlagKey, Value: req.DefaultValue, Reason: domain.ReasonDefault}
+		return domain.Decision{ControlPointKey: req.ControlPointKey, Value: req.DefaultValue, Reason: domain.ReasonDefault}
 	}}))
 }
 
-func TestFlagsAndControlPointsShareIdentity(t *testing.T) {
+func TestTheFlagsAliasIsGone(t *testing.T) {
 	c := readyClient(t)
-	if c.ControlPoints() != c.Flags() {
-		t.Fatal("Client.Flags() must return the identical *ControlPoints as Client.ControlPoints()")
+	if _, ok := reflect.TypeOf(c).MethodByName("Flags"); ok {
+		t.Fatal("Client.Flags() was removed in 3.0.0 (ADR-0013)")
 	}
 }
 
@@ -32,7 +33,7 @@ func TestControlPointsGetBooleanValueAndDetails(t *testing.T) {
 		t.Errorf("GetBooleanValue = %v, want true", v)
 	}
 	d := cp.GetBooleanDetails("fw-on", false, nil)
-	if d.Value != true || d.Reason != domain.ReasonTargetingMatch || d.FlagKey != "fw-on" {
+	if d.Value != true || d.Reason != domain.ReasonTargetingMatch || d.ControlPointKey != "fw-on" {
 		t.Fatalf("GetBooleanDetails = %+v", d)
 	}
 
@@ -61,7 +62,7 @@ func TestControlPointsAllNineMethodsReachable(t *testing.T) {
 	_ = cp.GetNumberDetails("k", 1, nil)
 	_ = cp.GetObjectDetails("k", map[string]any{}, nil)
 	d := cp.Evaluate("k", domain.FlagTypeBoolean, false, nil, nil)
-	if d.FlagKey != "k" {
+	if d.ControlPointKey != "k" {
 		t.Errorf("Evaluate: %+v", d)
 	}
 }

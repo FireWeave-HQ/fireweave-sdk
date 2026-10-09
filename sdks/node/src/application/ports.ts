@@ -48,7 +48,7 @@ export interface AdapterResolution {
   /** Flag definition version. */
   version?: number;
   /** Vendor-side numeric flag id. */
-  vendorFlagId?: number;
+  vendorControlPointId?: number;
   /** Optional flag payload (object or pre-serialized JSON string). */
   payload?: JsonValue;
   /** True when the /flags response reported quota limiting. */
@@ -71,7 +71,7 @@ export interface AdapterRuntimeFeatures {
 }
 
 /**
- * Backend adapter boundary (docs/architecture.md §layers). Adapters translate
+ * Backend adapter boundary. Adapters translate
  * canonical requests to vendor protocols; they never see OpenFeature types.
  */
 export interface BackendAdapter {
@@ -80,7 +80,7 @@ export interface BackendAdapter {
   /** Bring the backend to a usable state. Reject with FireweaveError on failure. */
   initialize(signal?: AbortSignal): Promise<void>;
   /** Resolve one flag. Throws FireweaveError for transport/auth/parse faults. */
-  resolve(flagKey: string, context: CanonicalContext, options?: ResolveOptions): Promise<AdapterResolution>;
+  resolve(controlPointKey: string, context: CanonicalContext, options?: ResolveOptions): Promise<AdapterResolution>;
   /**
    * Register a user or device so rules can target its durable properties
    * (optional capability). Resolves with `ok: false` rather than throwing —

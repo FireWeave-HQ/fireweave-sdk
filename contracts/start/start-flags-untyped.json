@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "id": "start-flags-untyped",
+  "suite": "start",
+  "description": "Flags validation that only dynamically typed languages can express",
+  "rules": [
+    "SP-18"
+  ],
+  "profile": "any",
+  "provisional": true,
+  "cases": [
+    {
+      "name": "non-boolean-local-rejected",
+      "when": {
+        "operation": "defineControlPoints",
+        "controlPoints": {
+          "new-checkout": {
+            "local": "yes"
+          }
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration"
+        }
+      }
+    },
+    {
+      "name": "missing-local-rejected",
+      "when": {
+        "operation": "defineControlPoints",
+        "controlPoints": {
+          "new-checkout": {}
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration"
+        }
+      }
+    },
+    {
+      "name": "non-string-description-rejected",
+      "when": {
+        "operation": "defineControlPoints",
+        "controlPoints": {
+          "new-checkout": {
+            "local": true,
+            "description": 5
+          }
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration"
+        }
+      }
+    }
+  ],
+  "compatibility": {
+    "node": "pass",
+    "web": "pass",
+    "python": "pass",
+    "go": "not-applicable",
+    "java": "not-applicable",
+    "rust": "not-applicable",
+    "swift": "not-applicable",
+    "dart": "not-applicable"
+  },
+  "limitations": {
+    "go": "the type system makes these shapes unrepresentable",
+    "java": "the type system makes these shapes unrepresentable",
+    "rust": "the type system makes these shapes unrepresentable",
+    "swift": "the type system makes these shapes unrepresentable",
+    "dart": "the type system makes these shapes unrepresentable"
+  }
+}

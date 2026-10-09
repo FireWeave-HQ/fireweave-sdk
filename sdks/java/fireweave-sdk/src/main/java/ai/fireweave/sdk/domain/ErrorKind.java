@@ -13,7 +13,7 @@ package ai.fireweave.sdk.domain;
  */
 public enum ErrorKind {
     NotReady("PROVIDER_NOT_READY", true, FailureClass.TRANSIENT, "provider not ready"),
-    FlagNotFound("FLAG_NOT_FOUND", false, FailureClass.PERMANENT, "flag not found"),
+    ControlPointNotFound("FLAG_NOT_FOUND", false, FailureClass.PERMANENT, "flag not found"),
     TypeMismatch("TYPE_MISMATCH", false, FailureClass.PERMANENT, "flag type mismatch"),
     InvalidContext("INVALID_CONTEXT", false, FailureClass.PERMANENT, "invalid evaluation context"),
     Authentication("GENERAL", false, FailureClass.PERMANENT, "authentication failed"),
@@ -70,6 +70,6 @@ public enum ErrorKind {
         return defaultMessage;
     }
 
-    /** The flagMetadata key carrying the canonical kind on error decisions. */
+    /** The controlPointMetadata key carrying the canonical kind on error decisions. */
     public static final String FLAG_METADATA_ERROR_KIND_KEY = "fireweave.errorKind";
 }

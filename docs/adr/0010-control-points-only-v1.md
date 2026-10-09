@@ -1,6 +1,6 @@
 # ADR-0010: v1 is control points and target registration; the OpenFeature provider is retired
 
-- **Status:** Accepted
+- **Status:** Accepted; its `flag` wire, envelope and alias boundaries are superseded by ADR-0013 (3.0.0)
 - **Date:** 2026-08-20
 - **Scope:** every SDK in `sdks/` — node, web, python, java, go, and the rust/swift additions
 - **Supersedes:** ADR-0003's dual-surface decision ("Users may use only OF, or only FireweaveClient, or both")

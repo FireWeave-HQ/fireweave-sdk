@@ -30,14 +30,14 @@ import java.util.Objects;
 /**
  * Fireweave remote backend adapter (ADR-0005) — <b>default production path</b>.
  *
- * <p>Speaks {@code POST /v1/flags/evaluate} and {@code POST /v1/targets/register} to fw-server
+ * <p>Speaks {@code POST /v1/control-points/evaluate} and {@code POST /v1/targets/register} to fw-server
  * with {@code Authorization: Bearer <FW_PROJECT_API_KEY>}. No vendor SDK or keys in the customer
  * process. Config: {@link FireweaveConfig#host()} = {@code FW_API_URL},
  * {@link FireweaveConfig#projectApiKey()} = {@code FW_PROJECT_API_KEY}.
  */
 public final class FireweaveRemoteAdapter implements BackendAdapter {
 
-    private static final String EVALUATE_PATH = "/v1/flags/evaluate";
+    private static final String EVALUATE_PATH = "/v1/control-points/evaluate";
     private static final String REGISTER_TARGET_PATH = "/v1/targets/register";
 
     private final HttpClient httpClient;
@@ -124,9 +124,9 @@ public final class FireweaveRemoteAdapter implements BackendAdapter {
 
         Map<String, JsonValue> body = new LinkedHashMap<>();
         body.put("targetingKey", JsonValue.of(targetingKey));
-        List<JsonValue> flagKeys = new ArrayList<>();
-        flagKeys.add(JsonValue.of(request.flagKey()));
-        body.put("flagKeys", JsonValue.ofArray(flagKeys));
+        List<JsonValue> controlPointKeys = new ArrayList<>();
+        controlPointKeys.add(JsonValue.of(request.controlPointKey()));
+        body.put("controlPointKeys", JsonValue.ofArray(controlPointKeys));
 
         Map<String, JsonValue> attributes = new LinkedHashMap<>();
         for (Map.Entry<String, JsonValue> e : ctx.attributes().entrySet()) {
@@ -167,21 +167,21 @@ public final class FireweaveRemoteAdapter implements BackendAdapter {
         }
         JsonValue decisionsNode = root.get("decisions");
         if (decisionsNode == null || decisionsNode.kind() != JsonValue.Kind.ARRAY) {
-            throw quotaLimited ? FireweaveException.quotaLimited() : new FireweaveException(ErrorKind.FlagNotFound);
+            throw quotaLimited ? FireweaveException.quotaLimited() : new FireweaveException(ErrorKind.ControlPointNotFound);
         }
         for (JsonValue item : decisionsNode.asArray()) {
             if (item.kind() != JsonValue.Kind.OBJECT) {
                 continue;
             }
             Map<String, JsonValue> d = item.asObject();
-            JsonValue keyNode = d.get("flagKey");
+            JsonValue keyNode = d.get("controlPointKey");
             if (keyNode == null || keyNode.kind() != JsonValue.Kind.STRING
-                    || !request.flagKey().equals(keyNode.asString())) {
+                    || !request.controlPointKey().equals(keyNode.asString())) {
                 continue;
             }
             JsonValue foundNode = d.get("found");
             if (foundNode != null && foundNode.kind() == JsonValue.Kind.BOOLEAN && !foundNode.asBoolean()) {
-                throw quotaLimited ? FireweaveException.quotaLimited() : new FireweaveException(ErrorKind.FlagNotFound);
+                throw quotaLimited ? FireweaveException.quotaLimited() : new FireweaveException(ErrorKind.ControlPointNotFound);
             }
             JsonValue value = d.get("value");
             if (value == null) {
@@ -192,12 +192,12 @@ public final class FireweaveRemoteAdapter implements BackendAdapter {
             if (reasonNode != null && reasonNode.kind() == JsonValue.Kind.STRING) {
                 reason = reasonNode.asString();
             }
-            Decision.Builder b = Decision.builder(request.flagKey()).value(value).reason(reason);
+            Decision.Builder b = Decision.builder(request.controlPointKey()).value(value).reason(reason);
             JsonValue variant = d.get("variant");
             if (variant != null && variant.kind() == JsonValue.Kind.STRING) {
                 b.variant(variant.asString());
             }
-            JsonValue meta = d.get("flagMetadata");
+            JsonValue meta = d.get("controlPointMetadata");
             if (meta != null && meta.kind() == JsonValue.Kind.OBJECT) {
                 for (Map.Entry<String, JsonValue> m : meta.asObject().entrySet()) {
                     Object scalar = toScalar(m.getValue());
@@ -225,7 +225,7 @@ public final class FireweaveRemoteAdapter implements BackendAdapter {
         // outcome as an explicit found:false item (spec/control-points.md return-discipline
         // table) — deliberately NOT the local adapter's matched=false/DEFAULT seam, which does
         // not apply here.
-        throw quotaLimited ? FireweaveException.quotaLimited() : new FireweaveException(ErrorKind.FlagNotFound);
+        throw quotaLimited ? FireweaveException.quotaLimited() : new FireweaveException(ErrorKind.ControlPointNotFound);
     }
 
     /**

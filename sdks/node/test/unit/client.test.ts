@@ -49,7 +49,7 @@ test('invokeCapability degrades cut-namespace capability names, not { ok: true }
   }
 });
 
-test('flags.evaluate exposes detailed Decision evaluation on the client surface', async () => {
+test('controlPoints.evaluate exposes detailed Decision evaluation on the client surface', async () => {
   const adapter = new InMemoryAdapter({
     flags: {
       'fw-detail': {
@@ -64,17 +64,17 @@ test('flags.evaluate exposes detailed Decision evaluation on the client surface'
   const runtime = new FireweaveRuntime(adapter);
   await runtime.initialize();
   const client = new FireweaveClient(runtime);
-  const decision = await client.flags.evaluate('fw-detail', 'string', 'classic', {
+  const decision = await client.controlPoints.evaluate('fw-detail', 'string', 'classic', {
     targetingKey: 'user-1',
   });
   assert.equal(decision.value, 'midnight');
   assert.equal(decision.variant, 'midnight');
   assert.equal(decision.reason, 'TARGETING_MATCH');
-  assert.equal(decision.metadata['fireweave.flagVersion'], 7);
+  assert.equal(decision.metadata['fireweave.controlPointVersion'], 7);
   // Errors surface as decisions, never throws:
-  const missing = await client.flags.evaluate('nope', 'boolean', false);
+  const missing = await client.controlPoints.evaluate('nope', 'boolean', false);
   assert.equal(missing.reason, 'ERROR');
-  assert.equal(missing.errorKind, 'FlagNotFound');
+  assert.equal(missing.errorKind, 'ControlPointNotFound');
   // Typed conveniences ride on the same path.
-  assert.equal(await client.flags.getStringValue('fw-detail', 'classic'), 'midnight');
+  assert.equal(await client.controlPoints.getStringValue('fw-detail', 'classic'), 'midnight');
 });

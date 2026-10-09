@@ -6,7 +6,7 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-mv-checkout": {
         "type": "string",
         "enabled": true,
@@ -30,7 +30,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-mv-checkout",
+    "controlPointKey": "fw-mv-checkout",
     "flagType": "string",
     "defaultValue": "control",
     "invocationContext": {
@@ -43,8 +43,8 @@
     "reason": "TARGETING_MATCH",
     "errorCode": null,
     "errorMessage": null,
-    "flagMetadata": {
-      "fireweave.flagVersion": 7
+    "controlPointMetadata": {
+      "fireweave.controlPointVersion": 7
     }
   },
   "schemaVersion": 1,

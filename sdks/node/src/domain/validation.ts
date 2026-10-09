@@ -56,28 +56,28 @@ const MAX_CONTROL_POINT_KEY_LENGTH = 256;
  * (spec/control-points.md rule 1, the first check in the fixed order).
  *
  * No taxonomy kind names "malformed key" explicitly (the return-discipline
- * table's closest row is "key unknown to the backend" → FlagNotFound): a key
+ * table's closest row is "key unknown to the backend" → ControlPointNotFound): a key
  * that can never identify a flag is treated the same as one the backend
- * doesn't recognise, so this maps to FlagNotFound too.
+ * doesn't recognise, so this maps to ControlPointNotFound too.
  *
  * Controller-ruled interim mapping (Task 3 review): the 15-kind taxonomy in
  * errors.schema.json is frozen at exactly 15 entries, `InvalidContext` is
  * textually scoped to the evaluation *context* (not the key), and the
  * schema already maps another non-literal case — quota-limited responses —
- * onto `FlagNotFound` rather than adding a kind for it. `FlagNotFound` is
+ * onto `ControlPointNotFound` rather than adding a kind for it. `ControlPointNotFound` is
  * therefore the least-wrong existing kind, not a literal fit. Other-language
  * implementations copying node as the reference SHOULD use the same mapping
  * rather than each independently guessing a different one.
  */
 export function validateControlPointKey(key: string): Validated<string> {
   if (typeof key !== 'string' || key.length === 0) {
-    return fail(new FireweaveError('FlagNotFound', { message: 'control point key must be a non-empty string' }));
+    return fail(new FireweaveError('ControlPointNotFound', { message: 'control point key must be a non-empty string' }));
   }
   if (key.length > MAX_CONTROL_POINT_KEY_LENGTH) {
-    return fail(new FireweaveError('FlagNotFound', { message: 'control point key exceeds maximum length' }));
+    return fail(new FireweaveError('ControlPointNotFound', { message: 'control point key exceeds maximum length' }));
   }
   if (CONTROL_CHARACTERS.test(key)) {
-    return fail(new FireweaveError('FlagNotFound', { message: 'control point key contains control characters' }));
+    return fail(new FireweaveError('ControlPointNotFound', { message: 'control point key contains control characters' }));
   }
   return ok(key);
 }

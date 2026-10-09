@@ -8,11 +8,6 @@ struct ClientTests {
     FireweaveClient(runtime: FireweaveRuntime(adapter: InMemoryAdapter()))
   }
 
-  @Test func flagsAliasSharesIdentityWithControlPoints() {
-    let fw = client()
-    #expect(fw.flags === fw.controlPoints)
-  }
-
   @Test func invokeCapabilityDegradesUnsupported() async {
     let fw = client()
     await fw.initialize()

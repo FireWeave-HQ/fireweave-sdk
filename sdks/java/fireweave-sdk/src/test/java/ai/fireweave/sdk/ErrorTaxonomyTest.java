@@ -49,7 +49,7 @@ class ErrorTaxonomyTest {
         }
         assertEquals(15, seen.size());
         assertEquals("fireweave.errorKind",
-                doc.get("rules").get("flagMetadataErrorKindKey").asText());
+                doc.get("rules").get("controlPointMetadataErrorKindKey").asText());
         assertEquals("fireweave.errorKind", ErrorKind.FLAG_METADATA_ERROR_KIND_KEY);
     }
 

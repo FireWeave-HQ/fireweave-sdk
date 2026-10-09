@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "id": "start-flags",
+  "suite": "start",
+  "description": "The flags object: core key rule, boolean local values",
+  "rules": [
+    "SP-18"
+  ],
+  "profile": "any",
+  "provisional": true,
+  "cases": [
+    {
+      "name": "valid-flags",
+      "when": {
+        "operation": "defineControlPoints",
+        "controlPoints": {
+          "new-checkout": {
+            "local": true,
+            "description": "New checkout"
+          },
+          "old-path": {
+            "local": false
+          }
+        }
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "name": "empty-flags",
+      "when": {
+        "operation": "defineControlPoints",
+        "controlPoints": {}
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "name": "key-of-256-characters",
+      "when": {
+        "operation": "defineControlPoints",
+        "controlPoints": {
+          "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk": {
+            "local": true
+          }
+        }
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "name": "empty-key-rejected",
+      "when": {
+        "operation": "defineControlPoints",
+        "controlPoints": {
+          "": {
+            "local": true
+          }
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration"
+        }
+      }
+    },
+    {
+      "name": "control-character-rejected",
+      "when": {
+        "operation": "defineControlPoints",
+        "controlPoints": {
+          "bad\u0001key": {
+            "local": true
+          }
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration"
+        }
+      }
+    },
+    {
+      "name": "key-over-256-characters-rejected",
+      "when": {
+        "operation": "defineControlPoints",
+        "controlPoints": {
+          "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk": {
+            "local": true
+          }
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration"
+        }
+      }
+    }
+  ],
+  "compatibility": {
+    "node": "pass",
+    "web": "pass",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass",
+    "rust": "pass",
+    "swift": "pass",
+    "dart": "pass"
+  },
+  "limitations": {}
+}

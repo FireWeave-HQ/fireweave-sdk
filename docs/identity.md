@@ -2,11 +2,7 @@
 
 ## The targeting key
 
-The OpenFeature `targetingKey` **is** the cohort key. It is forwarded verbatim and never rewritten: as `targetingKey` to fw-server, and as the vendor `distinct_id` where a direct vendor adapter is in use. This is the single identity join point between your app, control-point targeting, and your analytics — the same value that keys percentage rollouts also keys the person your exposure events attach to.
-
-```js
-await client.getBooleanValue('new-checkout', false, { targetingKey: 'user_42' });
-```
+The OpenFeature `targetingKey` **is** the cohort key. It is forwarded verbatim and never rewritten: as `targetingKey` to fw-server. This is the single identity join point between your app, control-point targeting, and your analytics — the same value that keys percentage rollouts also keys the person your exposure events attach to.
 
 Two hard rules (ADR-0001 §8):
 
@@ -18,9 +14,6 @@ Opt into strictness so missing identity is caught uniformly, even in tests:
 ```js
 new FireweaveRuntime(adapter, { requireTargetingKey: true })       // Node
 ```
-```python
-FireweaveConfig(require_targeting_key=True)                        # Python
-```
 ```go
 fireweave.Config{RequireTargetingKey: true}                        // Go
 ```
@@ -28,7 +21,7 @@ fireweave.Config{RequireTargetingKey: true}                        // Go
 FireweaveConfig.builder().requireTargetingKey(true).build()        // Java
 ```
 
-> **Note:** `requireTargetingKey` defaults to **false** in all four languages (opt-in). Javadoc or examples that call it "the default" are wrong — identity strictness is always explicit.
+> **Note:** `requireTargetingKey` defaults to **false** in Node, Python, Go, Java, Rust and Swift (opt-in). Javadoc or examples that call it "the default" are wrong — identity strictness is always explicit.
 
 ## Choosing a stable key
 
@@ -53,38 +46,21 @@ Non-reserved context attributes are forwarded as person properties for targeting
 EvaluationContext("user_42", {"plan": "enterprise", "region": "eu"})
 ```
 
-They are sent to the backend for evaluation — treat them with the same PII care as analytics properties ([privacy docs](privacy.md); context bounds in [openfeature.md](openfeature.md#evaluation-context)). Attributes with a `$` prefix are passed through as backend system directives (e.g. `$process_person_profile`), not person properties.
+They are sent to the backend for evaluation — treat them with the same PII care as analytics properties ([privacy docs](privacy.md)).
 
 **Prefer `registerTarget` for durable facts.** Properties that outlive a request — plan, beta membership, region — can be registered once at login instead of resent on every evaluation ([remote.md](remote.md#two-identity-paths)). Per-request attributes still override stored properties, so the two compose.
 
 ## Groups
 
-Group analytics lets control points target group-level entities (company, project) rather than persons. Fireweave carries group membership and group properties in the evaluation context and forwards them to the backend as `groups` / `group_properties`.
+Group analytics lets control points target group-level entities (company, project) rather than persons. Fireweave carries group membership and group properties in the evaluation context.
 
 **Canonical spelling (all languages, rulings 12–14):** reserved keys `fireweave.groups` and `fireweave.groupProperties`. **Plain alias (ruling 19):** `groups` / `groupProperties` are also accepted. Prefer the canonical keys in portable code; when both are present, the canonical keys win.
-
-```js
-// Node — canonical keys (plain `groups` / `groupProperties` also accepted).
-await client.getBooleanValue('org-flag', false, {
-  targetingKey: 'user_42',
-  'fireweave.groups': { company: 'org_123' },
-  'fireweave.groupProperties': { company: { plan: 'enterprise' } },
-});
-```
 
 ```python
 # Python — canonical keys (plain `groups` / `groupProperties` also accepted).
 EvaluationContext("user_42", {
     "fireweave.groups": {"company": "org_123"},
     "fireweave.groupProperties": {"company": {"plan": "enterprise"}},
-})
-```
-
-```go
-// Go — canonical helpers / attribute keys (plain alias also accepted).
-of.NewEvaluationContext("user_42", map[string]any{
-    "fireweave.groups":          map[string]any{"company": "org_123"},
-    "fireweave.groupProperties": map[string]any{"company": map[string]any{"plan": "enterprise"}},
 })
 ```
 
@@ -96,7 +72,7 @@ EvaluationContext ctx = EvaluationContext.builder()
     .build();
 ```
 
-Group **identify** (creating/updating group profiles) is not an evaluation side effect and is not part of the phase-one extension surface — do it with your analytics SDK.
+Group **identify** (creating/updating group profiles) is not an evaluation side effect and is out of v1 scope — do it with your analytics SDK.
 
 ## Reserved keys
 

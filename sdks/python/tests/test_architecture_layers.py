@@ -17,8 +17,12 @@ the node reference SDK):
 from __future__ import annotations
 
 import re
-import tomllib
 from pathlib import Path
+
+try:  # Python 3.11+
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 (the supported floor): no stdlib TOML reader
+    tomllib = None
 
 HERE = Path(__file__).resolve().parent
 PACKAGE_ROOT = HERE.parent
@@ -27,11 +31,21 @@ DOMAIN_DIR = SRC_ROOT / "domain"
 APPLICATION_DIR = SRC_ROOT / "application"
 
 
+def _project_dependencies(text: str):
+    """[project].dependencies, via tomllib where it exists, else a narrow read of that one array."""
+    if tomllib is not None:
+        return tomllib.loads(text)["project"]["dependencies"]
+    section = re.search(r"(?ms)^\[project\]\s*$(.*?)(?=^\[)", text)
+    assert section is not None, "pyproject.toml has no [project] table"
+    deps = re.search(r"(?ms)^dependencies\s*=\s*\[(.*?)\]", section.group(1))
+    assert deps is not None, "[project] declares no dependencies array"
+    body = re.sub(r"#.*", "", deps.group(1))
+    return re.findall(r"[\"']([^\"']+)[\"']", body)
+
+
 def test_pyproject_declares_zero_runtime_dependencies():
-    manifest = tomllib.loads((PACKAGE_ROOT / "pyproject.toml").read_text())
-    assert manifest["project"]["dependencies"] == [], (
-        "the SDK must stay dependency-free: [project].dependencies must be []"
-    )
+    deps = _project_dependencies((PACKAGE_ROOT / "pyproject.toml").read_text())
+    assert deps == [], "the SDK must stay dependency-free: [project].dependencies must be []"
 
 
 def _walk_py_files(directory: Path):

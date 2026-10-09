@@ -3,7 +3,7 @@
   "suite": "web",
   "description": "Plain http off-loopback is refused; loopback is permitted for local development",
   "tags": ["security", "transport"],
-  "given": { "providerState": "READY", "flags": {} },
+  "given": { "providerState": "READY", "controlPoints": {} },
   "when": { "operation": "initializeRemoteAdapter", "apiUrl": "http://evil.example.com", "apiKey": "project-api-key_x" },
   "expect": { "throws": true, "errorKind": "Configuration" },
   "schemaVersion": 1,

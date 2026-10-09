@@ -129,7 +129,7 @@ test('unknown flag produces FLAG_NOT_FOUND', async () => {
   await runtime.initialize();
   const decision = await runtime.evaluate('missing', 'boolean', false);
   assert.equal(decision.errorCode, 'FLAG_NOT_FOUND');
-  assert.equal(decision.errorKind, 'FlagNotFound');
+  assert.equal(decision.errorKind, 'ControlPointNotFound');
 });
 
 test('adapter throw surfaces mapped error decision without throwing', async () => {
@@ -273,7 +273,7 @@ test('H-4: evaluate does not emit by default; sendExposure:true opts in with ded
   await runtime.initialize();
   await runtime.evaluate('fw-a', 'boolean', false, { targetingKey: 'user-1' }, { sendExposure: true });
   assert.equal(adapter.getExposures().length, 1);
-  assert.equal(adapter.getExposures()[0]?.flagKey, 'fw-a');
+  assert.equal(adapter.getExposures()[0]?.controlPointKey, 'fw-a');
   // Dedup on the same tuple.
   await runtime.evaluate('fw-a', 'boolean', false, { targetingKey: 'user-1' }, { sendExposure: true });
   assert.equal(adapter.getExposures().length, 1);
@@ -310,7 +310,7 @@ test('a malformed key short-circuits before I/O: adapter.resolve is never called
 
   assert.equal(resolveCalls(), 0, 'adapter.resolve must not be called for a malformed key');
   assert.equal(decision.reason, 'ERROR');
-  assert.equal(decision.errorKind, 'FlagNotFound');
+  assert.equal(decision.errorKind, 'ControlPointNotFound');
   assert.equal(decision.value, false);
 });
 

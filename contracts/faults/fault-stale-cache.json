@@ -10,7 +10,7 @@
       "localEvaluation": true,
       "definitionsAgeMs": 600000
     },
-    "flags": {
+    "controlPoints": {
       "fw-stale": {
         "type": "boolean",
         "enabled": true,
@@ -27,7 +27,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-stale",
+    "controlPointKey": "fw-stale",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {
@@ -40,7 +40,7 @@
     "reason": "STALE",
     "errorCode": null,
     "errorMessage": null,
-    "flagMetadata": {
+    "controlPointMetadata": {
       "fireweave.fromCache": true
     }
   },

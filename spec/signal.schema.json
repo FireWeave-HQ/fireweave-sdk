@@ -69,7 +69,7 @@
       "minLength": 1,
       "maxLength": 128
     },
-    "flagKey": {
+    "controlPointKey": {
       "type": "string",
       "minLength": 1,
       "maxLength": 256

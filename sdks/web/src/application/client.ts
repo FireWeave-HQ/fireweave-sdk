@@ -7,14 +7,12 @@
  * capabilities — control points and target registration. Releases,
  * exposures, signals, capabilities discovery and guardrails are out of v1;
  * this client MUST NOT expose them (conformance/surface/control-points.surface.json
- * "mustNotExpose"). The dynamic `invokeCapability` dispatcher and the
- * deprecated `flags` alias survive unchanged.
+ * "mustNotExpose"). The dynamic `invokeCapability` dispatcher survives
+ * unchanged; the `flags` alias is gone (ADR-0013).
  *
  * One divergence from the server SDK, and it is intentional: `controlPoints.*`
  * is SYNCHRONOUS here and promise-returning on the server. That follows from
- * the OpenFeature web contract — browser reads happen in render paths — and
- * is recorded in docs/compatibility.md as a surface difference rather than a
- * gap.
+ * the OpenFeature web contract — browser reads happen in render paths.
  */
 import { FireweaveError } from '../domain/errors.js';
 import type { ContextInput } from '../domain/context.js';
@@ -77,29 +75,29 @@ export class WebControlPointsApi {
   }
 
   evaluate(
-    flagKey: string,
+    controlPointKey: string,
     expectedType: ExpectedFlagType,
     defaultValue: JsonValue,
     context?: ContextInput,
     _options?: EvaluateOptions
   ): Decision {
-    return this.runtime.evaluateSync(flagKey, expectedType, defaultValue, context);
+    return this.runtime.evaluateSync(controlPointKey, expectedType, defaultValue, context);
   }
 
-  getBooleanValue(flagKey: string, defaultValue: boolean, context?: ContextInput): boolean {
-    return this.evaluate(flagKey, 'boolean', defaultValue, context).value as boolean;
+  getBooleanValue(controlPointKey: string, defaultValue: boolean, context?: ContextInput): boolean {
+    return this.evaluate(controlPointKey, 'boolean', defaultValue, context).value as boolean;
   }
 
-  getStringValue(flagKey: string, defaultValue: string, context?: ContextInput): string {
-    return this.evaluate(flagKey, 'string', defaultValue, context).value as string;
+  getStringValue(controlPointKey: string, defaultValue: string, context?: ContextInput): string {
+    return this.evaluate(controlPointKey, 'string', defaultValue, context).value as string;
   }
 
-  getNumberValue(flagKey: string, defaultValue: number, context?: ContextInput): number {
-    return this.evaluate(flagKey, 'number', defaultValue, context).value as number;
+  getNumberValue(controlPointKey: string, defaultValue: number, context?: ContextInput): number {
+    return this.evaluate(controlPointKey, 'number', defaultValue, context).value as number;
   }
 
-  getObjectValue(flagKey: string, defaultValue: JsonValue, context?: ContextInput): JsonValue {
-    return this.evaluate(flagKey, 'object', defaultValue, context).value;
+  getObjectValue(controlPointKey: string, defaultValue: JsonValue, context?: ContextInput): JsonValue {
+    return this.evaluate(controlPointKey, 'object', defaultValue, context).value;
   }
 
   /**
@@ -109,20 +107,20 @@ export class WebControlPointsApi {
    * to the other without restructuring the call (spec/control-points.md "The
    * nine methods"). SYNCHRONOUS like every other read here (ADR-0009).
    */
-  getBooleanDetails(flagKey: string, defaultValue: boolean, context?: ContextInput): Decision {
-    return this.evaluate(flagKey, 'boolean', defaultValue, context);
+  getBooleanDetails(controlPointKey: string, defaultValue: boolean, context?: ContextInput): Decision {
+    return this.evaluate(controlPointKey, 'boolean', defaultValue, context);
   }
 
-  getStringDetails(flagKey: string, defaultValue: string, context?: ContextInput): Decision {
-    return this.evaluate(flagKey, 'string', defaultValue, context);
+  getStringDetails(controlPointKey: string, defaultValue: string, context?: ContextInput): Decision {
+    return this.evaluate(controlPointKey, 'string', defaultValue, context);
   }
 
-  getNumberDetails(flagKey: string, defaultValue: number, context?: ContextInput): Decision {
-    return this.evaluate(flagKey, 'number', defaultValue, context);
+  getNumberDetails(controlPointKey: string, defaultValue: number, context?: ContextInput): Decision {
+    return this.evaluate(controlPointKey, 'number', defaultValue, context);
   }
 
-  getObjectDetails(flagKey: string, defaultValue: JsonValue, context?: ContextInput): Decision {
-    return this.evaluate(flagKey, 'object', defaultValue, context);
+  getObjectDetails(controlPointKey: string, defaultValue: JsonValue, context?: ContextInput): Decision {
+    return this.evaluate(controlPointKey, 'object', defaultValue, context);
   }
 }
 
@@ -140,22 +138,6 @@ export interface FireweaveWebClientOptions {}
 export class FireweaveWebClient {
   readonly runtime: FireweaveWebRuntime;
   readonly controlPoints: WebControlPointsApi;
-
-  /**
-   * Control-point evaluation under its former name.
-   *
-   * @deprecated Renamed to {@link FireweaveWebClient.controlPoints}
-   * (ADR-0007). Identical and fully supported —
-   * `client.flags === client.controlPoints` — so no migration is required and
-   * none is planned. Silent at runtime: the alias is permanent, not scheduled
-   * for removal, so there is nothing to warn a caller toward — deprecation is
-   * conveyed by this doc comment only (no log, and no env gate to control
-   * one, since the SDK reads no environment variables regardless — ADR-0009
-   * security rule 3).
-   */
-  get flags(): WebControlPointsApi {
-    return this.controlPoints;
-  }
 
   constructor(runtime: FireweaveWebRuntime, _options: FireweaveWebClientOptions = {}) {
     this.runtime = runtime;

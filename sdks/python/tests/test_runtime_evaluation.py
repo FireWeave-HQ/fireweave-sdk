@@ -84,8 +84,8 @@ class TestReasonsAndMetadata:
     def test_key_genuinely_absent_is_error_flag_not_found(self):
         rt = make_runtime({})
         d = rt.evaluate("missing", FlagType.BOOLEAN, False, CTX)
-        assert d.value is False and d.error_kind is ErrorKind.FLAG_NOT_FOUND
-        assert d.flag_metadata == {"fireweave.errorKind": "FlagNotFound"}
+        assert d.value is False and d.error_kind is ErrorKind.CONTROL_POINT_NOT_FOUND
+        assert d.control_point_metadata == {"fireweave.errorKind": "ControlPointNotFound"}
 
     def test_vendor_metadata_gated_on_id_and_condition_index_and_reason_code(self):
         rt = make_runtime(
@@ -99,9 +99,9 @@ class TestReasonsAndMetadata:
             }
         )
         d = rt.evaluate("with_meta", FlagType.BOOLEAN, False, CTX)
-        assert d.flag_metadata["fireweave.vendorFlagId"] == 42
-        assert d.flag_metadata["fireweave.reasonCode"] == "condition_match"
-        assert d.flag_metadata["fireweave.flagVersion"] == 3
+        assert d.control_point_metadata["fireweave.vendorControlPointId"] == 42
+        assert d.control_point_metadata["fireweave.reasonCode"] == "condition_match"
+        assert d.control_point_metadata["fireweave.controlPointVersion"] == 3
 
 
 class TestIncludePayload:
@@ -114,26 +114,26 @@ class TestIncludePayload:
             {"p": {"enabled": True, "variant": "on", "value": True, "payload": {"b": 1, "a": 2}}}
         )
         d = rt.evaluate("p", FlagType.BOOLEAN, False, CTX, EvaluateOptions(include_payload=True))
-        assert d.flag_metadata["fireweave.payload"] == '{"a":2,"b":1}'
+        assert d.control_point_metadata["fireweave.payload"] == '{"a":2,"b":1}'
 
     def test_payload_omitted_when_include_payload_false(self):
         rt = make_runtime(
             {"p": {"enabled": True, "variant": "on", "value": True, "payload": {"a": 1}}}
         )
         d = rt.evaluate("p", FlagType.BOOLEAN, False, CTX, EvaluateOptions(include_payload=False))
-        assert "fireweave.payload" not in d.flag_metadata
+        assert "fireweave.payload" not in d.control_point_metadata
 
     def test_payload_omitted_when_options_absent(self):
         rt = make_runtime(
             {"p": {"enabled": True, "variant": "on", "value": True, "payload": {"a": 1}}}
         )
         d = rt.evaluate("p", FlagType.BOOLEAN, False, CTX)
-        assert "fireweave.payload" not in d.flag_metadata
+        assert "fireweave.payload" not in d.control_point_metadata
 
     def test_payload_omitted_when_flag_has_none_even_if_requested(self):
         rt = make_runtime({"p": {"enabled": True, "variant": "on", "value": True}})
         d = rt.evaluate("p", FlagType.BOOLEAN, False, CTX, EvaluateOptions(include_payload=True))
-        assert "fireweave.payload" not in d.flag_metadata
+        assert "fireweave.payload" not in d.control_point_metadata
 
 
 class TestContextLayering:

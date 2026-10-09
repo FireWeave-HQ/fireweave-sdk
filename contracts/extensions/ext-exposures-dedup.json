@@ -12,7 +12,7 @@
     "exposureQueue": [
       {
         "targetingKey": "org_01HZXEXP000000000000002",
-        "flagKey": "fw-exp",
+        "controlPointKey": "fw-exp",
         "variant": "on",
         "value": true
       }
@@ -22,7 +22,7 @@
     "operation": "recordExposure",
     "exposure": {
       "targetingKey": "org_01HZXEXP000000000000002",
-      "flagKey": "fw-exp",
+      "controlPointKey": "fw-exp",
       "variant": "on",
       "value": true
     }

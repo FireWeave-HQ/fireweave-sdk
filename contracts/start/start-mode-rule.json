@@ -1,0 +1,342 @@
+{
+  "schemaVersion": 1,
+  "id": "start-mode-rule",
+  "suite": "start",
+  "description": "The fail-closed mode rule on the server profile",
+  "rules": [
+    "SP-6",
+    "SP-7",
+    "SP-8",
+    "SP-9",
+    "SP-10"
+  ],
+  "profile": "server",
+  "provisional": true,
+  "cases": [
+    {
+      "name": "key-option-means-remote",
+      "when": {
+        "operation": "resolve",
+        "options": {
+          "key": "project-api-key_contracttest01"
+        },
+        "env": {}
+      },
+      "expect": {
+        "mode": "remote",
+        "modeSource": "key",
+        "keySource": "option",
+        "url": "https://app-server.fireweave.ai",
+        "urlSource": "channel",
+        "allowedHosts": null
+      }
+    },
+    {
+      "name": "key-env-means-remote",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01"
+        }
+      },
+      "expect": {
+        "mode": "remote",
+        "modeSource": "key",
+        "keySource": "FIREWEAVE_KEY",
+        "url": "https://app-server.fireweave.ai",
+        "urlSource": "channel",
+        "allowedHosts": null
+      }
+    },
+    {
+      "name": "key-wins-over-a-dev-environment",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01",
+          "FIREWEAVE_ENV": "development"
+        }
+      },
+      "expect": {
+        "mode": "remote",
+        "modeSource": "key",
+        "keySource": "FIREWEAVE_KEY",
+        "url": "https://app-server.fireweave.ai",
+        "urlSource": "channel",
+        "allowedHosts": null
+      }
+    },
+    {
+      "name": "no-key-development-means-local",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_ENV": "development"
+        }
+      },
+      "expect": {
+        "mode": "local",
+        "modeSource": "environment",
+        "keySource": "none",
+        "environment": "development",
+        "environmentSource": "FIREWEAVE_ENV"
+      }
+    },
+    {
+      "name": "no-key-dev-means-local",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_ENV": "dev"
+        }
+      },
+      "expect": {
+        "mode": "local",
+        "modeSource": "environment",
+        "keySource": "none",
+        "environment": "dev",
+        "environmentSource": "FIREWEAVE_ENV"
+      }
+    },
+    {
+      "name": "no-key-local-means-local",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_ENV": "local"
+        }
+      },
+      "expect": {
+        "mode": "local",
+        "modeSource": "environment",
+        "keySource": "none",
+        "environment": "local",
+        "environmentSource": "FIREWEAVE_ENV"
+      }
+    },
+    {
+      "name": "no-key-test-means-local",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_ENV": "test"
+        }
+      },
+      "expect": {
+        "mode": "local",
+        "modeSource": "environment",
+        "keySource": "none",
+        "environment": "test",
+        "environmentSource": "FIREWEAVE_ENV"
+      }
+    },
+    {
+      "name": "environment-name-is-case-insensitive",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_ENV": "Development"
+        }
+      },
+      "expect": {
+        "mode": "local",
+        "modeSource": "environment"
+      }
+    },
+    {
+      "name": "environment-name-is-trimmed",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_ENV": "  dev  "
+        }
+      },
+      "expect": {
+        "mode": "local",
+        "modeSource": "environment",
+        "keySource": "none",
+        "environment": "dev",
+        "environmentSource": "FIREWEAVE_ENV"
+      }
+    },
+    {
+      "name": "no-key-production-fails-closed",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_ENV": "production"
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration",
+          "mentions": [
+            "FIREWEAVE_KEY"
+          ]
+        }
+      }
+    },
+    {
+      "name": "no-key-no-environment-fails-closed",
+      "when": {
+        "operation": "resolve",
+        "env": {}
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration",
+          "mentions": [
+            "FIREWEAVE_KEY"
+          ]
+        }
+      }
+    },
+    {
+      "name": "fw-env-is-not-read",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FW_ENV": "development"
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration",
+          "mentions": [
+            "FIREWEAVE_KEY"
+          ]
+        }
+      }
+    },
+    {
+      "name": "mode-local-option-without-anything",
+      "when": {
+        "operation": "resolve",
+        "options": {
+          "mode": "local"
+        },
+        "env": {}
+      },
+      "expect": {
+        "mode": "local",
+        "modeSource": "option",
+        "keySource": "none"
+      }
+    },
+    {
+      "name": "mode-local-ignores-a-key-with-a-warning",
+      "when": {
+        "operation": "resolve",
+        "options": {
+          "mode": "local"
+        },
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01"
+        }
+      },
+      "expect": {
+        "mode": "local",
+        "modeSource": "option",
+        "keySource": "none",
+        "warnings": {
+          "mention": [
+            "FIREWEAVE_KEY"
+          ]
+        }
+      }
+    },
+    {
+      "name": "mode-remote-with-a-key",
+      "when": {
+        "operation": "resolve",
+        "options": {
+          "mode": "remote"
+        },
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01"
+        }
+      },
+      "expect": {
+        "mode": "remote",
+        "modeSource": "option",
+        "keySource": "FIREWEAVE_KEY",
+        "url": "https://app-server.fireweave.ai",
+        "urlSource": "channel",
+        "allowedHosts": null
+      }
+    },
+    {
+      "name": "mode-remote-without-a-key-fails",
+      "when": {
+        "operation": "resolve",
+        "options": {
+          "mode": "remote"
+        },
+        "env": {
+          "FIREWEAVE_ENV": "development"
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration",
+          "mentions": [
+            "FIREWEAVE_KEY"
+          ]
+        }
+      }
+    },
+    {
+      "name": "unknown-mode-fails",
+      "when": {
+        "operation": "resolve",
+        "options": {
+          "mode": "auto"
+        },
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01"
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration"
+        }
+      },
+      "appliesTo": [
+        "node",
+        "python",
+        "go"
+      ]
+    },
+    {
+      "name": "staging-channel-default-endpoint",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01"
+        },
+        "channel": "staging"
+      },
+      "expect": {
+        "mode": "remote",
+        "modeSource": "key",
+        "keySource": "FIREWEAVE_KEY",
+        "url": "https://staging-app-server.fireweave.ai",
+        "urlSource": "channel",
+        "allowedHosts": null
+      }
+    }
+  ],
+  "compatibility": {
+    "node": "pass",
+    "web": "not-applicable",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass",
+    "rust": "pass",
+    "swift": "pass",
+    "dart": "pass"
+  },
+  "limitations": {
+    "web": "server-profile fixture; web has only the client profile"
+  }
+}

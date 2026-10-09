@@ -6,8 +6,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Note: this SDK keeps **behavioral parity across Node, Python, Go, and Java** — a feature
-        normally lands in all four languages (with contract fixtures) or not at all. Cross-cutting
+        Note: this SDK keeps **behavioral parity** — a feature
+        normally lands in all languages (with contract fixtures) or not at all. Cross-cutting
         design changes go through an ADR (see [GOVERNANCE.md](../../GOVERNANCE.md)).
   - type: textarea
     id: problem
@@ -21,8 +21,8 @@ body:
     attributes:
       label: Proposed solution
       description: |
-        Sketch the API you'd want. Note where it belongs: OpenFeature surface (probably not — that's
-        spec-defined), FireweaveClient extension, adapter option, or spec/contract change.
+        Sketch the API you'd want. Note where it belongs: FireweaveClient extension, adapter
+        option, or spec/contract change.
     validations:
       required: true
   - type: dropdown
@@ -33,9 +33,12 @@ body:
       options:
         - All languages (cross-language behavior)
         - Node only
+        - Web only
         - Python only
         - Go only
         - Java only
+        - Rust only
+        - Swift only
         - spec / contracts
         - test-server / tooling
         - docs
@@ -51,5 +54,5 @@ body:
     attributes:
       label: Checks
       options:
-        - label: I searched existing issues and docs (especially docs/extensions.md and docs/compatibility.md) for this capability.
+        - label: I searched existing issues and docs for this capability.
           required: true

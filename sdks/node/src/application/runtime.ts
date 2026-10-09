@@ -80,7 +80,7 @@ export interface EvaluateOptions {
 
 function validateConfig(config: FireweaveRuntimeConfig): void {
   if (config.host !== undefined) {
-    // Allowlist is ON by default (release-blockers H-1): undefined/empty
+    // Allowlist is ON by default: undefined/empty
     // allowedHosts falls back to the canonical Fireweave + loopback list.
     assertHostAllowed(config.host, config.allowedHosts);
   }
@@ -241,74 +241,74 @@ export class FireweaveRuntime {
    * reach the adapter (the one I/O call in this method).
    */
   async evaluate(
-    flagKey: string,
+    controlPointKey: string,
     expectedType: ExpectedFlagType,
     defaultValue: JsonValue,
     invocationContext?: ContextInput,
     options: EvaluateOptions = {},
   ): Promise<Decision> {
-    const keyResult = validateControlPointKey(flagKey);
+    const keyResult = validateControlPointKey(controlPointKey);
     if (!keyResult.ok) {
-      return this.errorDecision(flagKey, defaultValue, keyResult.error);
+      return this.errorDecision(controlPointKey, defaultValue, keyResult.error);
     }
 
     const defaultResult = validateDefaultValue(expectedType, defaultValue);
     if (!defaultResult.ok) {
-      return this.errorDecision(flagKey, defaultValue, defaultResult.error);
+      return this.errorDecision(controlPointKey, defaultValue, defaultResult.error);
     }
 
     const merged = mergeContexts(this.globalContext, this.clientContext, invocationContext);
     const contextResult = validateContext(merged, this.contextPolicy);
     if (!contextResult.ok) {
-      return this.errorDecision(flagKey, defaultValue, contextResult.error);
+      return this.errorDecision(controlPointKey, defaultValue, contextResult.error);
     }
     const context = contextResult.value;
 
     const lifecycleError = this.lifecycleError();
     if (lifecycleError !== undefined) {
-      return this.errorDecision(flagKey, defaultValue, lifecycleError);
+      return this.errorDecision(controlPointKey, defaultValue, lifecycleError);
     }
 
     let resolution: AdapterResolution;
     try {
       const resolveOpts = options.signal !== undefined ? { signal: options.signal } : {};
-      resolution = await this.adapter.resolve(flagKey, context, resolveOpts);
+      resolution = await this.adapter.resolve(controlPointKey, context, resolveOpts);
     } catch (err) {
       // H-2: non-Fireweave (vendor/internal) exception text never reaches the
       // outward errorMessage — the fixed taxonomy message is used and the
       // original error is preserved on `cause` only.
       const fw = isFireweaveError(err) ? err : new FireweaveError('Internal', { cause: err });
-      return this.errorDecision(flagKey, defaultValue, fw);
+      return this.errorDecision(controlPointKey, defaultValue, fw);
     }
 
     if (!resolution.found) {
       // spec/modes.md "Behaviour per mode": local's unknown-key row is
       // `default` / `reason: DEFAULT` — deliberately not an error, unlike
-      // remote's `default` / `ERROR` / `FlagNotFound`. An adapter signals the
+      // remote's `default` / `ERROR` / `ControlPointNotFound`. An adapter signals the
       // former by carrying `reason: 'DEFAULT'` on its miss (FireweaveLocalAdapter);
       // any adapter that leaves `reason` unset (InMemoryAdapter,
-      // FireweaveRemoteAdapter) keeps the FlagNotFound/ERROR path below.
+      // FireweaveRemoteAdapter) keeps the ControlPointNotFound/ERROR path below.
       if (resolution.reason === 'DEFAULT') {
-        return { flagKey, value: defaultValue, reason: 'DEFAULT', metadata: {} };
+        return { controlPointKey, value: defaultValue, reason: 'DEFAULT', metadata: {} };
       }
       const meta: Record<string, string | number | boolean> = {};
       if (resolution.quotaLimited === true) meta['fireweave.quotaLimited'] = true;
-      return this.errorDecision(flagKey, defaultValue, new FireweaveError('FlagNotFound', { metadata: meta }));
+      return this.errorDecision(controlPointKey, defaultValue, new FireweaveError('ControlPointNotFound', { metadata: meta }));
     }
 
     const value = resolution.value ?? null;
     if (!matchesExpectedType(value, expectedType)) {
-      return this.errorDecision(flagKey, defaultValue, new FireweaveError('TypeMismatch'));
+      return this.errorDecision(controlPointKey, defaultValue, new FireweaveError('TypeMismatch'));
     }
 
     const metadata: Record<string, string | number | boolean> = {};
-    if (resolution.version !== undefined) metadata['fireweave.flagVersion'] = resolution.version;
+    if (resolution.version !== undefined) metadata['fireweave.controlPointVersion'] = resolution.version;
     // Detailed vendor fields travel together: they surface only when the
     // backend reported BOTH a vendor flag id and a matched condition index
     // (fixtures: eval-detailed-fields exposes them; eval-multivariate-string
     // [index, no id] and eval-payload-attached [id, no index] do not).
-    if (resolution.vendorFlagId !== undefined && resolution.conditionIndex !== undefined) {
-      metadata['fireweave.vendorFlagId'] = resolution.vendorFlagId;
+    if (resolution.vendorControlPointId !== undefined && resolution.conditionIndex !== undefined) {
+      metadata['fireweave.vendorControlPointId'] = resolution.vendorControlPointId;
       if (resolution.reasonCode !== undefined) metadata['fireweave.reasonCode'] = resolution.reasonCode;
     }
     if (options.includePayload === true && resolution.payload !== undefined) {
@@ -329,14 +329,14 @@ export class FireweaveRuntime {
       reason = 'TARGETING_MATCH';
     }
 
-    const decision: Decision = { flagKey, value, reason, metadata };
+    const decision: Decision = { controlPointKey, value, reason, metadata };
     if (resolution.variant !== undefined) decision.variant = resolution.variant;
 
     // H-4 / ruling 20: evaluate is side-effect-free by default; opt in via sendExposure: true.
     if (options.sendExposure === true) {
       this.emitEvaluateExposure({
         targetingKey: context.targetingKey ?? '',
-        flagKey,
+        controlPointKey,
         value,
         ...(resolution.variant !== undefined ? { variant: resolution.variant } : {}),
       });
@@ -372,18 +372,18 @@ export class FireweaveRuntime {
 
   private emitEvaluateExposure(exposure: {
     targetingKey: string;
-    flagKey: string;
+    controlPointKey: string;
     value: JsonValue;
     variant?: string;
   }): void {
     if (exposure.targetingKey.length === 0) return;
     if (this.adapter.recordExposure === undefined) return;
-    const key = `${exposure.targetingKey}\u0000${exposure.flagKey}\u0000${exposure.variant ?? ''}\u0000${stableStringify(exposure.value ?? null)}`;
+    const key = `${exposure.targetingKey}\u0000${exposure.controlPointKey}\u0000${exposure.variant ?? ''}\u0000${stableStringify(exposure.value ?? null)}`;
     if (this.evaluateExposureSeen.has(key)) return;
     this.evaluateExposureSeen.add(key);
     this.adapter.recordExposure({
       targetingKey: exposure.targetingKey,
-      flagKey: exposure.flagKey,
+      controlPointKey: exposure.controlPointKey,
       value: exposure.value,
       ...(exposure.variant !== undefined ? { variant: exposure.variant } : {}),
     });
@@ -405,13 +405,13 @@ export class FireweaveRuntime {
     }
   }
 
-  private errorDecision(flagKey: string, defaultValue: JsonValue, err: FireweaveError): Decision {
+  private errorDecision(controlPointKey: string, defaultValue: JsonValue, err: FireweaveError): Decision {
     const metadata: Record<string, string | number | boolean> = {
       'fireweave.errorKind': err.kind,
       ...err.metadata,
     };
     return {
-      flagKey,
+      controlPointKey,
       value: defaultValue,
       reason: 'ERROR',
       errorCode: err.openFeatureErrorCode,

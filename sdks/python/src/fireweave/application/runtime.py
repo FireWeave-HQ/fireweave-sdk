@@ -9,22 +9,23 @@ from __future__ import annotations
 import enum
 import json
 import threading
-from typing import Optional
+from typing import Mapping, Optional
 
 from ..domain.context import ContextLimits, DEFAULT_RESERVED_ATTRIBUTE_KEYS, EvaluationContext, merge_contexts
 from ..domain.decision import Decision, Reason
 from ..domain.errors import (
-    FLAG_METADATA_ERROR_KIND_KEY,
+    CONTROL_POINT_METADATA_ERROR_KIND_KEY,
     AlreadyClosedError,
     ConfigurationError,
     FireweaveError,
-    FlagNotFoundError,
+    ControlPointNotFoundError,
     InternalError,
+    InvalidContextError,
     NotReadyError,
     TypeMismatchError,
     UnsupportedCapabilityError,
 )
-from ..domain.types import FlagMetadata, FlagType
+from ..domain.types import ControlPointMetadata, FlagType
 from ..domain.validation import (
     matches_expected_type,
     validate_context,
@@ -45,6 +46,37 @@ def _stable_json(value) -> str:
     byte-for-byte (contracts/evaluation/eval-payload-attached.json's expected
     ``fireweave.payload`` string)."""
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _register_target_input_error(targeting_key, options) -> Optional[FireweaveError]:
+    """register_target's input guard: a non-string targeting key, options
+    that are not RegisterTargetOptions, or a body that cannot be sent as JSON
+    (a datetime or set property value, a non-string property name, a cycle)
+    is an InvalidContext ``ok=False``, never an exception into a sign-in
+    path."""
+    if not isinstance(targeting_key, str):
+        return InvalidContextError("targeting key must be a string")
+    if options is None:
+        return None
+    if not isinstance(options, RegisterTargetOptions):
+        return InvalidContextError("register_target options must be RegisterTargetOptions")
+    properties = options.properties
+    if properties is not None and (
+        not isinstance(properties, Mapping) or not all(isinstance(k, str) for k in properties)
+    ):
+        return InvalidContextError("register_target properties must be a mapping with string keys")
+    try:
+        json.dumps(
+            {
+                "kind": options.kind,
+                "environment": options.environment,
+                "properties": dict(properties) if properties is not None else None,
+            },
+            allow_nan=False,
+        )
+    except (TypeError, ValueError, RecursionError):
+        return InvalidContextError("register_target properties must be JSON-serialisable")
+    return None
 
 
 class LifecycleState(enum.Enum):
@@ -201,6 +233,9 @@ class FireweaveRuntime:
         sign-in paths, where a targeting concern must not break
         authentication (spec/modes.md "registerTarget in local mode").
         Adapters without the capability report `UnsupportedCapability`."""
+        input_error = _register_target_input_error(targeting_key, options)
+        if input_error is not None:
+            return RegisterTargetResult(ok=False, error=input_error)
         gate = self._lifecycle_error()
         if gate is not None:
             return RegisterTargetResult(ok=False, error=gate)
@@ -224,7 +259,7 @@ class FireweaveRuntime:
 
     def evaluate(
         self,
-        flag_key: str,
+        control_point_key: str,
         flag_type: FlagType,
         default_value,
         invocation_context: Optional[EvaluationContext] = None,
@@ -238,9 +273,9 @@ class FireweaveRuntime:
         does this reach the adapter (the one I/O call in this method).
 
         ``options.include_payload`` (task-10b item 5) attaches the resolved
-        flag's payload, when any, to ``flag_metadata['fireweave.payload']``.
+        flag's payload, when any, to ``control_point_metadata['fireweave.payload']``.
         """
-        key_result = validate_control_point_key(flag_key)
+        key_result = validate_control_point_key(control_point_key)
         if not key_result.ok:
             return self._error_decision(default_value, key_result.error)
 
@@ -248,7 +283,15 @@ class FireweaveRuntime:
         if not default_result.ok:
             return self._error_decision(default_value, default_result.error)
 
-        merged = self.merged_context(invocation_context)
+        with self._lock:
+            layers = (self._global_context, self._client_context, invocation_context)
+        if any(layer is not None and not isinstance(layer, EvaluationContext) for layer in layers):
+            # A dict (or anything else) where an EvaluationContext belongs, in
+            # any layer, is an invalid context, never an exception out of a read.
+            return self._error_decision(
+                default_value, InvalidContextError("context must be a fireweave.EvaluationContext")
+            )
+        merged = merge_contexts(*layers)
         context_result = validate_context(
             merged,
             limits=self._limits,
@@ -264,7 +307,7 @@ class FireweaveRuntime:
             return self._error_decision(default_value, lifecycle_error)
 
         try:
-            resolution = self._adapter.resolve(flag_key, canonical)
+            resolution = self._adapter.resolve(control_point_key, canonical)
         except FireweaveError as exc:
             return self._error_decision(default_value, exc)
         except Exception as exc:
@@ -288,7 +331,7 @@ class FireweaveRuntime:
             # default/reason DEFAULT — deliberately not an error. Any adapter
             # that reports `matched=False` gets this branch (the strict
             # seam); an adapter signalling a genuine backend-side "unknown
-            # key" instead RAISES FlagNotFoundError, which is caught above
+            # key" instead RAISES ControlPointNotFoundError, which is caught above
             # and takes the ERROR branch below.
             return Decision(value=default_value, variant=None, reason=Reason.DEFAULT)
 
@@ -306,17 +349,17 @@ class FireweaveRuntime:
         else:
             reason = Reason.TARGETING_MATCH
 
-        metadata: FlagMetadata = {}
+        metadata: ControlPointMetadata = {}
         if resolution.version is not None:
-            metadata["fireweave.flagVersion"] = resolution.version
+            metadata["fireweave.controlPointVersion"] = resolution.version
         # Detailed enrichment: only when the backend supplied a flag id, a
         # matched-condition index, AND a reason code together.
         if (
-            resolution.vendor_flag_id is not None
+            resolution.vendor_control_point_id is not None
             and resolution.condition_index is not None
             and resolution.reason_code is not None
         ):
-            metadata["fireweave.vendorFlagId"] = resolution.vendor_flag_id
+            metadata["fireweave.vendorControlPointId"] = resolution.vendor_control_point_id
             metadata["fireweave.reasonCode"] = resolution.reason_code
         if resolution.from_cache:
             metadata["fireweave.fromCache"] = True
@@ -326,11 +369,11 @@ class FireweaveRuntime:
             )
         metadata.update(resolution.extra_metadata)
 
-        return Decision(value=value, variant=resolution.variant, reason=reason, flag_metadata=metadata)
+        return Decision(value=value, variant=resolution.variant, reason=reason, control_point_metadata=metadata)
 
     def _error_decision(self, default_value, error: FireweaveError) -> Decision:
-        metadata: FlagMetadata = {FLAG_METADATA_ERROR_KIND_KEY: error.kind.value}
-        if isinstance(error, FlagNotFoundError) and error.quota_limited:
+        metadata: ControlPointMetadata = {CONTROL_POINT_METADATA_ERROR_KIND_KEY: error.kind.value}
+        if isinstance(error, ControlPointNotFoundError) and error.quota_limited:
             metadata["fireweave.quotaLimited"] = True
         return Decision(
             value=default_value,
@@ -339,5 +382,5 @@ class FireweaveRuntime:
             error_code=error.openfeature_error_code,
             error_message=error.message,
             error_kind=error.kind,
-            flag_metadata=metadata,
+            control_point_metadata=metadata,
         )

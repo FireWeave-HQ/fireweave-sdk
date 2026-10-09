@@ -34,7 +34,7 @@ class EvaluateOptions:
     ``include_payload`` (task-10b item 5, contracts/evaluation/eval-payload-
     attached.json): when True and the resolved flag carries a payload
     (:attr:`FlagResolution.payload`), it is attached to
-    ``flag_metadata['fireweave.payload']`` as a deterministic (sorted-key)
+    ``control_point_metadata['fireweave.payload']`` as a deterministic (sorted-key)
     JSON string — matching node's ``EvaluateOptions.includePayload``. Before
     task-10b this was entirely absent (``evaluate()`` had no ``options``
     concept whatsoever; the parameter existed but was always discarded).
@@ -80,8 +80,8 @@ class FlagResolution:
     :meth:`FireweaveRuntime.evaluate` reads to produce reason ``DEFAULT``
     (spec/modes.md "Behaviour per mode": local mode's unknown-key row).
     Contrast a genuinely-unknown key at a real backend (remote's "key unknown
-    to the backend" row), which resolves to reason ``ERROR``/``FlagNotFound``
-    by *raising* :class:`~fireweave.domain.errors.FlagNotFoundError` instead
+    to the backend" row), which resolves to reason ``ERROR``/``ControlPointNotFound``
+    by *raising* :class:`~fireweave.domain.errors.ControlPointNotFoundError` instead
     of returning ``matched=False`` — see `FireweaveRemoteAdapter.resolve` and
     `FireweaveLocalAdapter.resolve`.
 
@@ -94,7 +94,7 @@ class FlagResolution:
     enabled: bool = True
     matched: bool = True
     version: Optional[int] = None
-    vendor_flag_id: Optional[int] = None
+    vendor_control_point_id: Optional[int] = None
     reason_code: Optional[str] = None
     condition_index: Optional[int] = None
     payload: Optional[JsonValue] = None
@@ -108,7 +108,7 @@ class BackendAdapter(Protocol):
     """Protocol every Fireweave backend adapter implements.
 
     ``resolve`` raises a :class:`fireweave.domain.errors.FireweaveError`
-    subtype for a genuine backend failure (FlagNotFound, Network, Timeout,
+    subtype for a genuine backend failure (ControlPointNotFound, Network, Timeout,
     ...); the runtime converts those into default-valued decisions —
     evaluation APIs never propagate them to the caller.
 
@@ -122,7 +122,7 @@ class BackendAdapter(Protocol):
     def initialize(self) -> None:
         """Bring the backend up; raise FireweaveError on fatal config."""
 
-    def resolve(self, flag_key: str, context: EvaluationContext) -> FlagResolution:
+    def resolve(self, control_point_key: str, context: EvaluationContext) -> FlagResolution:
         """Resolve one flag against a validated, merged context."""
 
     def shutdown(self, timeout_ms: int) -> None:

@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "id": "start-legacy-names",
+  "suite": "start",
+  "description": "Legacy FW_* names are read after the new names, with one warning",
+  "rules": [
+    "SP-2",
+    "SP-4"
+  ],
+  "profile": "server",
+  "provisional": true,
+  "cases": [
+    {
+      "name": "legacy-key-read-with-a-warning",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FW_PROJECT_API_KEY": "project-api-key_contracttest01"
+        }
+      },
+      "expect": {
+        "mode": "remote",
+        "keySource": "FW_PROJECT_API_KEY",
+        "warnings": {
+          "mention": [
+            "FW_PROJECT_API_KEY",
+            "FIREWEAVE_KEY"
+          ]
+        }
+      }
+    },
+    {
+      "name": "new-key-shadows-legacy-without-a-warning",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01",
+          "FW_PROJECT_API_KEY": "project-api-key_legacy000001"
+        }
+      },
+      "expect": {
+        "mode": "remote",
+        "keySource": "FIREWEAVE_KEY",
+        "warnings": {
+          "mustNotMention": [
+            "FW_PROJECT_API_KEY"
+          ]
+        }
+      }
+    },
+    {
+      "name": "legacy-api-url-read-with-a-warning",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01",
+          "FW_API_URL": "https://legacy.example.com"
+        }
+      },
+      "expect": {
+        "url": "https://legacy.example.com",
+        "urlSource": "FW_API_URL",
+        "warnings": {
+          "mention": [
+            "FW_API_URL"
+          ]
+        }
+      }
+    },
+    {
+      "name": "legacy-attest-url-read-with-a-warning",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01",
+          "FW_ATTEST_URL": "https://attest.example.com"
+        }
+      },
+      "expect": {
+        "url": "https://attest.example.com",
+        "urlSource": "FW_ATTEST_URL",
+        "warnings": {
+          "mention": [
+            "FW_ATTEST_URL"
+          ]
+        }
+      }
+    },
+    {
+      "name": "api-url-beats-attest-url",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01",
+          "FW_API_URL": "https://legacy.example.com",
+          "FW_ATTEST_URL": "https://attest.example.com"
+        }
+      },
+      "expect": {
+        "url": "https://legacy.example.com",
+        "urlSource": "FW_API_URL"
+      }
+    },
+    {
+      "name": "new-url-shadows-legacy",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01",
+          "FIREWEAVE_URL": "https://new.example.com",
+          "FW_API_URL": "https://legacy.example.com"
+        }
+      },
+      "expect": {
+        "url": "https://new.example.com",
+        "urlSource": "FIREWEAVE_URL",
+        "warnings": {
+          "mustNotMention": [
+            "FW_API_URL"
+          ]
+        }
+      }
+    }
+  ],
+  "compatibility": {
+    "node": "pass",
+    "web": "not-applicable",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass",
+    "rust": "pass",
+    "swift": "pass",
+    "dart": "pass"
+  },
+  "limitations": {
+    "web": "server-profile fixture; web has only the client profile"
+  }
+}

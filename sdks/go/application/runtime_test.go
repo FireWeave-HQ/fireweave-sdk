@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/domain"
 )
 
 // stubAdapter is a programmable BackendAdapter for runtime tests.
@@ -30,7 +30,7 @@ func (s *stubAdapter) Resolve(ctx context.Context, req ResolveRequest) domain.De
 	if s.resolveFn != nil {
 		return s.resolveFn(ctx, req)
 	}
-	return domain.Decision{FlagKey: req.FlagKey, Value: true, Variant: "on", Reason: domain.ReasonTargetingMatch}
+	return domain.Decision{ControlPointKey: req.ControlPointKey, Value: true, Variant: "on", Reason: domain.ReasonTargetingMatch}
 }
 
 func (s *stubAdapter) Close(ctx context.Context) error {
@@ -108,7 +108,7 @@ func TestTransientFailureIsRetryable(t *testing.T) {
 }
 
 func TestEvaluateGatingByState(t *testing.T) {
-	req := ResolveRequest{FlagKey: "f", Type: domain.FlagTypeBoolean, DefaultValue: false,
+	req := ResolveRequest{ControlPointKey: "f", Type: domain.FlagTypeBoolean, DefaultValue: false,
 		Context: domain.NewEvaluationContext("k", nil)}
 
 	rt := NewRuntime(&stubAdapter{}, Config{})
@@ -137,11 +137,11 @@ func TestEvaluateGatingByState(t *testing.T) {
 
 func TestEvaluateDefaultsNeverThrown(t *testing.T) {
 	adapter := &stubAdapter{resolveFn: func(_ context.Context, req ResolveRequest) domain.Decision {
-		return domain.ErrorDecision(req.FlagKey, req.DefaultValue, domain.NewError(domain.KindBackendUnavailable, "", nil), nil)
+		return domain.ErrorDecision(req.ControlPointKey, req.DefaultValue, domain.NewError(domain.KindBackendUnavailable, "", nil), nil)
 	}}
 	rt := readyRuntime(t, adapter)
 	d := rt.Evaluate(context.Background(), ResolveRequest{
-		FlagKey: "f", Type: domain.FlagTypeString, DefaultValue: "fallback",
+		ControlPointKey: "f", Type: domain.FlagTypeString, DefaultValue: "fallback",
 		Context: domain.NewEvaluationContext("k", nil),
 	})
 	if d.Value != "fallback" || d.Reason != domain.ReasonError || d.Error.Kind != domain.KindBackendUnavailable {
@@ -159,12 +159,12 @@ func TestEvaluateValidationOrder(t *testing.T) {
 	}})
 
 	// 1. malformed key
-	d := rt.Evaluate(context.Background(), ResolveRequest{FlagKey: "", Type: domain.FlagTypeBoolean, DefaultValue: false})
-	if d.Error == nil || d.Error.Kind != domain.KindFlagNotFound {
+	d := rt.Evaluate(context.Background(), ResolveRequest{ControlPointKey: "", Type: domain.FlagTypeBoolean, DefaultValue: false})
+	if d.Error == nil || d.Error.Kind != domain.KindControlPointNotFound {
 		t.Errorf("empty key: %+v", d)
 	}
 	// 2. default vs type
-	d = rt.Evaluate(context.Background(), ResolveRequest{FlagKey: "f", Type: domain.FlagTypeBoolean, DefaultValue: "not-a-bool"})
+	d = rt.Evaluate(context.Background(), ResolveRequest{ControlPointKey: "f", Type: domain.FlagTypeBoolean, DefaultValue: "not-a-bool"})
 	if d.Error == nil || d.Error.Kind != domain.KindTypeMismatch {
 		t.Errorf("bad default: %+v", d)
 	}
@@ -172,7 +172,7 @@ func TestEvaluateValidationOrder(t *testing.T) {
 	cyclic := map[string]any{}
 	cyclic["self"] = cyclic
 	d = rt.Evaluate(context.Background(), ResolveRequest{
-		FlagKey: "f", Type: domain.FlagTypeBoolean, DefaultValue: false,
+		ControlPointKey: "f", Type: domain.FlagTypeBoolean, DefaultValue: false,
 		Context: domain.NewEvaluationContext("u", map[string]any{"loop": cyclic}),
 	})
 	if d.Error == nil || d.Error.Kind != domain.KindInvalidContext {
@@ -185,7 +185,7 @@ func TestCyclicContextFailsClosedEndToEnd(t *testing.T) {
 	cyclic := map[string]any{}
 	cyclic["self"] = cyclic
 	d := rt.Evaluate(context.Background(), ResolveRequest{
-		FlagKey: "f", Type: domain.FlagTypeBoolean, DefaultValue: false,
+		ControlPointKey: "f", Type: domain.FlagTypeBoolean, DefaultValue: false,
 		Context: domain.NewEvaluationContext("u", map[string]any{"loop": cyclic}),
 	})
 	if d.Value != false {
@@ -200,14 +200,14 @@ func TestEvaluateMergesGlobalContext(t *testing.T) {
 	var got domain.EvaluationContext
 	adapter := &stubAdapter{resolveFn: func(_ context.Context, req ResolveRequest) domain.Decision {
 		got = req.Context
-		return domain.Decision{FlagKey: req.FlagKey, Value: true, Reason: domain.ReasonTargetingMatch}
+		return domain.Decision{ControlPointKey: req.ControlPointKey, Value: true, Reason: domain.ReasonTargetingMatch}
 	}}
 	rt := NewRuntime(adapter, Config{GlobalContext: domain.NewEvaluationContext("org_g", map[string]any{"region": "us", "tier": "bronze"})})
 	if err := rt.Initialize(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	rt.Evaluate(context.Background(), ResolveRequest{
-		FlagKey: "f", Type: domain.FlagTypeBoolean, DefaultValue: false,
+		ControlPointKey: "f", Type: domain.FlagTypeBoolean, DefaultValue: false,
 		Context: domain.NewEvaluationContext("", map[string]any{"tier": "gold"}),
 	})
 	if got.TargetingKey != "org_g" || got.Attributes["tier"] != "gold" || got.Attributes["region"] != "us" {
@@ -256,7 +256,7 @@ func TestConcurrentEvaluation(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			d := rt.Evaluate(context.Background(), ResolveRequest{
-				FlagKey: "f", Type: domain.FlagTypeBoolean, DefaultValue: false,
+				ControlPointKey: "f", Type: domain.FlagTypeBoolean, DefaultValue: false,
 				Context: domain.NewEvaluationContext("k", map[string]any{"n": 1}),
 			})
 			if d.Error != nil {
@@ -271,7 +271,7 @@ func TestShutdownDuringEvaluation(t *testing.T) {
 	release := make(chan struct{})
 	adapter := &stubAdapter{resolveFn: func(ctx context.Context, req ResolveRequest) domain.Decision {
 		<-release
-		return domain.Decision{FlagKey: req.FlagKey, Value: true, Reason: domain.ReasonTargetingMatch}
+		return domain.Decision{ControlPointKey: req.ControlPointKey, Value: true, Reason: domain.ReasonTargetingMatch}
 	}}
 	rt := readyRuntime(t, adapter)
 
@@ -282,7 +282,7 @@ func TestShutdownDuringEvaluation(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			results[i] = rt.Evaluate(context.Background(), ResolveRequest{
-				FlagKey: "f", Type: domain.FlagTypeBoolean, DefaultValue: false,
+				ControlPointKey: "f", Type: domain.FlagTypeBoolean, DefaultValue: false,
 				Context: domain.NewEvaluationContext("k", nil),
 			})
 		}(i)
@@ -309,7 +309,7 @@ func TestMarkStaleKeepsEvaluating(t *testing.T) {
 		t.Fatalf("state = %s", rt.State())
 	}
 	d := rt.Evaluate(context.Background(), ResolveRequest{
-		FlagKey: "f", Type: domain.FlagTypeBoolean, DefaultValue: false,
+		ControlPointKey: "f", Type: domain.FlagTypeBoolean, DefaultValue: false,
 		Context: domain.NewEvaluationContext("k", nil),
 	})
 	if d.Error != nil {
@@ -351,7 +351,7 @@ type resolveOnlyAdapter struct{}
 
 func (resolveOnlyAdapter) Initialize(ctx context.Context) error { return nil }
 func (resolveOnlyAdapter) Resolve(ctx context.Context, req ResolveRequest) domain.Decision {
-	return domain.Decision{FlagKey: req.FlagKey, Value: req.DefaultValue, Reason: domain.ReasonDefault}
+	return domain.Decision{ControlPointKey: req.ControlPointKey, Value: req.DefaultValue, Reason: domain.ReasonDefault}
 }
 func (resolveOnlyAdapter) Close(ctx context.Context) error { return nil }
 

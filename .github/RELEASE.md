@@ -1,20 +1,27 @@
 # Fireweave SDK — Release Process
 
-Owner: release engineering (Agent K scope: `.github/`, `scripts/`, `tools/`).
+Owner: release engineering (scope: `.github/`, `scripts/`, `tools/`).
 
 Status (2026-07-27): **staging publish authorized** for npm
 (`@fireweaveai/server-sdk`, dist-tag `next`), TestPyPI (`fireweave`), and Go
 proxy warm — only when `workflow_dispatch` has `dry_run=false` and
 `channel=staging`.
 
-Status (2026-08-21, during the task-14 implementation work — **not** a
-separate human authorization; flagged for a human to confirm rather than
-inherit the 2026-07-27 sign-off by association): staging publish SCOPE
-EXTENDED to also cover npm for `@fireweaveai/web-sdk` (dist-tag `next` —
-identical OIDC trusted-publish mechanism as the already-authorized
-`server-sdk`) and a rust `cargo publish --dry-run` (packages + validates
-only; no crates.io upload — see "Pre-release channels"), under the same
-`dry_run=false` / `channel=staging` gate.
+Status (2026-08-21): staging publish SCOPE EXTENDED to also cover npm for
+`@fireweaveai/web-sdk` (dist-tag `next` — identical OIDC trusted-publish
+mechanism as the already-authorized `server-sdk`) and a rust
+`cargo publish --dry-run` (packages + validates only; no crates.io upload —
+see "Pre-release channels"), under the same `dry_run=false` /
+`channel=staging` gate.
+
+Status (2026-09-02, during the dart-sdk implementation work — **not** a
+separate human authorization; flagged for a human to confirm the same way the
+2026-08-21 extension was): a `dart` component was added under the same
+gates — staging is a `dart pub publish --dry-run` (validates only; pub.dev
+has no staging registry, and a published version can only be retracted, never
+deleted) plus the git tag; production publishes to pub.dev via pub.dev's own
+OIDC "automated publishing" on `environment: release`, which pub.dev rejects
+until it is enabled for the package (fail-closed; see "Registries").
 
 **Production PyPI** is enabled for `fireweave` via:
 
@@ -28,29 +35,26 @@ only; no crates.io upload — see "Pre-release channels"), under the same
 component runs `publish-npm-server-production` / `publish-npm-web-production`
 on environment `release`, publishing `--tag latest` via the same OIDC trusted
 publisher staging already uses. **The npm Trusted Publisher for each package
-must permit the `release` environment**: every successful OIDC publish to date
-ran under `release-staging`, so a publisher config pinned to that environment
-name will reject the production jobs. **Maven Central** is
+must permit the `release` environment**. **Maven Central** is
 wired through [`publish-java.yml`](workflows/publish-java.yml) (tag
 `java/v*`) and `release.yml` (`component=java`) using the Central Publisher
-Portal plugin. The first upload still requires namespace verification for
-`ai.fireweave` plus `MAVEN_CENTRAL_USERNAME` / `MAVEN_CENTRAL_PASSWORD` /
-`MAVEN_GPG_*` secrets — missing secrets fail closed rather than publishing a
+Portal plugin. Missing secrets fail closed rather than publishing a
 broken artifact. **crates.io** production publish requires
 `CARGO_REGISTRY_TOKEN` — same fail-closed behavior.
 
 ## Overview
 
 One release = one component (`server` | `web` | `python` | `java` | `go` |
-`rust` | `swift`, or `all` to fan out every component via a matrix) at one
-computed semver. Trigger [`Release (dry-run by default)`](workflows/release.yml)
-via `workflow_dispatch`:
+`rust` | `swift` | `dart`, or `all` to fan out every component via a
+matrix) at one computed semver. Trigger
+[`Release (dry-run by default)`](workflows/release.yml) via `workflow_dispatch`:
 
 **`all` is not only a build-time convenience — with `dry_run=false` and
 `channel=staging` it fires every staging publish job at once, unattended**
-(both npm packages, TestPyPI, and the rust `cargo --dry-run`): `release-staging`
-carries no required-reviewer gate, so selecting `all` there is the same as
-approving all of them in one click, not just requesting seven builds.
+(both npm packages, TestPyPI, the rust `cargo --dry-run`, and the dart
+`dart pub publish --dry-run`): `release-staging` carries no required-reviewer
+gate, so selecting `all` there is the same as approving all of them in one
+click, not just requesting eight builds.
 
 | Input | Meaning |
 | --- | --- |
@@ -73,7 +77,7 @@ The workflow always produces (as a CI artifact, never a registry upload):
 
 Between `build` and every `publish-*` job sits **`verify`**: the full
 `scripts/{build,test,conformance}-all.sh` suite (every language, the same
-65×7 cross-language differential gate CI runs) — a release cannot publish
+65×8 cross-language differential gate CI runs) — a release cannot publish
 without these gates passing, dry run or not.
 
 ## Versioning: `tools/release/version.sh`
@@ -87,9 +91,9 @@ does this release actually carry." Two subcommands:
   defaulting to `0.0.0` when none exists), strips any existing prerelease,
   applies `<bump>`, and (channel=staging only) appends `-staging.N` where `N`
   is queried live from the component's registry (npm / PyPI or TestPyPI /
-  crates.io / `git ls-remote` against `origin` for go, java, and swift — see
-  the script's own header for why those three use the tag list). Prints
-  `key=value` lines; never writes anything.
+  crates.io / pub.dev / `git ls-remote` against `origin` for go, java, and
+  swift — see the script's own header for why those three use the tag list).
+  Prints `key=value` lines; never writes anything.
 - `version.sh apply <component> <release-version>` — writes an
   ALREADY-COMPUTED version into the component's manifest (no bump math, no
   network). go/swift are a documented no-op — the git tag already pushed by
@@ -113,12 +117,13 @@ Org convention `<component>/v<semver>`, with one forced exception:
 
 | Component | Tag | Why |
 | --- | --- | --- |
-| server | `server/v0.1.0` | org convention (renamed from `node` — package is `@fireweaveai/server-sdk`; directory stays `sdks/node`; this component has never published, so the rename breaks no historical tag) |
+| server | `server/v0.1.0` | org convention (renamed from `node` — package is `@fireweaveai/server-sdk`; directory stays `sdks/node`) |
 | web | `web/v0.1.0` | org convention |
 | python | `python/v0.1.0` | org convention |
 | java | `java/v0.1.0` | org convention |
 | rust | `rust/v0.1.0` | org convention |
 | swift | `swift/v0.1.0` | org convention — chosen deliberately over a bare `vX.Y.Z`; see below |
+| dart | `dart/v0.1.0` | org convention — pub.dev resolves packages by version from its own registry, never by git tag, so the prefix costs nothing |
 | go | `sdks/go/v0.1.0` | **Go toolchain requirement**: a module in subdirectory `sdks/go` is only resolvable when the tag prefix equals the subdirectory path. `go/v0.1.0` would not resolve. |
 
 **Why swift uses `swift/v<semver>` and not a bare `vX.Y.Z`:** SwiftPM's git
@@ -126,10 +131,7 @@ dependency resolution (`.package(url:, from:)`) requires `Package.swift` at
 the ROOT of the referenced repository — there is no first-party "subdirectory"
 parameter the way Go modules have one. This repo's `Package.swift` lives at
 `sdks/swift/Package.swift`, and there is no root-level `Package.swift`
-(verified: `ls /Package.swift` → not found; `git ls-remote --tags origin`
-returns zero tags today, corroborated independently by
-`proxy.golang.org/.../sdks/go/@v/list` also returning empty for the go
-module). So **neither** tag scheme lets a consumer resolve this monorepo
+(verified: `ls /Package.swift` → not found). So **neither** tag scheme lets a consumer resolve this monorepo
 directly via `.package(url: "https://github.com/FireWeave-HQ/fireweave-sdk", from:)`
 today, regardless of prefix — a bare `vX.Y.Z` buys no actual SwiftPM
 resolution benefit. Meanwhile a bare, unprefixed tag WOULD collide with any
@@ -155,17 +157,18 @@ git push --force origin refs/tags/server/v0.1.0
 Longer term: provision a bot GPG key (or adopt sigstore `gitsign`) and move
 signing into the workflow.
 
-## Registries (target state)
+## Registries
 
 | Ecosystem | Registry | Name | Status |
 | --- | --- | --- | --- |
 | server (npm) | npmjs.com | `@fireweaveai/server-sdk` | Publish via **OIDC trusted publishing** (no long-lived `NPM_TOKEN`). |
 | web (npm) | npmjs.com | `@fireweaveai/web-sdk` | Publish via **OIDC trusted publishing**. |
 | Python | pypi.org | `fireweave` | Publish via **`PYPI_API_TOKEN`** GitHub secret (environment `release`) with `pypa/gh-action-pypi-publish`. Preferred auto path: push tag `python/v<semver>` → `publish-python.yml`. Staging goes to **TestPyPI** via `TEST_PYPI_API_TOKEN` (environment `release-staging`). |
-| Go | proxy.golang.org | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2` | No registry credentials — "publishing" is pushing the `sdks/go/v*` tag on the public repo; the proxy picks it up. **Major ≥ 2 requires the `/v2` module-path suffix** (Go modules rule); the git tag prefix stays `sdks/go/`. |
-| Java | Maven Central | groupId `ai.fireweave` | **Pending namespace verification** on the Central portal (DNS TXT proof for `fireweave.ai`). Workflows are release-ready and fail closed without secrets. Do not claim a coordinate is published until Central confirms. |
+| Go | proxy.golang.org | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3` | No registry credentials — "publishing" is pushing the `sdks/go/v*` tag on the public repo; the proxy picks it up. **Major ≥ 2 requires the `/vN` module-path suffix, e.g. `/v3`** (Go modules rule); the git tag prefix stays `sdks/go/`. |
+| Java | Maven Central | groupId `ai.fireweave` | Workflows are release-ready and fail closed without secrets. |
 | Rust | crates.io | `fireweave` | Publish via **`CARGO_REGISTRY_TOKEN`** GitHub secret (environment `release`). No staging registry exists — see "Pre-release channels". |
-| Swift | — | — | No package registry is used; consumption is git-tag-only, and (see "Tag convention") not currently resolvable as a direct SwiftPM dependency against this repo at all. |
+| Swift | mirror repository (`vars.SWIFT_MIRROR_REPO`, default `FireWeave-HQ/fireweave-swift`) | `.package(url:, from:)` on the mirror | No package registry; SwiftPM resolves the mirror's root `Package.swift` and plain semver tags, which `publish-swift-mirror` pushes. Blocked until the mirror exists (provisioning below). |
+| Dart | pub.dev | `fireweave` | Publish via pub.dev **automated publishing** (OIDC — no token secret; `dart-lang/setup-dart` exchanges the GitHub id-token). Must be enabled on pub.dev for the package, bound to this repository, `release.yml`, and the `release` environment; until then pub.dev rejects the publish. No staging registry exists — see "Pre-release channels". |
 
 ## Pre-release channels
 
@@ -186,10 +189,11 @@ that tag is now pure syntax, not the channel signal:
 | --- | --- | --- |
 | npm (server, web) | publish `X.Y.Z-staging.N`, `--tag next` (`npm install @fireweaveai/server-sdk@next`) | fresh `channel: production` run computes the plain `X.Y.Z`, published `--tag latest` |
 | PyPI | upload `X.Y.ZaN` to **TestPyPI** (`test.pypi.org`) — PEP 440 alpha; `-staging.N` is not a valid packaging version | push tag `python/vX.Y.Z` (preferred) or re-run `release.yml` with `channel: production` |
-| Maven | deploy the **plain** `X.Y.Z` to the Central portal (`autoPublish=false` on staging — no separate staging registry or credentials exist, so there is no version-collision risk to guard against the way there is for the others). Validate in the portal, then release. | `autoPublish=true` on production / tag `java/v*` |
+| Maven | publish `X.Y.Z-staging.N` to Maven Central (`autoPublish=true`; decision D4, ADR-0012). Maven resolves it only when asked for exactly, so an app opts into the staging channel by version; the workflow refuses a staging run whose version lacks `-staging.`. Each staging version is permanent on Central, like npm `next` versions. | fresh `channel: production` run publishes the plain `X.Y.Z` / tag `java/v*` |
 | crates.io (rust) | **no publish at all** — `cargo publish --dry-run` proves `X.Y.Z-staging.N` packages cleanly, plus the git tag. crates.io has no TestPyPI equivalent, and yanking is not deletion, so an actual staging upload would spend the version permanently. | fresh `channel: production` run computes the plain `X.Y.Z` and runs `cargo publish` for real (`CARGO_REGISTRY_TOKEN`) |
 | Go | tag `sdks/go/vX.Y.Z-staging.N` (`go get` will not auto-select a prerelease tag); optional proxy warm | tag the final `sdks/go/vX.Y.Z` |
-| Swift | tag `swift/vX.Y.Z-staging.N` — no publish step exists for swift at any channel; the tag IS the release | tag the final `swift/vX.Y.Z` |
+| Swift | `publish-swift-mirror` copies `sdks/swift` (with `BuildInfo.swift` stamped) to the mirror repository's root and tags it `X.Y.Z-staging.N` there (decision D5, ADR-0012); the monorepo keeps `swift/vX.Y.Z-staging.N` | the same job tags the plain `X.Y.Z` in the mirror |
+| pub.dev (dart) | **no publish at all** — `dart pub publish --dry-run` proves `X.Y.Z-staging.N` packages cleanly, plus the git tag. pub.dev has no staging registry, and a published version can only be retracted (within 7 days) — never deleted — so an actual staging upload would spend the version permanently. | fresh `channel: production` run computes the plain `X.Y.Z` and runs `dart pub publish --force` for real (OIDC automated publishing) |
 
 ## GitHub environments
 
@@ -199,12 +203,12 @@ believed they were hitting TestPyPI:
 
 | Environment | Used by | Secrets | Required reviewers |
 | --- | --- | --- | --- |
-| `release` | `publish-npm-server-production`, `publish-npm-web-production`, `publish-pypi-production`, `publish-maven` (BOTH channels — see below), `publish-cargo-production` | `PYPI_API_TOKEN`, `MAVEN_CENTRAL_USERNAME`/`_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`/`_PASSPHRASE`, `CARGO_REGISTRY_TOKEN` (the two npm jobs need no secret — OIDC) | **Yes** — this is the gate that must stay a human approval |
-| `release-staging` | `publish-npm`, `publish-npm-web`, `publish-pypi`, `publish-go`, `publish-cargo` | `TEST_PYPI_API_TOKEN` (npm/go/cargo-dry-run need no secret — OIDC or none) | No |
+| `release` | `publish-npm-server-production`, `publish-npm-web-production`, `publish-pypi-production`, `publish-maven` (BOTH channels — see below), `publish-cargo-production`, `publish-pub-production`, `publish-swift-mirror` (production) | `PYPI_API_TOKEN`, `MAVEN_CENTRAL_USERNAME`/`_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`/`_PASSPHRASE`, `CARGO_REGISTRY_TOKEN`, `SWIFT_MIRROR_DEPLOY_KEY` (the two npm jobs and pub.dev need no secret — OIDC) | **Yes** — this is the gate that must stay a human approval |
+| `release-staging` | `publish-npm`, `publish-npm-web`, `publish-pypi`, `publish-go`, `publish-cargo`, `publish-pub`, `publish-swift-mirror` (staging) | `TEST_PYPI_API_TOKEN`, `SWIFT_MIRROR_DEPLOY_KEY` (npm/go/cargo-dry-run/pub-dry-run need no secret — OIDC or none) | No |
 
 **Java is the one exception**: Maven Central Portal has no separate staging
-registry or credential set — `autoPublish=false` vs `true` is what makes a
-staging deploy non-final, not a different secret — so `publish-maven` stays
+registry or credential set — a staging run publishes an `X.Y.Z-staging.N`
+version with the same credentials — so `publish-maven` stays
 on `environment: release` for both `channel: staging` and
 `channel: production`. This means a java STAGING run also requires reviewer
 approval, unlike every other ecosystem's staging path; that is the accepted
@@ -221,14 +225,12 @@ cost of not having a second Maven credential set to protect.
    fast). Add secret: `TEST_PYPI_API_TOKEN`.
 3. `TEST_PYPI_API_TOKEN`: create at
    [test.pypi.org → Account settings → API tokens](https://test.pypi.org/manage/account/#api-tokens),
-   scoped to project `fireweave` (or account-wide for the first-ever upload,
-   then narrow it once the project exists). Paste into the
+   scoped to project `fireweave`. Paste into the
    `release-staging` environment secret of the same name.
 4. `CARGO_REGISTRY_TOKEN`: create at
    [crates.io → Account settings → API Tokens](https://crates.io/settings/tokens),
-   scope "publish-update" on crate `fireweave` (or unscoped for the
-   first-ever publish). Paste into the `release` environment secret of the
-   same name.
+   scope "publish-update" on crate `fireweave`. Paste into the `release`
+   environment secret of the same name.
 
 If either job runs before its secret exists, it fails closed with an
 explicit `::error::` naming the missing secret and the environment it
@@ -236,54 +238,30 @@ belongs on (see `publish-pypi`'s "Require TEST_PYPI_API_TOKEN" step and
 `publish-cargo-production`'s "Require CARGO_REGISTRY_TOKEN" step) — it never
 silently skips or falls back to an unauthenticated attempt.
 
-## Company-side provisioning required before enabling publishing
+## Company-side provisioning required
 
-1. **npm**: create the `@fireweaveai` org scope; add a trusted publisher for
-   `FireWeave-HQ/fireweave-sdk` → workflow `release.yml` (OIDC), for BOTH
-   `@fireweaveai/server-sdk` and `@fireweaveai/web-sdk`. No token secret
-   needed. First-ever publish of a new package may require a one-time
-   granular token with 2FA.
-   **Environment field**: staging jobs run on `release-staging` and production
-   jobs on `release`, so each publisher must either leave the environment
-   constraint EMPTY (allowing both) or have two entries. A publisher pinned to
-   `release-staging` alone will reject `publish-npm-*-production` at the OIDC
-   exchange, before any bytes are uploaded.
-2. **PyPI + TestPyPI**: reserve / create the project name `fireweave`; add
-   **trusted publishers** (OIDC — no token secret) on both indexes, OR use
-   the token secrets above (this repo's workflows accept either):
-
-   | Index | Workflow file | Environment |
-   | --- | --- | --- |
-   | **pypi.org** (production) | `publish-python.yml` | `release` |
-   | **pypi.org** (optional alternate) | `release.yml` | `release` |
-   | **test.pypi.org** (staging) | `release.yml` | `release-staging` |
-
-   Field values for each publisher:
-   - Owner: `FireWeave-HQ`
-   - Repository: `fireweave-sdk`
-   - Workflow name: exact filename above (e.g. `publish-python.yml`)
-   - Environment name: as listed above (must match the job's `environment:`)
-
-   Pending publishers are supported: configure before the first upload and the
-   project is created on first successful publish.
-3. **Maven Central**: verify namespace `ai.fireweave` (portal + DNS TXT);
-   generate portal user tokens → `release` environment secrets
-   `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`; provision a release
-   GPG key → `release` environment secrets `MAVEN_GPG_PRIVATE_KEY`,
-   `MAVEN_GPG_PASSPHRASE`. The parent POM will also need the Central
-   publishing plugin + sources/javadoc/gpg plugins (Agent I / orchestrator
-   change, outside `.github/` ownership).
-4. **crates.io**: reserve / create the crate name `fireweave`; generate an
-   API token → `release` environment secret `CARGO_REGISTRY_TOKEN` (see
-   "Creating the environments" above for the exact steps).
-5. **GitHub repo settings**: allow GitHub Actions to create and approve
+1. **Swift mirror** (decision D5): create the repository named by the
+   `SWIFT_MIRROR_REPO` repository variable (default
+   `FireWeave-HQ/fireweave-swift`), add a **write** deploy key to it, and store
+   the private half as the `SWIFT_MIRROR_DEPLOY_KEY` secret in **both** the
+   `release` and `release-staging` environments. Add a ruleset on the mirror so
+   only that deploy key can push to its default branch and tags; nobody edits
+   the mirror by hand. `publish-swift-mirror` fails closed until this exists.
+2. **pub.dev**: publish the first `fireweave` version manually (pub.dev
+   requires an initial human publish before automated publishing can be
+   configured), then on the package's **Admin** tab enable **Automated
+   publishing** from GitHub Actions with repository `FireWeave-HQ/fireweave-sdk`,
+   tag pattern `dart/v{{version}}`, and **require the GitHub Actions
+   environment** `release`. No token secret is involved; the `release`
+   environment's required reviewers remain the human gate.
+3. **GitHub repo settings**: allow GitHub Actions to create and approve
    attestations (for `actions/attest-build-provenance`); create the two
    protected environments described above (`release` with required
    reviewers, `release-staging` without) and point the publish jobs at them
    (already done in `release.yml` — this step is about the environments and
    their secrets/reviewers existing, not workflow edits).
-6. **Signing**: bot GPG key or gitsign for signed tags (above).
-7. **Branch/tag protection**: protect `master` and `*/v*` tags so only the
+4. **Signing**: bot GPG key or gitsign for signed tags (above).
+5. **Branch/tag protection**: protect `main` and `*/v*` tags so only the
    release workflow/owners can push tags.
 
 ## Rollback
@@ -299,6 +277,7 @@ Publishing is append-only almost everywhere; **prefer publishing a fixed
 | crates.io | Cannot delete a published version. `cargo yank` stops it from being selected by new lockfiles (existing `Cargo.lock` files are unaffected); publish a fixed version. |
 | Go proxy | Cannot delete cached versions. Publish a fixed version, or in emergencies add a `retract` directive to `sdks/go/go.mod` and release it in the next tag — `go` tooling then warns on the retracted versions. |
 | Swift | No registry to roll back — consumers pin an exact tag; publish a fixed tag and tell consumers to move to it. |
+| pub.dev | Cannot delete a published version. **Retract** it within 7 days of publishing (`dart pub` → package Admin tab; retracted versions are excluded from resolution unless already pinned in a `pubspec.lock`), then publish a fixed version. After 7 days, only fix-forward. |
 | Git tags | If a bad tag was pushed but nothing published: delete the tag (`git push origin :refs/tags/<tag>`). If any registry consumed it, treat the version as burned; never re-use a version number. |
 
 Always accompany a rollback with: a changelog entry in the next release, a

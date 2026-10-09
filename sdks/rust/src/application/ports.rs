@@ -29,7 +29,7 @@ use crate::domain::types::JsonValue;
 /// `include_payload` (`contracts/evaluation/eval-payload-attached.json`):
 /// when true and the resolved flag carries a payload
 /// ([`FlagResolution::payload`]), it is attached to
-/// `flag_metadata["fireweave.payload"]` as a deterministic (sorted-key)
+/// `control_point_metadata["fireweave.payload"]` as a deterministic (sorted-key)
 /// JSON string.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct EvaluateOptions {
@@ -85,7 +85,7 @@ impl RegisterTargetResult {
 /// produce reason `DEFAULT` (`spec/modes.md` "Behaviour per mode": local
 /// mode's unknown-key row). Contrast a genuinely-unknown key at a real
 /// backend (remote's "key unknown to the backend" row), which resolves to
-/// reason `ERROR`/`FlagNotFound` by *returning `Err`* from `resolve`
+/// reason `ERROR`/`ControlPointNotFound` by *returning `Err`* from `resolve`
 /// instead of `Ok(FlagResolution { matched: false, .. })` — see
 /// `infrastructure::adapters::remote::FireweaveRemoteAdapter::resolve` and
 /// `infrastructure::adapters::local::FireweaveLocalAdapter::resolve`.
@@ -93,9 +93,9 @@ impl RegisterTargetResult {
 /// `fireweave_reason` lets an adapter force a canonical reason on a
 /// *matched* resolution (e.g. the local dev adapter's `STATIC`).
 ///
-/// `vendor_flag_id`/`reason_code` are a PRE-GATED pair
+/// `vendor_control_point_id`/`reason_code` are a PRE-GATED pair
 /// (`spec/decision.schema.json` `standardMetadataKeys`, orchestrator ruling
-/// 11): the runtime emits `fireweave.vendorFlagId`/`fireweave.reasonCode`
+/// 11): the runtime emits `fireweave.vendorControlPointId`/`fireweave.reasonCode`
 /// together, or neither — never one alone. There is deliberately no
 /// separate `condition_index` field here: ruling 11's gate ("both a vendor
 /// flag id AND a condition index") is a statement about what the BACKEND
@@ -106,8 +106,8 @@ impl RegisterTargetResult {
 /// `conditionIndex` to check in the first place
 /// (`spec/remote-evaluate.schema.json`'s `decisionItem` carries no such
 /// field): fw-server applies ruling 11 server-side before the wire
-/// response is ever built, so the adapter passes `flagMetadata.
-/// fireweave.vendorFlagId`/`.fireweave.reasonCode` straight through when
+/// response is ever built, so the adapter passes `controlPointMetadata.
+/// fireweave.vendorControlPointId`/`.fireweave.reasonCode` straight through when
 /// present. Carrying a `condition_index` field on this shared, adapter-
 /// agnostic port type — and re-gating on it a second time in the runtime —
 /// meant the remote path's hardcoded `None` silently defeated the gate for
@@ -122,7 +122,7 @@ pub struct FlagResolution {
     pub enabled: bool,
     pub matched: bool,
     pub version: Option<i64>,
-    pub vendor_flag_id: Option<i64>,
+    pub vendor_control_point_id: Option<i64>,
     pub reason_code: Option<String>,
     pub payload: Option<JsonValue>,
     pub fireweave_reason: Option<String>,
@@ -138,7 +138,7 @@ impl Default for FlagResolution {
             enabled: true,
             matched: true,
             version: None,
-            vendor_flag_id: None,
+            vendor_control_point_id: None,
             reason_code: None,
             payload: None,
             fireweave_reason: None,
@@ -204,7 +204,7 @@ impl<T: 'static> AsAny for T {
 /// Protocol every Fireweave backend adapter implements.
 ///
 /// `resolve` returns `Err(FireweaveError)` for a genuine backend failure
-/// (`FlagNotFound`, `Network`, `Timeout`, ...); the runtime converts those
+/// (`ControlPointNotFound`, `Network`, `Timeout`, ...); the runtime converts those
 /// into default-valued decisions — evaluation APIs never propagate them to
 /// the caller.
 ///
@@ -219,7 +219,7 @@ pub trait BackendAdapter: Send + Sync + AsAny {
     /// Resolve one flag against a validated, merged context.
     fn resolve(
         &self,
-        flag_key: &str,
+        control_point_key: &str,
         context: &EvaluationContext,
     ) -> Result<FlagResolution, FireweaveError>;
 

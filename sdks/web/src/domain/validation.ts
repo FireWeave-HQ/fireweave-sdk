@@ -5,7 +5,7 @@
  *
  * Ported from sdks/node/src/domain/validation.ts (the reference
  * implementation) — same five validators, same `Validated<T>` discipline,
- * same malformed-key → FlagNotFound mapping. Reimplemented here rather than
+ * same malformed-key → ControlPointNotFound mapping. Reimplemented here rather than
  * shared so the browser package keeps zero cross-package dependency to
  * audit — the same reasoning ADR-0009 gives for duplicating types.ts/errors.ts
  * extends to this module.
@@ -55,26 +55,26 @@ const MAX_CONTROL_POINT_KEY_LENGTH = 256;
  * (spec/control-points.md rule 1, the first check in the fixed order).
  *
  * No taxonomy kind names "malformed key" explicitly (the return-discipline
- * table's closest row is "key unknown to the backend" → FlagNotFound):
+ * table's closest row is "key unknown to the backend" → ControlPointNotFound):
  * controller-ruled interim mapping (mirrors node's domain/validation.ts
  * verbatim) — the 15-kind taxonomy in errors.schema.json is frozen at
  * exactly 15 entries, `InvalidContext` is textually scoped to the evaluation
  * *context* (not the key), and the schema already maps another non-literal
- * case — quota-limited responses — onto `FlagNotFound` rather than adding a
- * kind for it. `FlagNotFound` is therefore the least-wrong existing kind,
+ * case — quota-limited responses — onto `ControlPointNotFound` rather than adding a
+ * kind for it. `ControlPointNotFound` is therefore the least-wrong existing kind,
  * not a literal fit. Other-language implementations copying node as the
  * reference SHOULD use the same mapping rather than each independently
  * guessing a different one.
  */
 export function validateControlPointKey(key: string): Validated<string> {
   if (typeof key !== 'string' || key.length === 0) {
-    return fail(new FireweaveError('FlagNotFound'));
+    return fail(new FireweaveError('ControlPointNotFound'));
   }
   if (key.length > MAX_CONTROL_POINT_KEY_LENGTH) {
-    return fail(new FireweaveError('FlagNotFound'));
+    return fail(new FireweaveError('ControlPointNotFound'));
   }
   if (CONTROL_CHARACTERS.test(key)) {
-    return fail(new FireweaveError('FlagNotFound'));
+    return fail(new FireweaveError('ControlPointNotFound'));
   }
   return ok(key);
 }

@@ -59,9 +59,7 @@ public final class DemoApp {
 
         // 4. Register the durable targeting facts for this user — once per
         // login, not on every evaluation. Resolves ok=false rather than
-        // throwing (it runs in sign-in paths); the offline default and the
-        // --remote stub (which has no /v1/targets/register route) both
-        // degrade the same, honest way.
+        // throwing (it runs in sign-in paths).
         RegisterTargetResult registered = client.registerTarget("user_42",
                 RegisterTargetOptions.builder()
                         .kind(TargetKind.USER)

@@ -6,11 +6,12 @@ compares results, and reports into the cross-language compatibility matrix.
 ## Goals
 
 1. Prove Fireweave's v1 control-points surface (`controlPoints.evaluate` / the nine typed
-   methods / `invokeCapability`) matches fixture `expect` across Node, Python, Go, and Java.
+   methods / `invokeCapability`) matches fixture `expect` across Node, Python, Go, Java, Rust,
+   and Swift.
 2. Fail CI on silent divergence (see [`README.md`](./README.md)).
-3. Report every language a fixture could conceivably apply to — 65 fixtures x 7 languages
-   (node, web, python, java, go, rust, swift) — with an honest status for each cell, never a
-   silently-missing one.
+3. Report every language a fixture could conceivably apply to — 65 fixtures x 8 languages
+   (node, web, python, java, go, rust, swift, dart) — with an honest status for each cell,
+   never a silently-missing one.
 
 ## Rewrite note (this document)
 
@@ -21,12 +22,6 @@ no `dev.openfeature:sdk`/`@openfeature/*` dependency in any SDK's runtime path) 
 the two-capability v1 surface: control points and target registration
 (`spec/control-points.md`). This document is rewritten to match — there is no OpenFeature
 client left to invoke, and no OF-setup column to give a runner.
-
-Fixtures and `spec/` survive unedited — `decision.schema.json` is Fireweave's own
-(`$id: fireweave.ai/spec/…`), and only 1 of 76 fixture files (across contracts/ and
-contracts/web/) ever named an OpenFeature package. `contracts/errors.md`/`errors.json`,
-`contracts/README.md`, and everything under `contracts/web/` remain byte-untouched by this
-rewrite; only this file's pipeline description changed.
 
 ## Shared pipeline
 
@@ -40,29 +35,29 @@ never a mock of the client itself:
 
 - **In-memory backend** (evaluation / context / lifecycle / security suites, and the one
   runnable extensions fixture): a deterministic, fixture-driven adapter (node/go/java:
-  `InMemoryAdapter`; python: `InMemoryAdapter`) seeded from `given.flags`, wired directly into
+  `InMemoryAdapter`; python: `InMemoryAdapter`) seeded from `given.controlPoints`, wired directly into
   the language's runtime + client types (`FireweaveRuntime`/`Runtime` + `FireweaveClient`/
   `Client`). This is the "local mode" leg of the pipeline: the runner does not go through the
   `initFireweave`/`Fireweave.init`/`init_fireweave` entry point for these fixtures, because that
   entry point's local-mode adapter (`FireweaveLocalAdapter`) accepts only a
   `Record<string, boolean>` override map — it cannot carry the rich, multi-type, condition-
-  matching flag definitions (variant, metadata, payload, matchAttribute/matchGroups/
+  matching control-point definitions (variant, metadata, payload, matchAttribute/matchGroups/
   matchPerson, fault injection) the fixtures need. `initFireweave` itself (both modes) is
   exercised end-to-end by each language's own unit-test suite, which the language's `verify`/
   `test` command already runs alongside the conformance suite.
 - **Remote backend** (faults suite): the real `FireweaveRemoteAdapter`/`Adapter` speaking
-  `POST /v1/flags/evaluate` over real HTTP — this is the "remote mode" leg. The HTTP peer
+  `POST /v1/control-points/evaluate` over real HTTP — this is the "remote mode" leg. The HTTP peer
   differs by language for environmental reasons (see "test-server role" below), but the
   adapter, the wire protocol, and the client invocation are all real; `fault-stale-cache`
   is the one faults-suite fixture that runs on the in-memory backend instead, since cache
-  staleness is provisioned directly (`given.flags[*].fromCache` + `providerState: STALE`),
+  staleness is provisioned directly (`given.controlPoints[*].fromCache` + `providerState: STALE`),
   not over HTTP.
 
 Comparator library responsibilities (one per language, same rules):
 
 - Drop excluded fields (timestamps, stacks, vendor `requestId`, nondeterministic metadata).
 - Redact secrets in messages.
-- Canonical-JSON serialize for structured `value` / `flagMetadata`.
+- Canonical-JSON serialize for structured `value` / `controlPointMetadata`.
 - Enforce `compatibility` vs observed status matrix (extended vocabulary — see "Statuses" below).
 
 ## Per-language runners
@@ -74,13 +69,24 @@ Comparator library responsibilities (one per language, same rules):
 | Python | `sdks/python/conformance/runner.py` (+ `tests/test_conformance.py`, `pytest`) | `InMemoryAdapter`, direct `FireweaveRuntime`+`FireweaveClient` | `FireweaveRemoteAdapter` vs the real `test-server` stub (spawned subprocess) |
 | Go | `sdks/go/internal/conformance` (+ `sdks/go/conformance/harness_test.go`, `go test`) | `InMemoryAdapter`, direct `Runtime`+`Client` | `Adapter` (remote) vs an **injected fake `http.RoundTripper`** — the canonical dockerized `golang:1.25-alpine` run has no `node` binary to spawn the real stub with; `FIREWEAVE_TEST_SERVER_URL` opts into the real stub for local iteration when `node` happens to be on `PATH` |
 | Java | `sdks/java/fireweave-testing` (`ConformanceRunner` + `ConformanceTest`, `mvn test`) | `InMemoryAdapter`, direct `FireweaveRuntime`+`FireweaveClient` | `FireweaveRemoteAdapter` vs an **in-process HTTP stub** (`FixtureHttpStub`, pure JDK `com.sun.net.httpserver`) — same "no `node` in the canonical dockerized `maven:3.9-eclipse-temurin-21` image" constraint as Go, solved with a same-process embedded server instead of a fake transport |
-| Rust | *(not implemented — Phase 6)* | — | — |
-| Swift | *(not implemented — Phase 6)* | — | — |
+| Rust | `sdks/rust/conformance/runner.rs` (`conformance` bin: `cargo run --bin conformance`) | `InMemoryAdapter`, direct `FireweaveRuntime`+`FireweaveClient` | `FireweaveRemoteAdapter` vs an **in-process loopback HTTP stub** (`sdks/rust/conformance/fake_server.rs`, std only) — same "no `node` in the canonical dockerized `rust:1-slim` image" constraint as Go and Java |
+| Swift | `sdks/swift/Sources/FireweaveConformance/Runner.swift` (`swift run FireweaveConformance`) | `InMemoryAdapter`, direct `FireweaveRuntime`+`FireweaveClient`; 6 context fixtures driven by invocation-only context are `skipped-with-documented-limitation` | none over HTTP — `evaluate()` is a synchronous cache read with no per-call I/O, so 8 of 9 faults fixtures are `skipped-with-documented-limitation`; `fault-stale-cache` runs on `InMemoryAdapter` |
+| Dart | `sdks/dart/conformance/run_conformance.dart` (+ `test/conformance_test.dart`, `dart test`) — ADR-0011 | `InMemoryAdapter`, direct `FireweaveRuntime`+`FireweaveClient`; prefetch-then-synchronous-read, so the 6 invocation-context-matching context fixtures are `skipped-with-documented-limitation` (swift's disposition) | `fault-stale-cache` only (provisioned directly); the other 8 are `skipped-with-documented-limitation` — `evaluate()` never does I/O |
 
 Node and Python are close enough to a real subprocess `test-server` that they use it directly;
 Go and Java's canonical CI environment cannot, so they substitute a same-language stand-in that
-speaks the identical wire contract (`POST /v1/flags/evaluate`, `{decisions:[...], quotaLimited}`)
+speaks the identical wire contract (`POST /v1/control-points/evaluate`, `{decisions:[...], quotaLimited}`)
 — this is a packaging-environment difference, not a behavioral one.
+
+### Start-profile suite (`contracts/start/`)
+
+A separate suite for the opt-in start profile (`spec/start-profile.md`, ADR-0012), outside the
+65 like `contracts/web/`. Its fixtures drive each SDK's pure start-profile resolution — mode,
+sources, endpoint, key families, instance key, local control points, release channel — with injected
+environment, build values and host name, so no network is involved. Every SDK runs it from its
+own test command and writes `compatibility-report.start.<lang>.json` (gitignored);
+`tools/conformance/compare-start.mjs` validates the fixtures and aggregates reports. Format,
+operations and comparison rules: [`start/README.md`](./start/README.md).
 
 ### Runner obligations
 
@@ -97,7 +103,7 @@ speaks the identical wire contract (`POST /v1/flags/evaluate`, `{decisions:[...]
    all cases pass. One report row per fixture (case detail in `message`).
 
 The canonical inventory is **65** fixtures; each language's own report must contain 65 cells;
-the cross-language aggregate (`tools/conformance/compare.mjs`) produces **65 x 7**.
+the cross-language aggregate (`tools/conformance/compare.mjs`) produces **65 x 8**.
 
 ### Lifecycle fixtures
 
@@ -174,10 +180,10 @@ above. A per-language report's `status` field is one of:
 | `skipped-with-documented-limitation` | Fixture declares this status for `compatibility.<lang>`, with a matching non-empty `limitations.<lang>` string. Unchanged from `contracts/README.md`. |
 | `skipped-v1-out-of-scope` | **New.** The fixture (always in `contracts/extensions/`) targets a namespace cut from the v1 surface (ADR-0010); see the rule above. `limitation` names the cut namespace. |
 | `not-applicable-web` | **New, aggregate-only.** Web's `contracts/web/` suite (ADR-0009) covers this instead; the shared 65 fixtures encode async server semantics a synchronous cache-read surface cannot answer. Never emitted by a per-language runner — only by `tools/conformance/compare.mjs`'s synthesized web column. |
-| `not-implemented` | **New, aggregate-only.** No SDK exists yet for this language (rust/swift, Phase 6). Never emitted by a per-language runner — only by the aggregate's synthesized columns. |
+| `not-implemented` | **New, aggregate-only.** No SDK exists yet for this language. Never emitted by a per-language runner — only by the aggregate's synthesized columns. |
 
-A per-language runner (node/python/go/java) only ever emits the first four; the last two are
-synthesized by the aggregate comparator for the three columns that have no runner to ask.
+A per-language runner only ever emits the first four; the last two are
+synthesized by the aggregate comparator.
 
 ## Comparator algorithm (normative)
 
@@ -196,16 +202,11 @@ compare(actual, expect):
   extra keys in actual that are not excluded → fail (prevents silent metadata drift)
 ```
 
-**Exception — `getCapabilities` (ruling 18):** N/A in v1 — `getCapabilities` is cut
-(`skipped-v1-out-of-scope`, see above). This exception is retained here only as a pointer for
-anyone consulting an older revision of this file or the git history: the structured
-`{static, runtime}` matrix comparison it described no longer has a live fixture to apply to.
-
 **Extra-key strictness note:** node/python/java's runners currently check only the keys
 `expect` declares (they do not fail on an extra, undeclared key in `actual`); go's runner does
 enforce the extra-key rule above literally, a difference that predates this rewrite and was not
 changed by it. Tightening node/python/java to match is a legitimate future improvement, not
-done here (out of this rewrite's scope — see task-10-report.md).
+done here (out of this rewrite's scope).
 
 `EXCLUDE_SET` baseline: `timestamp`, `evaluatedAt`, `ts`, `createdAt`, `updatedAt`, `stack`,
 `stackTrace`, `requestId`, `uuid`, `traceId`, `spanId`, `messageId`, `latencyMs`, `durationMs`,
@@ -214,7 +215,7 @@ done here (out of this rewrite's scope — see task-10-report.md).
 ## test-server role
 
 `test-server/implementation/server.mjs` speaks the Fireweave-native remote protocol
-(`POST /v1/flags/evaluate`, `POST /v1/targets/register`) plus its admin control plane
+(`POST /v1/control-points/evaluate`) plus its admin control plane
 (`POST /_test/fault`, `/_test/flags`, `/_test/reset`). Node and Python spawn it directly (an
 `npm`/`bun` and a `python` toolchain both have a `node` binary available, or install one, so
 this is the norm). Go and Java's canonical CI containers
@@ -222,37 +223,12 @@ this is the norm). Go and Java's canonical CI containers
 table above for what each substitutes. All four still exercise the real `FireweaveRemoteAdapter`
 /`Adapter` over real HTTP; only the process on the other end of the socket differs.
 
-## Retired: OpenFeature Appendix B Gherkin slot-in
-
-Earlier revisions of this document described vendoring the OpenFeature spec's Appendix B
-`evaluation.feature` and running it per language via cucumber (`@cucumber/cucumber`,
-`pytest-bdd`/`behave`, `godog`, `cucumber-jvm`), plus an "oracle diff" against each language's
-official in-memory OpenFeature provider. ADR-0010 retired the OpenFeature bridge from every
-language entirely (no provider, no `dev.openfeature:sdk`/`@openfeature/*` runtime dependency) —
-there is no OpenFeature client left in any SDK to run Appendix B scenarios against, official or
-otherwise, so this integration plan is retired along with it. `contracts/{evaluation,context,
-lifecycle,faults,security,extensions}/*.json` are Fireweave's own fixture format and remain the
-sole conformance source of truth.
-
-## CI matrix (recommended)
-
-```
-languages: [node, python, go, java]        # real conformance runners
-languages (synthesized, aggregate-only): [web, rust, swift]
-jobs:
-  - contracts-json-fixtures    # per-language: node/python/go/java each execute + report
-  - compatibility-report-aggregate
-      # tools/conformance/compare.mjs — merges the four real reports, synthesizes
-      # web/rust/swift, enforces: no missing fixture x language cell, no silent status
-      # drift vs fixture declarations (except the ruled v1-scope extensions carve-out),
-      # fail on any "fail" row. Publishes build/conformance/{compatibility-report.json,
-      # summary.md} — see scripts/conformance-all.sh.
-```
+## Per-language `verify` vs the aggregate
 
 Per-language `verify`/`test` commands (`npm run verify`, `uv run pytest`, `go test ./...`,
 `mvn test`) are expected to pass green on their own — including their conformance entry — even
 though the strict cross-language aggregate may still show real, documented, out-of-scope
-divergences (see task-10-report.md "Concerns"): each language's test wrapper softens exactly
+divergences: each language's test wrapper softens exactly
 those known gaps (skip/xfail/assumption, never silently), while the report-writing CLI/`main()`
 entry point and the aggregate comparator both report them honestly. A green per-language `verify`
 is not the same claim as a clean aggregate — the aggregate is the stricter, cross-language gate.

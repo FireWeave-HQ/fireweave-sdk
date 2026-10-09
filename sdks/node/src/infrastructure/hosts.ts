@@ -1,5 +1,5 @@
 /**
- * Backend host allowlist (SSRF guard, release-blockers H-1).
+ * Backend host allowlist (SSRF guard).
  *
  * The allowlist is ON by default: when no explicit `allowedHosts` is
  * configured, only the canonical Fireweave hosts plus loopback are permitted,

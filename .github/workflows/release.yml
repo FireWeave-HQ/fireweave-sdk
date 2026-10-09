@@ -2,8 +2,8 @@
 #
 # DRY-RUN BY DEFAULT. Builds, changelogs, SBOMs, checksums; optionally tags.
 #
-# Inputs: `component` (server|web|python|java|go|rust|swift|all — `all` fans
-# out via matrix), `bump` (patch|minor|major — computed from the component's
+# Inputs: `component` (server|web|python|java|go|rust|swift|dart|all —
+# `all` fans out via matrix), `bump` (patch|minor|major — computed from the component's
 # OWN current manifest version by tools/release/version.sh; there is no
 # free-text `version` input anymore), `channel` (staging|production),
 # `dry_run` (default true).
@@ -34,27 +34,33 @@
 # matching component is selected. Requires trusted publishers / secrets (see
 # RELEASE.md).
 #
-# STAGING PUBLISH SCOPE EXTENDED (2026-08-21, during this implementation
-# work — NOT a separate human authorization; record it as such): npm for
-# `web` (identical OIDC trusted-publish mechanism as the already-authorized
-# `server`) and a rust `cargo publish --dry-run` (packages + validates only;
-# never uploads — see below) were added to the same dry_run=false AND
-# channel=staging gate. Flag for a human to backfill an explicit sign-off on
-# these two specifically if the 2026-07-27 authorization was meant to be
-# read as closed to new components.
+# STAGING PUBLISH SCOPE EXTENDED (2026-08-21): npm for `web` (identical
+# OIDC trusted-publish mechanism as the already-authorized `server`) and a
+# rust `cargo publish --dry-run` (packages + validates only; never uploads —
+# see below) were added to the same dry_run=false AND channel=staging gate.
 #
 # rust and swift have no staging registry at all (crates.io has no TestPyPI
 # equivalent, and yanking is not deletion — a real staging publish would
 # spend the version permanently): rust staging stops at
-# `cargo publish --dry-run` plus the git tag; go and swift staging (and
-# production) resolve from the git tag alone — for swift there is no publish
-# step whatsoever, staging or production.
+# `cargo publish --dry-run` plus the git tag; go staging (and production)
+# resolve from the git tag alone. swift publishes by pushing sdks/swift to a
+# mirror repository and tagging it there (publish-swift-mirror, decision D5).
+#
+# dart (ADR-0011, added 2026-09-02 during the dart-sdk implementation
+# work — NOT a separate human authorization; flag for a human to confirm)
+# takes rust's shape exactly: pub.dev has no staging registry either and a
+# published version can only be retracted, never deleted, so staging stops
+# at `dart pub publish --dry-run` plus the git tag. Production publishes to
+# pub.dev via pub.dev's own OIDC "automated publishing" (id-token: write,
+# environment `release`) — there is no token secret; pub.dev rejects the
+# publish until automated publishing is enabled for the package on pub.dev,
+# so this fails closed by construction.
 #
 # Production PyPI is enabled via channel=production (component=python) and also
 # via the dedicated tag-triggered workflow publish-python.yml (python/v*).
 # Maven Central is enabled via channel staging/production (component=java) and
-# via publish-java.yml (tag java/v*) — requires Central namespace verification
-# plus MAVEN_CENTRAL_* and MAVEN_GPG_* secrets. Missing secrets fail closed.
+# via publish-java.yml (tag java/v*) — requires MAVEN_CENTRAL_* and
+# MAVEN_GPG_* secrets. Missing secrets fail closed.
 # rust production (`cargo publish`) requires CARGO_REGISTRY_TOKEN — missing
 # fails closed the same way.
 # Production npm (dist-tag latest, both server and web) was HARD-DISABLED
@@ -80,14 +86,14 @@
 #   rust   -> rust/v0.1.0
 #   swift  -> swift/v0.1.0   (chosen to match the org convention; see RELEASE.md
 #                             for why a bare `vX.Y.Z` buys nothing here)
+#   dart   -> dart/v0.1.0    (org convention; pub.dev resolves by version,
+#                             never by git tag, so the prefix is free)
 #   go     -> sdks/go/v0.1.0   (Go REQUIRES the tag to equal the module
 #                               subdirectory path; see RELEASE.md)
 #
 # `node` -> `server` rename: the npm package is `@fireweaveai/server-sdk`
 # (renamed from `@fireweaveai/sdk` in an earlier task); its directory stays
-# `sdks/node`. The tag prefix changes from `node/v` to `server/v`. This
-# component has never published (`git tag` is empty and the npm registry
-# 404s on `@fireweaveai/server-sdk`), so no historical tag breaks.
+# `sdks/node`. The tag prefix changes from `node/v` to `server/v`.
 name: Release (dry-run by default)
 
 on:
@@ -97,7 +103,7 @@ on:
         description: 'SDK component to release ("all" fans out via matrix)'
         required: true
         type: choice
-        options: [server, web, python, java, go, rust, swift, all]
+        options: [server, web, python, java, go, rust, swift, dart, all]
       bump:
         description: 'Semver bump, applied to the component''s OWN current manifest version (any existing prerelease is stripped first)'
         required: true
@@ -136,12 +142,12 @@ jobs:
           COMPONENT: ${{ inputs.component }}
         run: |
           if [ "$COMPONENT" = all ]; then
-            COMPONENTS='["server","web","python","java","go","rust","swift"]'
+            component_list='["server","web","python","java","go","rust","swift","dart"]'
           else
-            COMPONENTS="[\"$COMPONENT\"]"
+            component_list="[\"$COMPONENT\"]"
           fi
-          echo "components=$COMPONENTS" >> "$GITHUB_OUTPUT"
-          echo "Releasing bump=${{ inputs.bump }} channel=${{ inputs.channel }} dry_run=${{ inputs.dry_run }} components=$COMPONENTS"
+          echo "components=$component_list" >> "$GITHUB_OUTPUT"
+          echo "Releasing bump=${{ inputs.bump }} channel=${{ inputs.channel }} dry_run=${{ inputs.dry_run }} components=$component_list"
 
   build:
     name: build, changelog, SBOM, checksums (${{ matrix.component }})
@@ -292,12 +298,15 @@ jobs:
         with:
           # 6.2.1 is the newest patch known to setup-swift@v2 (6.3.x is not listed).
           swift-version: '6.2.1'
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
 
       - name: Build all package artifacts (dry-run)
         run: bash scripts/build-all.sh
       - name: Run the full test suite (node/python/go/java + offline examples)
         run: bash scripts/test-all.sh
-      - name: Cross-language conformance (65x7 differential gate)
+      - name: Cross-language conformance (65x8 differential gate)
         run: bash scripts/conformance-all.sh
       - name: Publish comparator summary
         if: always()
@@ -355,8 +364,7 @@ jobs:
   # - Staging, when dry_run=false and channel=staging (two DIFFERENT dates —
   #   see the file header for the full split, not restated here):
   #     - authorized 2026-07-27: npm server, TestPyPI, Go proxy warm.
-  #     - scope extended 2026-08-21 (this implementation task, NOT a fresh
-  #       human authorization): npm web, rust `cargo publish --dry-run`.
+  #     - scope extended 2026-08-21: npm web, rust `cargo publish --dry-run`.
   #   Requires trusted publishers / secrets (RELEASE.md).
   # - Production npm: ENABLED 2026-09-09 (the second written authorization),
   #   both server and web, dist-tag `latest`, environment `release`.
@@ -483,9 +491,7 @@ jobs:
   #
   # environment: release — same gate as every other production publish job, so
   # adding required reviewers to that environment covers npm too. NOTE: the npm
-  # Trusted Publisher for each package must permit this environment; every
-  # successful OIDC publish so far ran under `release-staging`, so a TP pinned
-  # to that name will reject these jobs (RELEASE.md "Company-side provisioning").
+  # Trusted Publisher for each package must permit this environment.
   publish-npm-server-production:
     name: publish npm production (server-sdk, dist-tag latest)
     needs: [validate, build, verify, tag]
@@ -769,7 +775,7 @@ jobs:
             fi
           done
           if [ "$missing" -ne 0 ]; then
-            echo "::error::Java publication blocked: Central namespace/credentials/GPG not provisioned."
+            echo "::error::Java publication blocked: Central credentials/GPG not provisioned."
             exit 1
           fi
       - uses: actions/setup-java@v5
@@ -793,15 +799,82 @@ jobs:
         run: tools/release/version.sh apply java "${{ steps.version.outputs.release_version }}"
       - name: Sign + deploy
         working-directory: sdks/java
+        # Both channels publish (decision D4, ADR-0012): a staging run deploys
+        # X.Y.Z-staging.N, which Maven resolves only when asked for exactly, so an
+        # app can opt into the staging channel by version and the start profile's
+        # channel rule (spec/start-profile.md SP-13) sees "-staging.". The guard
+        # keeps a staging run from ever publishing a plain release version.
         env:
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+          RELEASE_VERSION: ${{ steps.version.outputs.release_version }}
+          CHANNEL: ${{ inputs.channel }}
         run: |
-          if [ "${{ inputs.channel }}" = "production" ]; then AUTO=true; else AUTO=false; fi
+          case "$CHANNEL:$RELEASE_VERSION" in
+            staging:*-staging.*|production:*) ;;
+            *) echo "::error::staging must publish an X.Y.Z-staging.N version, got '$RELEASE_VERSION'"; exit 1 ;;
+          esac
           mvn -B -ntp -Prelease -DskipTests deploy \
-            -Dcentral.autoPublish="$AUTO" \
+            -Dcentral.autoPublish=true \
             -Dcentral.waitUntil=validated
+
+  # Swift (decision D5, ADR-0012). SwiftPM resolves a package only from a
+  # repository whose ROOT holds Package.swift and whose tags are plain semver;
+  # this monorepo has neither (sdks/swift, swift/vX.Y.Z tags), so no Swift
+  # release has ever been installable. A release copies sdks/swift, with its
+  # BuildInfo.swift stamped for this version, to the mirror repository's root
+  # and tags it X.Y.Z there. Fails closed until the mirror and its deploy key
+  # exist (.github/RELEASE.md "Company-side provisioning").
+  publish-swift-mirror:
+    name: push the Swift mirror (SwiftPM)
+    needs: [validate, build, verify, tag]
+    if: ${{ inputs.dry_run == false && contains(fromJson(needs.validate.outputs.components), 'swift') }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.channel == 'production' && 'release' || 'release-staging' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-swift
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
+      - name: Require the mirror deploy key
+        env:
+          SWIFT_MIRROR_DEPLOY_KEY: ${{ secrets.SWIFT_MIRROR_DEPLOY_KEY }}
+        run: |
+          if [ -z "$SWIFT_MIRROR_DEPLOY_KEY" ]; then
+            echo "::error::SWIFT_MIRROR_DEPLOY_KEY is not set. Create the Swift mirror repository and its deploy key first (.github/RELEASE.md)."
+            exit 1
+          fi
+      - name: Stamp the Swift build info for this version
+        run: tools/release/version.sh apply swift "${{ steps.version.outputs.release_version }}"
+      - name: Push sdks/swift to the mirror and tag it
+        env:
+          SWIFT_MIRROR_DEPLOY_KEY: ${{ secrets.SWIFT_MIRROR_DEPLOY_KEY }}
+          MIRROR_REPO: ${{ vars.SWIFT_MIRROR_REPO || 'FireWeave-HQ/fireweave-swift' }}
+          RELEASE_VERSION: ${{ steps.version.outputs.release_version }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SWIFT_MIRROR_DEPLOY_KEY" > ~/.ssh/swift_mirror
+          chmod 600 ~/.ssh/swift_mirror
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/swift_mirror -o IdentitiesOnly=yes"
+          git clone --depth 1 "git@github.com:${MIRROR_REPO}.git" mirror
+          if git -C mirror ls-remote --exit-code --tags origin "refs/tags/${RELEASE_VERSION}" >/dev/null; then
+            echo "::error::${MIRROR_REPO} already has tag ${RELEASE_VERSION}; a released Swift version is never re-tagged."
+            exit 1
+          fi
+          rsync -a --delete --exclude .git sdks/swift/ mirror/
+          cp LICENSE mirror/LICENSE
+          git -C mirror config user.name "fireweave-release"
+          git -C mirror config user.email "release@fireweave.ai"
+          git -C mirror add -A
+          git -C mirror commit -m "Release ${RELEASE_VERSION} (fireweave-sdk ${GITHUB_SHA})"
+          git -C mirror tag -a "${RELEASE_VERSION}" -m "fireweave Swift ${RELEASE_VERSION}"
+          git -C mirror push origin HEAD "refs/tags/${RELEASE_VERSION}"
 
   publish-go:
     name: warm Go module proxy (staging)
@@ -943,3 +1016,80 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: cargo publish --locked --allow-dirty
+
+  publish-pub:
+    name: dart pub publish --dry-run (staging — no pub.dev upload)
+    needs: [validate, build, verify, tag]
+    if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'dart') }}
+    runs-on: ubuntu-latest
+    environment: release-staging
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-dart
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - name: Apply computed version
+        run: tools/release/version.sh apply dart "${{ steps.version.outputs.release_version }}"
+      - name: dart pub publish --dry-run (validates only — never uploads)
+        # No staging registry exists for pub.dev (same situation as
+        # crates.io) and a published version can only be retracted, never
+        # deleted, so a real staging publish would spend the version
+        # permanently. --dry-run proves the package is publishable without
+        # spending anything; the git tag (already pushed by the `tag` job,
+        # which this job needs) IS this release's staging artifact.
+        #
+        # --ignore-warnings is required the same way cargo's --allow-dirty
+        # is: `version.sh apply` rewrites pubspec.yaml in the workspace
+        # (dirty tree), and package CHANGELOG.md does not list every
+        # -staging.N. Those are warnings; without --ignore-warnings dart
+        # pub exits 65. (--force cannot be combined with --dry-run.)
+        working-directory: sdks/dart
+        run: |
+          dart pub get
+          dart pub publish --dry-run --ignore-warnings
+
+  publish-pub-production:
+    name: publish pub.dev (production)
+    needs: [validate, build, verify, tag]
+    if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'dart') }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write # pub.dev automated publishing (OIDC) — no long-lived token; setup-dart exchanges it
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-info-dart
+          path: release-info
+      - name: Load computed release version
+        id: version
+        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - name: Assert OIDC preconditions
+        # pub.dev automated publishing must be enabled for `fireweave` on
+        # pub.dev (RELEASE.md provisioning) with this repository, this
+        # workflow file, and the `release` environment — otherwise the
+        # publish below is rejected by pub.dev. Fails closed either way.
+        run: |
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo "::error::OIDC id-token request vars absent — enable pub.dev automated publishing and permissions.id-token: write"
+            exit 1
+          fi
+      - name: Apply computed version
+        run: tools/release/version.sh apply dart "${{ steps.version.outputs.release_version }}"
+      - name: Publish to pub.dev
+        working-directory: sdks/dart
+        run: |
+          dart pub get
+          dart pub publish --force

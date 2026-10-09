@@ -1,0 +1,16 @@
+{
+  // Node build tooling (/vite, /define). Separate from tsconfig.json because
+  // these files run in Node at config time and need node types, which src/
+  // must never see (browser-portability.test.ts). They import only the pure
+  // start-profile modules (policy, names, build-info) from src/.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist/build",
+    "declaration": true,
+    "sourceMap": true,
+    "lib": ["ES2022"],
+    "types": ["node"]
+  },
+  "include": ["node/**/*.ts"]
+}

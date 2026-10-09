@@ -7,11 +7,11 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {}
+    "controlPoints": {}
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-does-not-exist",
+    "controlPointKey": "fw-does-not-exist",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {
@@ -24,8 +24,8 @@
     "reason": "ERROR",
     "errorCode": "FLAG_NOT_FOUND",
     "errorMessage": "flag not found",
-    "flagMetadata": {
-      "fireweave.errorKind": "FlagNotFound"
+    "controlPointMetadata": {
+      "fireweave.errorKind": "ControlPointNotFound"
     }
   },
   "schemaVersion": 1,

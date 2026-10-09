@@ -24,7 +24,7 @@ public class FireweaveException extends RuntimeException {
      * (InvalidContext -&gt; TARGETING_KEY_MISSING; runtime Configuration -&gt; GENERAL).
      */
     private final String openFeatureErrorCodeOverride;
-    /** Extra flagMetadata to attach to error decisions (e.g. fireweave.quotaLimited). */
+    /** Extra controlPointMetadata to attach to error decisions (e.g. fireweave.quotaLimited). */
     private final Map<String, Object> decisionMetadata;
 
     public FireweaveException(ErrorKind kind) {
@@ -61,7 +61,7 @@ public class FireweaveException extends RuntimeException {
         return openFeatureErrorCodeOverride != null ? openFeatureErrorCodeOverride : kind.openFeatureErrorCode();
     }
 
-    /** Extra flagMetadata entries to merge into the error decision. Never null. */
+    /** Extra controlPointMetadata entries to merge into the error decision. Never null. */
     public Map<String, Object> decisionMetadata() {
         return decisionMetadata;
     }
@@ -72,11 +72,11 @@ public class FireweaveException extends RuntimeException {
                 "TARGETING_KEY_MISSING", null);
     }
 
-    /** Quota-limited empty snapshot: FlagNotFound plus {@code fireweave.quotaLimited: true}. */
+    /** Quota-limited empty snapshot: ControlPointNotFound plus {@code fireweave.quotaLimited: true}. */
     public static FireweaveException quotaLimited() {
         Map<String, Object> meta = new LinkedHashMap<>();
         meta.put("fireweave.quotaLimited", true);
-        return new FireweaveException(ErrorKind.FlagNotFound, ErrorKind.FlagNotFound.defaultMessage(), null,
+        return new FireweaveException(ErrorKind.ControlPointNotFound, ErrorKind.ControlPointNotFound.defaultMessage(), null,
                 null, meta);
     }
 }

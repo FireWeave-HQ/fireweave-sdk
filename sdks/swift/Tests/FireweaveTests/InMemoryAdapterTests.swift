@@ -50,7 +50,7 @@ struct InMemoryAdapterTests {
   }
 
   @Test func vendorMetadataGateRequiresAllThreeSignals() async throws {
-    // vendorFlagId + reasonCode but NO conditionIndex -> gate fails, no
+    // vendorControlPointId + reasonCode but NO conditionIndex -> gate fails, no
     // metadata surfaces at the adapter level either.
     let adapter = InMemoryAdapter.from(flagsJSON: [
       "f": .object([
@@ -60,7 +60,7 @@ struct InMemoryAdapterTests {
       ])
     ])
     let result = try await adapter.prefetch(context: EvaluationContext(), options: nil)
-    #expect(result["f"]?.vendorFlagId == nil)
+    #expect(result["f"]?.vendorControlPointId == nil)
     #expect(result["f"]?.reasonCode == nil)
   }
 }

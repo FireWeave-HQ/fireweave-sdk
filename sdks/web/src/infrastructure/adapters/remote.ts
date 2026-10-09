@@ -2,7 +2,7 @@
  * Fireweave remote adapter for browsers — the production path.
  *
  * Speaks only the vendor-neutral Fireweave remote protocol to fw-server:
- *   POST /v1/flags/evaluate    (batch — one call per context, not per key)
+ *   POST /v1/control-points/evaluate    (batch — one call per context, not per key)
  *   POST /v1/capture
  *   POST /v1/targets/register
  *
@@ -30,7 +30,7 @@ import type {
 } from '../../application/ports.js';
 import type { CanonicalContext, DecisionReason, Exposure, JsonValue, Signal } from '../../domain/types.js';
 
-const EVALUATE_PATH = '/v1/flags/evaluate';
+const EVALUATE_PATH = '/v1/control-points/evaluate';
 const CAPTURE_PATH = '/v1/capture';
 const REGISTER_TARGET_PATH = '/v1/targets/register';
 
@@ -51,14 +51,14 @@ export interface FireweaveRemoteWebAdapterOptions {
 }
 
 interface DecisionItem {
-  flagKey: string;
+  controlPointKey: string;
   value: JsonValue;
   reason: string;
   found: boolean;
   enabled?: boolean;
   variant?: string | null;
   payload?: JsonValue;
-  flagMetadata?: Record<string, string | number | boolean>;
+  controlPointMetadata?: Record<string, string | number | boolean>;
 }
 
 interface EvaluateResponse {
@@ -70,7 +70,7 @@ interface CaptureEvent {
   type: 'exposure' | 'signal' | 'event';
   targetingKey: string;
   name?: string;
-  flagKey?: string;
+  controlPointKey?: string;
   value?: JsonValue;
   variant?: string | null;
   timestamp?: string;
@@ -154,8 +154,8 @@ export class FireweaveRemoteWebAdapter implements WebBackendAdapter {
     if (Object.keys(attributes).length > 0) body['attributes'] = attributes;
     if (context.groups !== undefined) body['groups'] = context.groups;
     if (context.groupProperties !== undefined) body['groupProperties'] = context.groupProperties;
-    if (options?.flagKeys !== undefined && options.flagKeys.length > 0) {
-      body['flagKeys'] = options.flagKeys;
+    if (options?.controlPointKeys !== undefined && options.controlPointKeys.length > 0) {
+      body['controlPointKeys'] = options.controlPointKeys;
     }
 
     const response = await this.requestJson<EvaluateResponse>(
@@ -166,7 +166,7 @@ export class FireweaveRemoteWebAdapter implements WebBackendAdapter {
 
     const out = new Map<string, AdapterResolution>();
     for (const item of response.decisions ?? []) {
-      out.set(item.flagKey, this.toResolution(item, response.quotaLimited === true));
+      out.set(item.controlPointKey, this.toResolution(item, response.quotaLimited === true));
     }
     return out;
   }
@@ -207,7 +207,7 @@ export class FireweaveRemoteWebAdapter implements WebBackendAdapter {
     const event: CaptureEvent = {
       type: 'exposure',
       targetingKey: exposure.targetingKey,
-      flagKey: exposure.flagKey,
+      controlPointKey: exposure.controlPointKey,
       value: exposure.value,
     };
     if (exposure.variant !== undefined) event.variant = exposure.variant;
@@ -231,7 +231,7 @@ export class FireweaveRemoteWebAdapter implements WebBackendAdapter {
         ...(signal.value !== undefined ? { value: signal.value } : {}),
       },
     };
-    if (signal.flagKey !== undefined) event.flagKey = signal.flagKey;
+    if (signal.controlPointKey !== undefined) event.controlPointKey = signal.controlPointKey;
     if (signal.variant !== undefined) event.variant = signal.variant;
     if (signal.rolloutId !== undefined) event.rolloutId = signal.rolloutId;
     if (signal.timestamp !== undefined) event.timestamp = signal.timestamp;
@@ -319,9 +319,9 @@ export class FireweaveRemoteWebAdapter implements WebBackendAdapter {
     const reason = toReason(item.reason);
     if (reason !== undefined) resolution.reason = reason;
     if (item.payload !== undefined) resolution.payload = item.payload;
-    const meta = item.flagMetadata ?? {};
-    if (typeof meta['fireweave.flagVersion'] === 'number') {
-      resolution.version = meta['fireweave.flagVersion'];
+    const meta = item.controlPointMetadata ?? {};
+    if (typeof meta['fireweave.controlPointVersion'] === 'number') {
+      resolution.version = meta['fireweave.controlPointVersion'];
     }
     if (typeof meta['fireweave.reasonCode'] === 'string') {
       resolution.reasonCode = meta['fireweave.reasonCode'];
