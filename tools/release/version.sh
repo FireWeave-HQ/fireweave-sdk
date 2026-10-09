@@ -443,12 +443,14 @@ remote_tag_versions() {
 # across channels; go/swift have no package registry, only git tags — see
 # RELEASE.md), so for them the "registry" queried here is always
 # `git ls-remote` against origin. For
-# dart on channel=staging the same applies — the git tag IS the staging
-# artifact — so rc-N must be read from tags, not pub.dev (which never
-# receives -rc.N uploads).
-# Production dart still reads pub.dev. Live network round-trip against the
-# shared remote, not a local file; for go specifically this is MORE
-# authoritative than proxy.golang.org (itself just a cache over these tags).
+# rust and dart on channel=staging the same applies — the git tag IS the
+# staging artifact — so rc-N must be read from tags, not crates.io / pub.dev
+# (which never receive -rc.N uploads; read from them, N would restart at 1 on
+# every run and the second rc's tag push would collide).
+# Production rust and dart still read crates.io / pub.dev. Live network
+# round-trip against the shared remote, not a local file; for go specifically
+# this is MORE authoritative than proxy.golang.org (itself just a cache over
+# these tags).
 registry_versions() {
   local component="$1" channel="$2"
   case "$component" in
@@ -459,7 +461,11 @@ registry_versions() {
       pypi_versions "https://pypi.org" fireweave
       ;;
     rust)
-      crates_versions fireweave
+      if [ "$channel" = staging ]; then
+        remote_tag_versions "$(component_tag_prefix "$component")"
+      else
+        crates_versions fireweave
+      fi
       ;;
     dart)
       if [ "$channel" = staging ]; then
