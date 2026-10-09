@@ -1,19 +1,14 @@
 # Publish the Python SDK (`fireweave`) to PyPI.
 #
-# Triggers:
-#   - push of org tag `python/v<semver>` (e.g. python/v0.1.0), pushed BY A
-#     HUMAN. Tags created by release.yml's `tag` job do NOT fire this: GitHub
-#     suppresses workflow triggers for refs pushed with the default
-#     GITHUB_TOKEN, so a CI-tagged release reaches PyPI only through
-#     release.yml's own `channel=production` path. Do not read a green
-#     release.yml run as "and then publish-python.yml took it from there".
-#   - workflow_dispatch with an explicit version
+# Trigger: workflow_dispatch only, with an explicit plain version — a manual
+# recovery path for a plain X.Y.Z. Routine releases, production and rc alike,
+# go through release.yml (component=python); the `python/v*` tag-push trigger
+# is retired, so a pushed tag never publishes.
 #
-# The resolved version is APPLIED to pyproject.toml here rather than asserted
-# to match it — the tag is the release identity, and the committed manifest
-# trails every shipped release because no publish job writes the version back.
-# Only plain `X.Y.Z` is accepted: `python/v*` also matches the `X.Y.ZaN`
-# staging tags, and those belong on TestPyPI.
+# The dispatched version is APPLIED to pyproject.toml here rather than asserted
+# to match it — the committed manifest trails every shipped release because no
+# publish job writes the version back. Only plain `X.Y.Z` is accepted: staging
+# builds (`X.Y.ZrcN`) publish to PyPI only through release.yml channel=staging.
 #
 # Auth (prefer token; OIDC optional):
 #   - Repository or `release` environment secret: PYPI_API_TOKEN
@@ -23,9 +18,6 @@
 name: Publish Python SDK
 
 on:
-  push:
-    tags:
-      - 'python/v*'
   workflow_dispatch:
     inputs:
       version:
@@ -57,33 +49,20 @@ jobs:
 
       - name: Resolve release version
         id: ver
-        # The tag, not pyproject.toml, is the release identity. No publish job
-        # writes the applied version back to the repo, so pyproject.toml on
-        # master trails every shipped release — an equality assertion between
-        # the two can only ever fail, which is why this workflow's tag path had
-        # never once completed. Resolve the version here and APPLY it below,
-        # the way publish-java.yml already does with versions:set.
+        # No publish job writes the applied version back to the repo, so
+        # pyproject.toml on master trails every shipped release — an equality
+        # assertion between the two can only ever fail. Resolve the version
+        # here and APPLY it below, the way publish-java.yml does with
+        # versions:set.
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.version }}"
-          else
-            REF="${GITHUB_REF_NAME}"
-            case "$REF" in
-              python/v*) VERSION="${REF#python/v}" ;;
-              *)
-                echo "::error::Unexpected tag '$REF' (expected python/v<semver>)"
-                exit 1
-                ;;
-            esac
-          fi
-          # pypi.org is the PRODUCTION index. Staging identities (`X.Y.ZaN`,
-          # PEP 440 alphas minted by release.yml channel=staging) belong on
-          # test.pypi.org and must never reach it through a tag push — the
-          # `python/v*` trigger matches those staging tags too.
+          VERSION="${{ inputs.version }}"
+          # This manual path publishes plain versions only. Staging builds
+          # (`X.Y.ZrcN`, minted by release.yml channel=staging) go to PyPI
+          # through release.yml, never through this workflow.
           if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "::error::'$VERSION' is not a plain X.Y.Z release version."
-            echo "::error::Staging builds (e.g. 2.3.0a1) go to TestPyPI via release.yml channel=staging, never to pypi.org."
+            echo "::error::Staging builds (X.Y.ZrcN) publish to PyPI only through release.yml channel=staging."
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"

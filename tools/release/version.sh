@@ -2,12 +2,13 @@
 # Read -> bump -> write the release version for one SDK component.
 #
 # Usage:
-#   tools/release/version.sh compute <component> <bump> <channel> [--manifest-root DIR]
-#   tools/release/version.sh apply   <component> <release-version> [--manifest-root DIR]
+#   tools/release/version.sh compute     <component> <bump> <channel> [--manifest-root DIR]
+#   tools/release/version.sh apply       <component> <release-version> [--manifest-root DIR]
+#   tools/release/version.sh check-stamp <component> <channel> [<go-version>] [--manifest-root DIR]
 #
 #   component : server | web | python | java | go | rust | swift | dart
 #   bump      : patch | minor | major        (compute only)
-#   channel   : staging | production          (compute only)
+#   channel   : staging | production          (compute, check-stamp)
 #   --manifest-root DIR : resolve/write manifests under DIR instead of the
 #                repo root (points `apply` — or `compute`'s reads — at a
 #                scratch copy so nothing ever mutates the real manifest).
@@ -16,14 +17,19 @@
 # — which carry no version field; the git tag IS the version record — the
 # highest existing plain `<prefix>/vX.Y.Z` tag, defaulting to 0.0.0 when none
 # exists), strips any prerelease/build metadata, applies <bump>, and — for
-# channel=staging — appends a staging iteration whose N is the next unused
-# for that base version:
-#   - most ecosystems: `X.Y.Z-staging.N` (npm / Cargo / git-tag consumers)
-#   - python only:     `X.Y.ZaN` (PEP 440; `-staging.N` is rejected by
-#                      packaging/setuptools and cannot be uploaded to
-#                      TestPyPI/PyPI)
-# It prints `key=value` lines to stdout (GITHUB_OUTPUT-compatible; see the
-# block below) and never writes anything.
+# channel=staging — appends a release-candidate iteration whose N is the next
+# unused for that base version. In FireWeave SDKs `rc` means "a pre-release
+# that calls the staging fw-server" (spec/start-profile.md SP-13):
+#   - most ecosystems: `X.Y.Z-rc.N` (npm / Maven Central / Cargo / pub /
+#                      git-tag consumers)
+#   - python only:     `X.Y.ZrcN` on PyPI, the normalised PEP 440 form, so the
+#                      git tag, the wheel and the PyPI version are identical
+#                      (`-rc.N` is valid PEP 440 but would be normalised to
+#                      `rcN` on upload)
+# Legacy `-staging.N` / `aN` versions are not rc iterations: they are ignored,
+# so the first rc of a base is N=1. A staging version without the rc spelling
+# is refused (exit 4). It prints `key=value` lines to stdout
+# (GITHUB_OUTPUT-compatible; see the block below) and never writes anything.
 #
 # `apply` takes an ALREADY-COMPUTED release version (typically `compute`'s
 # own `release_version` output, downloaded from wherever `compute` ran) and
@@ -44,12 +50,19 @@
 # removes the race entirely, for every ecosystem, not just the ones where it
 # would otherwise bite.
 #
+# `check-stamp` runs after `apply`, in the workspace that is about to publish,
+# and fails (exit 4) unless the channel the stamped artifact will call equals
+# <channel>: the stamp file for server/web/dart/swift, and the manifest version
+# read through the runtime rule for rust/java/python (go has no manifest, so
+# the tag's version is passed in). It is the last check before an
+# irreversible publish.
+#
 # Two mandated behaviors:
-#   - any existing prerelease is stripped BEFORE bumping (1.4.0-staging.3 +
-#     patch = 1.4.1, never 1.4.0-staging.4) — strip_prerelease() + semver_bump().
-#   - the staging iteration N is read from the ecosystem's registry, not a
+#   - any existing prerelease is stripped BEFORE bumping (1.4.0-rc.3 +
+#     patch = 1.4.1, never 1.4.0-rc.4) — strip_prerelease() + semver_bump().
+#   - the rc iteration N is read from the ecosystem's registry, not a
 #     local file, so two operators releasing from different branches both
-#     see the true next N — registry_versions() + max_staging_n().
+#     see the true next N — registry_versions() + max_rc_n().
 #
 # Sibling script: tools/release/changelog.sh (style/conventions followed here).
 
@@ -61,12 +74,17 @@ ROOT="$(cd "$HERE/../.." && pwd)"
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  version.sh compute <component> <bump> <channel> [--manifest-root DIR]
-  version.sh apply   <component> <release-version> [--manifest-root DIR]
+  version.sh compute     <component> <bump> <channel> [--manifest-root DIR]
+  version.sh apply       <component> <release-version> [--manifest-root DIR]
+  version.sh check-stamp <component> <channel> [<go-version>] [--manifest-root DIR]
 
   component : server | web | python | java | go | rust | swift | dart
   bump      : patch | minor | major
   channel   : staging | production
+  go-version: check-stamp go only — the tag's version (go has no manifest)
+
+Exit codes: 2 usage, 3 production version already spent,
+            4 staging spelling or stamped channel does not match the channel
 EOF
 }
 
@@ -121,7 +139,7 @@ require_known_component() {
 # --------------------------------------------------------------------------
 
 # Strip any prerelease AND build-metadata segment:
-#   "1.4.0-staging.3+x" -> "1.4.0"
+#   "1.4.0-rc.3+x" -> "1.4.0"
 #   "1.4.0a3" / "1.4.0b1" / "1.4.0rc2" -> "1.4.0"  (PEP 440; python staging)
 #   "1.4.0.dev1" / "1.4.0.post1" -> "1.4.0"
 semver_strip_prerelease() {
@@ -154,13 +172,14 @@ semver_bump() {
   printf '%s.%s.%s\n' "$major" "$minor" "$patch"
 }
 
-# "1.4.0-staging.3" "1.4.0" -> "3" (exit 1, no stdout, if $1 is not a
-# "<base>-staging.<digits>" string — including a non-matching base).
-extract_staging_n() {
+# "1.4.0-rc.3" "1.4.0" -> "3" (exit 1, no stdout, if $1 is not a
+# "<base>-rc.<digits>" string — including a non-matching base, and a legacy
+# "<base>-staging.<digits>", which is not an rc iteration).
+extract_rc_n() {
   local v="$1" base="$2" rest
   case "$v" in
-    "${base}-staging."*)
-      rest="${v#"${base}"-staging.}"
+    "${base}-rc."*)
+      rest="${v#"${base}"-rc.}"
       rest="${rest%%+*}"
       case "$rest" in
         ''|*[!0-9]*) return 1 ;;
@@ -172,28 +191,29 @@ extract_staging_n() {
 }
 
 # <base-version> <newline-separated existing version strings via stdin> ->
-# highest existing "-staging.N" iteration for that base, or 0 if none.
-max_staging_n() {
+# highest existing "-rc.N" iteration for that base, or 0 if none.
+max_rc_n() {
   local base="$1" max=0 n line
   # `|| [ -n "$line" ]` so the last line is still processed when the input
   # (e.g. a plain `printf '%s'` with no trailing newline) has none — `read`
   # returns non-zero on that final, newline-less line but still populates it.
   while IFS= read -r line || [ -n "$line" ]; do
     [ -z "$line" ] && continue
-    if n="$(extract_staging_n "$line" "$base" 2>/dev/null)"; then
+    if n="$(extract_rc_n "$line" "$base" 2>/dev/null)"; then
       if [ "$n" -gt "$max" ]; then max="$n"; fi
     fi
   done
   printf '%s\n' "$max"
 }
 
-# "1.4.0a3" "1.4.0" -> "3" (PEP 440 alpha used for python staging).
-# Exit 1 with no stdout when $1 is not "<base>a<digits>".
-extract_pep440_alpha_n() {
+# "1.4.0rc3" "1.4.0" -> "3" (PEP 440 release candidate used for python
+# staging). Exit 1 with no stdout when $1 is not "<base>rc<digits>"; a legacy
+# "<base>aN" is not an rc iteration.
+extract_pep440_rc_n() {
   local v="$1" base="$2" rest
   case "$v" in
-    "${base}a"*)
-      rest="${v#"${base}"a}"
+    "${base}rc"*)
+      rest="${v#"${base}"rc}"
       rest="${rest%%+*}"
       case "$rest" in
         ''|*[!0-9]*) return 1 ;;
@@ -204,12 +224,12 @@ extract_pep440_alpha_n() {
   esac
 }
 
-# Same as max_staging_n but for PEP 440 "<base>aN" (python TestPyPI/PyPI).
-max_pep440_alpha_n() {
+# Same as max_rc_n but for PEP 440 "<base>rcN" (python, on PyPI).
+max_pep440_rc_n() {
   local base="$1" max=0 n line
   while IFS= read -r line || [ -n "$line" ]; do
     [ -z "$line" ] && continue
-    if n="$(extract_pep440_alpha_n "$line" "$base" 2>/dev/null)"; then
+    if n="$(extract_pep440_rc_n "$line" "$base" 2>/dev/null)"; then
       if [ "$n" -gt "$max" ]; then max="$n"; fi
     fi
   done
@@ -227,6 +247,58 @@ highest_plain_version() {
     | sort \
     | tail -n1 \
     | cut -d' ' -f2
+}
+
+# <component> <version> -> "staging" | "production": the channel a build of
+# that version calls at runtime (spec/start-profile.md SP-13). Semver SDKs: a
+# version containing "-rc." is staging; everything else (a legacy -staging.N,
+# -rc with no N, build metadata, -beta.N, a plain release) is production.
+# Python keeps PEP 440: any pre-release or dev release is staging, with the
+# same patterns as sdks/python/src/fireweave/start/_build_info.py.
+version_channel() {
+  local component="$1" version="$2"
+  if [ "$component" = python ]; then
+    python3 - "$version" <<'PY'
+import re, sys
+public = sys.argv[1].strip().split("+", 1)[0]
+release = re.match(r"^v?(?:\d+!)?\d+(?:\.\d+)*", public, re.IGNORECASE)
+pre_or_dev = re.compile(r"^[-_.]?(?:a|b|c|rc|alpha|beta|pre|preview|dev)(?:[-_.]?\d+)?(?![a-z])", re.IGNORECASE)
+post = re.compile(r"^(?:-\d+|[-_.]?(?:post|rev|r)(?:[-_.]?\d+)?)", re.IGNORECASE)
+if release is None:
+    print("production")
+    sys.exit(0)
+rest = public[release.end():]
+p = post.match(rest)
+if p is not None and not pre_or_dev.match(rest):
+    rest = rest[p.end():]
+print("staging" if pre_or_dev.match(rest) else "production")
+PY
+    return
+  fi
+  case "$version" in
+    *-rc.*) printf 'staging\n' ;;
+    *) printf 'production\n' ;;
+  esac
+}
+
+# <component> <computed staging version> -> nothing, or exit 4. compute builds
+# the rc spelling itself; this re-checks the string it built, so a staging run
+# never emits anything else (a legacy -staging.N, an alpha, a plain version).
+# The real protection is check-stamp, after apply.
+assert_staging_spelling() {
+  local component="$1" version="$2"
+  case "$component:$version" in
+    python:*-*) ;;
+    python:*rc[0-9]*) return 0 ;;
+    python:*) ;;
+    *:*-rc.*) return 0 ;;
+  esac
+  if [ "$component" = python ]; then
+    echo "version.sh: staging must compute a PEP 440 X.Y.ZrcN version for python, got '$version'" >&2
+  else
+    echo "version.sh: staging must compute an X.Y.Z-rc.N version for $component, got '$version'" >&2
+  fi
+  exit 4
 }
 
 # --------------------------------------------------------------------------
@@ -281,7 +353,7 @@ npm_versions() {
   return 2
 }
 
-# <pypi index base URL, e.g. https://test.pypi.org> <project name> -> newline
+# <pypi index base URL, e.g. https://pypi.org> <project name> -> newline
 # list of every published version.
 pypi_versions() {
   local index="$1" name="$2" body
@@ -347,7 +419,8 @@ for v in d.get("versions", []):
 }
 
 # <tag prefix, e.g. "java" or "sdks/go"> -> newline list of every "X.Y.Z" (or
-# "X.Y.Z-staging.N") segment following "<prefix>/v" among tags on the ORIGIN
+# "X.Y.Z-rc.N", or a legacy "X.Y.Z-staging.N", which the rc counter ignores)
+# segment following "<prefix>/v" among tags on the ORIGIN
 # remote (a live network query, not the local tag cache — see the module
 # header for why this matters).
 remote_tag_versions() {
@@ -359,16 +432,20 @@ remote_tag_versions() {
 
 # component channel -> newline list of every version string known to that
 # component's registry (staging: wherever a staging publish would actually
-# land; production: the real registry) — the sole input to max_staging_n().
+# land; production: the real registry) — the sole input to max_rc_n() /
+# max_pep440_rc_n().
 #
-# No staging registry exists for rust or dart (crates.io / pub.dev have no
-# TestPyPI equivalent; a real staging upload would spend the version), and
-# none exists at all for go/java/swift (Maven Central Portal shares one
-# credential set across channels; go/swift have no package registry, only
-# git tags — see RELEASE.md). For go/java/swift the "registry" queried here
-# is always `git ls-remote` against origin. For dart on channel=staging the
-# same applies — the git tag IS the staging artifact — so staging-N must be
-# read from tags, not pub.dev (which never receives -staging.N uploads).
+# No Python staging index exists any more: Python rc builds go to pypi.org
+# itself as X.Y.ZrcN (pip skips pre-releases unless pinned), so both channels
+# read pypi.org. Rust and dart upload nothing on staging (crates.io / pub.dev
+# cannot delete a version; a real staging upload would spend it). go/java/swift
+# are counted from git tags (Maven Central Portal shares one credential set
+# across channels; go/swift have no package registry, only git tags — see
+# RELEASE.md), so for them the "registry" queried here is always
+# `git ls-remote` against origin. For
+# dart on channel=staging the same applies — the git tag IS the staging
+# artifact — so rc-N must be read from tags, not pub.dev (which never
+# receives -rc.N uploads).
 # Production dart still reads pub.dev. Live network round-trip against the
 # shared remote, not a local file; for go specifically this is MORE
 # authoritative than proxy.golang.org (itself just a cache over these tags).
@@ -379,11 +456,7 @@ registry_versions() {
       npm_versions "$(component_npm_package "$component")"
       ;;
     python)
-      if [ "$channel" = staging ]; then
-        pypi_versions "https://test.pypi.org" fireweave
-      else
-        pypi_versions "https://pypi.org" fireweave
-      fi
+      pypi_versions "https://pypi.org" fireweave
       ;;
     rust)
       crates_versions fireweave
@@ -511,8 +584,9 @@ PY
 }
 
 # The server SDK's start profile picks its default fw-server host from the
-# channel it was published on (docs/adr/0012-start-profile.md): a
-# `-staging.N` build talks to staging, a plain version to production. The
+# channel it was published on (docs/adr/0012-start-profile.md): a `-rc.N`
+# build talks to staging; anything else, a legacy `-staging.N` included, to
+# production. The
 # package has no other runtime record of its own version, so `apply` stamps it.
 # sdks/node/test/unit/start-build-info.test.ts fails CI if this drifts from
 # package.json.
@@ -521,7 +595,7 @@ PY
 write_build_info() {
   local component="$1" package_dir="$2" version="$3" channel="production"
   case "$version" in
-    *-staging.*) channel="staging" ;;
+    *-rc.*) channel="staging" ;;
   esac
   mkdir -p "$package_dir/src/start"
   cat > "$package_dir/src/start/build-info.ts" <<EOF
@@ -539,7 +613,7 @@ EOF
 write_dart_build_info() {
   local package_dir="$1" version="$2" channel="production"
   case "$version" in
-    *-staging.*) channel="staging" ;;
+    *-rc.*) channel="staging" ;;
   esac
   mkdir -p "$package_dir/lib/src/start"
   cat > "$package_dir/lib/src/start/build_info.dart" <<EOF
@@ -560,7 +634,7 @@ EOF
 write_swift_build_info() {
   local package_dir="$1" version="$2" channel="production"
   case "$version" in
-    *-staging.*) channel="staging" ;;
+    *-rc.*) channel="staging" ;;
   esac
   mkdir -p "$package_dir/Sources/FireweaveStart"
   cat > "$package_dir/Sources/FireweaveStart/BuildInfo.swift" <<EOF
@@ -644,16 +718,16 @@ cmd_compute() {
   if [ "$channel" = staging ]; then
     local existing
     existing="$(registry_versions "$component" "$channel")"
-    # Python must use PEP 440 (`XaN`); `-staging.N` fails packaging and
-    # cannot be uploaded to TestPyPI/PyPI. Other ecosystems keep the
-    # shared `-staging.N` form.
+    # Python uses the normalised PEP 440 form (`XrcN`), uploaded to PyPI;
+    # every other ecosystem uses the shared `-rc.N` form.
     if [ "$component" = python ]; then
-      staging_n=$(( $(printf '%s' "$existing" | max_pep440_alpha_n "$bumped_version") + 1 ))
-      release_version="${bumped_version}a${staging_n}"
+      staging_n=$(( $(printf '%s' "$existing" | max_pep440_rc_n "$bumped_version") + 1 ))
+      release_version="${bumped_version}rc${staging_n}"
     else
-      staging_n=$(( $(printf '%s' "$existing" | max_staging_n "$bumped_version") + 1 ))
-      release_version="${bumped_version}-staging.${staging_n}"
+      staging_n=$(( $(printf '%s' "$existing" | max_rc_n "$bumped_version") + 1 ))
+      release_version="${bumped_version}-rc.${staging_n}"
     fi
+    assert_staging_spelling "$component" "$release_version"
   else
     release_version="$bumped_version"
     assert_production_version_free "$component" "$release_version"
@@ -712,6 +786,85 @@ cmd_apply() {
   echo "version.sh: wrote $release_version to $rel_manifest" >&2
 }
 
+# <file> <sed -E expression capturing the channel> -> the channel string a
+# stamp file records, or "" when the file or the line is missing.
+read_stamp() {
+  local file="$1" expr="$2"
+  [ -f "$file" ] || return 0
+  sed -nE "$expr" "$file" | head -n1
+}
+
+cmd_check_stamp() {
+  local component="${1:?usage: version.sh check-stamp <component> <channel> [<go-version>]}"
+  local channel="${2:?usage: version.sh check-stamp <component> <channel> [<go-version>]}"
+  shift 2
+  local manifest_root="$ROOT" go_version=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --manifest-root) manifest_root="${2:?--manifest-root requires a path}"; shift 2 ;;
+      -*) echo "version.sh: unknown flag '$1'" >&2; usage; exit 2 ;;
+      *)
+        if [ "$component" != go ] || [ -n "$go_version" ]; then
+          echo "version.sh: unexpected argument '$1' (only check-stamp go takes a version)" >&2
+          usage
+          exit 2
+        fi
+        go_version="$1"
+        shift
+        ;;
+    esac
+  done
+
+  require_known_component "$component"
+  case "$channel" in
+    staging|production) ;;
+    *) echo "version.sh: invalid channel '$channel' (staging|production)" >&2; exit 2 ;;
+  esac
+
+  local stamped="" source="" version
+  case "$component" in
+    server|web)
+      if [ "$component" = server ]; then source="sdks/node"; else source="sdks/web"; fi
+      source="$source/src/start/build-info.ts"
+      stamped="$(read_stamp "$manifest_root/$source" "s/^export const SDK_CHANNEL[^=]*= '([a-z]+)';.*/\1/p")"
+      ;;
+    dart)
+      source="sdks/dart/lib/src/start/build_info.dart"
+      stamped="$(read_stamp "$manifest_root/$source" "s/^const String buildSdkChannel = '([a-z]+)';.*/\1/p")"
+      ;;
+    swift)
+      source="sdks/swift/Sources/FireweaveStart/BuildInfo.swift"
+      stamped="$(read_stamp "$manifest_root/$source" 's/^[[:space:]]*static let sdkChannel = "([a-z]+)".*/\1/p')"
+      ;;
+    python|rust|java)
+      # Rule-based SDKs: the runtime reads its own version, so the manifest
+      # version `apply` wrote is the stamp.
+      source="$(component_manifest "$component")"
+      version="$(read_current_version "$component" "$manifest_root/$source")"
+      [ -n "$version" ] && stamped="$(version_channel "$component" "$version")"
+      source="$source ($version)"
+      ;;
+    go)
+      if [ -z "$go_version" ]; then
+        echo "version.sh: go has no manifest — pass the tag's version: check-stamp go <channel> <version>" >&2
+        exit 2
+      fi
+      source="the tag version $go_version"
+      stamped="$(version_channel go "$go_version")"
+      ;;
+  esac
+
+  if [ -z "$stamped" ]; then
+    echo "version.sh: could not read the stamped channel of $component from $source" >&2
+    exit 4
+  fi
+  if [ "$stamped" != "$channel" ]; then
+    echo "version.sh: $component is stamped '$stamped' by $source, but this release's channel is '$channel' — refusing to publish" >&2
+    exit 4
+  fi
+  echo "version.sh: $component stamped channel '$stamped' matches ($source)" >&2
+}
+
 main() {
   if [ $# -lt 1 ]; then usage; exit 2; fi
   local sub="$1"
@@ -719,8 +872,9 @@ main() {
   case "$sub" in
     compute) cmd_compute "$@" ;;
     apply) cmd_apply "$@" ;;
+    check-stamp) cmd_check_stamp "$@" ;;
     -h|--help) usage; exit 0 ;;
-    *) echo "version.sh: unknown subcommand '$sub' (compute|apply)" >&2; usage; exit 2 ;;
+    *) echo "version.sh: unknown subcommand '$sub' (compute|apply|check-stamp)" >&2; usage; exit 2 ;;
   esac
 }
 
