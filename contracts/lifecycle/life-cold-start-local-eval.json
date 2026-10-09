@@ -11,11 +11,11 @@
       "onlyEvaluateLocally": true,
       "definitionsLoaded": false
     },
-    "flags": {}
+    "controlPoints": {}
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-cold",
+    "controlPointKey": "fw-cold",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {
@@ -28,7 +28,7 @@
     "reason": "ERROR",
     "errorCode": "PROVIDER_NOT_READY",
     "errorMessage": "provider not ready",
-    "flagMetadata": {
+    "controlPointMetadata": {
       "fireweave.errorKind": "NotReady"
     }
   },

@@ -1,5 +1,5 @@
 {
-  "description": "quotaLimited in /flags body serves default as FlagNotFound",
+  "description": "quotaLimited in /flags body serves default as ControlPointNotFound",
   "tags": [
     "quotaLimited"
   ],
@@ -11,11 +11,11 @@
         "feature_flags"
       ]
     },
-    "flags": {}
+    "controlPoints": {}
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-t",
+    "controlPointKey": "fw-t",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {
@@ -28,8 +28,8 @@
     "reason": "ERROR",
     "errorCode": "FLAG_NOT_FOUND",
     "errorMessage": "flag not found",
-    "flagMetadata": {
-      "fireweave.errorKind": "FlagNotFound",
+    "controlPointMetadata": {
+      "fireweave.errorKind": "ControlPointNotFound",
       "fireweave.quotaLimited": true
     }
   },

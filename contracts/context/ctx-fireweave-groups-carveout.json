@@ -7,7 +7,7 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-carveout": {
         "type": "boolean",
         "enabled": true,
@@ -24,7 +24,7 @@
       "name": "permitted-fireweave-keys-accepted",
       "when": {
         "operation": "evaluate",
-        "flagKey": "fw-carveout",
+        "controlPointKey": "fw-carveout",
         "flagType": "boolean",
         "defaultValue": false,
         "invocationContext": {
@@ -53,7 +53,7 @@
       "name": "other-fireweave-key-rejected",
       "when": {
         "operation": "evaluate",
-        "flagKey": "fw-carveout",
+        "controlPointKey": "fw-carveout",
         "flagType": "boolean",
         "defaultValue": false,
         "invocationContext": {
@@ -74,7 +74,7 @@
         "reason": "ERROR",
         "errorCode": "INVALID_CONTEXT",
         "errorMessage": "invalid evaluation context",
-        "flagMetadata": {
+        "controlPointMetadata": {
           "fireweave.errorKind": "InvalidContext"
         }
       }

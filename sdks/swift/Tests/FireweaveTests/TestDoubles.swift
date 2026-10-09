@@ -27,11 +27,27 @@ final class SlowFakeAdapter: ControlPointsBackendAdapter, @unchecked Sendable {
     -> PrefetchResult
   {
     lock.withLock { prefetchCallCount += 1 }
-    try await Task.sleep(nanoseconds: delayNs)
-    if let shouldFail {
-      throw shouldFail
+    let (delay, failure, answer) = lock.withLock { (delayNs, shouldFail, result) }
+    try await Task.sleep(nanoseconds: delay)
+    if let failure {
+      throw failure
     }
-    return result
+    return answer
+  }
+
+  /// What later prefetches return.
+  func setResult(_ newResult: PrefetchResult) {
+    lock.withLock { result = newResult }
+  }
+
+  /// Makes later prefetches fail with `error`, or succeed again with nil.
+  func setFailure(_ error: FireweaveError?) {
+    lock.withLock { shouldFail = error }
+  }
+
+  /// How long later prefetches take.
+  func setDelay(_ nanoseconds: UInt64) {
+    lock.withLock { delayNs = nanoseconds }
   }
 
   func registerTarget(targetingKey: String, options: RegisterTargetOptions?) async

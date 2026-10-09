@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/infrastructure/adapters/remote"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/infrastructure/adapters/remote"
 )
 
 func TestRemoteEvaluate(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/flags/evaluate" {
+		if r.URL.Path != "/v1/control-points/evaluate" {
 			t.Fatalf("path %s", r.URL.Path)
 		}
 		if r.Header.Get("Authorization") != "Bearer project-api-key_test" {
@@ -28,11 +28,11 @@ func TestRemoteEvaluate(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"decisions": []map[string]any{{
-				"flagKey": "checkout-v2",
-				"value":   true,
-				"reason":  "TARGETING_MATCH",
-				"found":   true,
-				"enabled": true,
+				"controlPointKey": "checkout-v2",
+				"value":           true,
+				"reason":          "TARGETING_MATCH",
+				"found":           true,
+				"enabled":         true,
 			}},
 		})
 	}))
@@ -46,9 +46,9 @@ func TestRemoteEvaluate(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := a.Resolve(context.Background(), domain.ResolveRequest{
-		FlagKey:      "checkout-v2",
-		DefaultValue: false,
-		Context:      domain.NewEvaluationContext("user-1", map[string]any{"plan": "pro"}),
+		ControlPointKey: "checkout-v2",
+		DefaultValue:    false,
+		Context:         domain.NewEvaluationContext("user-1", map[string]any{"plan": "pro"}),
 	})
 	if d.Error != nil {
 		t.Fatalf("error decision: %+v", d.Error)
@@ -71,18 +71,18 @@ func TestRemoteAuthFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := a.Resolve(context.Background(), domain.ResolveRequest{
-		FlagKey:      "x",
-		DefaultValue: false,
-		Context:      domain.NewEvaluationContext("u", nil),
+		ControlPointKey: "x",
+		DefaultValue:    false,
+		Context:         domain.NewEvaluationContext("u", nil),
 	})
 	if d.Error == nil || d.Error.Kind != domain.KindAuthentication {
 		t.Fatalf("want Authentication, got %+v", d.Error)
 	}
 }
 
-// modes.md: remote's unknown-key row is default/ERROR/FlagNotFound —
+// modes.md: remote's unknown-key row is default/ERROR/ControlPointNotFound —
 // deliberately NOT the local adapter's default/DEFAULT seam.
-func TestRemoteUnknownKeyIsErrorFlagNotFound(t *testing.T) {
+func TestRemoteUnknownKeyIsErrorControlPointNotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"decisions": []map[string]any{}})
 	}))
@@ -93,11 +93,11 @@ func TestRemoteUnknownKeyIsErrorFlagNotFound(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := a.Resolve(context.Background(), domain.ResolveRequest{
-		FlagKey: "does-not-exist", DefaultValue: false,
+		ControlPointKey: "does-not-exist", DefaultValue: false,
 		Context: domain.NewEvaluationContext("u", nil),
 	})
-	if d.Error == nil || d.Error.Kind != domain.KindFlagNotFound || d.Reason != domain.ReasonError {
-		t.Fatalf("got %+v, want ERROR/FlagNotFound", d)
+	if d.Error == nil || d.Error.Kind != domain.KindControlPointNotFound || d.Reason != domain.ReasonError {
+		t.Fatalf("got %+v, want ERROR/ControlPointNotFound", d)
 	}
 }
 
@@ -108,7 +108,7 @@ func TestRemoteUnknownKeyIsErrorFlagNotFound(t *testing.T) {
 // EvaluateOptions.includePayload.
 func TestRemoteResolveAttachesPayloadOnlyWhenRequested(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, `{"decisions":[{"flagKey":"fw-payload","value":true,"reason":"TARGETING_MATCH","found":true,"payload":{"rolloutId":"rollout_1","maxRetries":2}}]}`)
+		_, _ = io.WriteString(w, `{"decisions":[{"controlPointKey":"fw-payload","value":true,"reason":"TARGETING_MATCH","found":true,"payload":{"rolloutId":"rollout_1","maxRetries":2}}]}`)
 	}))
 	defer srv.Close()
 
@@ -118,7 +118,7 @@ func TestRemoteResolveAttachesPayloadOnlyWhenRequested(t *testing.T) {
 	}
 
 	d := a.Resolve(context.Background(), domain.ResolveRequest{
-		FlagKey: "fw-payload", DefaultValue: false,
+		ControlPointKey: "fw-payload", DefaultValue: false,
 		Context: domain.NewEvaluationContext("u", nil), IncludePayload: true,
 	})
 	want := `{"maxRetries":2,"rolloutId":"rollout_1"}`
@@ -127,7 +127,7 @@ func TestRemoteResolveAttachesPayloadOnlyWhenRequested(t *testing.T) {
 	}
 
 	d = a.Resolve(context.Background(), domain.ResolveRequest{
-		FlagKey: "fw-payload", DefaultValue: false,
+		ControlPointKey: "fw-payload", DefaultValue: false,
 		Context: domain.NewEvaluationContext("u", nil), IncludePayload: false,
 	})
 	if _, ok := d.Metadata["fireweave.payload"]; ok {
@@ -143,7 +143,7 @@ func TestRemoteResolveAttachesPayloadOnlyWhenRequested(t *testing.T) {
 // adapters.
 func TestRemoteResolvePassesThroughRawStringPayloadVerbatim(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, `{"decisions":[{"flagKey":"fw-payload","value":true,"reason":"TARGETING_MATCH","found":true,"payload":"{\"already\":\"serialized\"}"}]}`)
+		_, _ = io.WriteString(w, `{"decisions":[{"controlPointKey":"fw-payload","value":true,"reason":"TARGETING_MATCH","found":true,"payload":"{\"already\":\"serialized\"}"}]}`)
 	}))
 	defer srv.Close()
 
@@ -153,7 +153,7 @@ func TestRemoteResolvePassesThroughRawStringPayloadVerbatim(t *testing.T) {
 	}
 
 	d := a.Resolve(context.Background(), domain.ResolveRequest{
-		FlagKey: "fw-payload", DefaultValue: false,
+		ControlPointKey: "fw-payload", DefaultValue: false,
 		Context: domain.NewEvaluationContext("u", nil), IncludePayload: true,
 	})
 	want := `{"already":"serialized"}`
@@ -222,9 +222,9 @@ func TestRemoteResolveTimeoutClassifiesAsTimeout(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := a.Resolve(context.Background(), domain.ResolveRequest{
-		FlagKey:      "fw-t",
-		DefaultValue: false,
-		Context:      domain.NewEvaluationContext("u", nil),
+		ControlPointKey: "fw-t",
+		DefaultValue:    false,
+		Context:         domain.NewEvaluationContext("u", nil),
 	})
 	if d.Error == nil || d.Error.Kind != domain.KindTimeout {
 		t.Fatalf("want Timeout, got %+v", d.Error)
@@ -241,7 +241,7 @@ func TestRemoteResolveTimeoutClassifiesAsTimeout(t *testing.T) {
 func TestRemoteResolvePreservesIntegerBeyondSafeInteger(t *testing.T) {
 	const huge = 9007199254740993 // 2^53 + 1
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, `{"decisions":[{"flagKey":"fw-big-int","value":9007199254740993,"variant":"huge","reason":"TARGETING_MATCH","found":true}]}`)
+		_, _ = io.WriteString(w, `{"decisions":[{"controlPointKey":"fw-big-int","value":9007199254740993,"variant":"huge","reason":"TARGETING_MATCH","found":true}]}`)
 	}))
 	defer srv.Close()
 
@@ -250,10 +250,10 @@ func TestRemoteResolvePreservesIntegerBeyondSafeInteger(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := a.Resolve(context.Background(), domain.ResolveRequest{
-		FlagKey:      "fw-big-int",
-		Type:         domain.FlagTypeNumber,
-		DefaultValue: 0,
-		Context:      domain.NewEvaluationContext("u", nil),
+		ControlPointKey: "fw-big-int",
+		Type:            domain.FlagTypeNumber,
+		DefaultValue:    0,
+		Context:         domain.NewEvaluationContext("u", nil),
 	})
 	if d.Error != nil {
 		t.Fatalf("error decision: %+v", d.Error)

@@ -32,12 +32,16 @@
 //! client.shutdown();
 //! ```
 //!
-//! There are no hidden global clients: everything is constructed
-//! explicitly and injectable for tests.
+//! There are no hidden global clients in the core: everything is
+//! constructed explicitly and injectable for tests. The opt-in
+//! [`start`] module (the start profile, `docs/adr/0012-start-profile.md`)
+//! is the one exception: it reads `FIREWEAVE_*` variables and keeps one
+//! client per process, layered over this unchanged core.
 
 pub mod application;
 pub mod domain;
 pub mod infrastructure;
+pub mod start;
 
 /// Package version (`Cargo.toml`'s `[package].version`).
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -71,7 +75,7 @@ pub use domain::context::{
 pub use domain::decision::{reason, Decision};
 pub use domain::mode::Mode;
 pub use domain::target::TargetKind;
-pub use domain::types::{FlagMetadata, FlagType, JsonValue};
+pub use domain::types::{ControlPointMetadata, FlagType, JsonValue};
 
 // -- validation -----------------------------------------------------------------
 pub use domain::validation::{
@@ -80,4 +84,6 @@ pub use domain::validation::{
 };
 
 // -- errors -----------------------------------------------------------------------
-pub use domain::errors::{redact_secrets, ErrorKind, FireweaveError, FLAG_METADATA_ERROR_KIND_KEY};
+pub use domain::errors::{
+    redact_secrets, ErrorKind, FireweaveError, CONTROL_POINT_METADATA_ERROR_KIND_KEY,
+};

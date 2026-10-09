@@ -17,6 +17,8 @@
 #            baseline-gated via tools/lint/check-python.sh
 #   go     : gofmt -l + go vet
 #   java   : none beyond javac (no checkstyle config exists)
+#   dart   : dart format --set-exit-if-changed + dart analyze --fatal-infos
+#            (package:lints/recommended — the Dart team's default set)
 name: CI
 
 on:
@@ -137,7 +139,12 @@ jobs:
         run: npm run build
       - name: Typecheck the published build under Deno
         working-directory: sdks/node
-        run: deno check --no-npm dist/application/client.js dist/infrastructure/adapters/remote.js
+        # From a copy outside the package: newer Deno discovers sdks/node/tsconfig.json
+        # from the working directory (rootDir: src) and rejects dist/ files with TS6059.
+        run: |
+          cp -R dist "$RUNNER_TEMP/fireweave-dist"
+          cd "$RUNNER_TEMP/fireweave-dist"
+          deno check --no-npm application/client.js infrastructure/adapters/remote.js
       - name: Cross-runtime smoke (Deno leg, least privilege)
         working-directory: sdks/node
         run: deno run --allow-read scripts/smoke-runtimes.mjs
@@ -285,7 +292,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust: ['1.75.0', 'stable'] # Cargo.toml rust-version minimum + latest stable
+        rust: ['1.85.0', 'stable'] # Cargo.toml rust-version minimum + latest stable
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@master
@@ -330,7 +337,7 @@ jobs:
           swift-version: ${{ matrix.swift }}
       - name: swift-format lint (built-in `swift format`, no separate config)
         working-directory: sdks/swift
-        run: find Sources Tests -name '*.swift' | xargs swift format lint --strict
+        run: find Sources Tests -name '*.swift' -print0 | xargs -0 swift format lint --strict
       - name: swift build
         working-directory: sdks/swift
         run: swift build
@@ -351,8 +358,66 @@ jobs:
       # runner "exit non-zero on any fail" is expected on any real
       # divergence, not a crash signal — matching go/java/rust's per-language
       # job comment. The differential job (scripts/conformance-all.sh) is
-      # where that report is aggregated against the honest 65x7 cross-
+      # where that report is aggregated against the honest 65x8 cross-
       # language gate.
+
+  # ---------------------------------------------------------------- dart
+  # The Dart package (ADR-0011): Flutter on every platform, the Dart VM, and
+  # Dart compiled to JavaScript/WebAssembly. Pure Dart with no `flutter` SDK
+  # dependency, so the Dart toolchain alone runs the whole suite — the
+  # Flutter toolchain is deliberately NOT installed here: it would add
+  # ~1 GB per job to assert a property no code path depends on (the package
+  # never imports `package:flutter`; test/architecture_guard_test.dart pins
+  # that).
+  #
+  # Two test legs: the VM (`dart test`, io transport) and Chrome
+  # (`dart test -p chrome`, the whole runtime under dart2js plus the `fetch`
+  # transport — ubuntu-latest ships Chrome). Every test file runs on both legs
+  # except the four `@TestOn('vm')` files that read the filesystem and the
+  # one `@TestOn('browser')` file. The example is then compiled for JS and
+  # WASM, which proves the conditional-import seam resolves to the web
+  # transport on both web compilers without a browser at all.
+  dart:
+    name: dart (Dart ${{ matrix.dart }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dart: ['3.8.3', 'stable'] # pubspec.yaml sdk floor (^3.8.0) + latest stable
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: ${{ matrix.dart }}
+      - name: Resolve dev dependencies (pubspec.lock is not committed — resolved per matrix leg)
+        working-directory: sdks/dart
+        run: dart pub get
+      - name: dart format check
+        working-directory: sdks/dart
+        run: dart format --output=none --set-exit-if-changed .
+      - name: dart analyze (package:lints/recommended + strict mode; infos are fatal)
+        working-directory: sdks/dart
+        run: dart analyze --fatal-infos
+      - name: dart test — VM leg (unit + architecture/surface/portability guards + the 65-fixture gate)
+        working-directory: sdks/dart
+        run: dart test
+      - name: dart test — Chrome leg (runtime under dart2js + the fetch transport)
+        working-directory: sdks/dart
+        run: dart test -p chrome
+      - name: Compile the example for JavaScript and WebAssembly (web transport seam, no browser)
+        working-directory: sdks/dart
+        run: |
+          dart compile js -o /tmp/fireweave_example.js example/fireweave_example.dart
+          dart compile wasm -o /tmp/fireweave_example.wasm example/fireweave_example.dart
+      - name: Conformance runner (per-version sanity; differential job is the gate)
+        working-directory: sdks/dart
+        run: dart run conformance/run_conformance.dart --contracts ../../contracts --out /tmp/compatibility-report.dart.json
+      - name: Package validation dry run (never publishes)
+        working-directory: sdks/dart
+        run: dart pub publish --dry-run
+      # Same note as rust/swift: the runner's non-zero exit on a real
+      # divergence fails this job by itself; the differential job is where
+      # the report is aggregated against the honest 65x8 gate.
 
   # -------------------------------------------- cross-language differential
   differential:
@@ -384,6 +449,9 @@ jobs:
         with:
           # 6.2.1 is the newest patch known to setup-swift@v2 (6.3.x is not listed).
           swift-version: '6.2.1'
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
       - name: tools/release/version.sh unit tests (pure semver + staging-N logic)
         # Chosen job: this is the one job in ci.yml with node, python, AND
         # java/mvn all set up already (needed for the 65x7 conformance run
@@ -393,7 +461,11 @@ jobs:
         # no continue-on-error) — a regression in the bump/strip/staging-N
         # logic fails this job, not just the local dry run.
         run: bash tools/release/version.test.sh
-      - name: Run all six conformance runners + comparator
+      - name: Validate the start-profile suite (contracts/start, spec/start-profile.md)
+        # Schema and cross-field checks only; each SDK's own test job runs its
+        # start-contracts runner against these fixtures.
+        run: node tools/conformance/compare-start.mjs
+      - name: Run all seven conformance runners + comparator
         run: bash scripts/conformance-all.sh
       - name: Publish comparator summary
         if: always()
@@ -429,14 +501,16 @@ jobs:
             sleep 0.5
           done
           curl -fsS http://127.0.0.1:3901/health
-      - name: Protocol smoke (flags endpoint answers)
+      - name: Protocol smoke (control-points evaluate answers)
         run: |
-          code="$(curl -s -o /tmp/flags.json -w '%{http_code}' -X POST 'http://127.0.0.1:3901/flags?v=2' \
+          code="$(curl -s -o /tmp/evaluate.json -w '%{http_code}' -X POST 'http://127.0.0.1:3901/v1/control-points/evaluate' \
+            -H 'Authorization: Bearer project-api-key_ci' \
             -H 'Content-Type: application/json' \
-            -d '{"api_key":"phc_test","distinct_id":"ci-smoke"}')"
-          echo "POST /flags -> HTTP $code"
-          cat /tmp/flags.json
-          test "$code" != "404"
+            -d '{"targetingKey":"ci-smoke"}')"
+          echo "POST /v1/control-points/evaluate -> HTTP $code"
+          cat /tmp/evaluate.json
+          test "$code" = "200"
+          grep -q '"controlPointKey"' /tmp/evaluate.json
       - name: Node SDK integration tests (exercise the stub protocol via injected fetch)
         working-directory: sdks/node
         run: |

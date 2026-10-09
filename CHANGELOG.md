@@ -6,11 +6,153 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed — BREAKING: the wire and the public names say control point; 3.0.0 for all eight SDKs ([ADR-0013](docs/adr/0013-control-point-wire.md))
+
+- Evaluate calls `POST /v1/control-points/evaluate` with `controlPointKeys`; decisions carry `controlPointKey` and `controlPointMetadata`; capture and signal events (node, web) carry `controlPointKey`. fw-server keeps the 2.x route and names as aliases for 2.x SDKs.
+- Metadata keys `fireweave.flagVersion` and `fireweave.vendorFlagId` are now `fireweave.controlPointVersion` and `fireweave.vendorControlPointId`.
+- The error kind `FlagNotFound` is `ControlPointNotFound` in every SDK (Python `ControlPointNotFoundError`, Go `KindControlPointNotFound` / `ErrControlPointNotFound`, Java `ErrorKind.ControlPointNotFound`, Rust `ErrorKind::ControlPointNotFound`, Dart and Swift `.controlPointNotFound`). OpenFeature's code `FLAG_NOT_FOUND` is unchanged.
+- The public `Decision` says `controlPointKey` (node, web, Go, Java) and `controlPointMetadata` (Python `control_point_metadata`, Rust `control_point_metadata`, Dart, Swift).
+- The `client.flags` alias is removed in every SDK; use `client.controlPoints` (Python and Rust `control_points`, Go `ControlPoints()`).
+- The start profile below (ADR-0012, unreleased) takes `controlPoints` instead of `flags`: `defineControlPoints` (Python and Rust `define_control_points`, Go `DefineControlPoints`), with `LocalControlPoint`/`LocalControlPoints` types in Go, Java, Rust and Dart and `FireweaveLocalControlPoint(s)` in Swift; the status reports `controlPointCount`.
+- Conformance fixtures use `given.controlPoints`, `when.controlPointKey` and `expect.controlPointMetadata`; the surface descriptor records `removedAlias: "flags"`; the test server serves only `/v1/control-points/evaluate`.
+- Swift is changed by review only until CI runs it.
+
+### Added — `@fireweaveai/server-sdk` start profile ([ADR-0012](docs/adr/0012-start-profile.md), proposed)
+
+- New subpaths `@fireweaveai/server-sdk/start` (`start`, `fw`, `defineFlags`) and `@fireweaveai/server-sdk/register`. One import, one secret (`FIREWEAVE_KEY`) and an optional flags object replace the generated per-repo harness.
+- Options with env fallbacks: `mode` (override), `environment` (custom env name for inference), `url` (default from the SDK's release channel), `key`, `instanceId`, `flags`. Legacy `FW_PROJECT_API_KEY`, `FW_API_URL` and `FW_ATTEST_URL` are still read with a one-time warning.
+- `tools/release/version.sh apply server` stamps `src/start/build-info.ts` so a build knows its channel.
+- The core entrypoint and `initFireweave` are unchanged and still read no environment.
+
+### Added — `@fireweaveai/web-sdk` start profile ([ADR-0012](docs/adr/0012-start-profile.md), proposed)
+
+- New subpath `@fireweaveai/web-sdk/start` (`start`, `fw`, `defineFlags`): the browser start profile with the same options as the server one (`flags`, `mode`, `environment`, `url`, `key`) plus `persistence` and `deviceId`. `fw` adds `identify`, `reset`, `deviceId`, `setPersistence`, `forget`, `ready`, `status` and `subscribe`.
+- New Node build entries `@fireweaveai/web-sdk/vite` (the `fireweave()` plugin) and `@fireweaveai/web-sdk/define` (`fireweaveDefine`, `assertFireweaveBuild`). They read `FIREWEAVE_BROWSER_KEY`, `FIREWEAVE_URL` and `FIREWEAVE_ENV` at build time, fail the build on a bad configuration, and fail a Vite client build that contains a server key. `vite` is an optional peer dependency.
+- `tools/release/version.sh apply web` stamps the web `src/start/build-info.ts` too.
+- The core entrypoint and `initFireweave` are unchanged and still read no environment.
+
+### Added — Python `fireweave` start profile ([ADR-0012](docs/adr/0012-start-profile.md), proposed)
+
+- New subpackage `fireweave.start` (`start`, `fw`, `define_flags`). Keyword-only options `flags`, `mode`, `environment`, `url`, `key`, `instance_id`, `env`, `log`, with the same env fallbacks, mode rule and key checks as the server SDK. Legacy `FW_PROJECT_API_KEY`, `FW_API_URL` and `FW_ATTEST_URL` are read with a one-time warning.
+- The default endpoint follows the installed package's version: a PEP 440 prerelease (staging builds are `X.Y.ZaN`) calls staging, anything else production.
+- A read before `start()` starts from the environment at once; the first explicit `start()` replaces that start once, with a warning. The client is rebuilt in a forked child.
+- The core package and `init_fireweave` are unchanged and still read no environment.
+
+### Added — Go start profile, package `fw` ([ADR-0012](docs/adr/0012-start-profile.md), proposed)
+
+- New package `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/fw`: `Start(Options)`, `MustStart`, `DefineFlags`, `ControlPoints()`, `For`, `Identify`, `InstanceKey`, `Status`, `Client`, `Shutdown`. Options `Flags`, `Mode`, `Environment`, `URL`, `Key`, `InstanceID`, `Env`, `Log`, with the same env fallbacks, mode rule and key checks as the server SDK.
+- The default endpoint follows the SDK module version in the binary's build info: `vX.Y.Z-staging.N` calls staging, anything else (including a local checkout) production.
+- `Client()` is one permanent `*fireweave.Client` for the process, so a pointer captured before `Start` keeps working.
+- The core packages are unchanged apart from re-exporting `fireweave.ValidateControlPointKey`, and still read no environment.
+
+### Added — Java start profile, package `ai.fireweave.sdk.start` ([ADR-0012](docs/adr/0012-start-profile.md), proposed)
+
+- `Fw.start(StartOptions)`, `Fw.defineFlags`, `Fw.controlPoints()`, `Fw.identify`, `Fw.instanceKey`, `Fw.status`, `Fw.client`, `Fw.shutdown`. `StartOptions.builder()` takes `flags`, `mode`, `environment`, `url`, `key`, `instanceId`, `env` and `log`, with the same env fallbacks, mode rule and key checks as the server SDK.
+- The default endpoint follows this artifact's version, read from a Maven-filtered `build.properties`: `X.Y.Z-staging.N` calls staging, anything else production.
+- `Fw.client()` is one permanent `FireweaveClient` for the JVM, so a reference captured before `start` keeps working.
+- The core packages are unchanged and still read no environment. The architecture guard now allows the `start` package as the one sanctioned addition beside the three layers.
+
+### Added — Rust start profile, module `fireweave::start` ([ADR-0012](docs/adr/0012-start-profile.md), proposed)
+
+- `start(StartOptions)`, `define_flags`, `control_points()`, `identify`, `instance_key`, `status`, `client`, `shutdown`. `StartOptions` fields `flags`, `mode`, `environment`, `url`, `key`, `instance_id`, `env` and `log`, with the same env fallbacks, mode rule and key checks as the server SDK. No new dependencies.
+- The default endpoint follows the crate version compiled into the app (`CARGO_PKG_VERSION`): `X.Y.Z-staging.N` calls staging, anything else production.
+- `client()` is one permanent `FireweaveClient` for the process.
+- The core is unchanged apart from `pub mod start;`, and still reads no environment.
+
+### Added — Dart start profile, `package:fireweave/client.dart` and `server.dart` ([ADR-0012](docs/adr/0012-start-profile.md), proposed)
+
+- `await Fireweave.start(flags: …)` and a per-isolate `fw` in two profiles. The client profile (Flutter, Dart web) takes a browser key from options or the compile-time defines `FIREWEAVE_BROWSER_KEY`, `FIREWEAVE_URL` and `FIREWEAVE_ENV`, never throws (a fault sets `failed` with a `problem`), and offers `identify`, `reset`, `deviceId` and a `DeviceIdStore` persistence hook. The server profile (Dart VM) reads `FIREWEAVE_*` from the process environment, takes project keys, throws a `Configuration` error on a fault, and offers `instanceKey`.
+- The default endpoint follows `lib/src/start/build_info.dart`, which `version.sh apply dart` now stamps: `-staging.N` calls staging.
+- The start layer owns and closes its own `dart:io` transport and logs each remote error kind once. No new dependencies; the core is unchanged.
+
+### Added — Swift start profile, product `FireweaveStart` ([ADR-0012](docs/adr/0012-start-profile.md), proposed)
+
+- `startFireweave(flags: …)` (synchronous, throws a configuration error before any I/O) and a process-wide `fw`. The app profile reads Info.plist `FIREWEAVE_BROWSER_KEY`, `FIREWEAVE_URL` and `FIREWEAVE_ENV`, takes browser keys only, and keeps a `dev_<UUID>` device id in UserDefaults (`persistence`, `setPersistence`, `forget` for consent). The server profile reads `FIREWEAVE_*` from the environment and takes project keys.
+- The default endpoint follows `Sources/FireweaveStart/BuildInfo.swift`, which `version.sh apply swift` now writes.
+- Written without a local Swift toolchain; its first compile was CI, where the start profile and its tests (168 Swift tests in all) pass on Swift 6.0.3 and 6.2.1, including `swift format lint --strict`. Device and app-store checks are not covered yet.
+
+### Added — start-profile spec and shared conformance suite
+
+- `spec/start-profile.md`: the normative rules (SP-1…SP-26) for the start profile on every SDK — profiles, names, precedence, the fail-closed mode rule, the release-channel endpoint, key families, flags, idempotency, the instance key with FNV-1a test vectors. `spec/modes.md` now scopes "reads no environment" to the core.
+- `contracts/start/`: 14 fixtures (101 cases) with a closed schema, run by each SDK's own tests and validated by `tools/conformance/compare-start.mjs` in CI.
+
+### Changed — shared contracts (proposed with ADR-0012)
+
+- `spec/control-points.md`: SDKs that read from a prefetched cache (web, Swift, Dart) keep the last good decisions after a failed or timed-out re-fetch and serve them with reason `STALE`; only a fetch with no earlier success falls back to defaults with `ERROR`.
+- `contracts/errors.json` gains `rules.redaction` (with 16 test vectors) and every SDK's redactor implements it: bearer tokens, URL userinfo, the values of `FIREWEAVE_KEY` / `FIREWEAVE_BROWSER_KEY` / `FW_PROJECT_API_KEY` assignments, and key-shaped values (`project-api-key_`, `fw_public_`, `fw_ingest_pub_`, `fw_org_`, `cli_at_`, `ph*_`) become `[REDACTED]`. A variable **name** now stays readable (Go no longer blanks the bare name `FW_PROJECT_API_KEY`), and Go's placeholder changes from `[redacted]` to `[REDACTED]`.
+- `spec/start-profile.md`: client profiles never crash the app on a bad configuration (SP-23, now including Swift apps), and server profiles report a refused, rate-limited or unreachable fw-server once per kind with `lastErrorKind` (SP-27).
+
+### Fixed — cores
+
+- Go: the remote adapter's `Close` no longer races `Resolve`/`RegisterTarget` (a data race under `-race`), and the adapter owns its own HTTP transport instead of sharing `http.DefaultTransport`.
+- Python: the remote adapter refuses HTTP redirects, which used to re-send the `Authorization` header to the redirect target; proxies still come from the environment. Non-`EvaluationContext` contexts, non-string targeting keys and non-JSON registration properties now degrade to `InvalidContext` instead of raising.
+- Swift and Dart: one failed re-fetch no longer switches every read to its default (see the `STALE` rule above). Web now reports `STALE` for decisions served after a failed re-fetch instead of the backend's original reason.
+
+### Added — start profiles
+
+- Server profiles in Node, Python, Go, Java and Rust log one line per remote failure kind (key rejected, rate limited, unreachable), naming the key's source and the host, never the key, and expose `lastErrorKind` in status. Java adds `Fw.verify()`.
+- Dart and Swift server profiles re-fetch decisions every 30 s by default (`refreshInterval`). A Dart CLI in remote mode must now call `fw.shutdown()` (or pass a zero interval) to exit.
+- Swift app profile: `startFireweave(flags:)` no longer throws; a configuration fault sets the status to failed and reads serve defaults.
+- Python: a provisional client replaced by the first explicit `start()` is now shut down.
+
+### Release
+
+- Java staging releases publish `X.Y.Z-staging.N` to Maven Central (previously uploaded unpublished), so an app can opt into the staging channel by version.
+- New `publish-swift-mirror` job pushes `sdks/swift` to a mirror repository with a root `Package.swift` and plain semver tags, which SwiftPM can resolve. It fails closed until the mirror and its deploy key are provisioned (`.github/RELEASE.md`).
+
+### Fixed
+
+- `FireweaveRemoteAdapter.shutdown()` clears its timeout timer, so a clean shutdown no longer holds the process open for up to `shutdownTimeoutMs`.
+
 **Registry status.** `@fireweaveai/sdk` is on npm at **0.1.0** (2026-08-03) and **2.0.0** (2026-08-05), with `latest` pointing at 2.0.0. **2.1.0 is not published yet**, so an unpinned `npm install @fireweaveai/sdk` still resolves to 2.0.0 — the API that carries the direct PostHog adapter and the `./posthog` subpath. The Python, Go, and Java packages remain unpublished.
 
 > **Version note.** The work below was drafted as `3.0.0` and `3.1.0` and is released as a single **2.1.0** instead. Neither 3.x version reached a registry, so no published version is being renumbered.
 >
 > Read the *Breaking* section with that in mind: those changes ship in a **minor**, which semver would normally reserve for a major. A consumer pinned `^2.0.0` will pick 2.1.0 up automatically and, if they import `@fireweaveai/sdk/posthog`, will fail to build. This is a deliberate choice made while 2.0.0 has no known consumers — if that stops being true, the removals need a major.
+
+### Dart SDK `fireweave` (pub.dev) 2.2.0 — 2026-09-02
+
+New package (`sdks/dart`), per [ADR-0011](docs/adr/0011-dart-control-points.md), which retires
+the *Dart surface* row of [ADR-0004](docs/adr/0004-server-first.md)'s future-work table. One
+package for **Flutter on Android, iOS, macOS, Windows, Linux, and web**, the **Dart VM**, and Dart
+compiled to **JavaScript or WebAssembly**. Version is in lockstep with the other SDK manifests.
+**Not published**; pub.dev automated publishing must be provisioned first (`.github/RELEASE.md`).
+
+#### Added
+
+- **`initFireweave(InitFireweaveOptions.remote(…))` / `InitFireweaveOptions.local(…)`** — the
+  single entry point. `mode` is fixed by the options type constructed, credentials are explicit
+  arguments, and the SDK reads no environment (`spec/modes.md`).
+- **Nine synchronous `controlPoints` methods** over a prefetched decision cache (web/Swift shape,
+  not node's): reads are safe inside a widget's `build()`. A boot that misses the 5 s ceiling
+  enters `STALE` and serves defaults with reason `STALE`, distinguishable from a rollout at 0%.
+- **`registerTarget` / `identify`** — `/v1/targets/register`; in local mode recorded in-process
+  and traced with a `[fireweave:local]` line to an injectable sink (`print` by default, so it
+  reaches the Flutter console).
+- **`FireweaveRemoteAdapter`, `FireweaveLocalAdapter`, `InMemoryAdapter`** — the same three
+  adapters every other SDK ships. The remote transport is chosen per platform by conditional
+  import from SDK libraries alone: `dart:io` on the VM and Flutter mobile/desktop, the browser's
+  `fetch` through `dart:js_interop` on the web (valid under `dart compile wasm` too). Injectable
+  through the `HttpTransport` port.
+- **Conformance**: a real runner (`conformance/run_conformance.dart`) over the shared 65
+  fixtures with Swift's disposition (37 pass, 15 documented limitations, 13 v1-out-of-scope),
+  pinned by a `dart test` wrapper; `tools/conformance/compare.mjs` aggregates 65 × 8;
+  `conformance/surface/control-points.surface.json` gains a `dart` cell.
+- **Release**: component `dart`, tag `dart/vX.Y.Z`, manifest `sdks/dart/pubspec.yaml`
+  (`tools/release/version.sh`); staging = `dart pub publish --dry-run` + tag (pub.dev has no
+  staging registry), production = pub.dev automated publishing (OIDC) under `environment: release`.
+- **CI**: `dart` job (Dart 3.8 floor + stable: format, analyze, VM tests, Chrome tests, JS and
+  WASM compiles of the example, conformance, publish dry-run); `differential` and release
+  `verify` jobs set up Dart; osv-scan covers a generated `pubspec.lock`.
+
+#### Zero dependencies, no Flutter SDK dependency
+
+`pubspec.yaml` has no `dependencies:` block and never imports `package:flutter`, so the same
+package runs in a Flutter app and on the Dart VM, and CI needs only the Dart toolchain. Pinned by
+`test/architecture_guard_test.dart`; `test/portability_guard_test.dart` confines `dart:io` to the
+io transport and `dart:js_interop` to the web transport, bans the retired `dart:html`/`dart:js`
+and the pub `web`/`http` packages, bans environment reads, and bans vendor SDKs and vendor key
+shapes.
 
 ### Web SDK `@fireweaveai/web-sdk` 2.1.0 — 2026-08-09
 

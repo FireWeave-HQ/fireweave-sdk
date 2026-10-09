@@ -9,9 +9,9 @@ compares results, and reports into the cross-language compatibility matrix.
    methods / `invokeCapability`) matches fixture `expect` across Node, Python, Go, Java, Rust,
    and Swift.
 2. Fail CI on silent divergence (see [`README.md`](./README.md)).
-3. Report every language a fixture could conceivably apply to — 65 fixtures x 7 languages
-   (node, web, python, java, go, rust, swift) — with an honest status for each cell, never a
-   silently-missing one.
+3. Report every language a fixture could conceivably apply to — 65 fixtures x 8 languages
+   (node, web, python, java, go, rust, swift, dart) — with an honest status for each cell,
+   never a silently-missing one.
 
 ## Rewrite note (this document)
 
@@ -35,29 +35,29 @@ never a mock of the client itself:
 
 - **In-memory backend** (evaluation / context / lifecycle / security suites, and the one
   runnable extensions fixture): a deterministic, fixture-driven adapter (node/go/java:
-  `InMemoryAdapter`; python: `InMemoryAdapter`) seeded from `given.flags`, wired directly into
+  `InMemoryAdapter`; python: `InMemoryAdapter`) seeded from `given.controlPoints`, wired directly into
   the language's runtime + client types (`FireweaveRuntime`/`Runtime` + `FireweaveClient`/
   `Client`). This is the "local mode" leg of the pipeline: the runner does not go through the
   `initFireweave`/`Fireweave.init`/`init_fireweave` entry point for these fixtures, because that
   entry point's local-mode adapter (`FireweaveLocalAdapter`) accepts only a
   `Record<string, boolean>` override map — it cannot carry the rich, multi-type, condition-
-  matching flag definitions (variant, metadata, payload, matchAttribute/matchGroups/
+  matching control-point definitions (variant, metadata, payload, matchAttribute/matchGroups/
   matchPerson, fault injection) the fixtures need. `initFireweave` itself (both modes) is
   exercised end-to-end by each language's own unit-test suite, which the language's `verify`/
   `test` command already runs alongside the conformance suite.
 - **Remote backend** (faults suite): the real `FireweaveRemoteAdapter`/`Adapter` speaking
-  `POST /v1/flags/evaluate` over real HTTP — this is the "remote mode" leg. The HTTP peer
+  `POST /v1/control-points/evaluate` over real HTTP — this is the "remote mode" leg. The HTTP peer
   differs by language for environmental reasons (see "test-server role" below), but the
   adapter, the wire protocol, and the client invocation are all real; `fault-stale-cache`
   is the one faults-suite fixture that runs on the in-memory backend instead, since cache
-  staleness is provisioned directly (`given.flags[*].fromCache` + `providerState: STALE`),
+  staleness is provisioned directly (`given.controlPoints[*].fromCache` + `providerState: STALE`),
   not over HTTP.
 
 Comparator library responsibilities (one per language, same rules):
 
 - Drop excluded fields (timestamps, stacks, vendor `requestId`, nondeterministic metadata).
 - Redact secrets in messages.
-- Canonical-JSON serialize for structured `value` / `flagMetadata`.
+- Canonical-JSON serialize for structured `value` / `controlPointMetadata`.
 - Enforce `compatibility` vs observed status matrix (extended vocabulary — see "Statuses" below).
 
 ## Per-language runners
@@ -71,11 +71,22 @@ Comparator library responsibilities (one per language, same rules):
 | Java | `sdks/java/fireweave-testing` (`ConformanceRunner` + `ConformanceTest`, `mvn test`) | `InMemoryAdapter`, direct `FireweaveRuntime`+`FireweaveClient` | `FireweaveRemoteAdapter` vs an **in-process HTTP stub** (`FixtureHttpStub`, pure JDK `com.sun.net.httpserver`) — same "no `node` in the canonical dockerized `maven:3.9-eclipse-temurin-21` image" constraint as Go, solved with a same-process embedded server instead of a fake transport |
 | Rust | `sdks/rust/conformance/runner.rs` (`conformance` bin: `cargo run --bin conformance`) | `InMemoryAdapter`, direct `FireweaveRuntime`+`FireweaveClient` | `FireweaveRemoteAdapter` vs an **in-process loopback HTTP stub** (`sdks/rust/conformance/fake_server.rs`, std only) — same "no `node` in the canonical dockerized `rust:1-slim` image" constraint as Go and Java |
 | Swift | `sdks/swift/Sources/FireweaveConformance/Runner.swift` (`swift run FireweaveConformance`) | `InMemoryAdapter`, direct `FireweaveRuntime`+`FireweaveClient`; 6 context fixtures driven by invocation-only context are `skipped-with-documented-limitation` | none over HTTP — `evaluate()` is a synchronous cache read with no per-call I/O, so 8 of 9 faults fixtures are `skipped-with-documented-limitation`; `fault-stale-cache` runs on `InMemoryAdapter` |
+| Dart | `sdks/dart/conformance/run_conformance.dart` (+ `test/conformance_test.dart`, `dart test`) — ADR-0011 | `InMemoryAdapter`, direct `FireweaveRuntime`+`FireweaveClient`; prefetch-then-synchronous-read, so the 6 invocation-context-matching context fixtures are `skipped-with-documented-limitation` (swift's disposition) | `fault-stale-cache` only (provisioned directly); the other 8 are `skipped-with-documented-limitation` — `evaluate()` never does I/O |
 
 Node and Python are close enough to a real subprocess `test-server` that they use it directly;
 Go and Java's canonical CI environment cannot, so they substitute a same-language stand-in that
-speaks the identical wire contract (`POST /v1/flags/evaluate`, `{decisions:[...], quotaLimited}`)
+speaks the identical wire contract (`POST /v1/control-points/evaluate`, `{decisions:[...], quotaLimited}`)
 — this is a packaging-environment difference, not a behavioral one.
+
+### Start-profile suite (`contracts/start/`)
+
+A separate suite for the opt-in start profile (`spec/start-profile.md`, ADR-0012), outside the
+65 like `contracts/web/`. Its fixtures drive each SDK's pure start-profile resolution — mode,
+sources, endpoint, key families, instance key, local control points, release channel — with injected
+environment, build values and host name, so no network is involved. Every SDK runs it from its
+own test command and writes `compatibility-report.start.<lang>.json` (gitignored);
+`tools/conformance/compare-start.mjs` validates the fixtures and aggregates reports. Format,
+operations and comparison rules: [`start/README.md`](./start/README.md).
 
 ### Runner obligations
 
@@ -92,7 +103,7 @@ speaks the identical wire contract (`POST /v1/flags/evaluate`, `{decisions:[...]
    all cases pass. One report row per fixture (case detail in `message`).
 
 The canonical inventory is **65** fixtures; each language's own report must contain 65 cells;
-the cross-language aggregate (`tools/conformance/compare.mjs`) produces **65 x 7**.
+the cross-language aggregate (`tools/conformance/compare.mjs`) produces **65 x 8**.
 
 ### Lifecycle fixtures
 
@@ -204,7 +215,7 @@ done here (out of this rewrite's scope).
 ## test-server role
 
 `test-server/implementation/server.mjs` speaks the Fireweave-native remote protocol
-(`POST /v1/flags/evaluate`) plus its admin control plane
+(`POST /v1/control-points/evaluate`) plus its admin control plane
 (`POST /_test/fault`, `/_test/flags`, `/_test/reset`). Node and Python spawn it directly (an
 `npm`/`bun` and a `python` toolchain both have a `node` binary available, or install one, so
 this is the norm). Go and Java's canonical CI containers

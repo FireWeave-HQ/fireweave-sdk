@@ -9,17 +9,18 @@
 ///   from fallible internals, never `throw`n from a read-path public
 ///   method — only `initFireweave` surfaces it as a `throw`.
 /// - **No secrets in messages**: every message that crosses
-///   `FireweaveError`'s initializers runs through `redactSecrets`; canonical
-///   default messages never echo credentials in the first place.
+///   `FireweaveError`'s initializers runs through `redactSecrets`
+///   (`contracts/errors.json` `rules.redaction`); canonical default
+///   messages never echo credentials in the first place.
 
-/// `flagMetadata` key carrying the canonical Fireweave kind on error
-/// decisions (`spec/errors.schema.json` `rules.flagMetadataErrorKindKey`).
-public let flagMetadataErrorKindKey = "fireweave.errorKind"
+/// `controlPointMetadata` key carrying the canonical Fireweave kind on error
+/// decisions (`spec/errors.schema.json` `rules.controlPointMetadataErrorKindKey`).
+public let controlPointMetadataErrorKindKey = "fireweave.errorKind"
 
 /// Canonical PascalCase error kinds (`spec/errors.schema.json`); exactly 15.
 public enum ErrorKind: String, Sendable, Equatable, CaseIterable {
   case notReady = "NotReady"
-  case flagNotFound = "FlagNotFound"
+  case controlPointNotFound = "ControlPointNotFound"
   case typeMismatch = "TypeMismatch"
   case invalidContext = "InvalidContext"
   case authentication = "Authentication"
@@ -38,7 +39,7 @@ public enum ErrorKind: String, Sendable, Equatable, CaseIterable {
   var defaultMessage: String {
     switch self {
     case .notReady: return "provider not ready"
-    case .flagNotFound: return "flag not found"
+    case .controlPointNotFound: return "flag not found"
     case .typeMismatch: return "flag type mismatch"
     case .invalidContext: return "invalid evaluation context"
     case .authentication: return "authentication failed"
@@ -73,7 +74,7 @@ public enum ErrorKind: String, Sendable, Equatable, CaseIterable {
   fileprivate var baseOpenFeatureErrorCode: String {
     switch self {
     case .notReady: return "PROVIDER_NOT_READY"
-    case .flagNotFound: return "FLAG_NOT_FOUND"
+    case .controlPointNotFound: return "FLAG_NOT_FOUND"
     case .typeMismatch: return "TYPE_MISMATCH"
     case .invalidContext: return "INVALID_CONTEXT"
     case .authentication, .authorization, .rateLimited, .timeout, .network,
@@ -94,7 +95,7 @@ public enum ErrorKind: String, Sendable, Equatable, CaseIterable {
 /// booleans thread the subtype/behavioral flags the reference SDKs model as
 /// constructor keyword args (python) / dedicated struct fields (go/rust):
 ///
-/// - `quotaLimited` — only meaningful on `.flagNotFound`: the backend
+/// - `quotaLimited` — only meaningful on `.controlPointNotFound`: the backend
 ///   reported quota limiting for this evaluation
 ///   (`spec/decision.schema.json` `standardMetadataKeys`).
 /// - `initFatal` — only meaningful on `.configuration`: whether this
@@ -119,17 +120,17 @@ public struct FireweaveError: Error, Sendable, Equatable {
     targetingKeyMissing: Bool = false
   ) {
     self.kind = kind
-    self.message = redactSecrets(message ?? kind.defaultMessage)
+    self.message = normalizeErrorMessage(message ?? kind.defaultMessage)
     self.quotaLimited = quotaLimited
     self.initFatal = initFatal
     self.targetingKeyMissing = targetingKeyMissing
   }
 
-  /// `.flagNotFound`, optionally noting the backend reported quota
+  /// `.controlPointNotFound`, optionally noting the backend reported quota
   /// limiting (`contracts/errors.json`: "quota-limited responses resolve
-  /// as FlagNotFound with fireweave.quotaLimited metadata").
-  public static func flagNotFound(quotaLimited: Bool = false) -> FireweaveError {
-    FireweaveError(kind: .flagNotFound, quotaLimited: quotaLimited)
+  /// as ControlPointNotFound with fireweave.quotaLimited metadata").
+  public static func controlPointNotFound(quotaLimited: Bool = false) -> FireweaveError {
+    FireweaveError(kind: .controlPointNotFound, quotaLimited: quotaLimited)
   }
 
   /// `.invalidContext` subtype: missing targeting key
@@ -162,73 +163,161 @@ public struct FireweaveError: Error, Sendable, Equatable {
 
 // MARK: - Secret redaction
 
-// Manual scanner, NOT a regex-backed `NSRegularExpression` — the dependency
-// budget for this SDK is "Foundation only", and while `NSRegularExpression`
-// IS part of Foundation, hand-rolling the three fixed patterns keeps this
-// file trivially auditable and mirrors rust's own choice (task-12) to hand-
-// scan rather than pull in a pattern-matching dependency, even though its
-// dependency budget is a different shape (crates vs. frameworks). Matches
-// node/python/rust's `(ph[csx]_[A-Za-z0-9_\-]*|Bearer\s+\S+|
-// FW_PROJECT_API_KEY\s*[=:]\s*\S+)` byte-for-byte on the covered cases.
+// `contracts/errors.json` `rules.redaction`, implemented as a manual scanner
+// rather than `NSRegularExpression`: the dependency budget for this SDK is
+// "Foundation only", and while `NSRegularExpression` IS part of Foundation,
+// four small fixed passes keep this file trivially auditable. Each pass is
+// the scanner twin of one pattern in the other SDKs:
+//
+// 1. bearer:     `\bBearer(\s+)[A-Za-z0-9._~+/=-]+`, the word stays;
+// 2. userinfo:   `\b([A-Za-z][A-Za-z0-9+.-]*://)[^\s/?#@]+@`, scheme and `@` stay;
+// 3. assignment: `(NAME)(\s*[=:]\s*["']?)[^\s"',;]+`, name, separator and quote stay;
+// 4. value:      `(PREFIX)[A-Za-z0-9_-]+`.
 
-private let secretKeyPrefixes = ["phc_", "phs_", "phx_"]
+/// The text a redacted secret becomes (`rules.redaction.placeholder`).
+let redactionPlaceholder = "[REDACTED]"
 
+/// The variables whose assigned value is redacted (`rules.redaction.assignmentNames`).
+/// A name on its own is prose and stays.
+let redactionAssignmentNames = ["FIREWEAVE_KEY", "FIREWEAVE_BROWSER_KEY", "FW_PROJECT_API_KEY"]
+
+/// Key-shaped value prefixes (`rules.redaction.valuePrefixes`). A prefix
+/// followed by anything but `[A-Za-z0-9_-]` (the ellipsis in
+/// `project-api-key_…`) is prose and stays.
+let redactionValuePrefixes = [
+  "project-api-key_", "fw_public_", "fw_ingest_pub_", "fw_org_", "cli_at_", "phc_", "phx_", "phs_",
+]
+
+/// What one pass claims at a position: the text that replaces the span and
+/// the index just past it.
+private struct RedactionHit {
+  var replacement: String
+  var end: Int
+}
+
+private func isASCIILetter(_ c: Character) -> Bool {
+  c.isASCII && c.isLetter
+}
+
+/// `\w`: an ASCII letter, digit or underscore.
+private func isWordChar(_ c: Character) -> Bool {
+  c.isASCII && (c.isLetter || c.isNumber || c == "_")
+}
+
+/// `[A-Za-z0-9_-]`.
 private func isKeyChar(_ c: Character) -> Bool {
   c.isASCII && (c.isLetter || c.isNumber || c == "_" || c == "-")
 }
 
-/// Matches a `phc_`/`phs_`/`phx_` prefix followed by zero or more
-/// `[A-Za-z0-9_-]` characters starting at `start`. Returns the end index of
-/// the whole match, if `text` has one there.
-private func matchProjectKeyPrefix(_ text: String, at start: String.Index) -> String.Index? {
-  for prefix in secretKeyPrefixes where text[start...].hasPrefix(prefix) {
-    var end = text.index(start, offsetBy: prefix.count)
-    while end < text.endIndex && isKeyChar(text[end]) {
-      end = text.index(after: end)
+/// `[A-Za-z0-9._~+/=-]`: a bearer token character.
+private func isTokenChar(_ c: Character) -> Bool {
+  c.isASCII && (c.isLetter || c.isNumber || "._~+/=-".contains(c))
+}
+
+/// `\b` before a word character at `index`.
+private func atWordStart(_ chars: [Character], _ index: Int) -> Bool {
+  index == 0 || !isWordChar(chars[index - 1])
+}
+
+/// Whether `word` appears in `chars` starting at `start`.
+private func matches(_ chars: [Character], at start: Int, _ word: String) -> Bool {
+  var index = start
+  for c in word {
+    guard index < chars.count, chars[index] == c else { return false }
+    index += 1
+  }
+  return true
+}
+
+/// The index past the run of characters from `start` that satisfy `test`.
+private func runEnd(_ chars: [Character], from start: Int, _ test: (Character) -> Bool) -> Int {
+  var index = start
+  while index < chars.count && test(chars[index]) {
+    index += 1
+  }
+  return index
+}
+
+/// Copies `chars`, replacing every span `match` claims, left to right.
+private func redactPass(
+  _ chars: [Character],
+  _ match: ([Character], Int) -> RedactionHit?
+) -> [Character] {
+  var out: [Character] = []
+  out.reserveCapacity(chars.count)
+  var index = 0
+  while index < chars.count {
+    if let hit = match(chars, index) {
+      out.append(contentsOf: hit.replacement)
+      index = hit.end
+    } else {
+      out.append(chars[index])
+      index += 1
     }
-    return end
+  }
+  return out
+}
+
+/// `Bearer <token>`: the token goes, the word and the whitespace stay.
+private func matchBearer(_ chars: [Character], _ start: Int) -> RedactionHit? {
+  let word = "Bearer"
+  guard atWordStart(chars, start), matches(chars, at: start, word) else { return nil }
+  let spaceStart = start + word.count
+  let tokenStart = runEnd(chars, from: spaceStart) { $0.isWhitespace }
+  guard tokenStart > spaceStart else { return nil }
+  let end = runEnd(chars, from: tokenStart, isTokenChar)
+  guard end > tokenStart else { return nil }
+  let kept = String(chars[start..<tokenStart])
+  return RedactionHit(replacement: kept + redactionPlaceholder, end: end)
+}
+
+/// `scheme://userinfo@host`: the userinfo goes.
+private func matchURLUserinfo(_ chars: [Character], _ start: Int) -> RedactionHit? {
+  guard start < chars.count, isASCIILetter(chars[start]), atWordStart(chars, start) else {
+    return nil
+  }
+  let schemeEnd = runEnd(chars, from: start + 1) { c in
+    c.isASCII && (c.isLetter || c.isNumber || c == "+" || c == "." || c == "-")
+  }
+  guard matches(chars, at: schemeEnd, "://") else { return nil }
+  let infoStart = schemeEnd + 3
+  let infoEnd = runEnd(chars, from: infoStart) { c in
+    !c.isWhitespace && c != "/" && c != "?" && c != "#" && c != "@"
+  }
+  guard infoEnd > infoStart, infoEnd < chars.count, chars[infoEnd] == "@" else { return nil }
+  let kept = String(chars[start..<infoStart])
+  return RedactionHit(replacement: kept + redactionPlaceholder + "@", end: infoEnd + 1)
+}
+
+/// `NAME=value`, `NAME: value`, `NAME = "value"`, `NAME='value'`: the value
+/// (up to whitespace, a quote, a comma or a semicolon) goes.
+private func matchAssignment(_ chars: [Character], _ start: Int) -> RedactionHit? {
+  for name in redactionAssignmentNames where matches(chars, at: start, name) {
+    var index = runEnd(chars, from: start + name.count) { $0.isWhitespace }
+    guard index < chars.count, chars[index] == "=" || chars[index] == ":" else { continue }
+    index = runEnd(chars, from: index + 1) { $0.isWhitespace }
+    if index < chars.count, chars[index] == "\"" || chars[index] == "'" {
+      index += 1
+    }
+    let end = runEnd(chars, from: index) { c in
+      !c.isWhitespace && c != "\"" && c != "'" && c != "," && c != ";"
+    }
+    guard end > index else { continue }
+    let kept = String(chars[start..<index])
+    return RedactionHit(replacement: kept + redactionPlaceholder, end: end)
   }
   return nil
 }
 
-/// Matches `Bearer` + required whitespace run + required non-whitespace run.
-private func matchBearerToken(_ text: String, at start: String.Index) -> String.Index? {
-  let keyword = "Bearer"
-  guard text[start...].hasPrefix(keyword) else { return nil }
-  var idx = text.index(start, offsetBy: keyword.count)
-  var sawSpace = false
-  while idx < text.endIndex && text[idx].isWhitespace {
-    sawSpace = true
-    idx = text.index(after: idx)
+/// A value prefix followed by one or more `[A-Za-z0-9_-]`.
+private func matchKeyValue(_ chars: [Character], _ start: Int) -> RedactionHit? {
+  for prefix in redactionValuePrefixes where matches(chars, at: start, prefix) {
+    let valueStart = start + prefix.count
+    let end = runEnd(chars, from: valueStart, isKeyChar)
+    guard end > valueStart else { continue }
+    return RedactionHit(replacement: redactionPlaceholder, end: end)
   }
-  guard sawSpace else { return nil }
-  var sawToken = false
-  while idx < text.endIndex && !text[idx].isWhitespace {
-    sawToken = true
-    idx = text.index(after: idx)
-  }
-  guard sawToken else { return nil }
-  return idx
-}
-
-/// Matches `FW_PROJECT_API_KEY` + optional whitespace + (`=`|`:`) +
-/// optional whitespace + required non-whitespace run.
-private func matchFwProjectApiKeyAssignment(_ text: String, at start: String.Index) -> String.Index?
-{
-  let keyword = "FW_PROJECT_API_KEY"
-  guard text[start...].hasPrefix(keyword) else { return nil }
-  var idx = text.index(start, offsetBy: keyword.count)
-  while idx < text.endIndex && text[idx].isWhitespace { idx = text.index(after: idx) }
-  guard idx < text.endIndex, text[idx] == "=" || text[idx] == ":" else { return nil }
-  idx = text.index(after: idx)
-  while idx < text.endIndex && text[idx].isWhitespace { idx = text.index(after: idx) }
-  var sawToken = false
-  while idx < text.endIndex && !text[idx].isWhitespace {
-    sawToken = true
-    idx = text.index(after: idx)
-  }
-  guard sawToken else { return nil }
-  return idx
+  return nil
 }
 
 /// Collapses whitespace runs to a single space and trims both ends.
@@ -249,32 +338,27 @@ private func collapseAndTrimWhitespace(_ text: String) -> String {
   return out
 }
 
-/// Redacts secret-shaped substrings (`spec/errors.schema.json`
-/// `secretPatterns`) and collapses whitespace runs. Defensive: applied to
-/// every message that reaches `FireweaveError`, even though canonical
-/// default messages never contain a secret in the first place — this is the
-/// safety net for a message built dynamically elsewhere in the SDK.
+/// Scrubs secrets from `text` exactly as `contracts/errors.json`
+/// `rules.redaction` specifies (`contracts/errors.md` rule 2): bearer
+/// tokens, then URL userinfo, then the values assigned to `FIREWEAVE_KEY`,
+/// `FIREWEAVE_BROWSER_KEY` and `FW_PROJECT_API_KEY`, then key-shaped values
+/// each become `[REDACTED]`. A variable NAME is never redacted on its own,
+/// only its value, and nothing else in `text` changes.
+///
+/// Applied to every message that reaches `FireweaveError`, even though
+/// canonical default messages never contain a secret: it is the safety net
+/// for a message built dynamically elsewhere in the SDK.
 public func redactSecrets(_ text: String) -> String {
-  var out = ""
-  var i = text.startIndex
-  while i < text.endIndex {
-    if let end = matchProjectKeyPrefix(text, at: i) {
-      out += "[REDACTED]"
-      i = end
-      continue
-    }
-    if let end = matchBearerToken(text, at: i) {
-      out += "[REDACTED]"
-      i = end
-      continue
-    }
-    if let end = matchFwProjectApiKeyAssignment(text, at: i) {
-      out += "[REDACTED]"
-      i = end
-      continue
-    }
-    out.append(text[i])
-    i = text.index(after: i)
-  }
-  return collapseAndTrimWhitespace(out)
+  var chars = Array(text)
+  chars = redactPass(chars, matchBearer)
+  chars = redactPass(chars, matchURLUserinfo)
+  chars = redactPass(chars, matchAssignment)
+  chars = redactPass(chars, matchKeyValue)
+  return String(chars)
+}
+
+/// A message as `FireweaveError` stores it: redacted, then whitespace runs
+/// collapsed to one space and trimmed.
+func normalizeErrorMessage(_ text: String) -> String {
+  collapseAndTrimWhitespace(redactSecrets(text))
 }

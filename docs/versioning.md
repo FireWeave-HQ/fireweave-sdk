@@ -19,7 +19,7 @@ Today only the spec is pre-1.0 (`spec/version.json`: 0.1.0); every package is 2.
 
 ## What counts as "public API"
 
-Covered by the compatibility promise: exported/public types and functions of each SDK package, the canonical `fireweave.*` flagMetadata keys, the error-kind ↔ OpenFeature-code mapping, and documented configuration options. **Not covered**: anything under `internal/` (Go) or documented as a test/fixture hook (`seed`, `setFault`, conformance runners), and the `contracts/` fixture format (versioned separately via `schemaVersion`).
+Covered by the compatibility promise: exported/public types and functions of each SDK package, the canonical `fireweave.*` controlPointMetadata keys, the error-kind ↔ OpenFeature-code mapping, and documented configuration options. **Not covered**: anything under `internal/` (Go) or documented as a test/fixture hook (`seed`, `setFault`, conformance runners), and the `contracts/` fixture format (versioned separately via `schemaVersion`).
 
 ## Spec version
 

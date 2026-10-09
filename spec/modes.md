@@ -2,7 +2,8 @@
 
 - **Status:** Normative for SDK v1
 - **Applies to:** every language SDK in `sdks/`
-- **Related:** `control-points.md`, `remote-protocol.md`
+- **Related:** `control-points.md`, `remote-protocol.md`, `start-profile.md` (the opt-in layer
+  that resolves mode and credentials by rule)
 
 An SDK instance runs in exactly one **mode**, fixed at initialisation. The mode selects the
 adapter; nothing downstream branches on it.
@@ -28,10 +29,10 @@ production is something a human typed.
 
 | | `local` | `remote` |
 | --- | --- | --- |
-| adapter | local, seeded map | remote, `POST /v1/flags/evaluate` |
+| adapter | local, seeded map | remote, `POST /v1/control-points/evaluate` |
 | network | none | fw-server |
 | required options | `local.controlPoints` (may be empty) | `apiKey`, `apiUrl` |
-| unknown key | `default`, `reason: DEFAULT` | `default`, `reason: ERROR`, `FlagNotFound` |
+| unknown key | `default`, `reason: DEFAULT` | `default`, `reason: ERROR`, `ControlPointNotFound` |
 | `registerTarget` | **recorded in-process + traced** — nothing sent | `POST /v1/targets/register` |
 
 Both modes expose the identical nine methods with identical signatures. A call site MUST NOT
@@ -74,6 +75,11 @@ remote to local passes review and then behaves as neither.
 
 ## Reading credentials
 
-The SDK reads **no environment variables**. Credentials arrive as explicit options. Env
-reading belongs to the harness the caller owns, which is what keeps the SDK bundler-safe and
+The core SDK reads **no environment variables**. Credentials arrive as explicit options. Env
+reading belongs to the layer the caller opts into, which is what keeps the core bundler-safe and
 deterministic under test.
+
+The one sanctioned exception is the opt-in **start profile** (`start-profile.md`, ADR-0012): a
+separate entry point that reads `FIREWEAVE_*` variables (or, in client apps, build-time values)
+and chooses the mode by a fail-closed rule. It calls `initFireweave` with an explicit mode, so
+every rule in this document still holds for the core underneath it.

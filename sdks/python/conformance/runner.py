@@ -24,7 +24,7 @@ Suite -> execution backend:
 - faults: FireweaveRemoteAdapter with real HTTP against the local test-server
   stub (``test-server/implementation/server.mjs``, spawned once as a
   subprocess and reused, speaking the Fireweave-native
-  ``POST /v1/flags/evaluate`` route — not the legacy PostHog ``/flags?v=2``
+  ``POST /v1/control-points/evaluate`` route — not the legacy PostHog ``/flags?v=2``
   protocol this file used pre-v1). ``fault-stale-cache`` runs on the
   in-memory adapter instead (cache staleness is provisioned directly per
   ``given.flags[*].fromCache`` + ``providerState: STALE``).
@@ -186,7 +186,7 @@ def _decision_to_actual(decision: Any) -> Dict[str, Any]:
         "reason": decision.reason,
         "errorCode": decision.error_code,
         "errorMessage": decision.error_message,
-        "flagMetadata": dict(decision.flag_metadata or {}),
+        "controlPointMetadata": dict(decision.control_point_metadata or {}),
     }
 
 
@@ -200,9 +200,9 @@ class _CountingAdapter:
     def initialize(self) -> None:
         self._inner.initialize()
 
-    def resolve(self, flag_key: str, context: EvaluationContext) -> Any:
+    def resolve(self, control_point_key: str, context: EvaluationContext) -> Any:
         self.resolve_calls += 1
-        return self._inner.resolve(flag_key, context)
+        return self._inner.resolve(control_point_key, context)
 
     def shutdown(self, timeout_ms: int) -> None:
         self._inner.shutdown(timeout_ms)
@@ -247,7 +247,7 @@ class _FaultyAdapter:
     def initialize(self) -> None:
         self._inner.initialize()
 
-    def resolve(self, flag_key: str, context: EvaluationContext) -> Any:
+    def resolve(self, control_point_key: str, context: EvaluationContext) -> Any:
         raise self._error
 
     def shutdown(self, timeout_ms: int) -> None:
@@ -314,12 +314,12 @@ def _run_evaluate(fixture: Dict[str, Any]) -> Dict[str, Any]:
         requested = when.get("domain")
         output: Dict[str, Any] = {}
         for name, domain_given in given["domains"].items():
-            runtime = FireweaveRuntime(InMemoryAdapter(domain_given.get("flags") or {}))
+            runtime = FireweaveRuntime(InMemoryAdapter(domain_given.get("controlPoints") or {}))
             _provision_state(runtime, domain_given.get("providerState"))
             if name == requested:
                 client = FireweaveClient(runtime)
                 decision = client.control_points.evaluate(
-                    when["flagKey"],
+                    when["controlPointKey"],
                     _to_expected_type(when["flagType"]),
                     when.get("defaultValue"),
                     _context_from(when.get("invocationContext")),
@@ -332,7 +332,7 @@ def _run_evaluate(fixture: Dict[str, Any]) -> Dict[str, Any]:
     reserved = tuple(config.get("reservedAttributeKeys", ()))
     require_targeting_key = bool(config.get("requireTargetingKey", False))
 
-    base_adapter: Any = InMemoryAdapter(given.get("flags") or {})
+    base_adapter: Any = InMemoryAdapter(given.get("controlPoints") or {})
     fault = given.get("fault")
     if fault is not None and fault.get("applyTo", "flags") == "flags":
         base_adapter = _FaultyAdapter(base_adapter, _fault_to_error(fault))
@@ -356,7 +356,7 @@ def _run_evaluate(fixture: Dict[str, Any]) -> Dict[str, Any]:
     invocation_ctx = _context_from(when.get("invocationContext"))
     options = _evaluate_options_from(when.get("options"))
     decision = client.control_points.evaluate(
-        when["flagKey"], _to_expected_type(when["flagType"]), when.get("defaultValue"), invocation_ctx, options
+        when["controlPointKey"], _to_expected_type(when["flagType"]), when.get("defaultValue"), invocation_ctx, options
     )
     actual = _decision_to_actual(decision)
 
@@ -383,18 +383,18 @@ def _run_replace_provider(fixture: Dict[str, Any]) -> Dict[str, Any]:
     given = fixture.get("given", {})
     when = fixture.get("when", {})
 
-    runtime_a = FireweaveRuntime(InMemoryAdapter(given.get("flags") or {}))
+    runtime_a = FireweaveRuntime(InMemoryAdapter(given.get("controlPoints") or {}))
     runtime_a.initialize()
     runtime_a.shutdown()  # old provider retired before the replacement takes over
 
     replacement = given.get("replacement") or {}
-    runtime_b = FireweaveRuntime(InMemoryAdapter(replacement.get("flags") or {}))
+    runtime_b = FireweaveRuntime(InMemoryAdapter(replacement.get("controlPoints") or {}))
     runtime_b.initialize()
     client_b = FireweaveClient(runtime_b)
 
     then = when["thenEvaluate"]
     decision = client_b.control_points.evaluate(
-        then["flagKey"], _to_expected_type(then["flagType"]), then.get("defaultValue"),
+        then["controlPointKey"], _to_expected_type(then["flagType"]), then.get("defaultValue"),
         _context_from(then.get("invocationContext")),
     )
     actual = _decision_to_actual(decision)
@@ -416,7 +416,7 @@ def _run_initialize(fixture: Dict[str, Any]) -> Dict[str, Any]:
             allowed_hosts=tuple(config["allowedHosts"]) if "allowedHosts" in config else None,
         )
     else:
-        adapter = InMemoryAdapter(given.get("flags") or {})
+        adapter = InMemoryAdapter(given.get("controlPoints") or {})
     runtime = FireweaveRuntime(adapter)
     error_code = None
     error_message = None
@@ -437,7 +437,7 @@ def _run_initialize(fixture: Dict[str, Any]) -> Dict[str, Any]:
 
 def _run_shutdown(fixture: Dict[str, Any]) -> Dict[str, Any]:
     given = fixture.get("given", {})
-    runtime = FireweaveRuntime(InMemoryAdapter(given.get("flags") or {}))
+    runtime = FireweaveRuntime(InMemoryAdapter(given.get("controlPoints") or {}))
     _provision_state(runtime, given.get("providerState"))
     error_code = None
     error_message = None
@@ -455,7 +455,7 @@ def _run_extension(fixture: Dict[str, Any]) -> Dict[str, Any]:
     FireweaveClient.invoke_capability, present and un-cut in v1."""
     given = fixture.get("given", {})
     when = fixture.get("when", {})
-    runtime = FireweaveRuntime(InMemoryAdapter(given.get("flags") or {}))
+    runtime = FireweaveRuntime(InMemoryAdapter(given.get("controlPoints") or {}))
     _provision_state(runtime, given.get("providerState", "READY"))
     client = FireweaveClient(runtime)
 
@@ -478,7 +478,7 @@ def _run_extension(fixture: Dict[str, Any]) -> Dict[str, Any]:
 
 # ---------------------------------------------------------------------------
 # faults suite: real HTTP against a spawned test-server (Fireweave-native
-# /v1/flags/evaluate route)
+# /v1/control-points/evaluate route)
 
 class _StubServer:
     """One shared local test-server stub process (loopback, random port)."""
@@ -581,7 +581,7 @@ def _run_fault(fixture: Dict[str, Any]) -> Dict[str, Any]:
         "quotaLimited": None,
     }
     flag_id = 1
-    for key, definition in (given.get("flags") or {}).items():
+    for key, definition in (given.get("controlPoints") or {}).items():
         variant = definition.get("variant")
         flags_body["flags"][key] = {
             "key": key,
@@ -628,7 +628,7 @@ def _run_fault(fixture: Dict[str, Any]) -> Dict[str, Any]:
     runtime.initialize()
     client = FireweaveClient(runtime)
     decision = client.control_points.evaluate(
-        when["flagKey"], _to_expected_type(when["flagType"]), when.get("defaultValue"),
+        when["controlPointKey"], _to_expected_type(when["flagType"]), when.get("defaultValue"),
         _context_from(when.get("invocationContext")),
     )
     runtime.shutdown()

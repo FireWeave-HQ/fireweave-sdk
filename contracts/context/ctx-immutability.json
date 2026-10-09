@@ -5,7 +5,7 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-immut": {
         "type": "boolean",
         "enabled": true,
@@ -16,7 +16,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-immut",
+    "controlPointKey": "fw-immut",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {

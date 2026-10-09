@@ -6,10 +6,10 @@ import "context"
 // BackendAdapter. Context has already been merged and validated and is a
 // private copy the adapter may read freely.
 type ResolveRequest struct {
-	FlagKey      string
-	Type         FlagType
-	DefaultValue any
-	Context      EvaluationContext
+	ControlPointKey string
+	Type            FlagType
+	DefaultValue    any
+	Context         EvaluationContext
 	// IncludePayload threads EvaluateOptions.IncludePayload (task-10b item 5,
 	// contracts/evaluation/eval-payload-attached.json) through to whichever
 	// adapter resolves the flag: when true and the resolved flag carries a

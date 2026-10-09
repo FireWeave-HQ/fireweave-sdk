@@ -6,7 +6,7 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-bool-on": {
         "type": "boolean",
         "enabled": true,
@@ -24,7 +24,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-bool-on",
+    "controlPointKey": "fw-bool-on",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {
@@ -37,8 +37,8 @@
     "reason": "TARGETING_MATCH",
     "errorCode": null,
     "errorMessage": null,
-    "flagMetadata": {
-      "fireweave.flagVersion": 1
+    "controlPointMetadata": {
+      "fireweave.controlPointVersion": 1
     }
   },
   "schemaVersion": 1,

@@ -18,7 +18,7 @@
  *   runtime turns into the caller's own default with reason `DEFAULT` — not
  *   an error (spec/modes.md "Behaviour per mode": local's unknown-key row is
  *   deliberately `default`/`DEFAULT`, unlike remote's `default`/`ERROR`/
- *   `FlagNotFound`).
+ *   `ControlPointNotFound`).
  *
  * Call-site defaults stay `false` under RAMP-1. Never write
  * `fw.flag(key, true)` to dogfood locally — that same `true` is the production
@@ -99,14 +99,14 @@ export class FireweaveLocalAdapter implements BackendAdapter {
    * A miss carries `reason: 'DEFAULT'` on the `{ found: false }` resolution —
    * the signal `FireweaveRuntime.evaluate` (runtime.ts) reads to return the
    * caller's default with reason `DEFAULT` instead of falling through to its
-   * generic FlagNotFound/ERROR mapping (spec/modes.md).
+   * generic ControlPointNotFound/ERROR mapping (spec/modes.md).
    */
   async resolve(
-    flagKey: string,
+    controlPointKey: string,
     _context: CanonicalContext,
     _options?: ResolveOptions,
   ): Promise<AdapterResolution> {
-    const override = this.devFlags[flagKey];
+    const override = this.devFlags[controlPointKey];
     if (override === undefined) return { found: false, reason: 'DEFAULT' };
     return {
       found: true,

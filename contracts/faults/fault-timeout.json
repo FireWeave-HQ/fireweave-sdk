@@ -12,7 +12,7 @@
     "config": {
       "featureFlagsRequestTimeoutMs": 50
     },
-    "flags": {
+    "controlPoints": {
       "fw-t": {
         "type": "boolean",
         "enabled": true,
@@ -23,7 +23,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-t",
+    "controlPointKey": "fw-t",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {
@@ -36,7 +36,7 @@
     "reason": "ERROR",
     "errorCode": "GENERAL",
     "errorMessage": "request timed out",
-    "flagMetadata": {
+    "controlPointMetadata": {
       "fireweave.errorKind": "Timeout"
     }
   },

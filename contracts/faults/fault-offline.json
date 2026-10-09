@@ -11,11 +11,11 @@
     "config": {
       "localEvaluation": false
     },
-    "flags": {}
+    "controlPoints": {}
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-off",
+    "controlPointKey": "fw-off",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {
@@ -28,7 +28,7 @@
     "reason": "ERROR",
     "errorCode": "GENERAL",
     "errorMessage": "network error",
-    "flagMetadata": {
+    "controlPointMetadata": {
       "fireweave.errorKind": "Network"
     }
   },

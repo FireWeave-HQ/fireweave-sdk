@@ -1,6 +1,6 @@
 //! Fireweave remote backend adapter — default production path.
 //!
-//! Real HTTP client (`ureq`) for fw-server `POST /v1/flags/evaluate` and
+//! Real HTTP client (`ureq`) for fw-server `POST /v1/control-points/evaluate` and
 //! `POST /v1/targets/register`. Auth: `Authorization: Bearer <api_key>`.
 //! Speaks only the vendor-neutral Fireweave remote protocol
 //! (`spec/remote-protocol.md`) — no vendor SDK, key, or host ever enters
@@ -19,7 +19,7 @@ use crate::domain::errors::{ErrorKind, FireweaveError};
 use crate::domain::types::JsonValue;
 use crate::infrastructure::hosts::{assert_host_allowed, extract_hostname};
 
-const EVALUATE_PATH: &str = "/v1/flags/evaluate";
+const EVALUATE_PATH: &str = "/v1/control-points/evaluate";
 const REGISTER_TARGET_PATH: &str = "/v1/targets/register";
 
 /// Construction-time configuration for [`FireweaveRemoteAdapter`].
@@ -166,7 +166,7 @@ impl BackendAdapter for FireweaveRemoteAdapter {
 
     fn resolve(
         &self,
-        flag_key: &str,
+        control_point_key: &str,
         context: &EvaluationContext,
     ) -> Result<FlagResolution, FireweaveError> {
         if self.closed.load(Ordering::SeqCst) {
@@ -183,8 +183,8 @@ impl BackendAdapter for FireweaveRemoteAdapter {
         let mut body = serde_json::Map::new();
         body.insert("targetingKey".to_string(), JsonValue::String(targeting_key));
         body.insert(
-            "flagKeys".to_string(),
-            JsonValue::Array(vec![JsonValue::String(flag_key.to_string())]),
+            "controlPointKeys".to_string(),
+            JsonValue::Array(vec![JsonValue::String(control_point_key.to_string())]),
         );
 
         let mut attributes = serde_json::Map::new();
@@ -226,10 +226,12 @@ impl BackendAdapter for FireweaveRemoteAdapter {
             .unwrap_or(false);
         let item = decisions
             .iter()
-            .find(|d| d.get("flagKey").and_then(JsonValue::as_str) == Some(flag_key))
+            .find(|d| {
+                d.get("controlPointKey").and_then(JsonValue::as_str) == Some(control_point_key)
+            })
             .filter(|item| item.get("found").and_then(JsonValue::as_bool) != Some(false));
 
-        // key unknown to the backend -> ERROR/FlagNotFound
+        // key unknown to the backend -> ERROR/ControlPointNotFound
         // (spec/control-points.md return-discipline table) — deliberately
         // NOT matched: false (that path means the local-mode "no decision,
         // use the caller's default" seam, which does not apply to remote's
@@ -239,7 +241,9 @@ impl BackendAdapter for FireweaveRemoteAdapter {
             None => return Err(FireweaveError::flag_not_found(quota_limited)),
         };
 
-        let meta = item.get("flagMetadata").and_then(JsonValue::as_object);
+        let meta = item
+            .get("controlPointMetadata")
+            .and_then(JsonValue::as_object);
         Ok(FlagResolution {
             value: item.get("value").cloned().unwrap_or(JsonValue::Null),
             variant: item
@@ -252,13 +256,13 @@ impl BackendAdapter for FireweaveRemoteAdapter {
                 .unwrap_or(true),
             matched: true,
             version: meta
-                .and_then(|m| m.get("fireweave.flagVersion"))
+                .and_then(|m| m.get("fireweave.controlPointVersion"))
                 .and_then(JsonValue::as_i64),
-            vendor_flag_id: meta
-                .and_then(|m| m.get("fireweave.vendorFlagId"))
+            vendor_control_point_id: meta
+                .and_then(|m| m.get("fireweave.vendorControlPointId"))
                 .and_then(JsonValue::as_i64),
-            // vendor_flag_id/reason_code above are passed straight through
-            // from the server's own flagMetadata, no client-side re-gate:
+            // vendor_control_point_id/reason_code above are passed straight through
+            // from the server's own controlPointMetadata, no client-side re-gate:
             // fw-server already applies ruling 11 before this response is
             // built, and spec/remote-evaluate.schema.json's decisionItem
             // carries no separate conditionIndex field to re-check against
@@ -407,8 +411,8 @@ mod tests {
     }
 
     /// Task-12 review regression test: a mocked remote response carrying
-    /// BOTH `fireweave.vendorFlagId` and `fireweave.reasonCode` in
-    /// `flagMetadata` must surface both on the resulting `Decision`.
+    /// BOTH `fireweave.vendorControlPointId` and `fireweave.reasonCode` in
+    /// `controlPointMetadata` must surface both on the resulting `Decision`.
     /// Exercises the FULL pipeline (mocked HTTP -> `FireweaveRemoteAdapter`
     /// -> `FireweaveRuntime::evaluate`), not just the adapter's own
     /// `FlagResolution`, because the bug this guards against (a client-side
@@ -421,7 +425,7 @@ mod tests {
     /// for every remote decision, no fixture having covered the gap.
     #[test]
     fn remote_decision_surfaces_vendor_metadata_when_server_sends_both_keys() {
-        let body = r#"{"decisions":[{"flagKey":"f","value":true,"variant":"on","reason":"TARGETING_MATCH","found":true,"enabled":true,"flagMetadata":{"fireweave.vendorFlagId":1001,"fireweave.reasonCode":"condition_match"}}]}"#;
+        let body = r#"{"decisions":[{"controlPointKey":"f","value":true,"variant":"on","reason":"TARGETING_MATCH","found":true,"enabled":true,"controlPointMetadata":{"fireweave.vendorControlPointId":1001,"fireweave.reasonCode":"condition_match"}}]}"#;
         let api_url = spawn_one_shot_json_server(body);
 
         let adapter = FireweaveRemoteAdapter::new(RemoteAdapterConfig {
@@ -444,11 +448,13 @@ mod tests {
 
         assert_eq!(decision.value, JsonValue::Bool(true));
         assert_eq!(
-            decision.flag_metadata.get("fireweave.vendorFlagId"),
+            decision
+                .control_point_metadata
+                .get("fireweave.vendorControlPointId"),
             Some(&JsonValue::from(1001))
         );
         assert_eq!(
-            decision.flag_metadata.get("fireweave.reasonCode"),
+            decision.control_point_metadata.get("fireweave.reasonCode"),
             Some(&JsonValue::String("condition_match".to_string()))
         );
     }
@@ -458,7 +464,7 @@ mod tests {
     /// through pairing stays symmetric.
     #[test]
     fn remote_decision_omits_vendor_metadata_when_only_one_key_present() {
-        let body = r#"{"decisions":[{"flagKey":"f","value":true,"variant":"on","reason":"TARGETING_MATCH","found":true,"enabled":true,"flagMetadata":{"fireweave.reasonCode":"condition_match"}}]}"#;
+        let body = r#"{"decisions":[{"controlPointKey":"f","value":true,"variant":"on","reason":"TARGETING_MATCH","found":true,"enabled":true,"controlPointMetadata":{"fireweave.reasonCode":"condition_match"}}]}"#;
         let api_url = spawn_one_shot_json_server(body);
 
         let adapter = FireweaveRemoteAdapter::new(RemoteAdapterConfig {
@@ -480,8 +486,10 @@ mod tests {
         );
 
         assert!(!decision
-            .flag_metadata
-            .contains_key("fireweave.vendorFlagId"));
-        assert!(!decision.flag_metadata.contains_key("fireweave.reasonCode"));
+            .control_point_metadata
+            .contains_key("fireweave.vendorControlPointId"));
+        assert!(!decision
+            .control_point_metadata
+            .contains_key("fireweave.reasonCode"));
     }
 }

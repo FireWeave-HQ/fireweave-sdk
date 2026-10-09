@@ -73,9 +73,9 @@ test('every method matches the descriptor\'s arity exactly (conformance/surface/
   assert.deepEqual(offenders, [], `arity mismatches: ${offenders.join('; ')}`);
 });
 
-test('the deprecated flags alias shares identity with controlPoints', () => {
+test('the flags alias is gone (ADR-0013)', () => {
   const fw = client();
-  assert.equal(fw.flags, fw.controlPoints);
+  assert.equal('flags' in fw, false);
 });
 
 test('*Details returns a Decision, *Value returns the bare value', async () => {
@@ -86,7 +86,7 @@ test('*Details returns a Decision, *Value returns the bare value', async () => {
   assert.equal(value, false);
   assert.equal(details.value, false);
   // The whole point of the pair: details carries what value cannot.
-  assert.equal(details.flagKey, 'absent');
+  assert.equal(details.controlPointKey, 'absent');
   assert.equal(typeof details.reason, 'string');
 });
 

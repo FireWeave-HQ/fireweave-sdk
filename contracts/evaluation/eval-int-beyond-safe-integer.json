@@ -8,7 +8,7 @@
   "provisional": false,
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-big-int": {
         "type": "integer",
         "enabled": true,
@@ -22,7 +22,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-big-int",
+    "controlPointKey": "fw-big-int",
     "flagType": "integer",
     "defaultValue": 0,
     "invocationContext": {
@@ -35,8 +35,8 @@
     "reason": "TARGETING_MATCH",
     "errorCode": null,
     "errorMessage": null,
-    "flagMetadata": {
-      "fireweave.flagVersion": 1
+    "controlPointMetadata": {
+      "fireweave.controlPointVersion": 1
     }
   },
   "compatibility": {

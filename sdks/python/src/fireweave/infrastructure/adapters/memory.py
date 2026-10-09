@@ -26,7 +26,7 @@ import threading
 from typing import Any, Dict, Mapping, Optional
 
 from ...domain.context import EvaluationContext
-from ...domain.errors import FlagNotFoundError
+from ...domain.errors import ControlPointNotFoundError
 from ...application.ports import FlagResolution
 
 __all__ = ["InMemoryAdapter"]
@@ -50,14 +50,14 @@ class InMemoryAdapter:
         with self._lock:
             self._flags = dict(flags)
 
-    def resolve(self, flag_key: str, context: EvaluationContext) -> FlagResolution:
+    def resolve(self, control_point_key: str, context: EvaluationContext) -> FlagResolution:
         with self._lock:
-            definition = self._flags.get(flag_key)
+            definition = self._flags.get(control_point_key)
         if definition is None:
-            # key genuinely unknown to this backend -> ERROR/FlagNotFound
+            # key genuinely unknown to this backend -> ERROR/ControlPointNotFound
             # (spec/control-points.md return-discipline table), distinct
             # from "conditions did not select this caller" below.
-            raise FlagNotFoundError()
+            raise ControlPointNotFoundError()
 
         matched = self._conditions_match(definition, context)
         reason = definition.get("reason") or {}
@@ -68,7 +68,7 @@ class InMemoryAdapter:
             enabled=bool(definition.get("enabled", True)),
             matched=matched,
             version=metadata.get("version"),
-            vendor_flag_id=metadata.get("id"),
+            vendor_control_point_id=metadata.get("id"),
             reason_code=reason.get("code"),
             condition_index=reason.get("condition_index"),
             payload=definition.get("payload"),

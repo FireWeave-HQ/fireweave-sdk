@@ -55,11 +55,11 @@ interface Fixture {
   description: string;
   given: {
     providerState?: string;
-    flags?: Record<string, InMemoryFlagDefinition & { matchTargetingKey?: string }>;
+    controlPoints?: Record<string, InMemoryFlagDefinition & { matchTargetingKey?: string }>;
   };
   when: {
     operation: string;
-    flagKey?: string;
+    controlPointKey?: string;
     flagType?: ExpectedFlagType;
     defaultValue?: unknown;
     invocationContext?: Record<string, unknown>;
@@ -101,7 +101,7 @@ async function makeRuntime(fixture: Fixture): Promise<FireweaveWebRuntime> {
   const hangs = fixture.given.providerState === 'HANGS';
   const adapter: WebBackendAdapter = hangs
     ? hangingAdapter
-    : new InMemoryWebAdapter({ flags: fixture.given.flags ?? {} });
+    : new InMemoryWebAdapter({ flags: fixture.given.controlPoints ?? {} });
 
   const runtime = new FireweaveWebRuntime(adapter, {
     globalContext: (fixture.when.invocationContext ?? {}) as never,
@@ -156,7 +156,7 @@ async function runFixture(fixture: Fixture): Promise<Outcome> {
   }
 
   const runtime = await makeRuntime(fixture);
-  const flagKey = fixture.when.flagKey as string;
+  const controlPointKey = fixture.when.controlPointKey as string;
   const flagType = fixture.when.flagType as ExpectedFlagType;
   const defaultValue = fixture.when.defaultValue as never;
 
@@ -171,7 +171,7 @@ async function runFixture(fixture: Fixture): Promise<Outcome> {
     // Decision return, never a Promise, per application/client.ts).
     const client = new FireweaveWebClient(runtime);
     const details = client.controlPoints.evaluate(
-      flagKey,
+      controlPointKey,
       flagType,
       defaultValue,
       (fixture.when.invocationContext ?? {}) as never
@@ -189,7 +189,7 @@ async function runFixture(fixture: Fixture): Promise<Outcome> {
     changedKeys = await runtime.setContext(fixture.when.nextContext as never);
   }
 
-  const decision = runtime.evaluateSync(flagKey, flagType, defaultValue);
+  const decision = runtime.evaluateSync(controlPointKey, flagType, defaultValue);
   const actual: Record<string, unknown> = {
     value: decision.value,
     reason: decision.reason,

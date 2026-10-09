@@ -196,8 +196,8 @@ fn decision_to_actual(decision: &Decision) -> serde_json::Map<String, JsonValue>
             .unwrap_or(JsonValue::Null),
     );
     out.insert(
-        "flagMetadata".to_string(),
-        JsonValue::Object(decision.flag_metadata.clone()),
+        "controlPointMetadata".to_string(),
+        JsonValue::Object(decision.control_point_metadata.clone()),
     );
     out
 }
@@ -259,11 +259,11 @@ impl BackendAdapter for CountingAdapter {
     }
     fn resolve(
         &self,
-        flag_key: &str,
+        control_point_key: &str,
         context: &EvaluationContext,
     ) -> Result<FlagResolution, FireweaveError> {
         self.count.fetch_add(1, Ordering::SeqCst);
-        self.inner.resolve(flag_key, context)
+        self.inner.resolve(control_point_key, context)
     }
     fn shutdown(&self, timeout_ms: u64) {
         self.inner.shutdown(timeout_ms)
@@ -345,7 +345,7 @@ fn run_evaluate(fixture: &JsonValue) -> JsonValue {
         let mut output = serde_json::Map::new();
         for (name, domain_given) in domains {
             let flags = domain_given
-                .get("flags")
+                .get("controlPoints")
                 .and_then(JsonValue::as_object)
                 .cloned()
                 .unwrap_or_default();
@@ -362,7 +362,7 @@ fn run_evaluate(fixture: &JsonValue) -> JsonValue {
             if Some(name.as_str()) == requested {
                 let client = FireweaveClient::new(Arc::new(runtime));
                 let decision = client.control_points.evaluate(
-                    when.get("flagKey")
+                    when.get("controlPointKey")
                         .and_then(JsonValue::as_str)
                         .unwrap_or_default(),
                     to_flag_type(
@@ -398,7 +398,7 @@ fn run_evaluate(fixture: &JsonValue) -> JsonValue {
         .unwrap_or(false);
 
     let flags = given
-        .get("flags")
+        .get("controlPoints")
         .and_then(JsonValue::as_object)
         .cloned()
         .unwrap_or_default();
@@ -445,7 +445,7 @@ fn run_evaluate(fixture: &JsonValue) -> JsonValue {
     let invocation_ctx = context_from(when.get("invocationContext"));
     let options = evaluate_options_from(when.get("options"));
     let decision = client.control_points.evaluate(
-        when.get("flagKey")
+        when.get("controlPointKey")
             .and_then(JsonValue::as_str)
             .unwrap_or_default(),
         to_flag_type(
@@ -510,7 +510,7 @@ fn run_replace_provider(fixture: &JsonValue) -> JsonValue {
     let when = fixture.get("when").unwrap_or(&empty);
 
     let flags_a = given
-        .get("flags")
+        .get("controlPoints")
         .and_then(JsonValue::as_object)
         .cloned()
         .unwrap_or_default();
@@ -526,7 +526,7 @@ fn run_replace_provider(fixture: &JsonValue) -> JsonValue {
         .cloned()
         .unwrap_or_else(|| json!({}));
     let flags_b = replacement
-        .get("flags")
+        .get("controlPoints")
         .and_then(JsonValue::as_object)
         .cloned()
         .unwrap_or_default();
@@ -542,7 +542,7 @@ fn run_replace_provider(fixture: &JsonValue) -> JsonValue {
         .cloned()
         .unwrap_or_else(|| json!({}));
     let decision = client_b.control_points.evaluate(
-        then.get("flagKey")
+        then.get("controlPointKey")
             .and_then(JsonValue::as_str)
             .unwrap_or_default(),
         to_flag_type(
@@ -598,7 +598,7 @@ fn run_initialize(fixture: &JsonValue) -> JsonValue {
         init_result = runtime.initialize();
     } else {
         let flags = given
-            .get("flags")
+            .get("controlPoints")
             .and_then(JsonValue::as_object)
             .cloned()
             .unwrap_or_default();
@@ -648,7 +648,7 @@ fn run_shutdown(fixture: &JsonValue) -> JsonValue {
     let empty = json!({});
     let given = fixture.get("given").unwrap_or(&empty);
     let flags = given
-        .get("flags")
+        .get("controlPoints")
         .and_then(JsonValue::as_object)
         .cloned()
         .unwrap_or_default();
@@ -680,7 +680,7 @@ fn run_extension(fixture: &JsonValue) -> JsonValue {
     let given = fixture.get("given").unwrap_or(&empty);
     let when = fixture.get("when").unwrap_or(&empty);
     let flags = given
-        .get("flags")
+        .get("controlPoints")
         .and_then(JsonValue::as_object)
         .cloned()
         .unwrap_or_default();
@@ -834,7 +834,7 @@ fn run_fault(fixture: &JsonValue, fake_server: &FakeServer) -> JsonValue {
     let _ = runtime.initialize();
     let client = FireweaveClient::new(runtime.clone());
     let decision = client.control_points.evaluate(
-        when.get("flagKey")
+        when.get("controlPointKey")
             .and_then(JsonValue::as_str)
             .unwrap_or_default(),
         to_flag_type(
@@ -893,7 +893,7 @@ fn numbers_equal(a: &serde_json::Number, b: &serde_json::Number) -> bool {
 /// `_deep_equal`): numbers compare by numeric value (not representation),
 /// objects require an EXACT key set match (this is what pins vendor-
 /// metadata gating — ruling 11 — as a failure when only one of
-/// `fireweave.vendorFlagId`/`fireweave.reasonCode` leaks).
+/// `fireweave.vendorControlPointId`/`fireweave.reasonCode` leaks).
 fn json_deep_eq(a: &JsonValue, b: &JsonValue) -> bool {
     match (a, b) {
         (JsonValue::Null, JsonValue::Null) => true,

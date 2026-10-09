@@ -3,7 +3,7 @@
 Two Fireweave-provided tools mean your tests never need a backend account or network:
 
 1. **`InMemoryAdapter`** — a deterministic, fixture-driven `BackendAdapter` in every SDK except web. Assert on real evaluation behavior with zero I/O.
-2. **The protocol test server** (`test-server/`) — a zero-dependency Node HTTP stub with scriptable fault modes. It serves the Fireweave-native routes (`/v1/flags/evaluate`, `/v1/capture`) for exercising `FireweaveRemoteAdapter`'s HTTP path, plus legacy vendor routes.
+2. **The protocol test server** (`test-server/`) — a zero-dependency Node HTTP stub with scriptable fault modes. It serves the Fireweave-native routes (`/v1/control-points/evaluate`, `/v1/capture`) for exercising `FireweaveRemoteAdapter`'s HTTP path, plus legacy vendor routes.
 
 Both are test infrastructure; the evaluation semantics they exercise are the same canonical semantics as production.
 
@@ -54,7 +54,7 @@ node test-server/implementation/server.mjs            # http://127.0.0.1:3901
 node test-server/implementation/server.mjs --port 4000
 ```
 
-Fireweave-native endpoints (what `FireweaveRemoteAdapter` speaks): `POST /v1/flags/evaluate`, `POST /v1/capture`, `GET /health`. Auth is `Authorization: Bearer <FW_PROJECT_API_KEY>`.
+Fireweave-native endpoints (what `FireweaveRemoteAdapter` speaks): `POST /v1/control-points/evaluate`, `POST /v1/capture`, `GET /health`. Auth is `Authorization: Bearer <FW_PROJECT_API_KEY>`.
 
 Legacy vendor endpoints: `POST /flags?v=2`, `GET /flags/definitions?token=…`, `POST /batch/`.
 
@@ -86,7 +86,7 @@ Note that the stub serves **its own fixture control points** (`fw-bool-on`, …,
 - Missing flag → default + `FLAG_NOT_FOUND` (never a throw).
 - Type mismatch (e.g. string flag read as boolean) → default + `TYPE_MISMATCH`.
 - Missing `targetingKey` with `requireTargetingKey` enabled → default + `TARGETING_KEY_MISSING`.
-- Evaluation before init and after shutdown → default + `PROVIDER_NOT_READY` (with `fireweave.errorKind` = `NotReady` / `AlreadyClosed` in flagMetadata).
+- Evaluation before init and after shutdown → default + `PROVIDER_NOT_READY` (with `fireweave.errorKind` = `NotReady` / `AlreadyClosed` in controlPointMetadata).
 
 ## The conformance suite (contributors)
 

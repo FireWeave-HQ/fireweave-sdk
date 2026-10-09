@@ -73,7 +73,7 @@ test('a prefetch timeout leaves the runtime STALE and serves STALE decisions', a
   const d = runtime.evaluateSync('anything', 'boolean', false, CTX);
   assert.equal(d.value, false);
   assert.equal(d.reason, 'STALE');
-  // Crucially NOT FlagNotFound: the control point may well exist — we simply
+  // Crucially NOT ControlPointNotFound: the control point may well exist — we simply
   // never got an answer, and sending someone hunting for a missing flag would
   // be a lie.
   assert.equal(d.errorCode, undefined);
@@ -90,6 +90,34 @@ test('a timed-out boot is distinguishable from an all-off rollout', async () => 
   assert.notEqual(offDecision.reason, 'STALE');
   // Same value, different reason — which is the entire point.
   assert.equal(offDecision.value, false);
+});
+
+test('a failed re-fetch keeps the last good value and reports STALE, whatever the backend reason was', async () => {
+  let fail = false;
+  const adapter: WebBackendAdapter = {
+    name: 'other',
+    features: () => ({ remoteEvaluation: true }),
+    async initialize() {},
+    async prefetch() {
+      if (fail) throw new FireweaveError('BackendUnavailable');
+      return new Map([['new-checkout', { found: true, value: true, reason: 'TARGETING_MATCH' as const }]]);
+    },
+    async shutdown() {},
+  };
+  const runtime = new FireweaveWebRuntime(adapter, { globalContext: CTX });
+  await runtime.initialize();
+  assert.equal(runtime.evaluateSync('new-checkout', 'boolean', false, CTX).reason, 'TARGETING_MATCH');
+
+  fail = true;
+  await runtime.refresh();
+  const stale = runtime.evaluateSync('new-checkout', 'boolean', false, CTX);
+  assert.equal(runtime.getState(), 'STALE');
+  assert.equal(stale.value, true, 'the last good value is kept');
+  assert.equal(stale.reason, 'STALE');
+
+  fail = false;
+  await runtime.refresh();
+  assert.equal(runtime.evaluateSync('new-checkout', 'boolean', false, CTX).reason, 'TARGETING_MATCH');
 });
 
 test('an adapter that fails to initialize reports ERROR, not READY', async () => {
@@ -178,7 +206,7 @@ test('the local adapter honours devFlags and misses default otherwise (spec/mode
 
   // spec/modes.md "Behaviour per mode": local's unknown-key row is
   // `default`/reason `DEFAULT` — deliberately not an error, unlike remote's
-  // `default`/`ERROR`/`FlagNotFound`. The local adapter signals this via its
+  // `default`/`ERROR`/`ControlPointNotFound`. The local adapter signals this via its
   // `missReason: 'DEFAULT'` — a strict `===` seam the runtime checks.
   const miss = runtime.evaluateSync('other', 'boolean', false, CTX);
   assert.equal(miss.value, false);

@@ -1,0 +1,822 @@
+//! [`start`] and the process-wide singleton behind the module-level facade
+//! (node: `src/start/state.ts`, go: `fw/state.go` + `fw/fw.go`).
+//!
+//! The start profile keeps ONE permanent [`FireweaveClient`] for the life of
+//! the process, built on first use with no env reads and no I/O. Its runtime
+//! sits on a forwarding adapter, so a `&'static` reference taken before
+//! `start` (in a struct, a lazily built service) keeps working after it,
+//! across [`shutdown`] and a later `start`. `start` resolves the config,
+//! builds the real client with the unchanged core [`init_fireweave`] (so the
+//! core validation table still runs), and points the forwarder at it.
+//!
+//! A read before any `start` starts FireWeave from the environment alone,
+//! once, synchronously on that read. `init_fireweave` does no network I/O,
+//! so this never blocks on the network.
+//!
+//! Locking: one `Mutex` guards the singleton. It is never held while a log
+//! line is written or while a read runs against the started client, so a log
+//! sink that calls back into this module cannot deadlock, and reads on many
+//! threads run concurrently.
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
+
+use crate::{
+    init_fireweave, redact_secrets, BackendAdapter, ControlPointsNamespace, ErrorKind,
+    EvaluationContext, FireweaveClient, FireweaveError, FireweaveRuntime, FlagResolution,
+    InitOptions, JsonValue, LifecycleState, Mode, RegisterTargetOptions, RegisterTargetResult,
+    RuntimeConfig, TargetKind,
+};
+
+use super::channel::{sdk_channel, sdk_version, Channel};
+use super::env::{lookup_from, process_hostname, Lookup};
+use super::instance::{derive_instance_key, SOURCE_RANDOM};
+use super::names::{CONTROL_POINTS_FILE, ENV_INSTANCE_ID, ENV_KEY, ENV_URL, OPT_INSTANCE_ID};
+use super::options::{LogFn, StartOptions};
+use super::resolve::{config_error, resolve, BuildInfo, Resolved, MODE_SOURCE_ENVIRONMENT};
+
+/// Where the singleton is in its life.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum StartState {
+    /// Nothing has started yet (a read would start from the environment).
+    Unstarted,
+    Ready,
+    /// The last start failed; reads serve their defaults.
+    Failed,
+    /// [`shutdown`] ran; reads serve their defaults until a new [`start`].
+    Shutdown,
+}
+
+impl StartState {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            StartState::Unstarted => "unstarted",
+            StartState::Ready => "ready",
+            StartState::Failed => "failed",
+            StartState::Shutdown => "shutdown",
+        }
+    }
+}
+
+impl std::fmt::Display for StartState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// What makes two starts "the same". Local control points count in local mode only: remote
+/// ignores them, so an implicit env-only start followed by
+/// `start(StartOptions { control_points, .. })` under a key is not a conflict. Holds
+/// the key to compare it; no `Debug`, and `differs` names fields only.
+#[derive(Clone, PartialEq)]
+struct Signature {
+    mode: Mode,
+    url: Option<String>,
+    key: Option<String>,
+    allowed_hosts: Option<Vec<String>>,
+    instance_id: Option<String>,
+    control_points: Option<BTreeMap<String, bool>>,
+}
+
+fn trimmed_option(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+}
+
+impl Signature {
+    fn of(r: &Resolved, instance_id: Option<&str>) -> Self {
+        Signature {
+            mode: r.mode,
+            url: r.url.clone(),
+            key: r.key.clone(),
+            allowed_hosts: r.allowed_hosts.clone(),
+            instance_id: trimmed_option(instance_id),
+            control_points: (r.mode == Mode::Local).then(|| r.control_points.local_values()),
+        }
+    }
+
+    /// The names of the fields that differ, never their values.
+    fn differs(&self, other: &Signature) -> Vec<&'static str> {
+        let mut out = Vec::new();
+        let mut add = |changed: bool, name: &'static str| {
+            if changed {
+                out.push(name);
+            }
+        };
+        add(self.mode != other.mode, "mode");
+        add(self.url != other.url, "url");
+        add(self.key != other.key, "key");
+        add(self.allowed_hosts != other.allowed_hosts, "allowed hosts");
+        add(self.instance_id != other.instance_id, "instance id");
+        add(
+            self.control_points != other.control_points,
+            "control_points",
+        );
+        out
+    }
+}
+
+struct Singleton {
+    state: StartState,
+    /// The running client came from an implicit start.
+    implicit: bool,
+    /// Reads do not start implicitly again.
+    implicit_tried: bool,
+    resolved: Option<Resolved>,
+    sig: Option<Signature>,
+    client: Option<Arc<FireweaveClient>>,
+    err: Option<FireweaveError>,
+    /// The started configuration's env lookup (for `instance_key`).
+    lookup: Option<Lookup>,
+
+    instance_option: Option<String>,
+    instance_key: Option<String>,
+
+    log: Option<LogFn>,
+    warned: BTreeSet<String>,
+
+    /// The [`REMOTE_FAILURES`] kinds already logged; kept across shutdown
+    /// and restart, so each is logged once for the life of the process.
+    remote_warned: Vec<ErrorKind>,
+    /// The latest [`REMOTE_FAILURES`] kind the running client saw.
+    last_error_kind: Option<ErrorKind>,
+}
+
+/// Remote failures that mean the key was refused or throttled, or fw-server
+/// cannot be reached (SP-27): logged once per kind, reported in [`Status`].
+const REMOTE_FAILURES: [ErrorKind; 6] = [
+    ErrorKind::Authentication,
+    ErrorKind::Authorization,
+    ErrorKind::RateLimited,
+    ErrorKind::Network,
+    ErrorKind::Timeout,
+    ErrorKind::BackendUnavailable,
+];
+
+impl Singleton {
+    const fn new() -> Self {
+        Singleton {
+            state: StartState::Unstarted,
+            implicit: false,
+            implicit_tried: false,
+            resolved: None,
+            sig: None,
+            client: None,
+            err: None,
+            lookup: None,
+            instance_option: None,
+            instance_key: None,
+            log: None,
+            warned: BTreeSet::new(),
+            remote_warned: Vec::new(),
+            last_error_kind: None,
+        }
+    }
+
+    /// Appends `line` unless this process already logged it.
+    fn warn_once(&mut self, lines: &mut Vec<String>, line: String) {
+        if self.warned.insert(line.clone()) {
+            lines.push(line);
+        }
+    }
+
+    /// Forgets a failed or shut-down start, keeping the warned set, the log
+    /// sink and the instance key (it identifies the process, so a key handed
+    /// out before a failed or shut-down start stays the same after it).
+    fn fresh_run(&mut self) {
+        self.state = StartState::Unstarted;
+        self.implicit = false;
+        self.implicit_tried = false;
+        self.resolved = None;
+        self.sig = None;
+        self.client = None;
+        self.err = None;
+        self.lookup = None;
+        self.last_error_kind = None;
+    }
+
+    /// `start`'s body. Returns the lines to log once the lock is released.
+    fn start_locked(
+        &mut self,
+        options: StartOptions,
+        implicit: bool,
+    ) -> (Vec<String>, Result<(), FireweaveError>) {
+        let mut lines = Vec::new();
+        if matches!(self.state, StartState::Failed | StartState::Shutdown) {
+            self.fresh_run();
+        }
+
+        let lookup = lookup_from(options.env.as_ref());
+        let build = BuildInfo {
+            version: sdk_version().to_string(),
+            channel: sdk_channel(),
+        };
+        let r = match resolve(&options, &*lookup, &build) {
+            Ok(r) => r,
+            Err(err) => {
+                if self.state == StartState::Ready {
+                    // A bad second start never takes down the running client.
+                    return (lines, Err(err));
+                }
+                self.state = StartState::Failed;
+                self.err = Some(err.clone());
+                self.implicit_tried = true;
+                if implicit {
+                    self.warn_once(
+                        &mut lines,
+                        format!(
+                            "[fireweave] {} (FireWeave was not started; reads serve their defaults.)",
+                            err.message
+                        ),
+                    );
+                }
+                return (lines, Err(err));
+            }
+        };
+        let sig = Signature::of(&r, options.instance_id.as_deref());
+
+        if self.state == StartState::Ready {
+            let diff = match &self.sig {
+                Some(current) => current.differs(&sig),
+                None => Vec::new(),
+            };
+            if diff.is_empty() {
+                return (lines, Ok(()));
+            }
+            let fields = diff.join(", ");
+            let err = if self.implicit {
+                config_error(format!(
+                    "A control point was read before fireweave::start::start ran, so FireWeave started from the environment alone; this start differs in {fields}. Call start first in main, before anything reads a control point."
+                ))
+            } else {
+                config_error(format!(
+                    "fireweave::start::start was already called with a different configuration ({fields}). Call start once, from main."
+                ))
+            };
+            return (lines, Err(err));
+        }
+
+        if let Some(id) = trimmed_option(options.instance_id.as_deref()) {
+            if self.instance_key.as_ref().is_some_and(|k| *k != id) {
+                return (
+                    lines,
+                    Err(config_error(format!(
+                        "{OPT_INSTANCE_ID} differs from the instance_key() already handed out. Pass instance_id on the first start."
+                    ))),
+                );
+            }
+        }
+
+        // Only a start that actually begins sets the log sink: an identical
+        // second start is a no-op and a conflicting one fails, and neither
+        // may swap it.
+        if !implicit {
+            if let Some(log) = &options.log {
+                self.log = Some(Arc::clone(log));
+            }
+        }
+
+        let client = match init_fireweave(init_options(&r)) {
+            Ok(client) => client,
+            Err(err) => {
+                self.state = StartState::Failed;
+                self.err = Some(err.clone());
+                self.implicit_tried = true;
+                self.warn_once(
+                    &mut lines,
+                    format!(
+                        "[fireweave] start failed: {}. Reads serve their defaults.",
+                        err.message
+                    ),
+                );
+                return (lines, Err(err));
+            }
+        };
+
+        for w in &r.warnings {
+            self.warn_once(&mut lines, w.clone());
+        }
+        if r.mode == Mode::Local {
+            lines.push(local_line(&r));
+        }
+        if let Some(id) = trimmed_option(options.instance_id.as_deref()) {
+            self.instance_option = Some(id);
+        }
+        self.state = StartState::Ready;
+        self.implicit = implicit;
+        self.implicit_tried = true;
+        self.resolved = Some(r);
+        self.sig = Some(sig);
+        self.client = Some(Arc::new(client));
+        self.err = None;
+        self.lookup = Some(lookup);
+        (lines, Ok(()))
+    }
+}
+
+static SINGLETON: Mutex<Singleton> = Mutex::new(Singleton::new());
+
+/// The singleton, recovering from a poisoned lock: no read may panic because
+/// some other thread did.
+fn lock() -> MutexGuard<'static, Singleton> {
+    SINGLETON.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Writes lines to the sink (default: standard error). A panicking sink
+/// never reaches the caller.
+fn emit(log: Option<LogFn>, lines: Vec<String>) {
+    for line in lines {
+        let _ = catch_unwind(AssertUnwindSafe(|| match &log {
+            Some(sink) => sink(&line),
+            None => eprintln!("{line}"),
+        }));
+    }
+}
+
+/// Routes the core local adapter's `[fireweave:local]` trace through the
+/// current sink.
+fn route_line(line: &str) {
+    let log = lock().log.clone();
+    emit(log, vec![line.to_string()]);
+}
+
+fn local_line(r: &Resolved) -> String {
+    let why = if r.mode_source == MODE_SOURCE_ENVIRONMENT {
+        format!(
+            "no {ENV_KEY}; environment {:?} from {}",
+            r.environment.as_deref().unwrap_or_default(),
+            r.environment_source.as_deref().unwrap_or_default()
+        )
+    } else {
+        "StartOptions.mode Local".to_string()
+    };
+    let n = r.control_points.len();
+    let noun = if n == 1 {
+        "control point"
+    } else {
+        "control points"
+    };
+    format!("[fireweave:local] Local mode ({why}). Serving {n} {noun} from your control points; nothing is sent to fw-server.")
+}
+
+fn init_options(r: &Resolved) -> InitOptions {
+    match r.mode {
+        Mode::Local => InitOptions::local_with_control_points(r.control_points.local_seeds())
+            .with_log(route_line),
+        Mode::Remote => {
+            let options = InitOptions::remote(
+                r.key.clone().unwrap_or_default(),
+                r.url.clone().unwrap_or_default(),
+            );
+            match &r.allowed_hosts {
+                Some(hosts) => options.with_allowed_hosts(hosts.clone()),
+                None => options,
+            }
+        }
+    }
+}
+
+/// Starts FireWeave for this process. Call it once, first thing in `main`,
+/// after the app's own config loading (and any `.env` loader).
+///
+/// **Mode rule.** `StartOptions::mode` wins (`Local` ignores any key, with
+/// one warning; `Remote` without a key is an error). Otherwise a key
+/// (`StartOptions::key`, `FIREWEAVE_KEY`) means remote; no key and an
+/// environment name (`StartOptions::environment`, `FIREWEAVE_ENV`,
+/// `APP_ENV`) of `development`, `dev`, `local` or `test` means local;
+/// anything else, including no environment name at all, is a
+/// `Configuration` error naming `FIREWEAVE_KEY`. A deploy that forgot its
+/// key fails here instead of silently serving defaults.
+///
+/// `start` is synchronous and does no network I/O. A second call with the
+/// same configuration is a no-op `Ok`; a different one returns a
+/// `Configuration` error and leaves the running client alone. Every error is
+/// a core [`FireweaveError`] (kind `Configuration`, `PROVIDER_FATAL`) naming
+/// the option or variable at fault, never a key.
+///
+/// ```
+/// use fireweave::start::{define_control_points, env_map, start, LocalControlPoint, StartOptions};
+/// # fireweave::start::reset_for_tests();
+///
+/// start(StartOptions {
+///     control_points: define_control_points([("new-checkout", LocalControlPoint::local(true))]),
+///     env: Some(env_map([("FIREWEAVE_ENV", "development")])),
+///     log: Some(std::sync::Arc::new(|_line: &str| {})),
+///     ..Default::default()
+/// })?;
+/// assert!(fireweave::start::control_points().get_boolean_value("new-checkout", false, None));
+/// # fireweave::start::reset_for_tests();
+/// # Ok::<(), fireweave::FireweaveError>(())
+/// ```
+pub fn start(options: StartOptions) -> Result<(), FireweaveError> {
+    let (lines, result, log) = {
+        let mut st = lock();
+        let (lines, result) = st.start_locked(options, false);
+        (lines, result, st.log.clone())
+    };
+    emit(log, lines);
+    result
+}
+
+/// The running client for one read or registration, starting FireWeave from
+/// the environment if nothing has started it yet. On failure, the error a
+/// read reports instead.
+fn acquire(control_point_key: Option<&str>) -> Result<Arc<FireweaveClient>, FireweaveError> {
+    let (result, lines, log) = {
+        let mut st = lock();
+        let mut lines = Vec::new();
+        if st.state == StartState::Unstarted && !st.implicit_tried {
+            let (implicit_lines, _) = st.start_locked(StartOptions::default(), true);
+            lines = implicit_lines;
+        }
+        let result = match st.state {
+            StartState::Ready => {
+                if let Some(key) = control_point_key {
+                    let missing = st.resolved.as_ref().is_some_and(|r| {
+                        r.mode == Mode::Local && !r.control_points.contains_key(key)
+                    });
+                    if missing {
+                        st.warn_once(
+                            &mut lines,
+                            format!("[fireweave:local] {key:?} is not in your control points ({CONTROL_POINTS_FILE}), so it gets its default. Add it there to try it locally."),
+                        );
+                    }
+                }
+                st.client
+                    .clone()
+                    .ok_or_else(|| FireweaveError::new(ErrorKind::NotReady))
+            }
+            StartState::Shutdown => Err(FireweaveError::new(ErrorKind::AlreadyClosed)),
+            StartState::Unstarted | StartState::Failed => {
+                Err(st.err.clone().unwrap_or_else(|| {
+                    FireweaveError::with_message(ErrorKind::NotReady, "FireWeave was not started.")
+                }))
+            }
+        };
+        (result, lines, st.log.clone())
+    };
+    emit(log, lines);
+    result
+}
+
+/// Notes a failure the started client got back from fw-server (SP-27): a
+/// refused key, rate limiting or an unreachable endpoint is logged once per
+/// kind for the life of the process and becomes [`Status::last_error_kind`],
+/// so a revoked key does not look like a rollout at 0%. Observes only: the
+/// read has already resolved to its default.
+fn observe_remote(kind: ErrorKind) {
+    if !REMOTE_FAILURES.contains(&kind) {
+        return;
+    }
+    let (lines, log) = {
+        let mut st = lock();
+        st.last_error_kind = Some(kind);
+        let mut lines = Vec::new();
+        if !st.remote_warned.contains(&kind) {
+            st.remote_warned.push(kind);
+            lines.push(redact_secrets(&remote_line(kind, st.resolved.as_ref())));
+        }
+        (lines, st.log.clone())
+    };
+    emit(log, lines);
+}
+
+/// The one line for a remote failure kind: names the key's source or the
+/// host, never the key.
+fn remote_line(kind: ErrorKind, r: Option<&Resolved>) -> String {
+    let source = r
+        .map(|r| r.key_source.as_str())
+        .filter(|s| !s.is_empty() && *s != "none")
+        .unwrap_or(ENV_KEY);
+    let server = match r.and_then(|r| r.host.as_deref()) {
+        Some(host) => format!("fw-server at {host}"),
+        None => "fw-server".to_string(),
+    };
+    let endpoint = r.and_then(|r| r.url_source.as_deref()).unwrap_or(ENV_URL);
+    match kind {
+        ErrorKind::Authentication => format!(
+            "[fireweave] {server} rejected the key from {source} (401, Authentication), so every read serves its default. Check that {source} holds this project's key (project-api-key_\u{2026}) and that it has not been revoked."
+        ),
+        ErrorKind::Authorization => format!(
+            "[fireweave] {server} refused the key from {source} (403, Authorization), so every read serves its default. Check that the key belongs to this project."
+        ),
+        ErrorKind::RateLimited => format!(
+            "[fireweave] {server} is rate-limiting the key from {source} (429, RateLimited); reads serve their defaults until it recovers."
+        ),
+        _ => format!(
+            "[fireweave] Could not reach {server} ({kind}); reads serve their defaults until it is reachable. The endpoint comes from {endpoint}."
+        ),
+    }
+}
+
+/// The permanent client's adapter: it hands each call to the client the
+/// latest [`start`] built. Reads that cannot reach one degrade to the
+/// caller's default with the start error, exactly as a core read degrades.
+///
+/// The permanent runtime has already validated the key, the default and the
+/// context, with the same `RuntimeConfig::default()` `init_fireweave` uses,
+/// so `resolve` goes straight to the started client's adapter; the decision
+/// is then built by the core runtime as usual.
+struct Forwarder;
+
+impl BackendAdapter for Forwarder {
+    fn initialize(&self) -> Result<(), FireweaveError> {
+        Ok(())
+    }
+
+    fn resolve(
+        &self,
+        control_point_key: &str,
+        context: &EvaluationContext,
+    ) -> Result<FlagResolution, FireweaveError> {
+        let client = acquire(Some(control_point_key))?;
+        let runtime = client.runtime();
+        match runtime.state() {
+            LifecycleState::Ready | LifecycleState::Stale => {
+                let resolution = runtime.adapter().resolve(control_point_key, context);
+                if let Err(err) = &resolution {
+                    observe_remote(err.kind);
+                }
+                resolution
+            }
+            LifecycleState::Shutdown => Err(FireweaveError::new(ErrorKind::AlreadyClosed)),
+            _ => Err(FireweaveError::new(ErrorKind::NotReady)),
+        }
+    }
+
+    /// Never shuts anything: [`shutdown`] shuts the started client, never
+    /// the permanent one.
+    fn shutdown(&self, _timeout_ms: u64) {}
+
+    fn register_target(
+        &self,
+        targeting_key: &str,
+        options: Option<&RegisterTargetOptions>,
+    ) -> RegisterTargetResult {
+        match acquire(None) {
+            Ok(client) => {
+                let result = client.register_target(targeting_key, options);
+                if let Some(err) = result.error.as_ref().filter(|_| !result.ok) {
+                    observe_remote(err.kind);
+                }
+                result
+            }
+            Err(err) => RegisterTargetResult::failure(err),
+        }
+    }
+}
+
+static PERMANENT: OnceLock<FireweaveClient> = OnceLock::new();
+
+/// The one [`FireweaveClient`] for this process: the same reference before
+/// [`start`], after it, and across [`shutdown`] and a later `start`. Use it
+/// for dependency injection (`&'static FireweaveClient`) and anything the
+/// module functions do not cover. Its reads behave like
+/// [`control_points`]'.
+///
+/// Shut down with [`shutdown`], never `client().shutdown()`, which would
+/// close this permanent handle for the rest of the process.
+pub fn client() -> &'static FireweaveClient {
+    PERMANENT.get_or_init(|| {
+        let runtime = Arc::new(FireweaveRuntime::new(
+            Box::new(Forwarder),
+            RuntimeConfig::default(),
+        ));
+        // Forwarder::initialize does nothing and never fails.
+        let _ = runtime.initialize();
+        FireweaveClient::new(runtime)
+    })
+}
+
+/// The core's control point namespace on [`client`]: the same nine read
+/// methods with the same signatures (`evaluate`, `get_boolean_value`,
+/// `get_string_value`, `get_number_value`, `get_object_value` and the four
+/// `*_details`).
+///
+/// ```
+/// use fireweave::EvaluationContext;
+/// # fireweave::start::reset_for_tests();
+/// # fireweave::start::start(fireweave::start::StartOptions {
+/// #     mode: Some(fireweave::Mode::Local),
+/// #     log: Some(std::sync::Arc::new(|_line: &str| {})),
+/// #     ..Default::default()
+/// # }).unwrap();
+///
+/// let ctx = EvaluationContext::new().with_targeting_key("user-1");
+/// // @fireweave-controlpoint new-checkout
+/// if fireweave::start::control_points().get_boolean_value("new-checkout", false, Some(&ctx)) {
+///     // new path
+/// }
+/// # fireweave::start::reset_for_tests();
+/// ```
+///
+/// A read before any [`start`] starts FireWeave from the environment alone
+/// (once). Reads never panic and never fail: before a successful start they
+/// return the caller's default, and the `*_details` forms an `ERROR`
+/// [`crate::Decision`] carrying the start error.
+pub fn control_points() -> &'static ControlPointsNamespace {
+    &client().control_points
+}
+
+/// Registers durable targeting facts for a user at sign-in (the core's
+/// `register_target`, kind `user`). Returns the core error when the target
+/// was not registered; the caller logs it and carries on. Never panics. A
+/// blank targeting key is `InvalidContext` in both modes.
+///
+/// In remote mode it is one blocking POST, retried once on a transient
+/// failure, so it can take two request timeouts when fw-server hangs; call
+/// it off an async executor's threads (`spawn_blocking`). In local mode the
+/// target is recorded in-process and traced through the log sink.
+///
+/// ```
+/// # fireweave::start::reset_for_tests();
+/// # fireweave::start::start(fireweave::start::StartOptions {
+/// #     mode: Some(fireweave::Mode::Local),
+/// #     log: Some(std::sync::Arc::new(|_line: &str| {})),
+/// #     ..Default::default()
+/// # }).unwrap();
+/// if let Err(e) = fireweave::start::identify("user-1", [("plan", "pro")]) {
+///     eprintln!("fireweave identify failed: {e}");
+/// }
+/// // No properties:
+/// fireweave::start::identify("user-2", std::iter::empty::<(&str, &str)>()).unwrap();
+/// # fireweave::start::reset_for_tests();
+/// ```
+pub fn identify<I, K, V>(targeting_key: &str, properties: I) -> Result<(), FireweaveError>
+where
+    I: IntoIterator<Item = (K, V)>,
+    K: Into<String>,
+    V: Into<JsonValue>,
+{
+    let outcome = catch_unwind(AssertUnwindSafe(move || {
+        if targeting_key.trim().is_empty() {
+            return Err(FireweaveError::targeting_key_missing());
+        }
+        let mut options = RegisterTargetOptions {
+            kind: Some(TargetKind::User),
+            ..Default::default()
+        };
+        for (k, v) in properties {
+            options
+                .properties
+                .get_or_insert_with(Default::default)
+                .insert(k.into(), v.into());
+        }
+        let result = client().register_target(targeting_key, Some(&options));
+        if result.ok {
+            Ok(())
+        } else {
+            Err(result
+                .error
+                .unwrap_or_else(|| FireweaveError::new(ErrorKind::Internal)))
+        }
+    }));
+    outcome.unwrap_or_else(|_| Err(FireweaveError::new(ErrorKind::Internal)))
+}
+
+/// A stable targeting key for reads where the server itself is the subject
+/// (cron, workers, boot-time decisions): `StartOptions::instance_id`, else
+/// `FIREWEAVE_INSTANCE_ID`, else `inst_` + a hash of the host name (the same
+/// key every FireWeave SDK derives on that host), else a random id for the
+/// life of the process (with one warning). Nothing is written to disk. Set
+/// `FIREWEAVE_INSTANCE_ID` when replicas share a host name or the host name
+/// is not stable. Never injected into contexts: pass it explicitly.
+///
+/// ```
+/// use fireweave::EvaluationContext;
+/// let ctx = EvaluationContext::new().with_targeting_key(fireweave::start::instance_key());
+/// # let _ = ctx;
+/// ```
+pub fn instance_key() -> String {
+    let (key, lines, log) = {
+        let mut st = lock();
+        let mut lines = Vec::new();
+        if st.instance_key.is_none() {
+            let lookup = st.lookup.clone().unwrap_or_else(|| lookup_from(None));
+            let (key, source) =
+                derive_instance_key(st.instance_option.as_deref(), &*lookup, &process_hostname);
+            if source == SOURCE_RANDOM {
+                st.warn_once(
+                    &mut lines,
+                    format!("[fireweave] No host name found, so instance_key() is random for this process. Set {ENV_INSTANCE_ID} for a stable key."),
+                );
+            }
+            st.instance_key = Some(key);
+        }
+        (
+            st.instance_key.clone().unwrap_or_default(),
+            lines,
+            st.log.clone(),
+        )
+    };
+    emit(log, lines);
+    key
+}
+
+/// What [`start`] decided. Never contains the key, so it is safe to log.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Status {
+    pub state: StartState,
+    /// `None` until a start resolved one.
+    pub mode: Option<Mode>,
+    /// `"option"`, `"key"` or `"environment"`.
+    pub mode_source: Option<String>,
+    pub channel: Channel,
+    pub sdk_version: String,
+    /// The fw-server host name only (remote mode): never a path or a
+    /// credential.
+    pub host: Option<String>,
+    /// Where the endpoint came from: `StartOptions.url`, a variable name, or
+    /// `SDK channel (…)` (remote mode).
+    pub endpoint_source: Option<String>,
+    /// `StartOptions.key` or the variable the key came from; `"none"` in
+    /// local mode.
+    pub key_source: Option<String>,
+    /// The environment name, when it chose the mode.
+    pub environment: Option<String>,
+    pub control_point_count: usize,
+    /// Why start failed, when it did. Already redacted.
+    pub error: Option<String>,
+    /// The latest failure the started client got back from fw-server that
+    /// means the key was refused (`Authentication` for 401, `Authorization`
+    /// for 403), throttled (`RateLimited`, 429) or fw-server could not be
+    /// reached (`Network`, `Timeout`, `BackendUnavailable`); `None` when there
+    /// was none since start. Each of these kinds is also logged once per
+    /// process. Reads keep serving defaults meanwhile.
+    pub last_error_kind: Option<ErrorKind>,
+}
+
+/// Reports the singleton's state and what [`start`] decided: mode and why,
+/// channel, SDK version, host, endpoint source, key source, environment and
+/// flag count, the start error if any, and the latest remote failure kind
+/// ([`Status::last_error_kind`]). It never includes the key.
+///
+/// ```
+/// eprintln!("fireweave: {:?}", fireweave::start::status());
+/// ```
+pub fn status() -> Status {
+    let st = lock();
+    let mut s = Status {
+        state: st.state,
+        mode: None,
+        mode_source: None,
+        channel: sdk_channel(),
+        sdk_version: sdk_version().to_string(),
+        host: None,
+        endpoint_source: None,
+        key_source: None,
+        environment: None,
+        control_point_count: 0,
+        error: st.err.as_ref().map(|e| e.message.clone()),
+        last_error_kind: st.last_error_kind,
+    };
+    if let Some(r) = &st.resolved {
+        s.mode = Some(r.mode);
+        s.mode_source = Some(r.mode_source.to_string());
+        s.channel = r.channel;
+        s.sdk_version = r.sdk_version.clone();
+        s.host = r.host.clone();
+        s.endpoint_source = r.url_source.clone();
+        s.key_source = Some(r.key_source.clone());
+        s.environment = r.environment.clone();
+        s.control_point_count = r.control_points.len();
+    }
+    s
+}
+
+/// Shuts the started client down. Afterwards reads serve their defaults
+/// (`AlreadyClosed`) and nothing starts implicitly; a later [`start`] begins
+/// fresh. Idempotent. Remote reads hold no buffer, so there is nothing to
+/// flush.
+pub fn shutdown() {
+    let client = {
+        let mut st = lock();
+        st.state = StartState::Shutdown;
+        st.implicit_tried = true;
+        st.client.take()
+    };
+    if let Some(client) = client {
+        client.shutdown();
+    }
+}
+
+/// Test hook: shuts down and forgets the singleton, warnings, instance key
+/// and log sink included, so the next start begins as in a new process. The
+/// permanent client is kept: it holds no state of its own. Not part of the
+/// stable API.
+#[doc(hidden)]
+pub fn reset_for_tests() {
+    let client = {
+        let mut st = lock();
+        let client = st.client.take();
+        *st = Singleton::new();
+        client
+    };
+    if let Some(client) = client {
+        client.shutdown();
+    }
+}

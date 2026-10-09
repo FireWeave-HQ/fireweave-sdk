@@ -46,34 +46,34 @@ fn has_control_characters(key: &str) -> bool {
 /// (`spec/control-points.md` rule 1, the first check in the fixed order).
 ///
 /// No taxonomy kind names "malformed key" explicitly (the return-discipline
-/// table's closest row is "key unknown to the backend" -> `FlagNotFound`):
+/// table's closest row is "key unknown to the backend" -> `ControlPointNotFound`):
 /// a key that can never identify a flag is treated the same as one the
-/// backend doesn't recognise, so this maps to `FlagNotFound` too.
+/// backend doesn't recognise, so this maps to `ControlPointNotFound` too.
 ///
 /// Controller-ruled interim mapping (carried over from the node reference):
 /// the 15-kind taxonomy in `errors.schema.json` is frozen at exactly 15
 /// entries, `InvalidContext` is textually scoped to the evaluation
 /// *context* (not the key), and the schema already maps another
-/// non-literal case — quota-limited responses — onto `FlagNotFound` rather
-/// than adding a kind for it. `FlagNotFound` is therefore the
+/// non-literal case — quota-limited responses — onto `ControlPointNotFound` rather
+/// than adding a kind for it. `ControlPointNotFound` is therefore the
 /// least-wrong existing kind, not a literal fit.
 pub fn validate_control_point_key(key: &str) -> Result<(), FireweaveError> {
     if key.is_empty() {
         return Err(FireweaveError::with_message(
-            ErrorKind::FlagNotFound,
+            ErrorKind::ControlPointNotFound,
             "control point key must be a non-empty string",
         ));
     }
     // Character count, not byte count — the spec says "256 characters".
     if key.chars().count() > MAX_CONTROL_POINT_KEY_LENGTH {
         return Err(FireweaveError::with_message(
-            ErrorKind::FlagNotFound,
+            ErrorKind::ControlPointNotFound,
             "control point key exceeds maximum length",
         ));
     }
     if has_control_characters(key) {
         return Err(FireweaveError::with_message(
-            ErrorKind::FlagNotFound,
+            ErrorKind::ControlPointNotFound,
             "control point key contains control characters",
         ));
     }

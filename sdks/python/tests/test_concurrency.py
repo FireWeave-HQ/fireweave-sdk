@@ -53,9 +53,9 @@ def test_shutdown_during_evaluation_never_raises():
     """Concurrent evaluators either get the real value or the AlreadyClosed default."""
 
     class SlowAdapter(InMemoryAdapter):
-        def resolve(self, flag_key, context):
+        def resolve(self, control_point_key, context):
             time.sleep(0.001)
-            return super().resolve(flag_key, context)
+            return super().resolve(control_point_key, context)
 
     client = make_client(SlowAdapter(FLAGS))
     stop = threading.Event()

@@ -2,7 +2,7 @@
  * Fireweave remote backend adapter (ADR-0005) — **default production path**.
  *
  * Speaks only the vendor-neutral Fireweave remote protocol to fw-server:
- *   POST /v1/flags/evaluate
+ *   POST /v1/control-points/evaluate
  *   POST /v1/capture
  *   POST /v1/targets/register
  *
@@ -27,7 +27,7 @@ import type { CanonicalContext, Exposure, JsonValue, Signal } from '../../domain
 
 const DEFAULT_ADAPTER_SHUTDOWN_TIMEOUT_MS = 10000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 3000;
-const EVALUATE_PATH = '/v1/flags/evaluate';
+const EVALUATE_PATH = '/v1/control-points/evaluate';
 const CAPTURE_PATH = '/v1/capture';
 const REGISTER_TARGET_PATH = '/v1/targets/register';
 
@@ -72,14 +72,14 @@ export interface FireweaveRemoteAdapterOptions {
 }
 
 interface DecisionItem {
-  flagKey: string;
+  controlPointKey: string;
   value: JsonValue;
   reason: string;
   found: boolean;
   enabled?: boolean;
   variant?: string | null;
   payload?: JsonValue;
-  flagMetadata?: Record<string, string | number | boolean>;
+  controlPointMetadata?: Record<string, string | number | boolean>;
 }
 
 interface EvaluateResponse {
@@ -92,7 +92,7 @@ interface CaptureEvent {
   type: 'exposure' | 'signal' | 'event';
   targetingKey: string;
   name?: string;
-  flagKey?: string;
+  controlPointKey?: string;
   value?: JsonValue;
   variant?: string | null;
   timestamp?: string;
@@ -194,7 +194,7 @@ export class FireweaveRemoteAdapter implements BackendAdapter {
   }
 
   async resolve(
-    flagKey: string,
+    controlPointKey: string,
     context: CanonicalContext,
     options?: ResolveOptions,
   ): Promise<AdapterResolution> {
@@ -214,7 +214,7 @@ export class FireweaveRemoteAdapter implements BackendAdapter {
 
     const body: Record<string, unknown> = {
       targetingKey,
-      flagKeys: [flagKey],
+      controlPointKeys: [controlPointKey],
     };
     if (Object.keys(attributes).length > 0) body['attributes'] = attributes;
     if (context.groups !== undefined) body['groups'] = context.groups;
@@ -225,7 +225,7 @@ export class FireweaveRemoteAdapter implements BackendAdapter {
       body,
       options?.signal,
     );
-    const item = response.decisions?.find((d) => d.flagKey === flagKey);
+    const item = response.decisions?.find((d) => d.controlPointKey === controlPointKey);
     if (item === undefined) {
       const missing: AdapterResolution = { found: false };
       if (response.quotaLimited === true) missing.quotaLimited = true;
@@ -284,7 +284,7 @@ export class FireweaveRemoteAdapter implements BackendAdapter {
     const event: CaptureEvent = {
       type: 'exposure',
       targetingKey: exposure.targetingKey,
-      flagKey: exposure.flagKey,
+      controlPointKey: exposure.controlPointKey,
       value: exposure.value,
     };
     if (exposure.variant !== undefined) event.variant = exposure.variant;
@@ -308,7 +308,7 @@ export class FireweaveRemoteAdapter implements BackendAdapter {
         ...(signal.value !== undefined ? { value: signal.value } : {}),
       },
     };
-    if (signal.flagKey !== undefined) event.flagKey = signal.flagKey;
+    if (signal.controlPointKey !== undefined) event.controlPointKey = signal.controlPointKey;
     if (signal.variant !== undefined) event.variant = signal.variant;
     if (signal.rolloutId !== undefined) event.rolloutId = signal.rolloutId;
     if (signal.changeId !== undefined) event.changeId = signal.changeId;
@@ -331,14 +331,21 @@ export class FireweaveRemoteAdapter implements BackendAdapter {
   async shutdown(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    // The race timer is cleared once the flush wins; left armed, it held the
+    // process open for up to shutdownTimeoutMs after a clean shutdown.
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const timeout = this.options.shutdownTimeoutMs ?? DEFAULT_ADAPTER_SHUTDOWN_TIMEOUT_MS;
       await Promise.race([
         this.flush(),
-        new Promise<void>((resolve) => setTimeout(resolve, timeout)),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, timeout);
+        }),
       ]);
     } catch {
       // never throw from shutdown
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
     }
     this.ready = false;
   }
@@ -369,12 +376,12 @@ export class FireweaveRemoteAdapter implements BackendAdapter {
     const reason = reasonToAdapter(item.reason);
     if (reason !== undefined) resolution.reason = reason;
     if (item.payload !== undefined) resolution.payload = item.payload;
-    const meta = item.flagMetadata ?? {};
-    if (typeof meta['fireweave.flagVersion'] === 'number') {
-      resolution.version = meta['fireweave.flagVersion'];
+    const meta = item.controlPointMetadata ?? {};
+    if (typeof meta['fireweave.controlPointVersion'] === 'number') {
+      resolution.version = meta['fireweave.controlPointVersion'];
     }
-    if (typeof meta['fireweave.vendorFlagId'] === 'number') {
-      resolution.vendorFlagId = meta['fireweave.vendorFlagId'];
+    if (typeof meta['fireweave.vendorControlPointId'] === 'number') {
+      resolution.vendorControlPointId = meta['fireweave.vendorControlPointId'];
     }
     if (typeof meta['fireweave.reasonCode'] === 'string') {
       resolution.reasonCode = meta['fireweave.reasonCode'];

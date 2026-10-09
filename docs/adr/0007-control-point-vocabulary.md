@@ -1,6 +1,6 @@
 # ADR-0007: "Control point" is the product noun; `flag` stays at fixed boundaries
 
-- **Status:** Accepted
+- **Status:** Accepted; its `flag` wire, envelope and alias boundaries are superseded by ADR-0013 (3.0.0)
 - **Date:** 2026-08-08
 - **Scope:** Node SDK (`sdks/node`) and repo-level documentation. Python / Go / Java adopt the vocabulary when they next take a pass.
 - **Related:** ADR-0003 (OpenFeature boundary), ADR-0006 (Node drops the direct PostHog adapter)
@@ -42,6 +42,6 @@ What changes in the Node SDK:
 
 **Accepted cost — two vocabularies coexist.** Docs say "control point"; code says `flagKey`. That is more surface to explain, and it is the price of not breaking consumers. The mitigation is documentary, not technical: this table is the canonical answer to "which term applies where", so the duality reads as a decision rather than an unfinished refactor.
 
-**Guard.** `packages/sdk/test/compat/v2-surface.compat.test.ts` asserts the alias exists, shares object identity with `controlPoints`, stays silent by default, and that `features.flags` is still `true`. `packages/sdk/test/compat/v2-types.compat.ts` pins the type surface under `tsc --noEmit`. Both files carry headers stating they must not be edited to make a change pass.
+**Guard.** `sdks/node/test/unit/control-points-surface.test.ts` ("the deprecated flags alias shares identity with controlPoints") pins the alias. The broader v2 compatibility files this paragraph used to cite (`v2-surface.compat.test.ts`, `v2-types.compat.ts`) were retired deliberately by ADR-0010 along with the v2 surface they guarded.
 
 **Explicit non-goal.** Renaming `flagKey` anywhere in `spec/`, the wire protocol, or the OpenFeature boundary. A future contributor reading this ADR should understand the rename is *complete*, not partially applied.

@@ -42,20 +42,20 @@ func hasControlCharacter(s string) bool {
 // fixed order).
 //
 // No taxonomy kind names "malformed key" explicitly (the return-discipline
-// table's closest row is "key unknown to the backend" -> FlagNotFound): a
+// table's closest row is "key unknown to the backend" -> ControlPointNotFound): a
 // key that can never identify a flag is treated the same as one the backend
-// doesn't recognise, so this maps to FlagNotFound too — the node reference
+// doesn't recognise, so this maps to ControlPointNotFound too — the node reference
 // implementation's ruled mapping, carried forward unchanged so every
 // language SDK copying node as the reference agrees.
 func ValidateControlPointKey(key string) (string, *Error) {
 	if key == "" {
-		return "", NewError(KindFlagNotFound, "control point key must be a non-empty string", nil)
+		return "", NewError(KindControlPointNotFound, "control point key must be a non-empty string", nil)
 	}
 	if len(key) > maxControlPointKeyLength {
-		return "", NewError(KindFlagNotFound, "control point key exceeds maximum length", nil)
+		return "", NewError(KindControlPointNotFound, "control point key exceeds maximum length", nil)
 	}
 	if hasControlCharacter(key) {
-		return "", NewError(KindFlagNotFound, "control point key contains control characters", nil)
+		return "", NewError(KindControlPointNotFound, "control point key contains control characters", nil)
 	}
 	return key, nil
 }

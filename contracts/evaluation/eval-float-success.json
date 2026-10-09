@@ -6,7 +6,7 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-float-ratio": {
         "type": "float",
         "enabled": true,
@@ -24,7 +24,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-float-ratio",
+    "controlPointKey": "fw-float-ratio",
     "flagType": "float",
     "defaultValue": 0.0,
     "invocationContext": {
@@ -37,8 +37,8 @@
     "reason": "TARGETING_MATCH",
     "errorCode": null,
     "errorMessage": null,
-    "flagMetadata": {
-      "fireweave.flagVersion": 1
+    "controlPointMetadata": {
+      "fireweave.controlPointVersion": 1
     }
   },
   "schemaVersion": 1,

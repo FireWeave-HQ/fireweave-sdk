@@ -22,7 +22,7 @@ export type FireweaveErrorKind =
   | 'BackendUnavailable'
   | 'MalformedResponse'
   | 'InvalidContext'
-  | 'FlagNotFound'
+  | 'ControlPointNotFound'
   | 'TypeMismatch'
   | 'NotReady'
   | 'AlreadyClosed'
@@ -80,7 +80,7 @@ export const ERROR_TAXONOMY: Readonly<Record<FireweaveErrorKind, ErrorKindSpec>>
     openFeatureErrorCode: 'INVALID_CONTEXT',
     retryable: false,
   },
-  FlagNotFound: {
+  ControlPointNotFound: {
     message: 'flag not found',
     openFeatureErrorCode: 'FLAG_NOT_FOUND',
     retryable: false,

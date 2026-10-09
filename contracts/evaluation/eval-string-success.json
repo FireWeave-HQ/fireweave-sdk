@@ -6,7 +6,7 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-string-theme": {
         "type": "string",
         "enabled": true,
@@ -24,7 +24,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-string-theme",
+    "controlPointKey": "fw-string-theme",
     "flagType": "string",
     "defaultValue": "light",
     "invocationContext": {
@@ -37,8 +37,8 @@
     "reason": "TARGETING_MATCH",
     "errorCode": null,
     "errorMessage": null,
-    "flagMetadata": {
-      "fireweave.flagVersion": 2
+    "controlPointMetadata": {
+      "fireweave.controlPointVersion": 2
     }
   },
   "schemaVersion": 1,

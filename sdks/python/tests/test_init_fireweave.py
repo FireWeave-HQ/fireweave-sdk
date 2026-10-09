@@ -63,7 +63,7 @@ class TestSuccessfulPaths:
             assert headers["Authorization"] == "Bearer project-api-key_x"
             return 200, {
                 "decisions": [
-                    {"flagKey": "f", "found": True, "value": True, "enabled": True, "reason": "TARGETING_MATCH"}
+                    {"controlPointKey": "f", "found": True, "value": True, "enabled": True, "reason": "TARGETING_MATCH"}
                 ]
             }
 
@@ -92,7 +92,7 @@ class TestSuccessfulPaths:
 
     def test_remote_mode_missing_key_end_to_end_is_error_flag_not_found(self):
         """spec/control-points.md return-discipline table: remote's unknown-key
-        row is default/ERROR/FlagNotFound — deliberately NOT local's
+        row is default/ERROR/ControlPointNotFound — deliberately NOT local's
         default/DEFAULT. Exercised through init_fireweave end-to-end (not
         just at the adapter unit level, see test_remote_adapter.py) so the
         fix is pinned at the boundary a real caller actually uses."""
@@ -111,7 +111,7 @@ class TestSuccessfulPaths:
         )
         assert decision.value is False
         assert decision.reason == "ERROR"
-        assert decision.error_kind is ErrorKind.FLAG_NOT_FOUND
+        assert decision.error_kind is ErrorKind.CONTROL_POINT_NOT_FOUND
         client.shutdown()
 
 
@@ -143,7 +143,7 @@ class TestReadsNeverRaise:
         decision = client.control_points.get_boolean_details("", False, EvaluationContext("u"))
         assert decision.value is False
         assert decision.reason == "ERROR"
-        assert decision.error_kind is ErrorKind.FLAG_NOT_FOUND
+        assert decision.error_kind is ErrorKind.CONTROL_POINT_NOT_FOUND
         client.shutdown()
 
     def test_read_after_shutdown_degrades_already_closed(self):

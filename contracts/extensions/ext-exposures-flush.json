@@ -12,7 +12,7 @@
     "exposureQueue": [
       {
         "targetingKey": "org_01HZXEXP000000000000003",
-        "flagKey": "fw-exp",
+        "controlPointKey": "fw-exp",
         "variant": "on",
         "value": true
       }

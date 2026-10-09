@@ -17,11 +17,10 @@ are out of v1. An SDK MUST NOT expose them, and MUST NOT expose an OpenFeature p
 ## The namespace
 
 Every SDK exposes the surface under a namespace named `controlPoints`, cased for the
-language: `controlPoints` (TS, Java, Swift), `control_points` (Python, Rust), `ControlPoints`
-(Go).
+language: `controlPoints` (TS, Java, Swift, Dart), `control_points` (Python, Rust),
+`ControlPoints` (Go).
 
-`flags` MAY be retained as a deprecated alias pointing at the same object, per ADR-0007. It
-MUST NOT be the documented name and MUST NOT appear in examples.
+There is no `flags` alias: 3.0.0 removed it (ADR-0013).
 
 ## The nine methods
 
@@ -45,8 +44,9 @@ Naming follows each language's idiom (`get_boolean_value`, `GetBooleanValue`) bu
 **method set and its semantics do not vary**. A language missing any of the nine fails
 `conformance/surface/`.
 
-`flagKey` stays the parameter name at the wire and envelope boundary (ADR-0007) even though
-the namespace is `controlPoints`. That duality is a decision, not an oversight.
+The wire and the envelopes name the key `controlPointKey`, and its metadata
+`controlPointMetadata` (ADR-0013, superseding ADR-0007's `flagKey` boundary). OpenFeature's own
+vocabulary (`FLAG_NOT_FOUND`) appears only in the error mapping column.
 
 ## Return discipline — never throw into a read path
 
@@ -56,18 +56,27 @@ A control-point read MUST NOT raise into the caller. Every failure resolves to t
 | Situation | `value` | `reason` | `error.kind` |
 | --- | --- | --- | --- |
 | decision served | resolved | `TARGETING_MATCH` \| `SPLIT` \| `STATIC` \| `CACHED` | — |
-| key unknown to the backend | `default` | `ERROR` | `FlagNotFound` |
+| key unknown to the backend | `default` | `ERROR` | `ControlPointNotFound` |
 | resolved value is the wrong type | `default` | `ERROR` | `TypeMismatch` |
 | `default` does not match `type` | `default` | `ERROR` | `TypeMismatch` |
 | context fails validation | `default` | `ERROR` | `InvalidContext` |
 | runtime not initialised | `default` | `ERROR` | `NotReady` |
 | runtime closed | `default` | `ERROR` | `AlreadyClosed` |
-| backend unreachable / slow | `default` | `ERROR` | `Network` \| `Timeout` \| `BackendUnavailable` |
+| backend unreachable / slow, no earlier successful fetch | `default` | `ERROR` | `Network` \| `Timeout` \| `BackendUnavailable` |
+| a re-fetch fails after an earlier success (prefetching SDKs) | last good value | `STALE` | — |
 | prefetch ceiling lost the race (web) | `default` | `STALE` | — |
 
 Error kinds are the 15 in `errors.schema.json`. `STALE` is a `reason`, not an error: the
 runtime is serving a usable-but-not-fresh cache, which is a different claim from failure and
 MUST stay distinguishable.
+
+**A failed re-fetch keeps the last good decisions.** SDKs that read from a prefetched cache
+(web, Swift, Dart) MUST NOT discard it when a later fetch fails: after at least one successful
+fetch, a failed or timed-out re-fetch keeps the cached decisions and serves them with reason
+`STALE`, and the next successful fetch replaces them. Switching every read to its default on one
+429, 5xx or network blip would roll every user back at once; that is a worse outcome than
+serving decisions that are a little old, and it is exactly what `STALE` exists to report. Only
+a fetch with no earlier success falls back to defaults with `ERROR`.
 
 **Why a return rather than an exception.** These calls sit in request and render paths. If
 they raise, every call site needs a guard and fail-open becomes a convention instead of a

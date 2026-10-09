@@ -155,7 +155,7 @@ describe('initFireweave — adapter selection', () => {
     await omitted.shutdown();
   });
 
-  it('remote mode selects FireweaveRemoteWebAdapter and evaluates over a batch POST /v1/flags/evaluate', async () => {
+  it('remote mode selects FireweaveRemoteWebAdapter and evaluates over a batch POST /v1/control-points/evaluate', async () => {
     const calls: FetchCall[] = [];
     const client = await initFireweave({
       mode: 'remote',
@@ -163,12 +163,12 @@ describe('initFireweave — adapter selection', () => {
       apiUrl: 'http://127.0.0.1:3901',
       context: { targetingKey: 'user-1' },
       fetch: mockFetch((url) => {
-        assert.ok(url.endsWith('/v1/flags/evaluate'));
+        assert.ok(url.endsWith('/v1/control-points/evaluate'));
         return {
           status: 200,
           body: {
             decisions: [
-              { flagKey: 'checkout-v2', value: true, reason: 'TARGETING_MATCH', found: true, enabled: true },
+              { controlPointKey: 'checkout-v2', value: true, reason: 'TARGETING_MATCH', found: true, enabled: true },
             ],
           },
         };
@@ -219,7 +219,7 @@ describe('initFireweave — does nothing else conditional on mode', () => {
     // Neither call throws — that much IS identical across modes. The
     // resulting Decision shape is not: local's unknown-key row is
     // `default`/reason: DEFAULT (no error at all), remote's is
-    // `default`/reason: ERROR/FlagNotFound (spec/modes.md "Behaviour per
+    // `default`/reason: ERROR/ControlPointNotFound (spec/modes.md "Behaviour per
     // mode" table).
     const localDecision = local.controlPoints.getBooleanDetails('does-not-exist', false);
     assert.equal(localDecision.value, false);
@@ -230,7 +230,7 @@ describe('initFireweave — does nothing else conditional on mode', () => {
     const remoteDecision = remote.controlPoints.getBooleanDetails('does-not-exist', false);
     assert.equal(remoteDecision.value, false);
     assert.equal(remoteDecision.reason, 'ERROR');
-    assert.equal(remoteDecision.errorKind, 'FlagNotFound');
+    assert.equal(remoteDecision.errorKind, 'ControlPointNotFound');
 
     await local.shutdown();
     await remote.shutdown();

@@ -46,13 +46,13 @@ const (
 // prior claim was the divergence itself, not a description of the ratified
 // surface; this key restores go to node/python parity.
 const (
-	MetaErrorKind    = "fireweave.errorKind"
-	MetaFlagVersion  = "fireweave.flagVersion"
-	MetaVendorFlagID = "fireweave.vendorFlagId"
-	MetaReasonCode   = "fireweave.reasonCode"
-	MetaQuotaLimited = "fireweave.quotaLimited"
-	MetaFromCache    = "fireweave.fromCache"
-	MetaPayload      = "fireweave.payload"
+	MetaErrorKind            = "fireweave.errorKind"
+	MetaControlPointVersion  = "fireweave.controlPointVersion"
+	MetaVendorControlPointID = "fireweave.vendorControlPointId"
+	MetaReasonCode           = "fireweave.reasonCode"
+	MetaQuotaLimited         = "fireweave.quotaLimited"
+	MetaFromCache            = "fireweave.fromCache"
+	MetaPayload              = "fireweave.payload"
 )
 
 // Decision is the normalized outcome of a flag resolution
@@ -61,27 +61,27 @@ const (
 // defaults are returned, never thrown (spec/control-points.md "Return
 // discipline").
 type Decision struct {
-	FlagKey  string
-	Value    any
-	Variant  string
-	Reason   Reason
-	Error    *Error
-	Metadata map[string]any
+	ControlPointKey string
+	Value           any
+	Variant         string
+	Reason          Reason
+	Error           *Error
+	Metadata        map[string]any
 }
 
 // ErrorDecision builds the canonical error-path decision: default value,
 // ERROR reason, and fireweave.errorKind metadata (plus any extras such as
 // fireweave.quotaLimited).
-func ErrorDecision(flagKey string, defaultValue any, err *Error, extraMeta map[string]any) Decision {
+func ErrorDecision(controlPointKey string, defaultValue any, err *Error, extraMeta map[string]any) Decision {
 	meta := map[string]any{MetaErrorKind: string(err.Kind)}
 	for k, v := range extraMeta {
 		meta[k] = v
 	}
 	return Decision{
-		FlagKey:  flagKey,
-		Value:    defaultValue,
-		Reason:   ReasonError,
-		Error:    err,
-		Metadata: meta,
+		ControlPointKey: controlPointKey,
+		Value:           defaultValue,
+		Reason:          ReasonError,
+		Error:           err,
+		Metadata:        meta,
 	}
 }

@@ -9,7 +9,7 @@
       "mode": "networkError",
       "error": "connection_reset"
     },
-    "flags": {
+    "controlPoints": {
       "fw-t": {
         "type": "boolean",
         "enabled": true,
@@ -20,7 +20,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-t",
+    "controlPointKey": "fw-t",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": {
@@ -33,7 +33,7 @@
     "reason": "ERROR",
     "errorCode": "GENERAL",
     "errorMessage": "network error",
-    "flagMetadata": {
+    "controlPointMetadata": {
       "fireweave.errorKind": "Network"
     }
   },

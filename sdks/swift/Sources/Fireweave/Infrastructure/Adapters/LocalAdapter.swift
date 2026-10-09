@@ -36,7 +36,7 @@ private let defaultLogSink: LogSink = { message in
 ///   caller's own default with reason `.defaultReason` — not an error
 ///   (`spec/modes.md` "Behaviour per mode": local's unknown-key row is
 ///   deliberately `default`/`DEFAULT`, unlike remote's
-///   `default`/`ERROR`/`FlagNotFound`).
+///   `default`/`ERROR`/`ControlPointNotFound`).
 public final class FireweaveLocalAdapter: ControlPointsBackendAdapter, @unchecked Sendable {
   private let devFlags: [String: Bool]
   private let log: LogSink

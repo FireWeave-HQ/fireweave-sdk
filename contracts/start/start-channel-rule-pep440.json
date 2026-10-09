@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "id": "start-channel-rule-pep440",
+  "suite": "start",
+  "description": "Release channel from a PEP 440 version (Python)",
+  "rules": [
+    "SP-13"
+  ],
+  "profile": "any",
+  "provisional": true,
+  "cases": [
+    {
+      "name": "release-is-production",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "2.4.0"
+      },
+      "expect": {
+        "channel": "production"
+      }
+    },
+    {
+      "name": "alpha-is-staging",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "2.4.0a1"
+      },
+      "expect": {
+        "channel": "staging"
+      }
+    },
+    {
+      "name": "release-candidate-is-staging",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "2.4.0rc1"
+      },
+      "expect": {
+        "channel": "staging"
+      }
+    },
+    {
+      "name": "dev-release-is-staging",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "2.4.0.dev3"
+      },
+      "expect": {
+        "channel": "staging"
+      }
+    },
+    {
+      "name": "local-label-is-production",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "2.4.0+local"
+      },
+      "expect": {
+        "channel": "production"
+      }
+    },
+    {
+      "name": "post-release-is-production",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "2.4.0.post1"
+      },
+      "expect": {
+        "channel": "production"
+      }
+    },
+    {
+      "name": "unparseable-is-production",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "garbage"
+      },
+      "expect": {
+        "channel": "production"
+      }
+    }
+  ],
+  "compatibility": {
+    "node": "not-applicable",
+    "web": "not-applicable",
+    "python": "pass",
+    "go": "not-applicable",
+    "java": "not-applicable",
+    "rust": "not-applicable",
+    "swift": "not-applicable",
+    "dart": "not-applicable"
+  },
+  "limitations": {
+    "node": "PEP 440 versions are Python-only",
+    "web": "PEP 440 versions are Python-only",
+    "go": "PEP 440 versions are Python-only",
+    "java": "PEP 440 versions are Python-only",
+    "rust": "PEP 440 versions are Python-only",
+    "swift": "PEP 440 versions are Python-only",
+    "dart": "PEP 440 versions are Python-only"
+  }
+}

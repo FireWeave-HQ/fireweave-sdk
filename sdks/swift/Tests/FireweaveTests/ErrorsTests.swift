@@ -4,25 +4,47 @@ import Testing
 
 @Suite("Errors")
 struct ErrorsTests {
-  @Test func redactsProjectKeyPrefixes() {
+  @Test func redactsKeyShapedValues() {
     #expect(redactSecrets("key phc_SUPERSECRET0000 leaked") == "key [REDACTED] leaked")
     #expect(redactSecrets("phs_abc-DEF_123") == "[REDACTED]")
-    #expect(redactSecrets("phx_") == "[REDACTED]")
+    // A prefix with no value after it is prose (`rules.redaction.value`).
+    #expect(redactSecrets("phx_") == "phx_")
   }
 
-  @Test func redactsBearerTokens() {
-    #expect(redactSecrets("Authorization: Bearer abc.def.ghi") == "Authorization: [REDACTED]")
+  @Test func redactsBearerTokensButKeepsTheWord() {
+    #expect(
+      redactSecrets("Authorization: Bearer abc.def.ghi") == "Authorization: Bearer [REDACTED]"
+    )
   }
 
-  @Test func redactsFwProjectApiKeyAssignment() {
-    #expect(redactSecrets("FW_PROJECT_API_KEY=supersecret") == "[REDACTED]")
-    #expect(redactSecrets("FW_PROJECT_API_KEY : supersecret") == "[REDACTED]")
-    // No assignment marker -> not matched (mirrors the reference regex).
+  @Test func redactsTheValueOfANamedAssignmentButKeepsTheName() {
+    #expect(redactSecrets("FW_PROJECT_API_KEY=supersecret") == "FW_PROJECT_API_KEY=[REDACTED]")
+    #expect(
+      redactSecrets("FW_PROJECT_API_KEY : supersecret") == "FW_PROJECT_API_KEY : [REDACTED]"
+    )
+    #expect(redactSecrets("FIREWEAVE_KEY='abc', next") == "FIREWEAVE_KEY='[REDACTED]', next")
+    // No assignment marker: the name alone stays.
     #expect(redactSecrets("FW_PROJECT_API_KEY is unset") == "FW_PROJECT_API_KEY is unset")
   }
 
-  @Test func collapsesWhitespaceAndTrims() {
-    #expect(redactSecrets("  a   b\n\tc  ") == "a b c")
+  @Test func redactsURLUserinfoOnly() {
+    #expect(
+      redactSecrets("GET http://key@localhost:3000/v1") == "GET http://[REDACTED]@localhost:3000/v1"
+    )
+    // An `@` after the path is not userinfo.
+    let noUserinfo = "https://fw.example.com/v1?to=a@b"
+    #expect(redactSecrets(noUserinfo) == noUserinfo)
+  }
+
+  @Test func redactionLeavesWhitespaceAloneAndErrorsCollapseIt() {
+    #expect(redactSecrets("  a   b  ") == "  a   b  ")
+    let error = FireweaveError(kind: .network, message: "  a   b\n\tc  ")
+    #expect(error.message == "a b c")
+  }
+
+  @Test func errorMessagesAreRedacted() {
+    let error = FireweaveError(kind: .authentication, message: "FIREWEAVE_KEY=fw_org_abc refused")
+    #expect(error.message == "FIREWEAVE_KEY=[REDACTED] refused")
   }
 
   @Test func leavesOrdinaryTextAlone() {

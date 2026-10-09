@@ -10,9 +10,9 @@ import java.util.Objects;
  * {@code BackendAdapter} / {@code FireweaveRuntime}. No vendor types appear here.
  *
  * <p>On error paths {@link #value()} is always the caller-supplied default, {@link #reason()} is
- * {@code ERROR}, and {@code flagMetadata} carries {@code fireweave.errorKind}.
+ * {@code ERROR}, and {@code controlPointMetadata} carries {@code fireweave.errorKind}.
  *
- * <p>flagMetadata values are scalar only: Boolean, String, or Number.
+ * <p>controlPointMetadata values are scalar only: Boolean, String, or Number.
  *
  * <p>v1 scope (spec/control-points.md "Side effects"): a read is side-effect free, so this type
  * carries no {@code payload} or {@code exposure} fields — those are schema-level extension
@@ -21,28 +21,28 @@ import java.util.Objects;
  */
 public final class Decision {
 
-    private final String flagKey;
+    private final String controlPointKey;
     private final JsonValue value;
     private final String variant;
     private final String reason;
     private final FireweaveError error;
-    private final Map<String, Object> flagMetadata;
+    private final Map<String, Object> controlPointMetadata;
 
     private Decision(Builder b) {
-        this.flagKey = Objects.requireNonNull(b.flagKey, "flagKey");
+        this.controlPointKey = Objects.requireNonNull(b.controlPointKey, "controlPointKey");
         this.value = Objects.requireNonNull(b.value, "value");
         this.variant = b.variant;
         this.reason = Objects.requireNonNull(b.reason, "reason");
         this.error = b.error;
-        this.flagMetadata = Collections.unmodifiableMap(new LinkedHashMap<>(b.flagMetadata));
+        this.controlPointMetadata = Collections.unmodifiableMap(new LinkedHashMap<>(b.controlPointMetadata));
     }
 
-    public static Builder builder(String flagKey) {
-        return new Builder(flagKey);
+    public static Builder builder(String controlPointKey) {
+        return new Builder(controlPointKey);
     }
 
-    public String flagKey() {
-        return flagKey;
+    public String controlPointKey() {
+        return controlPointKey;
     }
 
     public JsonValue value() {
@@ -62,21 +62,21 @@ public final class Decision {
         return error;
     }
 
-    /** Scalar-only flagMetadata (Boolean | String | Number values). */
-    public Map<String, Object> flagMetadata() {
-        return flagMetadata;
+    /** Scalar-only controlPointMetadata (Boolean | String | Number values). */
+    public Map<String, Object> controlPointMetadata() {
+        return controlPointMetadata;
     }
 
     public static final class Builder {
-        private final String flagKey;
+        private final String controlPointKey;
         private JsonValue value;
         private String variant;
         private String reason = Reasons.UNKNOWN;
         private FireweaveError error;
-        private final Map<String, Object> flagMetadata = new LinkedHashMap<>();
+        private final Map<String, Object> controlPointMetadata = new LinkedHashMap<>();
 
-        private Builder(String flagKey) {
-            this.flagKey = flagKey;
+        private Builder(String controlPointKey) {
+            this.controlPointKey = controlPointKey;
         }
 
         public Builder value(JsonValue value) {
@@ -103,10 +103,10 @@ public final class Decision {
         public Builder metadata(String key, Object value) {
             if (value != null) {
                 if (!(value instanceof Boolean || value instanceof String || value instanceof Number)) {
-                    throw new IllegalArgumentException("flagMetadata values must be scalar, got "
+                    throw new IllegalArgumentException("controlPointMetadata values must be scalar, got "
                             + value.getClass().getSimpleName());
                 }
-                flagMetadata.put(key, value);
+                controlPointMetadata.put(key, value);
             }
             return this;
         }

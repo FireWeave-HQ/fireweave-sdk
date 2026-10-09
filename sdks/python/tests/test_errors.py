@@ -10,7 +10,7 @@ from fireweave import (
     ConfigurationError,
     ErrorKind,
     FireweaveError,
-    FlagNotFoundError,
+    ControlPointNotFoundError,
     InvalidContextError,
     NetworkError,
     NotReadyError,
@@ -24,7 +24,7 @@ from fireweave import (
 )
 
 EXPECTED_KINDS = {
-    "NotReady", "FlagNotFound", "TypeMismatch", "InvalidContext",
+    "NotReady", "ControlPointNotFound", "TypeMismatch", "InvalidContext",
     "Authentication", "Authorization", "RateLimited", "Timeout", "Network",
     "BackendUnavailable", "MalformedResponse", "UnsupportedCapability",
     "Configuration", "AlreadyClosed", "Internal",
@@ -41,7 +41,7 @@ def test_exactly_15_pascalcase_kinds():
     "kind,expected_code",
     [
         (ErrorKind.NOT_READY, "PROVIDER_NOT_READY"),
-        (ErrorKind.FLAG_NOT_FOUND, "FLAG_NOT_FOUND"),
+        (ErrorKind.CONTROL_POINT_NOT_FOUND, "FLAG_NOT_FOUND"),
         (ErrorKind.TYPE_MISMATCH, "TYPE_MISMATCH"),
         (ErrorKind.INVALID_CONTEXT, "INVALID_CONTEXT"),
         (ErrorKind.MALFORMED_RESPONSE, "PARSE_ERROR"),
@@ -101,8 +101,8 @@ class TestRedaction:
             assert "phc_" not in msg and "phs_" not in msg and "phx_" not in msg
 
     def test_empty_message_falls_back_to_default(self):
-        assert FlagNotFoundError().message == "flag not found"
-        assert FlagNotFoundError("").message == "flag not found"
+        assert ControlPointNotFoundError().message == "flag not found"
+        assert ControlPointNotFoundError("").message == "flag not found"
 
 
 def test_cause_preserved_via_dunder_cause():
@@ -117,9 +117,9 @@ def test_cause_preserved_via_dunder_cause():
 
 
 def test_flag_not_found_quota_limited_flag():
-    err = FlagNotFoundError(quota_limited=True)
+    err = ControlPointNotFoundError(quota_limited=True)
     assert err.quota_limited
-    assert err.kind is ErrorKind.FLAG_NOT_FOUND
+    assert err.kind is ErrorKind.CONTROL_POINT_NOT_FOUND
 
 
 def test_all_errors_subclass_fireweave_error():

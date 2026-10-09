@@ -1,0 +1,11 @@
+# Lint policy (matches the repo's "no invented configs" rule for the other
+# languages): the Dart team's recommended set, plus the three strict-mode
+# switches. CI runs `dart analyze --fatal-infos` and
+# `dart format --output=none --set-exit-if-changed .`.
+include: package:lints/recommended.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true

@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "id": "start-env-conventional-node",
+  "suite": "start",
+  "description": "Node also reads NODE_ENV after APP_ENV",
+  "rules": [
+    "SP-3"
+  ],
+  "profile": "server",
+  "provisional": true,
+  "cases": [
+    {
+      "name": "node-env-used-last",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "NODE_ENV": "development"
+        }
+      },
+      "expect": {
+        "mode": "local",
+        "modeSource": "environment",
+        "keySource": "none",
+        "environment": "development",
+        "environmentSource": "NODE_ENV"
+      }
+    },
+    {
+      "name": "app-env-beats-node-env",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "APP_ENV": "production",
+          "NODE_ENV": "development"
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration",
+          "mentions": [
+            "FIREWEAVE_KEY"
+          ]
+        }
+      }
+    }
+  ],
+  "compatibility": {
+    "node": "pass",
+    "web": "not-applicable",
+    "python": "not-applicable",
+    "go": "not-applicable",
+    "java": "not-applicable",
+    "rust": "not-applicable",
+    "swift": "not-applicable",
+    "dart": "not-applicable"
+  },
+  "limitations": {
+    "web": "only Node reads a language-conventional environment name (NODE_ENV)",
+    "python": "only Node reads a language-conventional environment name (NODE_ENV)",
+    "go": "only Node reads a language-conventional environment name (NODE_ENV)",
+    "java": "only Node reads a language-conventional environment name (NODE_ENV)",
+    "rust": "only Node reads a language-conventional environment name (NODE_ENV)",
+    "swift": "only Node reads a language-conventional environment name (NODE_ENV)",
+    "dart": "only Node reads a language-conventional environment name (NODE_ENV)"
+  }
+}

@@ -48,10 +48,8 @@ const lifecycleGate = (runtime: FireweaveRuntime): FireweaveError | undefined =>
  * Decision-returning evaluation without reaching into the runtime. Never throws
  * — errors surface as ERROR decisions, exactly like the OpenFeature path.
  *
- * "Control point" is the Fireweave product noun (ADR-0007). The per-call
- * parameter stays `flagKey`, because that is the name fixed by the OpenFeature
- * spec, by `spec/decision.schema.json`, and by the `/v1/flags/evaluate` wire
- * contract shared with the Python, Go, and Java SDKs.
+ * "Control point" is the Fireweave product noun (ADR-0007), on the wire too
+ * from 3.0.0 (ADR-0013).
  */
 export class ControlPointsApi {
   private readonly runtime: FireweaveRuntime;
@@ -62,32 +60,32 @@ export class ControlPointsApi {
 
   /** Evaluate a flag to a canonical Decision (detailed evaluation). */
   evaluate(
-    flagKey: string,
+    controlPointKey: string,
     expectedType: ExpectedFlagType,
     defaultValue: JsonValue,
     context?: ContextInput,
     options?: EvaluateOptions,
   ): Promise<Decision> {
-    return this.runtime.evaluate(flagKey, expectedType, defaultValue, context, options ?? {});
+    return this.runtime.evaluate(controlPointKey, expectedType, defaultValue, context, options ?? {});
   }
 
-  async getBooleanValue(flagKey: string, defaultValue: boolean, context?: ContextInput): Promise<boolean> {
-    const decision = await this.evaluate(flagKey, 'boolean', defaultValue, context);
+  async getBooleanValue(controlPointKey: string, defaultValue: boolean, context?: ContextInput): Promise<boolean> {
+    const decision = await this.evaluate(controlPointKey, 'boolean', defaultValue, context);
     return decision.value as boolean;
   }
 
-  async getStringValue(flagKey: string, defaultValue: string, context?: ContextInput): Promise<string> {
-    const decision = await this.evaluate(flagKey, 'string', defaultValue, context);
+  async getStringValue(controlPointKey: string, defaultValue: string, context?: ContextInput): Promise<string> {
+    const decision = await this.evaluate(controlPointKey, 'string', defaultValue, context);
     return decision.value as string;
   }
 
-  async getNumberValue(flagKey: string, defaultValue: number, context?: ContextInput): Promise<number> {
-    const decision = await this.evaluate(flagKey, 'number', defaultValue, context);
+  async getNumberValue(controlPointKey: string, defaultValue: number, context?: ContextInput): Promise<number> {
+    const decision = await this.evaluate(controlPointKey, 'number', defaultValue, context);
     return decision.value as number;
   }
 
-  async getObjectValue(flagKey: string, defaultValue: JsonValue, context?: ContextInput): Promise<JsonValue> {
-    const decision = await this.evaluate(flagKey, 'object', defaultValue, context);
+  async getObjectValue(controlPointKey: string, defaultValue: JsonValue, context?: ContextInput): Promise<JsonValue> {
+    const decision = await this.evaluate(controlPointKey, 'object', defaultValue, context);
     return decision.value;
   }
 
@@ -100,20 +98,20 @@ export class ControlPointsApi {
    * `variant` or `error` was the OpenFeature provider's `resolve*Evaluation`,
    * so detailed evaluation was unreachable without installing OpenFeature.
    */
-  getBooleanDetails(flagKey: string, defaultValue: boolean, context?: ContextInput): Promise<Decision> {
-    return this.evaluate(flagKey, 'boolean', defaultValue, context);
+  getBooleanDetails(controlPointKey: string, defaultValue: boolean, context?: ContextInput): Promise<Decision> {
+    return this.evaluate(controlPointKey, 'boolean', defaultValue, context);
   }
 
-  getStringDetails(flagKey: string, defaultValue: string, context?: ContextInput): Promise<Decision> {
-    return this.evaluate(flagKey, 'string', defaultValue, context);
+  getStringDetails(controlPointKey: string, defaultValue: string, context?: ContextInput): Promise<Decision> {
+    return this.evaluate(controlPointKey, 'string', defaultValue, context);
   }
 
-  getNumberDetails(flagKey: string, defaultValue: number, context?: ContextInput): Promise<Decision> {
-    return this.evaluate(flagKey, 'number', defaultValue, context);
+  getNumberDetails(controlPointKey: string, defaultValue: number, context?: ContextInput): Promise<Decision> {
+    return this.evaluate(controlPointKey, 'number', defaultValue, context);
   }
 
-  getObjectDetails(flagKey: string, defaultValue: JsonValue, context?: ContextInput): Promise<Decision> {
-    return this.evaluate(flagKey, 'object', defaultValue, context);
+  getObjectDetails(controlPointKey: string, defaultValue: JsonValue, context?: ContextInput): Promise<Decision> {
+    return this.evaluate(controlPointKey, 'object', defaultValue, context);
   }
 }
 
@@ -131,21 +129,6 @@ export interface FireweaveClientOptions {}
 export class FireweaveClient {
   readonly runtime: FireweaveRuntime;
   readonly controlPoints: ControlPointsApi;
-
-  /**
-   * Control-point evaluation under its former name.
-   *
-   * @deprecated Renamed to {@link FireweaveClient.controlPoints} (ADR-0007).
-   * Identical and fully supported — `client.flags === client.controlPoints`, so
-   * no migration is required and none is planned. Silent at runtime: the alias
-   * is permanent, not scheduled for removal, so there is nothing to warn a
-   * caller toward — deprecation is conveyed by this doc comment only (no log,
-   * and no env gate to control one, since the SDK reads no environment
-   * variables regardless — spec/modes.md).
-   */
-  get flags(): ControlPointsApi {
-    return this.controlPoints;
-  }
 
   constructor(runtime: FireweaveRuntime, _options: FireweaveClientOptions = {}) {
     this.runtime = runtime;

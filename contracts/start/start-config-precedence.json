@@ -1,0 +1,189 @@
+{
+  "schemaVersion": 1,
+  "id": "start-config-precedence",
+  "suite": "start",
+  "description": "Option, then variable, then default; blank values are unset",
+  "rules": [
+    "SP-4",
+    "SP-5"
+  ],
+  "profile": "server",
+  "provisional": true,
+  "cases": [
+    {
+      "name": "key-option-beats-env",
+      "when": {
+        "operation": "resolve",
+        "options": {
+          "key": "project-api-key_contracttest01"
+        },
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_fromenv000001"
+        }
+      },
+      "expect": {
+        "mode": "remote",
+        "keySource": "option"
+      }
+    },
+    {
+      "name": "url-option-beats-env",
+      "when": {
+        "operation": "resolve",
+        "options": {
+          "url": "https://option.example.com"
+        },
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01",
+          "FIREWEAVE_URL": "https://env.example.com"
+        }
+      },
+      "expect": {
+        "url": "https://option.example.com",
+        "urlSource": "option"
+      }
+    },
+    {
+      "name": "url-env-used",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01",
+          "FIREWEAVE_URL": "https://env.example.com"
+        }
+      },
+      "expect": {
+        "url": "https://env.example.com",
+        "urlSource": "FIREWEAVE_URL"
+      }
+    },
+    {
+      "name": "environment-option-beats-env",
+      "when": {
+        "operation": "resolve",
+        "options": {
+          "environment": "development"
+        },
+        "env": {
+          "FIREWEAVE_ENV": "production"
+        }
+      },
+      "expect": {
+        "mode": "local",
+        "environment": "development",
+        "environmentSource": "option"
+      }
+    },
+    {
+      "name": "fireweave-env-beats-app-env",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_ENV": "production",
+          "APP_ENV": "development"
+        }
+      },
+      "expect": {
+        "error": {
+          "kind": "Configuration",
+          "mentions": [
+            "FIREWEAVE_KEY"
+          ]
+        }
+      }
+    },
+    {
+      "name": "app-env-used-when-fireweave-env-unset",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "APP_ENV": "development"
+        }
+      },
+      "expect": {
+        "mode": "local",
+        "modeSource": "environment",
+        "keySource": "none",
+        "environment": "development",
+        "environmentSource": "APP_ENV"
+      }
+    },
+    {
+      "name": "blank-env-key-is-unset",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "   ",
+          "FIREWEAVE_ENV": "development"
+        }
+      },
+      "expect": {
+        "mode": "local",
+        "modeSource": "environment",
+        "keySource": "none",
+        "environment": "development",
+        "environmentSource": "FIREWEAVE_ENV"
+      }
+    },
+    {
+      "name": "blank-option-key-falls-through-to-env",
+      "when": {
+        "operation": "resolve",
+        "options": {
+          "key": ""
+        },
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01"
+        }
+      },
+      "expect": {
+        "mode": "remote",
+        "keySource": "FIREWEAVE_KEY"
+      }
+    },
+    {
+      "name": "blank-fireweave-env-falls-through-to-app-env",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_ENV": "  ",
+          "APP_ENV": "development"
+        }
+      },
+      "expect": {
+        "mode": "local",
+        "modeSource": "environment",
+        "keySource": "none",
+        "environment": "development",
+        "environmentSource": "APP_ENV"
+      }
+    },
+    {
+      "name": "url-value-is-trimmed",
+      "when": {
+        "operation": "resolve",
+        "env": {
+          "FIREWEAVE_KEY": "project-api-key_contracttest01",
+          "FIREWEAVE_URL": "  https://fw.example.com/  "
+        }
+      },
+      "expect": {
+        "url": "https://fw.example.com",
+        "urlSource": "FIREWEAVE_URL"
+      }
+    }
+  ],
+  "compatibility": {
+    "node": "pass",
+    "web": "not-applicable",
+    "python": "pass",
+    "go": "pass",
+    "java": "pass",
+    "rust": "pass",
+    "swift": "pass",
+    "dart": "pass"
+  },
+  "limitations": {
+    "web": "server-profile fixture; web has only the client profile"
+  }
+}

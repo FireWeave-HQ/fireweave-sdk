@@ -5,7 +5,7 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-merge": {
         "type": "string",
         "enabled": true,
@@ -31,7 +31,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-merge",
+    "controlPointKey": "fw-merge",
     "flagType": "string",
     "defaultValue": "none",
     "invocationContext": {

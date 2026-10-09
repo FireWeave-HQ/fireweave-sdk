@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Go SDK (`sdks/go`)
 
-Module `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2`. `go 1.25`. **Zero `require` directives** — Go cannot scope a dep to tests, so any dependency is a runtime dependency. Guard: `fireweave/architecture_guard_test.go`.
+Module `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3`. `go 1.25`. **Zero `require` directives** — Go cannot scope a dep to tests, so any dependency is a runtime dependency. Guard: `fireweave/architecture_guard_test.go`.
 
 ## Folder structure
 

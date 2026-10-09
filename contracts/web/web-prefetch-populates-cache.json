@@ -5,13 +5,13 @@
   "tags": ["prefetch", "sync"],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "web-checkout": { "type": "boolean", "enabled": true, "variant": "on", "value": true }
     }
   },
   "when": {
     "operation": "evaluateSync",
-    "flagKey": "web-checkout",
+    "controlPointKey": "web-checkout",
     "flagType": "boolean",
     "defaultValue": false,
     "invocationContext": { "targetingKey": "user_web_1" }

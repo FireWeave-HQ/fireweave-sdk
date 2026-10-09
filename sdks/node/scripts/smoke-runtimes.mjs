@@ -99,12 +99,8 @@ const decision = await client.controlPoints.evaluate('new-checkout', 'boolean', 
 check('control point evaluates to true', decision.value === true, `got ${decision.value}`);
 check('decision carries TARGETING_MATCH', decision.reason === 'TARGETING_MATCH', decision.reason);
 
-// --- the deprecated alias still works on every runtime ----------------------
-check('client.flags aliases client.controlPoints', client.flags === client.controlPoints);
-const viaAlias = await client.flags.getBooleanValue('new-checkout', false, {
-  targetingKey: 'user_42',
-});
-check('evaluation through the deprecated alias works', viaAlias === true);
+// --- the flags alias is gone (ADR-0013) ------------------------------------
+check('client.flags is gone', !('flags' in client));
 
 // --- invokeCapability (v1's only extension-style surface) -------------------
 // SUPPORTED_CAPABILITIES is frozen empty in v1 (releases/exposures/signals/

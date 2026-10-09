@@ -41,10 +41,8 @@ fn failure(err: FireweaveError, degraded: bool) -> ExtensionResult {
 const SUPPORTED_CAPABILITIES: &[&str] = &[];
 
 /// Typed evaluation helpers — the nine methods (`spec/control-points.md`
-/// "The nine methods"). Documented as `client.control_points`;
-/// `client.flags()` is an identical alias sharing identity (returns a
-/// reference to the SAME field), retained for compatibility (ADR-0007,
-/// silent — no runtime warning, matching node/go's silent alias).
+/// "The nine methods"), as `client.control_points`. The `client.flags()`
+/// alias was removed in 3.0.0 (ADR-0013).
 pub struct ControlPointsNamespace {
     runtime: Arc<FireweaveRuntime>,
 }
@@ -62,24 +60,24 @@ impl ControlPointsNamespace {
     /// exposure opt-in to carry either) — both remain N/A.
     pub fn evaluate(
         &self,
-        flag_key: &str,
+        control_point_key: &str,
         flag_type: FlagType,
         default: JsonValue,
         context: Option<&EvaluationContext>,
         options: Option<&EvaluateOptions>,
     ) -> Decision {
         self.runtime
-            .evaluate(flag_key, flag_type, default, context, options)
+            .evaluate(control_point_key, flag_type, default, context, options)
     }
 
     pub fn get_boolean_value(
         &self,
-        flag_key: &str,
+        control_point_key: &str,
         default: bool,
         context: Option<&EvaluationContext>,
     ) -> bool {
         let decision = self.evaluate(
-            flag_key,
+            control_point_key,
             FlagType::Boolean,
             JsonValue::Bool(default),
             context,
@@ -90,12 +88,12 @@ impl ControlPointsNamespace {
 
     pub fn get_string_value(
         &self,
-        flag_key: &str,
+        control_point_key: &str,
         default: &str,
         context: Option<&EvaluationContext>,
     ) -> String {
         let decision = self.evaluate(
-            flag_key,
+            control_point_key,
             FlagType::String,
             JsonValue::String(default.to_string()),
             context,
@@ -110,12 +108,12 @@ impl ControlPointsNamespace {
 
     pub fn get_number_value(
         &self,
-        flag_key: &str,
+        control_point_key: &str,
         default: f64,
         context: Option<&EvaluationContext>,
     ) -> f64 {
         let decision = self.evaluate(
-            flag_key,
+            control_point_key,
             FlagType::Number,
             JsonValue::from(default),
             context,
@@ -126,11 +124,17 @@ impl ControlPointsNamespace {
 
     pub fn get_object_value(
         &self,
-        flag_key: &str,
+        control_point_key: &str,
         default: JsonValue,
         context: Option<&EvaluationContext>,
     ) -> JsonValue {
-        let decision = self.evaluate(flag_key, FlagType::Object, default.clone(), context, None);
+        let decision = self.evaluate(
+            control_point_key,
+            FlagType::Object,
+            default.clone(),
+            context,
+            None,
+        );
         if decision.value.is_object() || decision.value.is_array() {
             decision.value
         } else {
@@ -140,12 +144,12 @@ impl ControlPointsNamespace {
 
     pub fn get_boolean_details(
         &self,
-        flag_key: &str,
+        control_point_key: &str,
         default: bool,
         context: Option<&EvaluationContext>,
     ) -> Decision {
         self.evaluate(
-            flag_key,
+            control_point_key,
             FlagType::Boolean,
             JsonValue::Bool(default),
             context,
@@ -155,12 +159,12 @@ impl ControlPointsNamespace {
 
     pub fn get_string_details(
         &self,
-        flag_key: &str,
+        control_point_key: &str,
         default: &str,
         context: Option<&EvaluationContext>,
     ) -> Decision {
         self.evaluate(
-            flag_key,
+            control_point_key,
             FlagType::String,
             JsonValue::String(default.to_string()),
             context,
@@ -170,12 +174,12 @@ impl ControlPointsNamespace {
 
     pub fn get_number_details(
         &self,
-        flag_key: &str,
+        control_point_key: &str,
         default: f64,
         context: Option<&EvaluationContext>,
     ) -> Decision {
         self.evaluate(
-            flag_key,
+            control_point_key,
             FlagType::Number,
             JsonValue::from(default),
             context,
@@ -185,11 +189,11 @@ impl ControlPointsNamespace {
 
     pub fn get_object_details(
         &self,
-        flag_key: &str,
+        control_point_key: &str,
         default: JsonValue,
         context: Option<&EvaluationContext>,
     ) -> Decision {
-        self.evaluate(flag_key, FlagType::Object, default, context, None)
+        self.evaluate(control_point_key, FlagType::Object, default, context, None)
     }
 }
 
@@ -211,20 +215,6 @@ impl FireweaveClient {
             },
             runtime,
         }
-    }
-
-    /// Control-point evaluation under its former name.
-    ///
-    /// Identical to [`FireweaveClient::control_points`] and shares its
-    /// identity — both are the exact same field, so
-    /// `std::ptr::eq(&client.control_points, client.flags())` holds.
-    /// Silent at runtime: the alias is permanent, not scheduled for
-    /// removal (ADR-0007), so there is nothing to warn a caller toward —
-    /// deprecation is conveyed by this doc comment only (no log, and no
-    /// env gate to control one, since the SDK reads no environment
-    /// variables regardless — `spec/modes.md`).
-    pub fn flags(&self) -> &ControlPointsNamespace {
-        &self.control_points
     }
 
     pub fn runtime(&self) -> &Arc<FireweaveRuntime> {
@@ -290,12 +280,6 @@ mod tests {
             RuntimeConfig::default(),
         ));
         FireweaveClient::new(runtime)
-    }
-
-    #[test]
-    fn flags_alias_shares_identity_with_control_points() {
-        let fw = client();
-        assert!(std::ptr::eq(&fw.control_points, fw.flags()));
     }
 
     #[test]

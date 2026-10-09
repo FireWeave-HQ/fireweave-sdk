@@ -38,7 +38,7 @@ test('validateControlPointKey: rejects an empty key', () => {
   const result = validateControlPointKey('');
   assert.equal(result.ok, false);
   assert.ok(!result.ok && result.error instanceof FireweaveError);
-  assert.ok(!result.ok && result.error.kind === 'FlagNotFound');
+  assert.ok(!result.ok && result.error.kind === 'ControlPointNotFound');
 });
 
 test('validateControlPointKey: accepts exactly 256 characters, rejects 257', () => {
@@ -47,13 +47,13 @@ test('validateControlPointKey: accepts exactly 256 characters, rejects 257', () 
 
   const at257 = validateControlPointKey('k'.repeat(257));
   assert.equal(at257.ok, false);
-  assert.ok(!at257.ok && at257.error.kind === 'FlagNotFound');
+  assert.ok(!at257.ok && at257.error.kind === 'ControlPointNotFound');
 });
 
 test('validateControlPointKey: rejects a key containing a control character', () => {
   const withNewline = validateControlPointKey('checkout\nv2');
   assert.equal(withNewline.ok, false);
-  assert.ok(!withNewline.ok && withNewline.error.kind === 'FlagNotFound');
+  assert.ok(!withNewline.ok && withNewline.error.kind === 'ControlPointNotFound');
 
   const withNul = validateControlPointKey(`checkout${String.fromCharCode(0x00)}v2`);
   assert.equal(withNul.ok, false);

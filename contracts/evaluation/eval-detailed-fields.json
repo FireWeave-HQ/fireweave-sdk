@@ -6,7 +6,7 @@
   ],
   "given": {
     "providerState": "READY",
-    "flags": {
+    "controlPoints": {
       "fw-detailed": {
         "type": "string",
         "enabled": true,
@@ -26,7 +26,7 @@
   },
   "when": {
     "operation": "evaluate",
-    "flagKey": "fw-detailed",
+    "controlPointKey": "fw-detailed",
     "flagType": "string",
     "defaultValue": "red",
     "invocationContext": {
@@ -39,9 +39,9 @@
     "reason": "TARGETING_MATCH",
     "errorCode": null,
     "errorMessage": null,
-    "flagMetadata": {
-      "fireweave.flagVersion": 9,
-      "fireweave.vendorFlagId": 1001,
+    "controlPointMetadata": {
+      "fireweave.controlPointVersion": 9,
+      "fireweave.vendorControlPointId": 1001,
       "fireweave.reasonCode": "condition_match"
     }
   },

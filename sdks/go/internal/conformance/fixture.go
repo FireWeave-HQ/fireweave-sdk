@@ -44,7 +44,7 @@ type FixtureCase struct {
 // Given is the fixture arrangement block.
 type Given struct {
 	ProviderState  string                 `json:"providerState"`
-	Flags          map[string]FixtureFlag `json:"flags"`
+	ControlPoints  map[string]FixtureFlag `json:"controlPoints"`
 	GlobalContext  *ContextSpec           `json:"globalContext"`
 	ClientContext  *ContextSpec           `json:"clientContext"`
 	Config         map[string]any         `json:"config"`
@@ -60,12 +60,12 @@ type Given struct {
 // DomainSpec arranges one named provider domain.
 type DomainSpec struct {
 	ProviderState string                 `json:"providerState"`
-	Flags         map[string]FixtureFlag `json:"flags"`
+	ControlPoints map[string]FixtureFlag `json:"controlPoints"`
 }
 
 // ReplacementSpec arranges the provider swapped in by replaceProvider.
 type ReplacementSpec struct {
-	Flags map[string]FixtureFlag `json:"flags"`
+	ControlPoints map[string]FixtureFlag `json:"controlPoints"`
 }
 
 // ContextSpec is a fixture-declared context layer.
@@ -74,7 +74,7 @@ type ContextSpec struct {
 	Attributes   map[string]any `json:"attributes"`
 }
 
-// FixtureFlag is one deterministic flag definition in given.flags.
+// FixtureFlag is one deterministic flag definition in given.controlPoints.
 type FixtureFlag struct {
 	Type     string         `json:"type"`
 	Enabled  bool           `json:"enabled"`
@@ -105,7 +105,7 @@ type FixtureReason struct {
 type When struct {
 	Operation         string         `json:"operation"`
 	Domain            string         `json:"domain"`
-	FlagKey           string         `json:"flagKey"`
+	ControlPointKey   string         `json:"controlPointKey"`
 	FlagType          string         `json:"flagType"`
 	DefaultValue      any            `json:"defaultValue"`
 	InvocationContext *ContextSpec   `json:"invocationContext"`

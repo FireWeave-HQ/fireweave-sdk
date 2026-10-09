@@ -10,7 +10,7 @@ test('taxonomy has exactly the 15 canonical kinds', () => {
     'Authorization',
     'BackendUnavailable',
     'Configuration',
-    'FlagNotFound',
+    'ControlPointNotFound',
     'Internal',
     'InvalidContext',
     'MalformedResponse',

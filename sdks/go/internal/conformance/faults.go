@@ -32,7 +32,7 @@ func stubBaseURL() string {
 
 // stubFaultBody maps a fixture given.fault block onto the test-server
 // control-plane body (POST /_test/fault). applyTo is "evaluate": the remote
-// adapter speaks POST /v1/flags/evaluate (the Fireweave-native route), not
+// adapter speaks POST /v1/control-points/evaluate (the Fireweave-native route), not
 // the legacy PostHog /flags this used to target. Returns nil for fault modes
 // the stub cannot produce over a live connection (networkError, offline),
 // which stay on the injected fake Transport regardless of stub availability.
@@ -95,7 +95,7 @@ func stubResetState(baseURL string) error {
 
 // faultTransport is the injected fake http.RoundTripper used for fault
 // fixtures — the hermetic baseline this package actually runs on (see
-// stubBaseURL). It reproduces the Fireweave-native /v1/flags/evaluate
+// stubBaseURL). It reproduces the Fireweave-native /v1/control-points/evaluate
 // response shape (decisions[] + quotaLimited, not the legacy PostHog
 // /flags?v=2 shape this used to emit) deterministically, in-process, with no
 // external process.
@@ -134,7 +134,7 @@ func newFaultTransport(fault map[string]any) *faultTransport {
 
 func (t *faultTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Non-evaluate traffic (capture batches on shutdown flush) always succeeds.
-	if !strings.Contains(req.URL.Path, "/flags/evaluate") {
+	if !strings.Contains(req.URL.Path, "/control-points/evaluate") {
 		return jsonResponse(req, http.StatusOK, `{"ok":true}`), nil
 	}
 

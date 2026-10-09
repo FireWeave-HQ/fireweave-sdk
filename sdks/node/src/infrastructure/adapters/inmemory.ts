@@ -96,12 +96,12 @@ export class InMemoryAdapter implements BackendAdapter {
     }
   }
 
-  async resolve(flagKey: string, context: CanonicalContext, _options?: ResolveOptions): Promise<AdapterResolution> {
+  async resolve(controlPointKey: string, context: CanonicalContext, _options?: ResolveOptions): Promise<AdapterResolution> {
     if (this.fault !== undefined) {
       const opts = this.fault.metadata !== undefined ? { metadata: this.fault.metadata } : {};
       throw new FireweaveError(this.fault.kind, opts);
     }
-    const def = this.flags.get(flagKey);
+    const def = this.flags.get(controlPointKey);
     if (def === undefined) {
       return { found: false };
     }
@@ -119,7 +119,7 @@ export class InMemoryAdapter implements BackendAdapter {
     if (def.reason?.code !== undefined) resolution.reasonCode = def.reason.code;
     if (def.reason?.condition_index !== undefined) resolution.conditionIndex = def.reason.condition_index;
     if (def.metadata?.version !== undefined) resolution.version = def.metadata.version;
-    if (def.metadata?.id !== undefined) resolution.vendorFlagId = def.metadata.id;
+    if (def.metadata?.id !== undefined) resolution.vendorControlPointId = def.metadata.id;
     if (def.payload !== undefined) resolution.payload = def.payload;
     if (def.fromCache === true) resolution.fromCache = true;
     return resolution;

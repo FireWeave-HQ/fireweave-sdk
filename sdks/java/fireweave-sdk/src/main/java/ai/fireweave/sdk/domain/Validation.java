@@ -84,23 +84,23 @@ public final class Validation {
      * 1, the first check in the fixed order).
      *
      * <p>No taxonomy kind names "malformed key" explicitly (the return-discipline table's
-     * closest row is "key unknown to the backend" -&gt; FlagNotFound): a key that can never
+     * closest row is "key unknown to the backend" -&gt; ControlPointNotFound): a key that can never
      * identify a flag is treated the same as one the backend doesn't recognise, so this maps to
-     * FlagNotFound too — the node reference implementation's ruled mapping (Task 3 review),
+     * ControlPointNotFound too — the node reference implementation's ruled mapping (Task 3 review),
      * carried forward unchanged so every language SDK copying node as the reference agrees.
      */
     public static Validated<String> validateControlPointKey(String key) {
         if (key == null || key.isEmpty()) {
             return Validated.fail(new FireweaveException(
-                    ErrorKind.FlagNotFound, "control point key must be a non-empty string"));
+                    ErrorKind.ControlPointNotFound, "control point key must be a non-empty string"));
         }
         if (key.length() > MAX_CONTROL_POINT_KEY_LENGTH) {
             return Validated.fail(new FireweaveException(
-                    ErrorKind.FlagNotFound, "control point key exceeds maximum length"));
+                    ErrorKind.ControlPointNotFound, "control point key exceeds maximum length"));
         }
         if (CONTROL_CHARACTERS.matcher(key).find()) {
             return Validated.fail(new FireweaveException(
-                    ErrorKind.FlagNotFound, "control point key contains control characters"));
+                    ErrorKind.ControlPointNotFound, "control point key contains control characters"));
         }
         return Validated.ok(key);
     }

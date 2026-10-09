@@ -7,28 +7,10 @@ import warnings
 from fireweave import FireweaveClient, FireweaveRuntime, InMemoryAdapter
 
 
-def test_control_points_is_flags_alias(client):
-    assert client.flags is client.control_points
+def test_the_flags_alias_is_gone(client):
+    """Removed in 3.0.0 (ADR-0013)."""
+    assert not hasattr(client, "flags")
     assert client.control_points.get_boolean_value("bool-on", False) is True
-
-
-def test_flags_alias_warns_once_unconditionally():
-    """Unconditional (no env gate): the SDK reads no environment variables
-    (spec/modes.md "The SDK reads no environment variables", unscoped)."""
-    runtime = FireweaveRuntime(InMemoryAdapter({}))
-    runtime.initialize()
-    c = FireweaveClient(runtime)
-    import fireweave.application.client as client_mod
-
-    client_mod._flags_alias_warned = False
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        _ = c.flags
-        _ = c.flags
-    deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
-    assert len(deprecations) == 1
-    assert "control_points" in str(deprecations[0].message)
-    c.shutdown()
 
 
 def test_get_integer_value_delegates_and_warns_once(client):

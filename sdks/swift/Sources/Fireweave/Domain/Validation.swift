@@ -36,29 +36,29 @@ private func hasControlCharacters(_ key: String) -> Bool {
 /// (`spec/control-points.md` rule 1, the first check in the fixed order).
 ///
 /// No taxonomy kind names "malformed key" explicitly (the return-discipline
-/// table's closest row is "key unknown to the backend" -> `FlagNotFound`):
+/// table's closest row is "key unknown to the backend" -> `ControlPointNotFound`):
 /// a key that can never identify a flag is treated the same as one the
-/// backend doesn't recognise, so this maps to `.flagNotFound` too.
+/// backend doesn't recognise, so this maps to `.controlPointNotFound` too.
 ///
 /// Controller-ruled interim mapping (carried over from the node reference,
 /// same as rust's finding): the 15-kind taxonomy in `errors.schema.json` is
 /// frozen at exactly 15 entries, `.invalidContext` is textually scoped to
 /// the evaluation *context* (not the key), and the schema already maps
 /// another non-literal case — quota-limited responses — onto
-/// `.flagNotFound` rather than adding a kind for it. `.flagNotFound` is
+/// `.controlPointNotFound` rather than adding a kind for it. `.controlPointNotFound` is
 /// therefore the least-wrong existing kind, not a literal fit.
 public func validateControlPointKey(_ key: String) -> Validated {
   if key.isEmpty {
     return .failure(
-      FireweaveError(kind: .flagNotFound, message: "control point key must be a non-empty string"))
+      FireweaveError(kind: .controlPointNotFound, message: "control point key must be a non-empty string"))
   }
   if key.count > maxControlPointKeyLength {
     return .failure(
-      FireweaveError(kind: .flagNotFound, message: "control point key exceeds maximum length"))
+      FireweaveError(kind: .controlPointNotFound, message: "control point key exceeds maximum length"))
   }
   if hasControlCharacters(key) {
     return .failure(
-      FireweaveError(kind: .flagNotFound, message: "control point key contains control characters"))
+      FireweaveError(kind: .controlPointNotFound, message: "control point key contains control characters"))
   }
   return .success(())
 }

@@ -5,7 +5,7 @@
 #   tools/release/version.sh compute <component> <bump> <channel> [--manifest-root DIR]
 #   tools/release/version.sh apply   <component> <release-version> [--manifest-root DIR]
 #
-#   component : server | web | python | java | go | rust | swift
+#   component : server | web | python | java | go | rust | swift | dart
 #   bump      : patch | minor | major        (compute only)
 #   channel   : staging | production          (compute only)
 #   --manifest-root DIR : resolve/write manifests under DIR instead of the
@@ -64,7 +64,7 @@ Usage:
   version.sh compute <component> <bump> <channel> [--manifest-root DIR]
   version.sh apply   <component> <release-version> [--manifest-root DIR]
 
-  component : server | web | python | java | go | rust | swift
+  component : server | web | python | java | go | rust | swift | dart
   bump      : patch | minor | major
   channel   : staging | production
 EOF
@@ -83,6 +83,7 @@ component_manifest() {
     python) printf 'sdks/python/pyproject.toml\n' ;;
     java)   printf 'sdks/java/pom.xml\n' ;;
     rust)   printf 'sdks/rust/Cargo.toml\n' ;;
+    dart) printf 'sdks/dart/pubspec.yaml\n' ;;
     go|swift) printf '\n' ;;
     *) return 1 ;;
   esac
@@ -90,12 +91,12 @@ component_manifest() {
 
 # Tag prefix: org convention is <component>/v<semver>, with go's forced
 # exception (module in subdirectory sdks/go must be tagged sdks/go/v<semver>
-# for `go get` to resolve it — see RELEASE.md). server/web/python/java/rust
-# have never published, so the rename/additions break no historical tag.
+# for `go get` to resolve it — see RELEASE.md). server/web/python/java/rust/
+# dart have never published, so the rename/additions break no historical tag.
 component_tag_prefix() {
   case "$1" in
     go) printf 'sdks/go\n' ;;
-    server|web|python|java|rust|swift) printf '%s\n' "$1" ;;
+    server|web|python|java|rust|swift|dart) printf '%s\n' "$1" ;;
     *) return 1 ;;
   esac
 }
@@ -110,8 +111,8 @@ component_npm_package() {
 
 require_known_component() {
   case "$1" in
-    server|web|python|java|go|rust|swift) ;;
-    *) echo "version.sh: unknown component '$1' (server|web|python|java|go|rust|swift)" >&2; exit 2 ;;
+    server|web|python|java|go|rust|swift|dart) ;;
+    *) echo "version.sh: unknown component '$1' (server|web|python|java|go|rust|swift|dart)" >&2; exit 2 ;;
   esac
 }
 
@@ -326,6 +327,25 @@ for v in d.get("versions", []):
 '
 }
 
+# <pub package name> -> newline list of every version published on pub.dev
+# (staging and production alike: pub.dev has no staging registry, and a
+# published version can only be retracted, never deleted — see RELEASE.md
+# "Pre-release channels"). A 404 means the package has never been published.
+pub_versions() {
+  local name="$1" body
+  body="$(http_get_json "https://pub.dev/api/packages/${name}")"
+  [ -z "$body" ] && return 0
+  printf '%s' "$body" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+for v in d.get("versions", []):
+    print(v.get("version", ""))
+'
+}
+
 # <tag prefix, e.g. "java" or "sdks/go"> -> newline list of every "X.Y.Z" (or
 # "X.Y.Z-staging.N") segment following "<prefix>/v" among tags on the ORIGIN
 # remote (a live network query, not the local tag cache — see the module
@@ -341,13 +361,17 @@ remote_tag_versions() {
 # component's registry (staging: wherever a staging publish would actually
 # land; production: the real registry) — the sole input to max_staging_n().
 #
-# No staging registry exists for rust, and none exists at all for go/java/
-# swift (Maven Central Portal shares one credential set across channels;
-# go/swift have no package registry, only git tags — see RELEASE.md). For
-# those four, the "registry" queried here is `git ls-remote` against origin:
-# a live network round-trip against the shared remote, not a local file, and
-# — for go specifically — MORE authoritative than proxy.golang.org (which is
-# itself just a cache over these same tags and can lag).
+# No staging registry exists for rust or dart (crates.io / pub.dev have no
+# TestPyPI equivalent; a real staging upload would spend the version), and
+# none exists at all for go/java/swift (Maven Central Portal shares one
+# credential set across channels; go/swift have no package registry, only
+# git tags — see RELEASE.md). For go/java/swift the "registry" queried here
+# is always `git ls-remote` against origin. For dart on channel=staging the
+# same applies — the git tag IS the staging artifact — so staging-N must be
+# read from tags, not pub.dev (which never receives -staging.N uploads).
+# Production dart still reads pub.dev. Live network round-trip against the
+# shared remote, not a local file; for go specifically this is MORE
+# authoritative than proxy.golang.org (itself just a cache over these tags).
 registry_versions() {
   local component="$1" channel="$2"
   case "$component" in
@@ -363,6 +387,13 @@ registry_versions() {
       ;;
     rust)
       crates_versions fireweave
+      ;;
+    dart)
+      if [ "$channel" = staging ]; then
+        remote_tag_versions "$(component_tag_prefix "$component")"
+      else
+        pub_versions fireweave
+      fi
       ;;
     go|java|swift)
       remote_tag_versions "$(component_tag_prefix "$component")"
@@ -444,7 +475,26 @@ el = root.find("m:version", ns)
 print((el.text or "").strip() if el is not None else "")
 PY
       ;;
+    dart)
+      # pubspec.yaml's top-level `version:` line. No YAML parser is assumed
+      # (PyYAML is not in the base toolchain); the line is a bare scalar by
+      # construction, and write_pubspec_version() keeps it that way.
+      sed -nE 's/^version:[[:space:]]*([^[:space:]#]+).*/\1/p' "$manifest" | head -n1
+      ;;
   esac
+}
+
+write_pubspec_version() {
+  local manifest="$1" version="$2"
+  python3 - "$manifest" "$version" <<'PY'
+import re, sys
+path, version = sys.argv[1], sys.argv[2]
+text = open(path, "r", encoding="utf-8").read()
+new_text, n = re.subn(r'(?m)^version:[ \t]*\S.*$', f'version: {version}', text, count=1)
+if n != 1:
+    sys.exit(f"version.sh: expected exactly one top-level `version:` line in {path}, found {n}")
+open(path, "w", encoding="utf-8").write(new_text)
+PY
 }
 
 write_toml_version() {
@@ -460,17 +510,90 @@ open(path, "w", encoding="utf-8").write(new_text)
 PY
 }
 
+# The server SDK's start profile picks its default fw-server host from the
+# channel it was published on (docs/adr/0012-start-profile.md): a
+# `-staging.N` build talks to staging, a plain version to production. The
+# package has no other runtime record of its own version, so `apply` stamps it.
+# sdks/node/test/unit/start-build-info.test.ts fails CI if this drifts from
+# package.json.
+# Stamp the start profile's build info (docs/adr/0012-start-profile.md) for the
+# server and web TypeScript SDKs: SDK_CHANNEL picks the default fw-server host.
+write_build_info() {
+  local component="$1" package_dir="$2" version="$3" channel="production"
+  case "$version" in
+    *-staging.*) channel="staging" ;;
+  esac
+  mkdir -p "$package_dir/src/start"
+  cat > "$package_dir/src/start/build-info.ts" <<EOF
+// GENERATED by tools/release/version.sh apply $component — do not edit by hand.
+// The start profile reads SDK_CHANNEL to choose its default fw-server host
+// (docs/adr/0012-start-profile.md). test/unit/start-build-info.test.ts pins
+// SDK_VERSION to package.json, so a release that forgets to stamp fails CI.
+export const SDK_VERSION = '$version';
+export const SDK_CHANNEL: 'staging' | 'production' = '$channel';
+EOF
+}
+
+# The Dart start profile's stamp: same rule, Dart syntax
+# (sdks/dart/lib/src/start/build_info.dart; pinned by test/start_build_info_test.dart).
+write_dart_build_info() {
+  local package_dir="$1" version="$2" channel="production"
+  case "$version" in
+    *-staging.*) channel="staging" ;;
+  esac
+  mkdir -p "$package_dir/lib/src/start"
+  cat > "$package_dir/lib/src/start/build_info.dart" <<EOF
+// GENERATED by tools/release/version.sh apply dart — do not edit by hand.
+// The start profile reads buildSdkChannel to choose its default fw-server
+// host (docs/adr/0012-start-profile.md). test/start_build_info_test.dart
+// pins buildSdkVersion to pubspec.yaml, so a release that forgets to stamp
+// fails CI.
+const String buildSdkVersion = '$version';
+const String buildSdkChannel = '$channel';
+EOF
+}
+
+# The Swift start profile's stamp. Swift has no version manifest (the git tag
+# is the version record), so `apply swift` writes only this file, in the
+# 2-space style `swift format lint --strict` expects. A Swift release must
+# commit it before tagging, because SwiftPM builds the tagged source.
+write_swift_build_info() {
+  local package_dir="$1" version="$2" channel="production"
+  case "$version" in
+    *-staging.*) channel="staging" ;;
+  esac
+  mkdir -p "$package_dir/Sources/FireweaveStart"
+  cat > "$package_dir/Sources/FireweaveStart/BuildInfo.swift" <<EOF
+// GENERATED by tools/release/version.sh apply swift — do not edit by hand.
+// The start profile reads sdkChannel to choose its default fw-server host
+// (docs/adr/0012-start-profile.md).
+enum BuildInfo {
+  static let sdkVersion = "$version"
+  static let sdkChannel = "$channel"
+}
+EOF
+}
+
 write_manifest() {
   local component="$1" manifest="$2" version="$3"
   case "$component" in
-    server|web)
+    server)
       npm --prefix "$(dirname "$manifest")" pkg set "version=$version" >/dev/null
+      write_build_info server "$(dirname "$manifest")" "$version"
+      ;;
+    web)
+      npm --prefix "$(dirname "$manifest")" pkg set "version=$version" >/dev/null
+      write_build_info web "$(dirname "$manifest")" "$version"
       ;;
     python|rust)
       write_toml_version "$manifest" "$version"
       ;;
     java)
       mvn -q -f "$manifest" versions:set -DnewVersion="$version" -DgenerateBackupPoms=false
+      ;;
+    dart)
+      write_pubspec_version "$manifest" "$version"
+      write_dart_build_info "$(dirname "$manifest")" "$version"
       ;;
   esac
 }
@@ -577,6 +700,11 @@ cmd_apply() {
   local rel_manifest
   rel_manifest="$(component_manifest "$component")"
   if [ -z "$rel_manifest" ]; then
+    if [ "$component" = swift ]; then
+      write_swift_build_info "$manifest_root/sdks/swift" "$release_version"
+      echo "version.sh: swift has no version manifest; wrote $release_version to sdks/swift/Sources/FireweaveStart/BuildInfo.swift" >&2
+      return 0
+    fi
     echo "version.sh: $component has no version manifest — the git tag is the version record; nothing written" >&2
     return 0
   fi

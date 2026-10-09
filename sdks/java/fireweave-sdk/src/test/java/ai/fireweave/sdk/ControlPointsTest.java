@@ -15,7 +15,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class ControlPointsTest {
@@ -47,10 +46,9 @@ final class ControlPointsTest {
     }
 
     @Test
-    void flagsIsTheSameObjectAsControlPoints() {
-        assertSame(client.controlPoints(), client.flags());
-        EvaluationContext ctx = EvaluationContext.builder().targetingKey("user_42").build();
-        assertTrue(client.flags().getBooleanValue("new-checkout", false, ctx));
+    void theFlagsAliasIsGone() {
+        assertTrue(java.util.Arrays.stream(FireweaveClient.class.getMethods())
+                .noneMatch(m -> m.getName().equals("flags")), "flags() was removed in 3.0.0 (ADR-0013)");
     }
 
     @Test
@@ -70,7 +68,7 @@ final class ControlPointsTest {
 
         assertEquals(true, value);
         assertEquals(true, details.value().asBoolean());
-        assertEquals("new-checkout", details.flagKey());
+        assertEquals("new-checkout", details.controlPointKey());
         assertTrue(details.reason() != null && !details.reason().isEmpty());
     }
 

@@ -10,10 +10,11 @@
   <a href="https://www.npmjs.com/package/@fireweaveai/server-sdk"><img alt="node" src="https://img.shields.io/npm/v/@fireweaveai/server-sdk?label=node&logo=nodedotjs&style=flat&labelColor=0E0E10&color=ED5502&logoColor=white"></a>
   <a href="https://www.npmjs.com/package/@fireweaveai/web-sdk"><img alt="web" src="https://img.shields.io/npm/v/@fireweaveai/web-sdk?label=web&logo=javascript&style=flat&labelColor=0E0E10&color=ED5502&logoColor=white"></a>
   <a href="https://pypi.org/project/fireweave/"><img alt="python" src="https://img.shields.io/pypi/v/fireweave?label=python&logo=python&style=flat&labelColor=0E0E10&color=ED5502&logoColor=white"></a>
-  <a href="https://pkg.go.dev/github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2"><img alt="go" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fproxy.golang.org%2Fgithub.com%2F%21fire%21weave-%21h%21q%2Ffireweave-sdk%2Fsdks%2Fgo%2Fv2%2F%40latest&query=%24.Version&label=go&logo=go&style=flat&labelColor=0E0E10&color=ED5502&logoColor=white"></a>
+  <a href="https://pkg.go.dev/github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3"><img alt="go" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fproxy.golang.org%2Fgithub.com%2F%21fire%21weave-%21h%21q%2Ffireweave-sdk%2Fsdks%2Fgo%2Fv3%2F%40latest&query=%24.Version&label=go&logo=go&style=flat&labelColor=0E0E10&color=ED5502&logoColor=white"></a>
   <a href="https://central.sonatype.com/artifact/ai.fireweave/fireweave-sdk"><img alt="java" src="https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Frepo1.maven.org%2Fmaven2%2Fai%2Ffireweave%2Ffireweave-sdk%2Fmaven-metadata.xml&label=java&logo=openjdk&style=flat&labelColor=0E0E10&color=ED5502&logoColor=white"></a>
   <a href="https://crates.io/crates/fireweave"><img alt="rust" src="https://img.shields.io/crates/v/fireweave?label=rust&logo=rust&style=flat&labelColor=0E0E10&color=ED5502&logoColor=white"></a>
   <a href="sdks/swift"><img alt="swift" src="https://img.shields.io/badge/swift-from%20source-ED5502?logo=swift&style=flat&labelColor=0E0E10&logoColor=white"></a>
+  <a href="sdks/dart"><img alt="dart" src="https://img.shields.io/badge/dart-from%20source-ED5502?logo=dart&style=flat&labelColor=0E0E10&logoColor=white"></a>
 </p>
 
 **Fireweave is the AI release engineer for teams shipping with coding agents.** Every change rolls out behind a control point, one step at a time, with guardrails watching real users — and if something breaks, Fireweave pauses or rolls it back before most users ever see it. It's the only way to ship as fast as your agents write code, without the fear of breaking production.
@@ -117,7 +118,7 @@ client.shutdown()
 <summary><b>Go</b></summary>
 
 ```bash
-go get github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2
+go get github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3
 ```
 
 ```go
@@ -129,7 +130,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fireweave"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/fireweave"
 )
 
 func main() {
@@ -275,6 +276,37 @@ let enabled = fireweave.controlPoints.getBooleanValue("new-checkout", default: f
 print("new-checkout: \(enabled)")
 
 await fireweave.shutdown()
+```
+
+</details>
+
+<details>
+<summary><b>Dart</b> · Flutter (Android, iOS, macOS, Windows, Linux, web) · Dart VM</summary>
+
+```yaml
+# Not on pub.dev yet: clone next to your app and depend on it by path
+dependencies:
+  fireweave:
+    path: ../fireweave-sdk/sdks/dart
+```
+
+```dart
+import 'package:fireweave/fireweave.dart';
+
+final fw = await initFireweave(InitFireweaveOptions.remote(
+  apiKey: 'project-api-key_...',
+  apiUrl: 'https://app-server.fireweave.ai',
+  context: EvaluationContext(targetingKey: deviceId), // prefetch under a stable key
+));
+
+// Once per login: register the target, then prefetch its decisions.
+await fw.identify('user_42',
+    options: const RegisterTargetOptions(properties: {'plan': 'pro'}));
+
+// Inside build(): synchronous, never throws.
+final enabled = fw.controlPoints.getBooleanValue('new-checkout', false);
+
+await fw.shutdown();
 ```
 
 </details>

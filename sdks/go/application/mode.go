@@ -3,9 +3,9 @@ package application
 import (
 	"context"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/infrastructure/adapters/local"
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/infrastructure/adapters/remote"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/infrastructure/adapters/local"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/infrastructure/adapters/remote"
 )
 
 // Init — the single SDK entry point (spec/modes.md).

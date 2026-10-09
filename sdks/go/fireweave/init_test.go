@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/domain"
 )
 
 // Init — the single entry point (spec/modes.md).
@@ -18,7 +18,7 @@ import (
 // past adapter selection — any behavioural difference between modes lives
 // entirely in the adapter seam (spec/modes.md "Behaviour per mode"). That
 // table has one deliberately DIVERGENT row — an unknown control point
-// resolves default/DEFAULT in local mode but default/ERROR/FlagNotFound in
+// resolves default/DEFAULT in local mode but default/ERROR/ControlPointNotFound in
 // remote — asserted per-mode below, not as a shared shape. registerTarget
 // genuinely IS shape-identical across modes (resolves ok:true, never
 // panics), asserted below too.
@@ -128,7 +128,7 @@ func TestRemoteModeSelectsRemoteAdapterAndEvaluatesOverEvaluatePath(t *testing.T
 		lastAuth = r.Header.Get("Authorization")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"decisions": []map[string]any{{
-				"flagKey": "checkout-v2", "value": true, "reason": "TARGETING_MATCH", "found": true, "enabled": true,
+				"controlPointKey": "checkout-v2", "value": true, "reason": "TARGETING_MATCH", "found": true, "enabled": true,
 			}},
 		})
 	}))
@@ -197,8 +197,8 @@ func TestReadsNeverThrowInEitherModeButTheUnknownKeyRowIsDeliberatelyDivergent(t
 	if remoteDecision.Value != false || remoteDecision.Reason != ReasonError {
 		t.Fatalf("remote miss = %+v, want default/ERROR", remoteDecision)
 	}
-	if remoteDecision.Error == nil || remoteDecision.Error.Kind != KindFlagNotFound {
-		t.Fatalf("remote miss error = %v, want FlagNotFound", remoteDecision.Error)
+	if remoteDecision.Error == nil || remoteDecision.Error.Kind != KindControlPointNotFound {
+		t.Fatalf("remote miss error = %v, want ControlPointNotFound", remoteDecision.Error)
 	}
 }
 

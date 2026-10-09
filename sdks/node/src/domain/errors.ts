@@ -9,7 +9,7 @@
 
 export type FireweaveErrorKind =
   | 'NotReady'
-  | 'FlagNotFound'
+  | 'ControlPointNotFound'
   | 'TypeMismatch'
   | 'InvalidContext'
   | 'Authentication'
@@ -53,7 +53,7 @@ const spec = (
 
 export const ERROR_TAXONOMY: Readonly<Record<FireweaveErrorKind, ErrorKindSpec>> = Object.freeze({
   NotReady: spec('NotReady', 'PROVIDER_NOT_READY', true, 'transient', 'provider not ready'),
-  FlagNotFound: spec('FlagNotFound', 'FLAG_NOT_FOUND', false, 'permanent', 'flag not found'),
+  ControlPointNotFound: spec('ControlPointNotFound', 'FLAG_NOT_FOUND', false, 'permanent', 'flag not found'),
   TypeMismatch: spec('TypeMismatch', 'TYPE_MISMATCH', false, 'permanent', 'flag type mismatch'),
   InvalidContext: spec('InvalidContext', 'INVALID_CONTEXT', false, 'permanent', 'invalid evaluation context'),
   Authentication: spec('Authentication', 'GENERAL', false, 'permanent', 'authentication failed'),
@@ -69,18 +69,55 @@ export const ERROR_TAXONOMY: Readonly<Record<FireweaveErrorKind, ErrorKindSpec>>
   Internal: spec('Internal', 'GENERAL', false, 'permanent', 'internal error'),
 });
 
-const SECRET_PATTERNS: readonly RegExp[] = [
-  /ph[csx]_[A-Za-z0-9]*/g, // project / secret / legacy personal API keys
-  /Bearer\s+[^\s"']+/g, // bearer tokens
-  /FW_PROJECT_API_KEY\s*[=:]\s*[^\s"']+/g,
+/**
+ * The redaction contract (contracts/errors.json `rules.redaction`, start-profile
+ * SP-26). Applied in this order: bearer tokens, URL userinfo, named
+ * assignments, then key-shaped values. A variable NAME is never redacted on its
+ * own; only its value is. `test/unit/redaction-contract.test.ts` runs every
+ * contract vector through `redactSecrets`.
+ */
+const REDACTION_PLACEHOLDER = '[REDACTED]';
+
+/** Variables whose assigned value is scrubbed: `NAME=value`, `NAME: value`, `NAME = "value"`. */
+const ASSIGNMENT_NAMES: readonly string[] = ['FIREWEAVE_KEY', 'FIREWEAVE_BROWSER_KEY', 'FW_PROJECT_API_KEY'];
+
+/** Key families; a prefix only counts when one or more of [A-Za-z0-9_-] follows it. */
+const VALUE_PREFIXES: readonly string[] = [
+  'project-api-key_',
+  'fw_public_',
+  'fw_ingest_pub_',
+  'fw_org_',
+  'cli_at_',
+  'phc_',
+  'phx_',
+  'phs_',
 ];
 
-/** Redact secret-shaped substrings; collapse whitespace runs; trim. */
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const BEARER = /\bBearer(\s+)[A-Za-z0-9._~+/=-]+/g;
+// scheme://userinfo@host: userinfo cannot hold whitespace, '/', '?', '#' or '@'.
+const URL_USERINFO = /\b([A-Za-z][A-Za-z0-9+.-]*:\/\/)[^\s/?#@]+@/g;
+// The name stays, as do the separator and any opening quote; the value runs to
+// whitespace, a quote, a comma or a semicolon. The lookbehind keeps a longer
+// name that merely ends in one of these (MY_FIREWEAVE_KEY) out of scope.
+const ASSIGNMENT = new RegExp(
+  `(?<![A-Za-z0-9_])(${ASSIGNMENT_NAMES.map(escapeRegExp).join('|')})(\\s*[=:]\\s*)(["']?)[^\\s"',;]+`,
+  'g',
+);
+// No leading boundary: a key glued to other text is still a key.
+const KEY_VALUE = new RegExp(`(?:${VALUE_PREFIXES.map(escapeRegExp).join('|')})[A-Za-z0-9_-]+`, 'g');
+
+/**
+ * Scrub secrets per the redaction contract, then collapse whitespace runs and
+ * trim (so a message stays on one log line).
+ */
 export function redactSecrets(text: string): string {
-  let out = text;
-  for (const pattern of SECRET_PATTERNS) {
-    out = out.replace(pattern, '[REDACTED]');
-  }
+  const out = text
+    .replace(BEARER, `Bearer$1${REDACTION_PLACEHOLDER}`)
+    .replace(URL_USERINFO, `$1${REDACTION_PLACEHOLDER}@`)
+    .replace(ASSIGNMENT, `$1$2$3${REDACTION_PLACEHOLDER}`)
+    .replace(KEY_VALUE, REDACTION_PLACEHOLDER);
   return out.replace(/\s+/g, ' ').trim();
 }
 

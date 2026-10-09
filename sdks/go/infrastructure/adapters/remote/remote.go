@@ -2,7 +2,7 @@
 // (ADR-0005) — the default production path. It speaks only the
 // vendor-neutral Fireweave remote protocol to fw-server:
 //
-//	POST /v1/flags/evaluate
+//	POST /v1/control-points/evaluate
 //	POST /v1/targets/register
 //
 // Auth: Authorization: Bearer <apiKey> (project-api-key_…). Which backend
@@ -19,17 +19,18 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/domain"
 )
 
 const (
-	evaluatePath       = "/v1/flags/evaluate"
+	evaluatePath       = "/v1/control-points/evaluate"
 	registerTargetPath = "/v1/targets/register"
 )
 
@@ -72,32 +73,43 @@ type Config struct {
 }
 
 // Adapter speaks the Fireweave remote protocol.
+//
+// Close may run while Resolve and RegisterTarget are in flight (the runtime
+// checks its own state, then calls the adapter outside its lock), so every
+// read and write of closed and ready holds mu. client, baseURL and apiKey are
+// written once by Initialize under mu and only read after a reader has seen
+// ready under mu, which orders those reads after the writes.
 type Adapter struct {
 	cfg     Config
 	client  *http.Client
 	baseURL string
 	apiKey  string
-	mu      sync.Mutex
-	closed  bool
-	ready   bool
+
+	// transport is the adapter's own connection pool, nil when the caller
+	// supplied Config.HTTPClient. Close releases its idle connections.
+	transport *http.Transport
+
+	mu     sync.Mutex
+	closed bool
+	ready  bool
 }
 
 type evaluateRequest struct {
-	TargetingKey    string            `json:"targetingKey"`
-	Attributes      map[string]any    `json:"attributes,omitempty"`
-	Groups          map[string]string `json:"groups,omitempty"`
-	GroupProperties map[string]any    `json:"groupProperties,omitempty"`
-	FlagKeys        []string          `json:"flagKeys,omitempty"`
+	TargetingKey     string            `json:"targetingKey"`
+	Attributes       map[string]any    `json:"attributes,omitempty"`
+	Groups           map[string]string `json:"groups,omitempty"`
+	GroupProperties  map[string]any    `json:"groupProperties,omitempty"`
+	ControlPointKeys []string          `json:"controlPointKeys,omitempty"`
 }
 
 type decisionItem struct {
-	FlagKey      string         `json:"flagKey"`
-	Value        any            `json:"value"`
-	Variant      *string        `json:"variant"`
-	Reason       string         `json:"reason"`
-	Found        bool           `json:"found"`
-	Enabled      *bool          `json:"enabled"`
-	FlagMetadata map[string]any `json:"flagMetadata"`
+	ControlPointKey      string         `json:"controlPointKey"`
+	Value                any            `json:"value"`
+	Variant              *string        `json:"variant"`
+	Reason               string         `json:"reason"`
+	Found                bool           `json:"found"`
+	Enabled              *bool          `json:"enabled"`
+	ControlPointMetadata map[string]any `json:"controlPointMetadata"`
 	// Payload mirrors python's/node's remote adapter (both already read an
 	// item-level "payload" field): task-10b item 5 parity. Attached as
 	// fireweave.payload metadata only when the caller's EvaluateOptions sets
@@ -150,8 +162,14 @@ func (a *Adapter) Initialize(ctx context.Context) error {
 	if !hostAllowed(host, allow) {
 		return domain.NewError(domain.KindConfiguration, "", nil)
 	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	client := a.cfg.HTTPClient
 	if client == nil {
+		// The adapter's own transport, cloned from the standard defaults
+		// rather than sharing http.DefaultTransport's pool with the rest
+		// of the process, so Close can release its connections.
+		//
 		// No client-level Timeout here: postJSON derives its own
 		// per-request context.WithTimeout from cfg.RequestTimeout (task-10b
 		// item 3) and that is the sole, authoritative deadline. A
@@ -159,7 +177,10 @@ func (a *Adapter) Initialize(ctx context.Context) error {
 		// against a context deadline it cannot see would make timeout
 		// classification (ctx.Err() in postJSON) nondeterministic depending
 		// on which fires first.
-		client = &http.Client{}
+		if a.transport == nil {
+			a.transport = newTransport()
+		}
+		client = &http.Client{Transport: a.transport}
 	}
 	a.client = client
 	a.baseURL = apiURL
@@ -168,19 +189,49 @@ func (a *Adapter) Initialize(ctx context.Context) error {
 	return nil
 }
 
+// newTransport clones the standard library's default transport settings
+// (proxy, dial and TLS timeouts, keep-alive limits) into a pool of the
+// adapter's own.
+func newTransport() *http.Transport {
+	if t, ok := http.DefaultTransport.(*http.Transport); ok {
+		return t.Clone()
+	}
+	// http.DefaultTransport was replaced with a different RoundTripper:
+	// build the same defaults directly.
+	return &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+}
+
+// status reads closed and ready together, under mu.
+func (a *Adapter) status() *domain.Error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	switch {
+	case a.closed:
+		return domain.NewError(domain.KindAlreadyClosed, "", nil)
+	case !a.ready:
+		return domain.NewError(domain.KindNotReady, "", nil)
+	}
+	return nil
+}
+
 // Resolve implements domain.BackendAdapter.
 func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain.Decision {
-	if a.closed {
-		return domain.ErrorDecision(req.FlagKey, req.DefaultValue, domain.NewError(domain.KindAlreadyClosed, "", nil), nil)
-	}
-	if !a.ready {
-		return domain.ErrorDecision(req.FlagKey, req.DefaultValue, domain.NewError(domain.KindNotReady, "", nil), nil)
+	if err := a.status(); err != nil {
+		return domain.ErrorDecision(req.ControlPointKey, req.DefaultValue, err, nil)
 	}
 	targeting := req.Context.TargetingKey
 	if targeting == "" {
 		err := domain.NewError(domain.KindInvalidContext, "targeting key missing", nil)
 		err.TargetingKeyMissing = true
-		return domain.ErrorDecision(req.FlagKey, req.DefaultValue, err, nil)
+		return domain.ErrorDecision(req.ControlPointKey, req.DefaultValue, err, nil)
 	}
 
 	attrs := map[string]any{}
@@ -192,8 +243,8 @@ func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain
 		attrs[k] = v
 	}
 	body := evaluateRequest{
-		TargetingKey: targeting,
-		FlagKeys:     []string{req.FlagKey},
+		TargetingKey:     targeting,
+		ControlPointKeys: []string{req.ControlPointKey},
 	}
 	if len(attrs) > 0 {
 		body.Attributes = attrs
@@ -212,11 +263,11 @@ func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain
 
 	var resp evaluateResponse
 	if err := a.postJSON(ctx, evaluatePath, body, &resp); err != nil {
-		return domain.ErrorDecision(req.FlagKey, req.DefaultValue, err, nil)
+		return domain.ErrorDecision(req.ControlPointKey, req.DefaultValue, err, nil)
 	}
 	var item *decisionItem
 	for i := range resp.Decisions {
-		if resp.Decisions[i].FlagKey == req.FlagKey {
+		if resp.Decisions[i].ControlPointKey == req.ControlPointKey {
 			item = &resp.Decisions[i]
 			break
 		}
@@ -226,10 +277,10 @@ func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain
 		if resp.QuotaLimited {
 			extra[domain.MetaQuotaLimited] = true
 		}
-		return domain.ErrorDecision(req.FlagKey, req.DefaultValue, domain.NewError(domain.KindFlagNotFound, "", nil), extra)
+		return domain.ErrorDecision(req.ControlPointKey, req.DefaultValue, domain.NewError(domain.KindControlPointNotFound, "", nil), extra)
 	}
 	meta := map[string]any{}
-	for k, v := range item.FlagMetadata {
+	for k, v := range item.ControlPointMetadata {
 		meta[k] = v
 	}
 	if resp.QuotaLimited {
@@ -253,11 +304,11 @@ func (a *Adapter) Resolve(ctx context.Context, req domain.ResolveRequest) domain
 		value = numberValue(value)
 	}
 	return domain.Decision{
-		FlagKey:  req.FlagKey,
-		Value:    value,
-		Variant:  variant,
-		Reason:   reason,
-		Metadata: meta,
+		ControlPointKey: req.ControlPointKey,
+		Value:           value,
+		Variant:         variant,
+		Reason:          reason,
+		Metadata:        meta,
 	}
 }
 
@@ -310,11 +361,8 @@ func payloadString(payload any) (string, bool) {
 // failure retryable; a rejected payload or bad key is not retried, since it
 // would be rejected identically.
 func (a *Adapter) RegisterTarget(ctx context.Context, targetingKey string, opts domain.RegisterTargetOptions) domain.RegisterTargetResult {
-	if a.closed {
-		return domain.RegisterTargetResult{Error: domain.NewError(domain.KindAlreadyClosed, "", nil)}
-	}
-	if !a.ready {
-		return domain.RegisterTargetResult{Error: domain.NewError(domain.KindNotReady, "", nil)}
+	if err := a.status(); err != nil {
+		return domain.RegisterTargetResult{Error: err}
 	}
 	if targetingKey == "" {
 		err := domain.NewError(domain.KindInvalidContext, "targeting key missing", nil)
@@ -344,7 +392,11 @@ func (a *Adapter) RegisterTarget(ctx context.Context, targetingKey string, opts 
 	return domain.RegisterTargetResult{Error: lastErr}
 }
 
-// Close implements domain.BackendAdapter.
+// Close implements domain.BackendAdapter. It is idempotent and safe to call
+// while reads are in flight: a read that already passed its state check
+// finishes its request; every later one reports AlreadyClosed. Close
+// releases the idle connections of the adapter's own transport (never a
+// caller-supplied Config.HTTPClient's).
 func (a *Adapter) Close(ctx context.Context) error {
 	a.mu.Lock()
 	if a.closed {
@@ -353,7 +405,11 @@ func (a *Adapter) Close(ctx context.Context) error {
 	}
 	a.closed = true
 	a.ready = false
+	transport := a.transport
 	a.mu.Unlock()
+	if transport != nil {
+		transport.CloseIdleConnections()
+	}
 	return nil
 }
 

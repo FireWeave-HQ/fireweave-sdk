@@ -83,8 +83,8 @@ extension JSONValue: ExpressibleByNilLiteral, ExpressibleByBooleanLiteral,
   }
 }
 
-/// `flagMetadata` values per `spec/decision.schema.json`: `bool | string | number`.
-public typealias FlagMetadata = [String: JSONValue]
+/// `controlPointMetadata` values per `spec/decision.schema.json`: `bool | string | number`.
+public typealias ControlPointMetadata = [String: JSONValue]
 
 /// Requested flag value type for typed evaluation (`spec/control-points.md`
 /// "The nine methods"). Exactly four members: boolean, string, number,

@@ -16,7 +16,7 @@ Resolution policy is deliberately minimal:
   runtime turns into the caller's own default with reason ``DEFAULT`` — not
   an error (spec/modes.md "Behaviour per mode": local's unknown-key row is
   deliberately ``default``/``DEFAULT``, unlike remote's
-  ``default``/``ERROR``/``FlagNotFound``).
+  ``default``/``ERROR``/``ControlPointNotFound``).
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ class FireweaveLocalAdapter:
     def initialize(self) -> None:
         self._closed = False
 
-    def resolve(self, flag_key: str, context: EvaluationContext) -> FlagResolution:
+    def resolve(self, control_point_key: str, context: EvaluationContext) -> FlagResolution:
         """A ``dev_flags`` hit reports ``enabled=True`` alongside reason
         ``STATIC``. Reporting ``enabled=False`` for an override of ``False``
         would make the runtime label the decision ``DISABLED`` — "the
@@ -76,15 +76,15 @@ class FireweaveLocalAdapter:
         A miss returns ``matched=False`` — the strict, typed seam
         `FireweaveRuntime._decision_from_resolution` reads to return the
         caller's default with reason ``DEFAULT`` instead of falling through
-        to the generic FlagNotFound/ERROR path (spec/modes.md). This
+        to the generic ControlPointNotFound/ERROR path (spec/modes.md). This
         adapter never RAISES on a miss — raising here would be
         indistinguishable, from the runtime's perspective, from a genuine
         backend failure, and would produce the wrong (ERROR) reason.
         """
         del context  # unused; kept for BackendAdapter signature parity
-        if flag_key not in self._dev_flags:
+        if control_point_key not in self._dev_flags:
             return FlagResolution(value=None, matched=False)
-        override = self._dev_flags[flag_key]
+        override = self._dev_flags[control_point_key]
         return FlagResolution(
             value=override,
             variant="on" if override else "off",

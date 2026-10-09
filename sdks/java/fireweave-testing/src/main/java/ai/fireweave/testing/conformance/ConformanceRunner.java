@@ -407,7 +407,7 @@ public final class ConformanceRunner {
 
     static Map<String, InMemoryAdapter.FlagDefinition> flagsFrom(JsonNode given) {
         Map<String, InMemoryAdapter.FlagDefinition> out = new LinkedHashMap<>();
-        JsonNode flags = given.get("flags");
+        JsonNode flags = given.get("controlPoints");
         if (flags != null && flags.isObject()) {
             Iterator<Map.Entry<String, JsonNode>> it = flags.fields();
             while (it.hasNext()) {
@@ -523,7 +523,7 @@ public final class ConformanceRunner {
             out.set("errorMessage", MAPPER.nullNode());
         }
         ObjectNode meta = MAPPER.createObjectNode();
-        for (Map.Entry<String, Object> e : d.flagMetadata().entrySet()) {
+        for (Map.Entry<String, Object> e : d.controlPointMetadata().entrySet()) {
             Object v = e.getValue();
             if (v instanceof Boolean) {
                 meta.put(e.getKey(), (Boolean) v);
@@ -536,7 +536,7 @@ public final class ConformanceRunner {
             }
         }
         if (meta.size() > 0) {
-            out.set("flagMetadata", meta);
+            out.set("controlPointMetadata", meta);
         }
         return out;
     }
@@ -593,7 +593,7 @@ public final class ConformanceRunner {
                 if (name.equals(requested)) {
                     FireweaveClient client = new FireweaveClient(runtime);
                     Decision d = client.controlPoints().evaluate(
-                            when.get("flagKey").asText(),
+                            when.get("controlPointKey").asText(),
                             flagTypeFrom(when.get("flagType").asText()),
                             defaultValueFrom(when),
                             contextFrom(when.get("invocationContext")),
@@ -629,7 +629,7 @@ public final class ConformanceRunner {
 
         EvaluationContext invocationCtx = contextFrom(when.get("invocationContext"));
         Decision d = client.controlPoints().evaluate(
-                when.get("flagKey").asText(), flagTypeFrom(when.get("flagType").asText()),
+                when.get("controlPointKey").asText(), flagTypeFrom(when.get("flagType").asText()),
                 defaultValueFrom(when), invocationCtx, evaluationOptionsFrom(when));
         ObjectNode actual = decisionToActual(d);
 
@@ -737,8 +737,8 @@ public final class ConformanceRunner {
 
         JsonNode replacement = given.get("replacement");
         Map<String, InMemoryAdapter.FlagDefinition> replacementFlags = new LinkedHashMap<>();
-        if (replacement != null && replacement.has("flags")) {
-            Iterator<Map.Entry<String, JsonNode>> it = replacement.get("flags").fields();
+        if (replacement != null && replacement.has("controlPoints")) {
+            Iterator<Map.Entry<String, JsonNode>> it = replacement.get("controlPoints").fields();
             while (it.hasNext()) {
                 Map.Entry<String, JsonNode> e = it.next();
                 replacementFlags.put(e.getKey(), flagDefinitionFrom(e.getValue()));
@@ -751,7 +751,7 @@ public final class ConformanceRunner {
 
         JsonNode then = when.get("thenEvaluate");
         Decision d = clientB.controlPoints().evaluate(
-                then.get("flagKey").asText(), flagTypeFrom(then.get("flagType").asText()),
+                then.get("controlPointKey").asText(), flagTypeFrom(then.get("flagType").asText()),
                 defaultValueFrom(then), contextFrom(then.get("invocationContext")), null);
         ObjectNode actual = decisionToActual(d);
         actual.put("providerState", stateName(runtimeB.state()));
@@ -814,7 +814,7 @@ public final class ConformanceRunner {
     }
 
     /**
-     * Exercises the remote adapter's real HTTP path (POST /v1/flags/evaluate). Baseline: an
+     * Exercises the remote adapter's real HTTP path (POST /v1/control-points/evaluate). Baseline: an
      * in-process HTTP stub ({@link FixtureHttpStub}, pure JDK) — the canonical dockerized
      * maven:3.9-eclipse-temurin-21 image has no {@code node} binary to spawn
      * test-server/implementation/server.mjs with, unlike node/python's runners.
@@ -885,7 +885,7 @@ public final class ConformanceRunner {
             runtime.initialize();
             FireweaveClient client = new FireweaveClient(runtime);
             Decision d = client.controlPoints().evaluate(
-                    when.get("flagKey").asText(), flagTypeFrom(when.get("flagType").asText()),
+                    when.get("controlPointKey").asText(), flagTypeFrom(when.get("flagType").asText()),
                     defaultValueFrom(when), contextFrom(when.get("invocationContext")), null);
             runtime.shutdown();
             return decisionToActual(d);

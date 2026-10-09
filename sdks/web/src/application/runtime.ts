@@ -72,7 +72,7 @@ export interface FireweaveWebRuntimeConfig {
   readonly reservedAttributeKeys?: readonly string[];
   readonly flagsReadyTimeoutMs?: number;
   /** Restrict prefetch to a known set of control points. */
-  readonly flagKeys?: readonly string[];
+  readonly controlPointKeys?: readonly string[];
   /** Emit a Fireweave exposure on each successful evaluation. Default false. */
   readonly sendExposure?: boolean;
 }
@@ -171,7 +171,7 @@ export class FireweaveWebRuntime {
 
     const prefetch = this.adapter.prefetch(
       canonical,
-      this.config.flagKeys !== undefined ? { flagKeys: this.config.flagKeys } : undefined
+      this.config.controlPointKeys !== undefined ? { controlPointKeys: this.config.controlPointKeys } : undefined
     );
 
     try {
@@ -210,19 +210,19 @@ export class FireweaveWebRuntime {
    * the first failure. Only once all four pass does this consult the cache.
    */
   evaluateSync(
-    flagKey: string,
+    controlPointKey: string,
     expectedType: ExpectedFlagType,
     defaultValue: JsonValue,
     invocationContext?: ContextInput
   ): Decision {
-    const keyResult = validateControlPointKey(flagKey);
+    const keyResult = validateControlPointKey(controlPointKey);
     if (!keyResult.ok) {
-      return this.errorDecision(flagKey, defaultValue, keyResult.error);
+      return this.errorDecision(controlPointKey, defaultValue, keyResult.error);
     }
 
     const defaultResult = validateDefaultValue(expectedType, defaultValue);
     if (!defaultResult.ok) {
-      return this.errorDecision(flagKey, defaultValue, defaultResult.error);
+      return this.errorDecision(controlPointKey, defaultValue, defaultResult.error);
     }
 
     // The validated context here is not what SELECTS the cached decision —
@@ -234,46 +234,46 @@ export class FireweaveWebRuntime {
     const merged = mergeContexts(this.globalContext, invocationContext);
     const contextResult = validateContext(merged, this.contextPolicy);
     if (!contextResult.ok) {
-      return this.errorDecision(flagKey, defaultValue, contextResult.error);
+      return this.errorDecision(controlPointKey, defaultValue, contextResult.error);
     }
 
     const lifecycleError = this.lifecycleError();
     if (lifecycleError !== undefined) {
-      return this.errorDecision(flagKey, defaultValue, lifecycleError);
+      return this.errorDecision(controlPointKey, defaultValue, lifecycleError);
     }
 
-    const resolution = this.cache.get(flagKey);
+    const resolution = this.cache.get(controlPointKey);
     if (resolution === undefined || resolution.found === false) {
       // spec/modes.md "Behaviour per mode": local's unknown-key row is
       // `default`/reason `DEFAULT` — deliberately not an error. The local
       // adapter signals this via `missReason: 'DEFAULT'` (adapter.ts); every
       // other adapter leaves it undefined and keeps the path below.
       if (this.adapter.missReason === 'DEFAULT') {
-        return { flagKey, value: defaultValue, reason: 'DEFAULT', metadata: {} };
+        return { controlPointKey, value: defaultValue, reason: 'DEFAULT', metadata: {} };
       }
       // A cache miss while STALE is not a missing control point — it is an
       // unanswered question. Reporting FLAG_NOT_FOUND there would send a
       // caller hunting for a flag that may well exist.
       if (this.state === 'STALE') {
         return {
-          flagKey,
+          controlPointKey,
           value: defaultValue,
           reason: 'STALE',
           variant: 'default',
           metadata: { 'fireweave.stale': true },
         };
       }
-      return this.errorDecision(flagKey, defaultValue, new FireweaveError('FlagNotFound'));
+      return this.errorDecision(controlPointKey, defaultValue, new FireweaveError('ControlPointNotFound'));
     }
 
     const value = resolution.value ?? null;
     if (!matchesExpectedType(value, expectedType)) {
-      return this.errorDecision(flagKey, defaultValue, new FireweaveError('TypeMismatch'));
+      return this.errorDecision(controlPointKey, defaultValue, new FireweaveError('TypeMismatch'));
     }
 
     const metadata = this.metadataFor(resolution);
     const decision: Decision = {
-      flagKey,
+      controlPointKey,
       value,
       reason: this.reasonFor(resolution),
       ...(resolution.variant !== undefined ? { variant: resolution.variant } : {}),
@@ -287,15 +287,18 @@ export class FireweaveWebRuntime {
   }
 
   private reasonFor(resolution: AdapterResolution): DecisionReason {
+    // A STALE runtime is serving the last good decisions after a failed or
+    // timed-out re-fetch (spec/control-points.md): say so, whatever reason the
+    // backend gave when the decision was fresh.
+    if (this.state === 'STALE') return 'STALE';
     if (resolution.enabled === false) return 'DISABLED';
     if (resolution.reason !== undefined) return resolution.reason;
-    if (this.state === 'STALE') return 'STALE';
     return 'TARGETING_MATCH';
   }
 
   private metadataFor(resolution: AdapterResolution): Record<string, string | number | boolean> | undefined {
     const metadata: Record<string, string | number | boolean> = {};
-    if (resolution.version !== undefined) metadata['fireweave.flagVersion'] = resolution.version;
+    if (resolution.version !== undefined) metadata['fireweave.controlPointVersion'] = resolution.version;
     if (resolution.reasonCode !== undefined) metadata['fireweave.reasonCode'] = resolution.reasonCode;
     if (resolution.quotaLimited === true) metadata['fireweave.quotaLimited'] = true;
     return Object.keys(metadata).length > 0 ? metadata : undefined;
@@ -308,7 +311,7 @@ export class FireweaveWebRuntime {
     if (targetingKey === '') return;
     const rc = this.releaseContext;
     const exposure: Exposure = {
-      flagKey: decision.flagKey,
+      controlPointKey: decision.controlPointKey,
       targetingKey,
       value: decision.value,
       ...(decision.variant !== undefined ? { variant: decision.variant } : {}),
@@ -394,9 +397,9 @@ export class FireweaveWebRuntime {
     }
   }
 
-  private errorDecision(flagKey: string, defaultValue: JsonValue, err: FireweaveError): Decision {
+  private errorDecision(controlPointKey: string, defaultValue: JsonValue, err: FireweaveError): Decision {
     return {
-      flagKey,
+      controlPointKey,
       value: defaultValue,
       reason: 'ERROR',
       errorCode: err.openFeatureErrorCode,

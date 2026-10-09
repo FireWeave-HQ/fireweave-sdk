@@ -14,7 +14,7 @@ import java.util.function.Function;
 final class StubAdapter implements BackendAdapter {
 
     volatile Function<EvaluationRequest, Decision> onEvaluate = req ->
-            Decision.builder(req.flagKey()).value(JsonValue.of(true))
+            Decision.builder(req.controlPointKey()).value(JsonValue.of(true))
                     .variant("on").reason(Reasons.TARGETING_MATCH).build();
     volatile FireweaveException initFailure;
     volatile FireweaveException evalFailure;

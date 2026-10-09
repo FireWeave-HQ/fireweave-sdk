@@ -39,7 +39,7 @@ import java.util.function.Consumer;
  *   <li>every other key MISSES: the caller's default is returned with reason
  *       {@link Reasons#DEFAULT} — not an error (spec/modes.md "Behaviour per mode": local's
  *       unknown-key row is deliberately {@code default}/{@code DEFAULT}, unlike remote's
- *       {@code default}/{@code ERROR}/{@code FlagNotFound}). This adapter never THROWS on a
+ *       {@code default}/{@code ERROR}/{@code ControlPointNotFound}). This adapter never THROWS on a
  *       miss — throwing here would be indistinguishable, from the runtime's perspective, from a
  *       genuine backend failure, and would produce the wrong (ERROR) reason; returning a plain
  *       {@link Decision} directly is the strict, typed seam that rules the ambiguity out.</li>
@@ -98,9 +98,9 @@ public final class FireweaveLocalAdapter implements BackendAdapter {
         if (closed) {
             throw new FireweaveException(ErrorKind.AlreadyClosed);
         }
-        Boolean override = devFlags.get(request.flagKey());
+        Boolean override = devFlags.get(request.controlPointKey());
         if (override == null) {
-            return Decision.builder(request.flagKey())
+            return Decision.builder(request.controlPointKey())
                     .value(request.defaultValue())
                     .reason(Reasons.DEFAULT)
                     .build();
@@ -108,7 +108,7 @@ public final class FireweaveLocalAdapter implements BackendAdapter {
         if (request.type() != FlagType.BOOLEAN) {
             throw new FireweaveException(ErrorKind.TypeMismatch);
         }
-        return Decision.builder(request.flagKey())
+        return Decision.builder(request.controlPointKey())
                 .value(JsonValue.of(override.booleanValue()))
                 .variant(override ? "on" : "off")
                 .reason(Reasons.STATIC)

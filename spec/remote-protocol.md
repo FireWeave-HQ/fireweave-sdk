@@ -20,11 +20,16 @@ Never send PostHog `phc_` / `phs_` / `phx_` keys on this path.
 
 | Method | Path | Schema | Purpose |
 | --- | --- | --- | --- |
-| `POST` | `/v1/flags/evaluate` | [`remote-evaluate.schema.json`](./remote-evaluate.schema.json) | Batch flag evaluation (side-effect-free) |
+| `POST` | `/v1/control-points/evaluate` | [`remote-evaluate.schema.json`](./remote-evaluate.schema.json) | Batch control-point evaluation (side-effect-free) |
 | `POST` | `/v1/capture` | [`remote-capture.schema.json`](./remote-capture.schema.json) | Exposures / signals / events batch |
 | `POST` | `/v1/targets/register` | [`remote-register-target.schema.json`](./remote-register-target.schema.json) | Register a user or device for targeting (implemented by all seven SDKs) |
 
-Optional later: `GET /v1/flags/definitions` for local-eval parity.
+Optional later: `GET /v1/control-points/definitions` for local-eval parity.
+
+**Version 3 (ADR-0013).** The control-point names above are the wire from 3.0.0. fw-server also
+serves `POST /v1/flags/evaluate` with the 2.x field names (`flagKeys`, `flagKey`, `flagMetadata`)
+and accepts `events[].flagKey` on `/v1/capture`, as thin aliases, until no supported SDK version
+calls them. A 3.x SDK never sends the old names.
 
 ## Two identity paths
 
@@ -32,7 +37,7 @@ A target's properties reach an evaluation by two different routes, and they comp
 
 | | Registered target | Evaluation context |
 | --- | --- | --- |
-| Written by | `POST /v1/targets/register` | `attributes` on `POST /v1/flags/evaluate` |
+| Written by | `POST /v1/targets/register` | `attributes` on `POST /v1/control-points/evaluate` |
 | Set | once, at login / provisioning | on every evaluate call |
 | Lifetime | stored server-side | that one request |
 | Use for | durable facts: plan, beta, region, device model | per-request state: page, session, experiment context |
@@ -53,11 +58,11 @@ two projects using the same raw id are different targets.
 
 `@fireweaveai/web-sdk` speaks this same protocol from a browser. Three things differ, and each is a server-side obligation rather than an SDK one.
 
-**Any origin.** Browser callers arrive from origins fw-server cannot enumerate, so `/v1/flags/evaluate`, `/v1/capture`, and `/v1/targets/register` accept **any** `Origin`. The preflight must allow the `authorization` and `content-type` request headers, and should set a `Max-Age` so a preflight is not paid on every evaluate. This is not a relaxed boundary: these routes authenticate by bearer token and ignore cookies, so origin never protected them.
+**Any origin.** Browser callers arrive from origins fw-server cannot enumerate, so `/v1/control-points/evaluate`, `/v1/capture`, and `/v1/targets/register` accept **any** `Origin`. The preflight must allow the `authorization` and `content-type` request headers, and should set a `Max-Age` so a preflight is not paid on every evaluate. This is not a relaxed boundary: these routes authenticate by bearer token and ignore cookies, so origin never protected them.
 
-**The key is the whole boundary.** A browser key is public by construction — anything in a bundle is readable. It must therefore be scoped to `flags:evaluate` + `events:write` and rate-limited per key. Do **not** issue a browser a key carrying `attest:write` or any deploy-time scope. fw-server implements this as a distinct `fw_public_…` key family carrying exactly those scopes; its attest plane rejects that family outright, and the runtime-proxy routes answer `429` with a `Retry-After` header when a key exceeds its per-key limit. Where the app has a same-origin backend, injecting the key server-side (a BFF) remains the better pattern and avoids the question entirely.
+**The key is the whole boundary.** A browser key is public by construction — anything in a bundle is readable. It must therefore be scoped to `control-points:evaluate` + `events:write` and rate-limited per key. Do **not** issue a browser a key carrying `attest:write` or any deploy-time scope. fw-server implements this as a distinct `fw_public_…` key family carrying exactly those scopes; its attest plane rejects that family outright, and the runtime-proxy routes answer `429` with a `Retry-After` header when a key exceeds its per-key limit. Where the app has a same-origin backend, injecting the key server-side (a BFF) remains the better pattern and avoids the question entirely.
 
-**Batch, then read.** A browser evaluates synchronously against a prefetched cache, so it calls `/v1/flags/evaluate` **once per context** with no `flagKeys` filter (or a known subset) and reads every decision from the response. Servers should expect one batch call per page load and per identity change, not one call per control point.
+**Batch, then read.** A browser evaluates synchronously against a prefetched cache, so it calls `/v1/control-points/evaluate` **once per context** with no `controlPointKeys` filter (or a known subset) and reads every decision from the response. Servers should expect one batch call per page load and per identity change, not one call per control point.
 
 Capture from a browser may arrive via `navigator.sendBeacon` or `fetch(..., { keepalive: true })` during page unload. Both send `POST` with the JSON body unchanged; `sendBeacon` cannot set an `Authorization` header, so a browser using it must carry the key another way the server accepts (`x-api-key` is already accepted above, but not settable on a beacon either — a keepalive `fetch` is the portable choice when a header is required). Unload-time delivery is best-effort by definition: neither transport reports failure to the page.
 
@@ -78,12 +83,12 @@ Request:
   "attributes": { "email": "a@example.com" },
   "groups": { "company": "acme" },
   "groupProperties": { "company": { "plan": "pro" } },
-  "flagKeys": ["checkout-v2"]
+  "controlPointKeys": ["checkout-v2"]
 }
 ```
 
 Response decisions are compatible with [`decision.schema.json`](./decision.schema.json)
-(`flagKey`, `value`, `reason`) plus `found` / `enabled` for adapter resolution.
+(`controlPointKey`, `value`, `reason`) plus `found` / `enabled` for adapter resolution.
 
 ## Capture (sketch)
 
@@ -93,7 +98,7 @@ Response decisions are compatible with [`decision.schema.json`](./decision.schem
     {
       "type": "exposure",
       "targetingKey": "user-123",
-      "flagKey": "checkout-v2",
+      "controlPointKey": "checkout-v2",
       "value": "treatment-b",
       "variant": "treatment-b"
     }
