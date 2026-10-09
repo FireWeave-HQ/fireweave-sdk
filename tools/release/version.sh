@@ -5,6 +5,7 @@
 #   tools/release/version.sh compute     <component> <bump> <channel> [--manifest-root DIR]
 #   tools/release/version.sh apply       <component> <release-version> [--manifest-root DIR]
 #   tools/release/version.sh check-stamp <component> <channel> [<go-version>] [--manifest-root DIR]
+#   tools/release/version.sh release-commit <component> <release-version> [--manifest-root DIR]
 #
 #   component : server | web | python | java | go | rust | swift | dart
 #   bump      : patch | minor | major        (compute only)
@@ -57,6 +58,15 @@
 # the tag's version is passed in). It is the last check before an
 # irreversible publish.
 #
+# `release-commit` (rust | dart | swift only) runs `apply`, then `check-stamp`
+# against the channel the version itself names, then commits the result on a
+# detached HEAD (`release(<component>): <version>`, signed off) and prints the
+# commit. Those three are consumed straight from their git tag (Rust and Dart
+# staging builds, every Swift release), so release.yml's `tag` job tags this
+# commit rather than the unstamped checkout. The branch it started from never
+# moves, so `compute`'s base is unchanged. With --manifest-root, DIR is also
+# the git work tree.
+#
 # Two mandated behaviors:
 #   - any existing prerelease is stripped BEFORE bumping (1.4.0-rc.3 +
 #     patch = 1.4.1, never 1.4.0-rc.4) — strip_prerelease() + semver_bump().
@@ -77,11 +87,13 @@ Usage:
   version.sh compute     <component> <bump> <channel> [--manifest-root DIR]
   version.sh apply       <component> <release-version> [--manifest-root DIR]
   version.sh check-stamp <component> <channel> [<go-version>] [--manifest-root DIR]
+  version.sh release-commit <component> <release-version> [--manifest-root DIR]
 
   component : server | web | python | java | go | rust | swift | dart
   bump      : patch | minor | major
   channel   : staging | production
   go-version: check-stamp go only — the tag's version (go has no manifest)
+  release-commit takes rust | dart | swift only
 
 Exit codes: 2 usage, 3 production version already spent,
             4 staging spelling or stamped channel does not match the channel
@@ -871,6 +883,61 @@ cmd_check_stamp() {
   echo "version.sh: $component stamped channel '$stamped' matches ($source)" >&2
 }
 
+# Cargo.lock's entry for the SDK's own package carries its version too, and
+# apply rewrites Cargo.toml only, so a `--locked` build of the release commit
+# would fail. Rewrite just that entry: the same edit cargo makes when it
+# re-locks, with no toolchain needed in the tag job.
+write_cargo_lock_version() {
+  local lockfile="$1" version="$2"
+  python3 - "$lockfile" "$version" <<'PY'
+import re, sys
+path, version = sys.argv[1], sys.argv[2]
+text = open(path, "r", encoding="utf-8").read()
+new_text, n = re.subn(r'(?m)^(\[\[package\]\]\nname = "fireweave"\nversion = )"[^"]*"$', lambda m: f'{m.group(1)}"{version}"', text, count=1)
+if n != 1:
+    sys.exit(f"version.sh: expected one [[package]] entry named fireweave in {path}, found {n}")
+open(path, "w", encoding="utf-8").write(new_text)
+PY
+}
+
+cmd_release_commit() {
+  local component="${1:?usage: version.sh release-commit <component> <release-version>}"
+  local release_version="${2:?usage: version.sh release-commit <component> <release-version>}"
+  shift 2
+  local manifest_root="$ROOT"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --manifest-root) manifest_root="${2:?--manifest-root requires a path}"; shift 2 ;;
+      *) echo "version.sh: unknown flag '$1'" >&2; usage; exit 2 ;;
+    esac
+  done
+
+  # Exactly the files apply writes for the component: what the commit carries.
+  local paths
+  case "$component" in
+    rust) paths="sdks/rust/Cargo.toml sdks/rust/Cargo.lock" ;;
+    dart) paths="sdks/dart/pubspec.yaml sdks/dart/lib/src/start/build_info.dart" ;;
+    swift) paths="sdks/swift/Sources/FireweaveStart/BuildInfo.swift" ;;
+    *)
+      echo "version.sh: release-commit is for rust, dart and swift (consumed from the git tag); $component tags the checkout" >&2
+      exit 2
+      ;;
+  esac
+
+  git -C "$manifest_root" checkout --quiet --detach
+  cmd_apply "$component" "$release_version" --manifest-root "$manifest_root"
+  if [ "$component" = rust ]; then
+    write_cargo_lock_version "$manifest_root/sdks/rust/Cargo.lock" "$release_version"
+  fi
+  cmd_check_stamp "$component" "$(version_channel "$component" "$release_version")" --manifest-root "$manifest_root"
+
+  # shellcheck disable=SC2086 # $paths is a fixed list without spaces
+  git -C "$manifest_root" add -- $paths
+  # shellcheck disable=SC2086
+  git -C "$manifest_root" commit --quiet --signoff -m "release($component): $release_version" -- $paths
+  git -C "$manifest_root" rev-parse HEAD
+}
+
 main() {
   if [ $# -lt 1 ]; then usage; exit 2; fi
   local sub="$1"
@@ -879,8 +946,9 @@ main() {
     compute) cmd_compute "$@" ;;
     apply) cmd_apply "$@" ;;
     check-stamp) cmd_check_stamp "$@" ;;
+    release-commit) cmd_release_commit "$@" ;;
     -h|--help) usage; exit 0 ;;
-    *) echo "version.sh: unknown subcommand '$sub' (compute|apply|check-stamp)" >&2; usage; exit 2 ;;
+    *) echo "version.sh: unknown subcommand '$sub' (compute|apply|check-stamp|release-commit)" >&2; usage; exit 2 ;;
   esac
 }
 

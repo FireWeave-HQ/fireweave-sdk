@@ -345,6 +345,14 @@ jobs:
   # green. Matrixed the same way `build` is, since each component gets its
   # own tag; reads the version/tag computed by build's matching leg from the
   # release-info-<component> artifact rather than recomputing it.
+  #
+  # Rust, Dart and Swift are consumed straight from this tag (Rust and Dart
+  # staging builds have no registry upload; Swift is tag-only), so their tag
+  # points at a detached release commit carrying the applied version and
+  # stamp (`version.sh release-commit`), never at the unstamped checkout.
+  # Only the tag is pushed; main is untouched. The other components tag the
+  # checkout: Go's tag is its version, and server/web/python/java consumers
+  # use the registry artifact, stamped in its publish job.
   # =========================================================================
   tag:
     name: create + push release tag (${{ matrix.component }})
@@ -376,10 +384,20 @@ jobs:
         # re-create this tag locally with `git tag -s` or enable gitsign here.
         env:
           TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.version.outputs.release_version }}
+          COMPONENT: ${{ matrix.component }}
+          CHANNEL: ${{ inputs.channel }}
         run: |
           git config user.name "fireweave-release-bot"
           git config user.email "releases@fireweave.ai"
-          git tag -a "$TAG" -m "Release ${TAG} (channel: ${{ inputs.channel }})"
+          TARGET=HEAD
+          case "$COMPONENT" in
+            rust|dart|swift)
+              TARGET="$(tools/release/version.sh release-commit "$COMPONENT" "$RELEASE_VERSION")"
+              tools/release/version.sh check-stamp "$COMPONENT" "$CHANNEL"
+              ;;
+          esac
+          git tag -a "$TAG" "$TARGET" -m "Release ${TAG} (channel: ${CHANNEL})"
           git push origin "refs/tags/${TAG}"
 
   # =========================================================================

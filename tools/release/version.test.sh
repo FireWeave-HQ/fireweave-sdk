@@ -509,6 +509,64 @@ check_refused "check-stamp go: needs the tag's version" go staging
 check_refused "check-stamp: an unknown channel is refused" server beta
 rm -rf "$scratch3"
 
+# ------------------------------------------------------------- release-commit
+# Rust and Dart staging builds are consumed straight from the git tag, and
+# Swift releases are tag-only, so the tag must point at a commit carrying the
+# applied version and stamp. release-commit applies, checks the stamp and
+# commits on a detached HEAD; the branch it started from never moves.
+repo="$(mktemp -d)"
+mkdir -p "$repo/sdks/rust" "$repo/sdks/dart/lib/src/start" "$repo/sdks/swift/Sources/FireweaveStart"
+printf '[package]\nname = "fireweave"\nversion = "2.2.0"\n' > "$repo/sdks/rust/Cargo.toml"
+printf '[[package]]\nname = "itoa"\nversion = "1.0.11"\n\n[[package]]\nname = "fireweave"\nversion = "2.2.0"\ndependencies = [\n "serde",\n]\n' > "$repo/sdks/rust/Cargo.lock"
+printf 'name: fireweave\nversion: 2.2.0\n' > "$repo/sdks/dart/pubspec.yaml"
+write_dart_build_info "$repo/sdks/dart" "2.2.0"
+write_swift_build_info "$repo/sdks/swift" "2.2.0"
+git -C "$repo" init -q -b main
+git -C "$repo" config user.name "release test"
+git -C "$repo" config user.email "release-test@example.invalid"
+git -C "$repo" config commit.gpgsign false
+git -C "$repo" add -A
+git -C "$repo" commit -q -m "base"
+base="$(git -C "$repo" rev-parse HEAD)"
+
+rc_commit="$( (cmd_release_commit rust "3.0.0-rc.1" --manifest-root "$repo") 2>/dev/null || true)"
+assert_eq "release-commit rust: prints the new commit, and only it" "yes" "$(if [[ "$rc_commit" =~ ^[0-9a-f]{40}$ ]]; then echo yes; fi)"
+assert_eq "release-commit rust: Cargo.toml at the commit says 3.0.0-rc.1" '3.0.0-rc.1' \
+  "$(git -C "$repo" show "${rc_commit:-HEAD}:sdks/rust/Cargo.toml" | sed -nE 's/^version = "([^"]+)"$/\1/p')"
+assert_eq "release-commit rust: Cargo.lock's own package entry follows" '3.0.0-rc.1' \
+  "$(git -C "$repo" show "${rc_commit:-HEAD}:sdks/rust/Cargo.lock" | sed -n '/^name = "fireweave"$/{n;s/^version = "\(.*\)"$/\1/p;}')"
+assert_eq "release-commit rust: other lock entries are untouched" '1.0.11' \
+  "$(git -C "$repo" show "${rc_commit:-HEAD}:sdks/rust/Cargo.lock" | sed -n '/^name = "itoa"$/{n;s/^version = "\(.*\)"$/\1/p;}')"
+assert_eq "release-commit rust: its parent is HEAD" "$base" "$(git -C "$repo" rev-parse "${rc_commit:-HEAD}^" 2>/dev/null || true)"
+assert_eq "release-commit rust: subject" 'release(rust): 3.0.0-rc.1' "$(git -C "$repo" log -1 --format=%s "${rc_commit:-HEAD}")"
+assert_eq "release-commit rust: signed off" 'Signed-off-by: release test <release-test@example.invalid>' \
+  "$(git -C "$repo" log -1 --format=%b "${rc_commit:-HEAD}" | grep '^Signed-off-by:' || true)"
+assert_eq "release-commit rust: the commit carries only the stamp" "$(printf 'sdks/rust/Cargo.lock\nsdks/rust/Cargo.toml')" \
+  "$(git -C "$repo" diff --name-only "$base" "${rc_commit:-HEAD}")"
+assert_eq "release-commit rust: main is unchanged" "$base" "$(git -C "$repo" rev-parse main)"
+assert_eq "release-commit rust: HEAD is detached" '' "$(git -C "$repo" symbolic-ref --quiet HEAD || true)"
+
+git -C "$repo" checkout -q main
+rc_commit="$( (cmd_release_commit dart "3.0.0-rc.1" --manifest-root "$repo") 2>/dev/null || true)"
+assert_eq "release-commit dart: buildSdkChannel is staging at the commit" "const String buildSdkChannel = 'staging';" \
+  "$(git -C "$repo" show "${rc_commit:-HEAD}:sdks/dart/lib/src/start/build_info.dart" | grep '^const String buildSdkChannel')"
+assert_eq "release-commit dart: pubspec.yaml at the commit says 3.0.0-rc.1" 'version: 3.0.0-rc.1' \
+  "$(git -C "$repo" show "${rc_commit:-HEAD}:sdks/dart/pubspec.yaml" | grep '^version:')"
+assert_eq "release-commit dart: its parent is HEAD" "$base" "$(git -C "$repo" rev-parse "${rc_commit:-HEAD}^" 2>/dev/null || true)"
+assert_eq "release-commit dart: main is unchanged" "$base" "$(git -C "$repo" rev-parse main)"
+
+git -C "$repo" checkout -q main
+rc_commit="$( (cmd_release_commit swift "3.0.0-rc.1" --manifest-root "$repo") 2>/dev/null || true)"
+assert_eq "release-commit swift: sdkChannel is staging at the commit" 'static let sdkChannel = "staging"' \
+  "$(git -C "$repo" show "${rc_commit:-HEAD}:sdks/swift/Sources/FireweaveStart/BuildInfo.swift" | grep -o 'static let sdkChannel = "[a-z]*"')"
+assert_eq "release-commit swift: main is unchanged" "$base" "$(git -C "$repo" rev-parse main)"
+
+git -C "$repo" checkout -q main
+assert_fail "release-commit: only rust, dart and swift tag a release commit" \
+  cmd_release_commit server "3.0.0-rc.1" --manifest-root "$repo"
+assert_eq "release-commit: a refused component leaves main where it was" "$base" "$(git -C "$repo" rev-parse main)"
+rm -rf "$repo"
+
 # ---------------------------------------------------------------------- summary
 echo "version.test.sh: ${PASS} passed, ${FAIL} failed, ${SKIP} skipped"
 [ "$FAIL" -eq 0 ]
