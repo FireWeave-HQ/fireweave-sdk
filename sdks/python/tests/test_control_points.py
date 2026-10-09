@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import warnings
 
-from fireweave import FireweaveClient, FireweaveRuntime, InMemoryAdapter
-
 
 def test_the_flags_alias_is_gone(client):
     """Removed in 3.0.0 (ADR-0013)."""
