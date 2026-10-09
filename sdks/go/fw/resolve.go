@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fireweave"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/fireweave"
 )
 
 // Mode is the SDK mode the start profile selects: fw.ModeRemote or

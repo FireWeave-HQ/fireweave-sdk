@@ -110,8 +110,8 @@ func parseImports(t *testing.T, dir string) map[string][]fileImport {
 }
 
 const (
-	applicationImportPrefix    = "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/application"
-	infrastructureImportPrefix = "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/infrastructure"
+	applicationImportPrefix    = "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/application"
+	infrastructureImportPrefix = "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/infrastructure"
 	// compositionRootFile is the one file under application/ permitted to
 	// import infrastructure/adapters/* (mirrors node's application/mode.ts
 	// / java's application/Fireweave.java).
@@ -260,7 +260,7 @@ func TestFacadeHoldsOnlyReExportsNoImplementation(t *testing.T) {
 //     profile layered over it.
 
 const (
-	modulePrefix        = "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2"
+	modulePrefix        = "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3"
 	facadeImportPath    = modulePrefix + "/fireweave"
 	startProfileImport  = modulePrefix + "/fw"
 	startProfileDir     = "fw"

@@ -4,7 +4,7 @@
   ADR-0012 is accepted.
 - **Applies to:** the start layer of every language SDK in `sdks/` — Node and web
   (`@fireweaveai/server-sdk/start`, `@fireweaveai/web-sdk/start`), Python (`fireweave.start`),
-  Go (`.../sdks/go/v2/fw`), Java (`ai.fireweave.sdk.start`), Rust (`fireweave::start`), Dart
+  Go (`.../sdks/go/v3/fw`), Java (`ai.fireweave.sdk.start`), Rust (`fireweave::start`), Dart
   (`package:fireweave/client.dart`, `server.dart`) and Swift (`FireweaveStart`).
 - **Related:** `modes.md` (the core rules this layer is the documented exception to),
   `control-points.md`, `remote-protocol.md`, ADR-0012.

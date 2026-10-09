@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fireweave"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/fireweave"
 )
 
 // Client is the one *fireweave.Client for this process: never nil, and the

@@ -15,10 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fireweave"
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/infrastructure/adapters/inmemory"
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/infrastructure/adapters/remote"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/fireweave"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/infrastructure/adapters/inmemory"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/infrastructure/adapters/remote"
 )
 
 // Result is one compatibility-report row.

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fireweave"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/fireweave"
 )
 
 // Start, the singleton and the package facade (state.go, fw.go). Mirrors

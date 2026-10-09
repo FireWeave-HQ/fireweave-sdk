@@ -17,7 +17,7 @@ const (
 
 // modulePath is this SDK's module path, looked up in the binary's build info.
 // fw/channel_test.go pins it to go.mod's module line.
-const modulePath = "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2"
+const modulePath = "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3"
 
 // develVersion is reported when the build info does not carry a release
 // version: a local checkout, a directory replace, or a test binary.

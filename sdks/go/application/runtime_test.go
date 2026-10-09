@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/domain"
 )
 
 // stubAdapter is a programmable BackendAdapter for runtime tests.

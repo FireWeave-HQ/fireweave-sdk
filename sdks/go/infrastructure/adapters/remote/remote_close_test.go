@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/infrastructure/adapters/remote"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/infrastructure/adapters/remote"
 )
 
 // GO-1: Close may run while reads and registrations are in flight (the

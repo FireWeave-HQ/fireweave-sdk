@@ -1,6 +1,6 @@
 # Fireweave Go SDK
 
-Go module: `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2` (Go 1.25).
+Go module: `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3` (Go 1.25).
 
 Exactly two v1 capabilities (spec/control-points.md "Scope of v1"): control
 points (`Client.ControlPoints()`, the nine methods) and target registration
@@ -11,14 +11,14 @@ are not exposed.
 ## Quick start (one line: the start profile)
 
 Most apps need only this ([ADR-0012](../../docs/adr/0012-start-profile.md)). Package
-`github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fw` is an opt-in layer over the
+`github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/fw` is an opt-in layer over the
 unchanged core: one control-points file, one call in `main`, then reads from anywhere.
 
 ```go
 // internal/fireweave/control_points.go: every control point the app reads, with its local value
 package fireweave
 
-import "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fw"
+import "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/fw"
 
 var ControlPoints = fw.DefineControlPoints(fw.LocalControlPoints{
 	"new-checkout": {Local: true, Description: "new checkout flow"}, // served only in local mode
@@ -29,7 +29,7 @@ var ControlPoints = fw.DefineControlPoints(fw.LocalControlPoints{
 // main.go: first thing in main, after the app's own config loading
 import (
 	appfw "example.com/app/internal/fireweave"
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fw"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/fw"
 )
 
 func main() {
@@ -172,7 +172,7 @@ architecture guard tests in `fireweave/architecture_guard_test.go`.
 ## Modes (spec/modes.md)
 
 ```go
-import "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fireweave"
+import "github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/fireweave"
 
 // Local (offline, in-process seed map; may be empty):
 client, err := fireweave.Init(fireweave.Options{

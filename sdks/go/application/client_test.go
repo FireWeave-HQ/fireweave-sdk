@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/domain"
 )
 
 func readyClient(t *testing.T) *Client {

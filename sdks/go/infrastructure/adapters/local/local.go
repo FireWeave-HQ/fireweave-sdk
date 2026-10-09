@@ -9,7 +9,7 @@ import (
 	"log"
 	"sync"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/domain"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/domain"
 )
 
 // RegisteredTarget is one target recorded by Adapter.RegisterTarget.

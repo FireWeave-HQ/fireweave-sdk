@@ -40,7 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added — Go start profile, package `fw` ([ADR-0012](docs/adr/0012-start-profile.md), proposed)
 
-- New package `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fw`: `Start(Options)`, `MustStart`, `DefineFlags`, `ControlPoints()`, `For`, `Identify`, `InstanceKey`, `Status`, `Client`, `Shutdown`. Options `Flags`, `Mode`, `Environment`, `URL`, `Key`, `InstanceID`, `Env`, `Log`, with the same env fallbacks, mode rule and key checks as the server SDK.
+- New package `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/fw`: `Start(Options)`, `MustStart`, `DefineFlags`, `ControlPoints()`, `For`, `Identify`, `InstanceKey`, `Status`, `Client`, `Shutdown`. Options `Flags`, `Mode`, `Environment`, `URL`, `Key`, `InstanceID`, `Env`, `Log`, with the same env fallbacks, mode rule and key checks as the server SDK.
 - The default endpoint follows the SDK module version in the binary's build info: `vX.Y.Z-staging.N` calls staging, anything else (including a local checkout) production.
 - `Client()` is one permanent `*fireweave.Client` for the process, so a pointer captured before `Start` keeps working.
 - The core packages are unchanged apart from re-exporting `fireweave.ValidateControlPointKey`, and still read no environment.

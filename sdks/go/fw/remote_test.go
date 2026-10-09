@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fireweave"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/fireweave"
 )
 
 // The start profile in remote mode against a real HTTP server speaking the

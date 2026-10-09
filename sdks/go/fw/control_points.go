@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fireweave"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/fireweave"
 )
 
 // LocalControlPoint is one control point the app reads.

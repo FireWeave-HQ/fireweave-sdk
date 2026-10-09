@@ -26,7 +26,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v2/fireweave"
+	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/fireweave"
 )
 
 // Options configures Start. Every field is optional; the zero Options reads
