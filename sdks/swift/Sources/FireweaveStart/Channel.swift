@@ -25,8 +25,9 @@ public enum FireweaveChannel: String, Sendable, Equatable {
 }
 
 /// The channel rule, as a pure function of a version string: a release
-/// script staging version (`X.Y.Z-staging.N`) is staging, anything else is
-/// production.
+/// script staging version (`X.Y.Z-rc.N`) is staging, anything else is
+/// production, including `-staging.N`, which stopped being a staging
+/// spelling at 3.0.0.
 func channelForVersion(_ version: String) -> FireweaveChannel {
-  version.contains("-staging.") ? .staging : .production
+  version.contains("-rc.") ? .staging : .production
 }

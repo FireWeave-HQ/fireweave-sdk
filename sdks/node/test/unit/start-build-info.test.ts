@@ -20,8 +20,8 @@ test('SDK_VERSION is the package.json version', () => {
   assert.equal(SDK_VERSION, manifest.version, 'run tools/release/version.sh apply server <version> to restamp');
 });
 
-test('SDK_CHANNEL follows the version: -staging.N is staging, anything else production', () => {
-  assert.equal(SDK_CHANNEL, /-staging\.\d+$/.test(manifest.version) ? 'staging' : 'production');
+test('SDK_CHANNEL follows the version: -rc.N is staging, anything else production', () => {
+  assert.equal(SDK_CHANNEL, /-rc\./.test(manifest.version) ? 'staging' : 'production');
 });
 
 test('./start and ./register resolve to built files, with a browser stub for each', () => {

@@ -452,7 +452,7 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
-      - name: tools/release/version.sh unit tests (pure semver + staging-N logic)
+      - name: tools/release/version.sh unit tests (pure semver + rc-N logic)
         # Chosen job: this is the one job in ci.yml with node, python, AND
         # java/mvn all set up already (needed for the 65x7 conformance run
         # below) — so version.test.sh's java `apply` case, which SKIPs
@@ -461,6 +461,10 @@ jobs:
         # no continue-on-error) — a regression in the bump/strip/staging-N
         # logic fails this job, not just the local dry run.
         run: bash tools/release/version.test.sh
+      - name: tools/release/changelog.sh unit tests (previous-tag selection)
+        # Offline scratch repo: a legacy -staging.N / aN tag never starts a
+        # changelog, and an rc tag on a detached release commit is still found.
+        run: bash tools/release/changelog.test.sh
       - name: Validate the start-profile suite (contracts/start, spec/start-profile.md)
         # Schema and cross-field checks only; each SDK's own test job runs its
         # start-contracts runner against these fixtures.

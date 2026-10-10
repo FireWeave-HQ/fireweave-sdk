@@ -14,6 +14,22 @@ registration, the two v1 capabilities (spec/control-points.md "Scope of v1").
   Fireweave project key and talk to fw-server; which backend fw-server
   forwards to is fw-server's concern.
 
+## Install
+
+```bash
+cargo add fireweave@3          # stable: the latest 3.x from crates.io, recorded as "3"
+```
+
+**Staging builds** are `X.Y.Z-rc.N` and call `staging-app-server.fireweave.ai`. crates.io never
+receives one, so a staging build comes from its git tag, the highest `rust/vX.Y.Z-rc.N`:
+
+```bash
+cargo add fireweave --git https://github.com/FireWeave-HQ/fireweave-sdk --tag rust/v3.0.0-rc.1
+```
+
+This is the one Rust install that records an exact build: Cargo pins the tag. To move to a newer
+staging build, run the command again with the higher `rust/v…-rc.N` tag.
+
 ## Quick start (one line: the start profile)
 
 Most apps need only this ([ADR-0012](../../docs/adr/0012-start-profile.md)). The
@@ -78,7 +94,7 @@ default. Empty and whitespace-only values count as unset.
 | `control_points` | — | none | Local values per control point (`define_control_points`). Ignored in remote mode. |
 | `mode` | — | inferred | `Some(Mode::Remote)` or `Some(Mode::Local)`. Overrides inference. Remote without a key is a start error; local ignores a key (one warning). |
 | `environment` | `FIREWEAVE_ENV`, `APP_ENV` | — | Environment name used for inference when there is no key and no `mode`. Pass your own, e.g. a deploy-stage setting. `NODE_ENV` and `FW_ENV` are not read, and debug builds are never treated as development. |
-| `url` | `FIREWEAVE_URL` (legacy `FW_API_URL`, `FW_ATTEST_URL`) | from the crate version | A `-staging.N` crate version calls `staging-app-server.fireweave.ai`; any other calls `app-server.fireweave.ai`. Set it for a self-hosted or local fw-server: https is required except on localhost, and the allowlist becomes that host plus loopback. |
+| `url` | `FIREWEAVE_URL` (legacy `FW_API_URL`, `FW_ATTEST_URL`) | from the crate version | A `-rc.N` crate version calls `staging-app-server.fireweave.ai`; any other calls `app-server.fireweave.ai`. Set it for a self-hosted or local fw-server: https is required except on localhost, and the allowlist becomes that host plus loopback. |
 | `key` | `FIREWEAVE_KEY` (legacy `FW_PROJECT_API_KEY`) | — | Project key. Pass it to read from your own secret store. Browser keys, analytics vendor keys and org/CLI tokens are rejected at start, naming the source, never the value. |
 | `instance_id` | `FIREWEAVE_INSTANCE_ID` | `inst_` + hash of the host name | Value of `instance_key()`, the same key every FireWeave SDK derives on that host. Nothing is written to disk. Set it when replicas share a host name. |
 | `env` | — | the process | `Arc<dyn Fn(&str) -> Option<String>>` read instead of the process environment (tests, apps with their own config source); `env_map([...])` builds one from pairs. Return `None` for unset; apply no defaults. |

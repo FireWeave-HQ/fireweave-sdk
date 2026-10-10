@@ -46,7 +46,7 @@ func makeSources(
     platformProfile: profile,
     isDebugBuild: debug,
     channel: channel,
-    sdkVersion: channel == .staging ? "2.3.0-staging.1" : "2.2.0",
+    sdkVersion: channel == .staging ? "2.3.0-rc.1" : "2.2.0",
     makeStore: { store }
   )
 }

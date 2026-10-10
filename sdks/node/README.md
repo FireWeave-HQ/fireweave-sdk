@@ -68,7 +68,7 @@ Every value resolves as: `start()` option, then env var, then legacy name (warns
 | `controlPoints` | — | `{}` | Local values per control point. Ignored in remote mode. |
 | `mode` | — | inferred | `'remote'` or `'local'`. Overrides inference. `'remote'` without a key is a start error; `'local'` ignores a key. |
 | `environment` | `FIREWEAVE_ENV`, `APP_ENV`, `NODE_ENV` | — | Environment name used for inference when there is no key and no `mode`. Pass your own, e.g. `environment: process.env.DEPLOY_STAGE`. |
-| `url` | `FIREWEAVE_URL` (legacy `FW_API_URL`, `FW_ATTEST_URL`) | from the SDK build | A `-staging.N` build calls `staging-app-server.fireweave.ai`; any other calls `app-server.fireweave.ai`. Set it for a self-hosted or local fw-server. |
+| `url` | `FIREWEAVE_URL` (legacy `FW_API_URL`, `FW_ATTEST_URL`) | from the SDK build | A `-rc.N` build (`@next`) calls `staging-app-server.fireweave.ai`; any other calls `app-server.fireweave.ai`. Set it for a self-hosted or local fw-server. |
 | `key` | `FIREWEAVE_KEY` (legacy `FW_PROJECT_API_KEY`) | — | Project key. Pass it to read from your own secret store. Browser keys and vendor keys are rejected at start. |
 | `instanceId` | `FIREWEAVE_INSTANCE_ID` | hash of the host name | Value of `fw.instanceKey()`. Nothing is written to disk. |
 | `env` | — | the process | Read values from this object instead of the environment. |

@@ -34,35 +34,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added — Python `fireweave` start profile ([ADR-0012](docs/adr/0012-start-profile.md), proposed)
 
 - New subpackage `fireweave.start` (`start`, `fw`, `define_flags`). Keyword-only options `flags`, `mode`, `environment`, `url`, `key`, `instance_id`, `env`, `log`, with the same env fallbacks, mode rule and key checks as the server SDK. Legacy `FW_PROJECT_API_KEY`, `FW_API_URL` and `FW_ATTEST_URL` are read with a one-time warning.
-- The default endpoint follows the installed package's version: a PEP 440 prerelease (staging builds are `X.Y.ZaN`) calls staging, anything else production.
+- The default endpoint follows the installed package's version: staging builds are `X.Y.ZrcN` on PyPI; any PEP 440 pre-release or dev release calls staging, anything else production.
 - A read before `start()` starts from the environment at once; the first explicit `start()` replaces that start once, with a warning. The client is rebuilt in a forked child.
 - The core package and `init_fireweave` are unchanged and still read no environment.
 
 ### Added — Go start profile, package `fw` ([ADR-0012](docs/adr/0012-start-profile.md), proposed)
 
 - New package `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/fw`: `Start(Options)`, `MustStart`, `DefineFlags`, `ControlPoints()`, `For`, `Identify`, `InstanceKey`, `Status`, `Client`, `Shutdown`. Options `Flags`, `Mode`, `Environment`, `URL`, `Key`, `InstanceID`, `Env`, `Log`, with the same env fallbacks, mode rule and key checks as the server SDK.
-- The default endpoint follows the SDK module version in the binary's build info: `vX.Y.Z-staging.N` calls staging, anything else (including a local checkout) production.
+- The default endpoint follows the SDK module version in the binary's build info: `vX.Y.Z-rc.N` calls staging, anything else (including a local checkout and a pseudo-version of `main`) production.
 - `Client()` is one permanent `*fireweave.Client` for the process, so a pointer captured before `Start` keeps working.
 - The core packages are unchanged apart from re-exporting `fireweave.ValidateControlPointKey`, and still read no environment.
 
 ### Added — Java start profile, package `ai.fireweave.sdk.start` ([ADR-0012](docs/adr/0012-start-profile.md), proposed)
 
 - `Fw.start(StartOptions)`, `Fw.defineFlags`, `Fw.controlPoints()`, `Fw.identify`, `Fw.instanceKey`, `Fw.status`, `Fw.client`, `Fw.shutdown`. `StartOptions.builder()` takes `flags`, `mode`, `environment`, `url`, `key`, `instanceId`, `env` and `log`, with the same env fallbacks, mode rule and key checks as the server SDK.
-- The default endpoint follows this artifact's version, read from a Maven-filtered `build.properties`: `X.Y.Z-staging.N` calls staging, anything else production.
+- The default endpoint follows this artifact's version, read from a Maven-filtered `build.properties`: `X.Y.Z-rc.N` (on Maven Central) calls staging, anything else production. A Maven range or Gradle dynamic version can resolve an rc; write an exact plain version for production.
 - `Fw.client()` is one permanent `FireweaveClient` for the JVM, so a reference captured before `start` keeps working.
 - The core packages are unchanged and still read no environment. The architecture guard now allows the `start` package as the one sanctioned addition beside the three layers.
 
 ### Added — Rust start profile, module `fireweave::start` ([ADR-0012](docs/adr/0012-start-profile.md), proposed)
 
 - `start(StartOptions)`, `define_flags`, `control_points()`, `identify`, `instance_key`, `status`, `client`, `shutdown`. `StartOptions` fields `flags`, `mode`, `environment`, `url`, `key`, `instance_id`, `env` and `log`, with the same env fallbacks, mode rule and key checks as the server SDK. No new dependencies.
-- The default endpoint follows the crate version compiled into the app (`CARGO_PKG_VERSION`): `X.Y.Z-staging.N` calls staging, anything else production.
+- The default endpoint follows the crate version compiled into the app (`CARGO_PKG_VERSION`): `X.Y.Z-rc.N` calls staging, anything else production.
 - `client()` is one permanent `FireweaveClient` for the process.
 - The core is unchanged apart from `pub mod start;`, and still reads no environment.
 
 ### Added — Dart start profile, `package:fireweave/client.dart` and `server.dart` ([ADR-0012](docs/adr/0012-start-profile.md), proposed)
 
 - `await Fireweave.start(flags: …)` and a per-isolate `fw` in two profiles. The client profile (Flutter, Dart web) takes a browser key from options or the compile-time defines `FIREWEAVE_BROWSER_KEY`, `FIREWEAVE_URL` and `FIREWEAVE_ENV`, never throws (a fault sets `failed` with a `problem`), and offers `identify`, `reset`, `deviceId` and a `DeviceIdStore` persistence hook. The server profile (Dart VM) reads `FIREWEAVE_*` from the process environment, takes project keys, throws a `Configuration` error on a fault, and offers `instanceKey`.
-- The default endpoint follows `lib/src/start/build_info.dart`, which `version.sh apply dart` now stamps: `-staging.N` calls staging.
+- The default endpoint follows `lib/src/start/build_info.dart`, which `version.sh apply dart` now stamps: `-rc.N` calls staging.
 - The start layer owns and closes its own `dart:io` transport and logs each remote error kind once. No new dependencies; the core is unchanged.
 
 ### Added — Swift start profile, product `FireweaveStart` ([ADR-0012](docs/adr/0012-start-profile.md), proposed)
@@ -74,7 +74,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added — start-profile spec and shared conformance suite
 
 - `spec/start-profile.md`: the normative rules (SP-1…SP-26) for the start profile on every SDK — profiles, names, precedence, the fail-closed mode rule, the release-channel endpoint, key families, flags, idempotency, the instance key with FNV-1a test vectors. `spec/modes.md` now scopes "reads no environment" to the core.
-- `contracts/start/`: 14 fixtures (101 cases) with a closed schema, run by each SDK's own tests and validated by `tools/conformance/compare-start.mjs` in CI.
+- `contracts/start/`: 14 fixtures (110 cases) with a closed schema, run by each SDK's own tests and validated by `tools/conformance/compare-start.mjs` in CI.
 
 ### Changed — shared contracts (proposed with ADR-0012)
 
@@ -97,7 +97,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Release
 
-- Java staging releases publish `X.Y.Z-staging.N` to Maven Central (previously uploaded unpublished), so an app can opt into the staging channel by version.
+- Java staging releases publish `X.Y.Z-rc.N` to Maven Central (previously uploaded unpublished), so an app can opt into the staging channel by version.
+- Staging builds are `X.Y.Z-rc.N` (Python `X.Y.ZrcN`); `version.sh compute` refuses any other staging spelling.
+- **Breaking:** from 3.0.0, `-staging.N` no longer means staging: the semver SDKs call it production, and only a version containing `-rc.` calls staging (spec SP-13; Python keeps "any PEP 440 pre-release or dev release").
+- Python staging builds moved from TestPyPI to PyPI (`pip install fireweave==X.Y.ZrcN`).
+- New `version.sh check-stamp <component> <channel>`: every publish job checks the stamped workspace's channel after `apply` and before publishing.
+- Rust, Dart and Swift tags point at a detached release commit carrying the applied version and stamp (`version.sh release-commit`), so a build from the tag calls the right channel.
+- The tag-push publish paths of `publish-java.yml` (`java/v*`) and `publish-python.yml` (`python/v*`) are retired; both are dispatch-only manual recovery for a plain version, and `release.yml` is the publish path.
+- Swift is not in rc cuts (`all` omits it) until its mirror exists.
 - New `publish-swift-mirror` job pushes `sdks/swift` to a mirror repository with a root `Package.swift` and plain semver tags, which SwiftPM can resolve. It fails closed until the mirror and its deploy key are provisioned (`.github/RELEASE.md`).
 
 ### Fixed

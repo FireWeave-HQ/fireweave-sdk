@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "start-channel-rule-pep440",
   "suite": "start",
-  "description": "Release channel from a PEP 440 version (Python)",
+  "description": "Release channel from a PEP 440 version (Python): any pre-release or dev release is staging; the release tooling emits only X.Y.ZrcN",
   "rules": [
     "SP-13"
   ],
@@ -20,20 +20,30 @@
       }
     },
     {
-      "name": "alpha-is-staging",
+      "name": "release-candidate-is-staging",
       "when": {
         "operation": "channelForVersion",
-        "version": "2.4.0a1"
+        "version": "2.4.0rc1"
       },
       "expect": {
         "channel": "staging"
       }
     },
     {
-      "name": "release-candidate-is-staging",
+      "name": "rc-unnormalised-is-staging",
       "when": {
         "operation": "channelForVersion",
-        "version": "2.4.0rc1"
+        "version": "2.4.0-rc.1"
+      },
+      "expect": {
+        "channel": "staging"
+      }
+    },
+    {
+      "name": "alpha-is-staging",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "2.4.0a1"
       },
       "expect": {
         "channel": "staging"

@@ -212,7 +212,7 @@ public final class Fw {
     }
 
     /**
-     * This SDK's version as Maven built it (for example {@code 2.4.0} or {@code 2.4.0-staging.1}),
+     * This SDK's version as Maven built it (for example {@code 2.4.0} or {@code 2.4.0-rc.1}),
      * or {@code (devel)} when the build recorded none.
      */
     public static String sdkVersion() {
@@ -220,7 +220,7 @@ public final class Fw {
     }
 
     /**
-     * The release channel of this SDK build: {@code STAGING} for a {@code -staging.N} version,
+     * The release channel of this SDK build: {@code STAGING} for a {@code -rc.N} version,
      * {@code PRODUCTION} for anything else. It picks the default endpoint.
      */
     public static SdkChannel sdkChannel() {

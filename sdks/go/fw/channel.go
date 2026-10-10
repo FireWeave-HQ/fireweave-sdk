@@ -25,10 +25,17 @@ const develVersion = "(devel)"
 
 // channelForVersion is the channel rule, as a pure function of a module
 // version. tools/release/version.sh tags a Go staging release
-// sdks/go/vX.Y.Z-staging.N, so the module version a consumer resolves is
-// vX.Y.Z-staging.N. Anything else, including (devel), is production.
+// sdks/go/vX.Y.Z-rc.N, so the module version a consumer resolves is
+// vX.Y.Z-rc.N. Anything else, including (devel), is production.
+//
+// -staging.N stopped being a staging spelling at 3.0.0. Go bases a
+// pseudo-version on the highest semver tag among the commit's ancestors, and
+// the legacy sdks/go/v3.0.0-staging.1 tag outranks every rc, so a
+// pseudo-version of main (v3.0.0-staging.1.0.<ts>-<sha>) is production until
+// v3.0.0 is tagged: an untagged main build is a development build, like
+// (devel).
 func channelForVersion(version string) Channel {
-	if strings.Contains(version, "-staging.") {
+	if strings.Contains(version, "-rc.") {
 		return ChannelStaging
 	}
 	return ChannelProduction
@@ -69,10 +76,11 @@ var buildVersion = sync.OnceValue(func() string {
 })
 
 // SDKVersion is this SDK's module version as recorded in the binary's build
-// info (for example "v2.4.0" or "v2.4.0-staging.1"), or "(devel)" when the
+// info (for example "v2.4.0" or "v2.4.0-rc.1"), or "(devel)" when the
 // build info has none.
 func SDKVersion() string { return buildVersion() }
 
 // SDKChannel is the release channel of this SDK build: staging for a
-// -staging.N version, production for anything else.
+// -rc.N version, production for anything else (including -staging.N, which
+// stopped being a staging spelling at 3.0.0, and pseudo-versions of main).
 func SDKChannel() Channel { return channelForVersion(SDKVersion()) }

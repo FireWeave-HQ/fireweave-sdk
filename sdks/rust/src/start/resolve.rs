@@ -414,7 +414,7 @@ mod tests {
 
     fn staging() -> BuildInfo {
         BuildInfo {
-            version: "2.4.0-staging.3".to_string(),
+            version: "2.4.0-rc.3".to_string(),
             channel: Channel::Staging,
         }
     }
@@ -675,7 +675,7 @@ mod tests {
         );
         assert_eq!(r.url_source.as_deref(), Some("SDK channel (staging)"));
         assert_eq!(r.channel, Channel::Staging);
-        assert_eq!(r.sdk_version, "2.4.0-staging.3");
+        assert_eq!(r.sdk_version, "2.4.0-rc.3");
     }
 
     #[test]

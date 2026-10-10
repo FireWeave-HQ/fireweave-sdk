@@ -209,11 +209,19 @@ class TestKey:
 class TestChannel:
     @pytest.mark.parametrize(
         "version",
-        ["2.4.0a1", "2.4.0a12", "2.4.0b1", "2.4.0rc2", "2.4.0c1", "2.4.0.dev3", "2.4.0a1.dev1",
+        ["3.0.0rc1", "3.0.0-rc.1", "3.0.0a1",
+         "2.4.0a1", "2.4.0a12", "2.4.0b1", "2.4.0rc2", "2.4.0c1", "2.4.0.dev3", "2.4.0a1.dev1",
          "2.4.0-alpha.1", "2.4.0.post1.dev2", "1!2.4.0a1", "2.4.0a1+local.7"],
     )
     def test_a_pep440_prerelease_is_staging(self, version):
         assert channel_for_version(version) == "staging"
+
+    def test_a_dev_store_version_is_staging_in_python_only(self):
+        # Known divergence (SP-13): the semver SDKs call a dev-store build
+        # (3.0.0-dev.<stamp>.<sha>) production, while PEP 440 reads -dev. as a
+        # dev release, which Python calls staging. The dev store publishes
+        # node/web only, so no Python build carries this version.
+        assert channel_for_version("3.0.0-dev.20261009.abc") == "staging"
 
     @pytest.mark.parametrize(
         "version", ["2.4.0", "2.2.0", "2.4.0.post1", "2.4.0-1", "2.4.0+local", "0+unknown", "", "garbage"]

@@ -17,6 +17,6 @@ test('SDK_VERSION matches package.json', () => {
   assert.equal(SDK_VERSION, manifest.version);
 });
 
-test('SDK_CHANNEL follows the version: -staging.N builds are staging', () => {
-  assert.equal(SDK_CHANNEL, /-staging\.\d+$/.test(manifest.version) ? 'staging' : 'production');
+test('SDK_CHANNEL follows the version: -rc.N builds are staging', () => {
+  assert.equal(SDK_CHANNEL, /-rc\./.test(manifest.version) ? 'staging' : 'production');
 });

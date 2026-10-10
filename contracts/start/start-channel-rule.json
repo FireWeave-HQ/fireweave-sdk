@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "start-channel-rule",
   "suite": "start",
-  "description": "Release channel from a semver-style version",
+  "description": "Release channel from a semver-style version: a version containing -rc. is staging; everything else is production",
   "rules": [
     "SP-13"
   ],
@@ -20,30 +20,110 @@
       }
     },
     {
-      "name": "staging-is-staging",
+      "name": "rc-is-staging",
       "when": {
         "operation": "channelForVersion",
-        "version": "2.4.0-staging.1"
+        "version": "2.4.0-rc.1"
       },
       "expect": {
         "channel": "staging"
       }
     },
     {
-      "name": "go-tag-staging-is-staging",
+      "name": "go-tag-rc-is-staging",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "v2.4.0-rc.12"
+      },
+      "expect": {
+        "channel": "staging"
+      }
+    },
+    {
+      "name": "legacy-staging-is-production",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "2.4.0-staging.1"
+      },
+      "expect": {
+        "channel": "production"
+      }
+    },
+    {
+      "name": "legacy-go-tag-staging-is-production",
       "when": {
         "operation": "channelForVersion",
         "version": "v2.4.0-staging.12"
       },
       "expect": {
-        "channel": "staging"
+        "channel": "production"
       }
     },
     {
       "name": "other-prerelease-is-production",
       "when": {
         "operation": "channelForVersion",
-        "version": "2.4.0-rc.1"
+        "version": "2.4.0-beta.1"
+      },
+      "expect": {
+        "channel": "production"
+      }
+    },
+    {
+      "name": "rc-without-iteration-is-production",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "2.4.0-rc"
+      },
+      "expect": {
+        "channel": "production"
+      }
+    },
+    {
+      "name": "build-metadata-is-production",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "2.4.0+rc.1"
+      },
+      "expect": {
+        "channel": "production"
+      }
+    },
+    {
+      "name": "go-pseudo-of-rc-is-staging",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "v3.0.0-rc.1.0.20261010120000-abcdef123456"
+      },
+      "expect": {
+        "channel": "staging"
+      }
+    },
+    {
+      "name": "go-pseudo-of-legacy-staging-is-production",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "v3.0.0-staging.1.0.20261010120000-abcdef123456"
+      },
+      "expect": {
+        "channel": "production"
+      }
+    },
+    {
+      "name": "go-pseudo-of-release-is-production",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "v3.0.1-0.20261010120000-abcdef123456"
+      },
+      "expect": {
+        "channel": "production"
+      }
+    },
+    {
+      "name": "dev-store-is-production",
+      "when": {
+        "operation": "channelForVersion",
+        "version": "3.0.0-dev.20261009.abc1234"
       },
       "expect": {
         "channel": "production"
@@ -91,9 +171,9 @@
     "dart": "not-applicable"
   },
   "limitations": {
-    "node": "the channel is stamped at release by tools/release/version.sh (covered by tools/release/version.test.sh), not computed at run time",
-    "web": "the channel is stamped at release by tools/release/version.sh (covered by tools/release/version.test.sh), not computed at run time",
+    "node": "the channel is stamped at release by tools/release/version.sh (covered by tools/release/version.test.sh), not computed at run time; from 3.0.0 the stamp is staging only for an X.Y.Z-rc.N version (-staging.N stopped being a staging spelling at 3.0.0)",
+    "web": "the channel is stamped at release by tools/release/version.sh (covered by tools/release/version.test.sh), not computed at run time; from 3.0.0 the stamp is staging only for an X.Y.Z-rc.N version (-staging.N stopped being a staging spelling at 3.0.0)",
     "python": "python staging versions are PEP 440 pre-releases; see start-channel-rule-pep440",
-    "dart": "the channel is stamped at release by tools/release/version.sh (covered by tools/release/version.test.sh), not computed at run time"
+    "dart": "the channel is stamped at release by tools/release/version.sh (covered by tools/release/version.test.sh), not computed at run time; from 3.0.0 the stamp is staging only for an X.Y.Z-rc.N version (-staging.N stopped being a staging spelling at 3.0.0)"
   }
 }

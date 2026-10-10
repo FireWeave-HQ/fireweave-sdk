@@ -47,6 +47,21 @@ dependencies:
     path: ../fireweave-sdk/sdks/dart
 ```
 
+**Staging builds** are `X.Y.Z-rc.N` and call `staging-app-server.fireweave.ai`. pub.dev never
+receives one, so a staging build comes from its git tag, the highest `dart/vX.Y.Z-rc.N`:
+
+```yaml
+dependencies:
+  fireweave:
+    git:
+      url: https://github.com/FireWeave-HQ/fireweave-sdk
+      path: sdks/dart
+      ref: dart/v3.0.0-rc.1
+```
+
+This is the one Dart install that records an exact build: `ref` pins the tag. To move to a newer
+staging build, change `ref` to the higher `dart/v…-rc.N` tag and run `dart pub get`.
+
 ## Quick start (one line: the start profile)
 
 The start profile ([ADR-0012](../../docs/adr/0012-start-profile.md)) is one awaited call over
@@ -177,7 +192,7 @@ unset.
 | `controlPoints` | — | — | `{}` | `defineControlPoints({...})`, checked with the core's key rule. Served in local mode only; a local read of a key missing from it gets its default and warns once. |
 | `mode` | — | — | inferred | `Mode.local` or `Mode.remote`; see the mode rule. |
 | `environment` | `FIREWEAVE_ENV` | `FIREWEAVE_ENV`, then `APP_ENV` | — | Only feeds the mode rule. `FW_ENV` is not read. |
-| `url` | `FIREWEAVE_URL` | `FIREWEAVE_URL`, then legacy `FW_API_URL` / `FW_ATTEST_URL` (one warning) | this build's channel | `-staging.N` builds call `https://staging-app-server.fireweave.ai`, others `https://app-server.fireweave.ai`. https only, except `localhost`, `127.0.0.1` and `::1`. An override is the only extra allowed host. |
+| `url` | `FIREWEAVE_URL` | `FIREWEAVE_URL`, then legacy `FW_API_URL` / `FW_ATTEST_URL` (one warning) | this build's channel | `-rc.N` builds call `https://staging-app-server.fireweave.ai`, others `https://app-server.fireweave.ai`. https only, except `localhost`, `127.0.0.1` and `::1`. An override is the only extra allowed host. |
 | `key` | `FIREWEAVE_BROWSER_KEY` | `FIREWEAVE_KEY`, then legacy `FW_PROJECT_API_KEY` (one warning) | — | Client: browser keys (`fw_public_…`) only; a server key gets a revoke instruction. Server: browser keys, analytics vendor keys and org/CLI tokens are refused. Messages name the source, never the value. |
 | `deviceId` (client) | — | — | in-memory `dev_<uuid>` | App-supplied anonymous id. |
 | `deviceIdStore` (client) | — | — | none | Persists the device id. |

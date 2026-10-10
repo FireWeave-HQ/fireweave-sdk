@@ -9,7 +9,7 @@ import java.util.Properties;
  *
  * <p>{@code build.properties} beside this class is filtered by Maven
  * ({@code fireweave-sdk/pom.xml}) to {@code version=${project.version}}. tools/release/version.sh
- * writes a Java staging release as {@code X.Y.Z-staging.N}, so that is what a staging artifact
+ * writes a Java staging release as {@code X.Y.Z-rc.N}, so that is what a staging artifact
  * carries; a production release is {@code X.Y.Z}, and a local build {@code X.Y.Z-SNAPSHOT}.
  */
 final class BuildInfo {
@@ -23,11 +23,12 @@ final class BuildInfo {
     }
 
     /**
-     * The channel rule, as a pure function of a version string: a {@code -staging.} version is
-     * staging; anything else, including {@code (devel)} and {@code -SNAPSHOT}, is production.
+     * The channel rule, as a pure function of a version string: a {@code -rc.} version is
+     * staging; anything else, including {@code (devel)}, {@code -SNAPSHOT} and {@code -staging.N}
+     * (no longer a staging spelling from 3.0.0), is production.
      */
     static SdkChannel channelForVersion(String version) {
-        return version != null && version.contains("-staging.") ? SdkChannel.STAGING : SdkChannel.PRODUCTION;
+        return version != null && version.contains("-rc.") ? SdkChannel.STAGING : SdkChannel.PRODUCTION;
     }
 
     /** The version recorded in {@code in}, or {@link #DEVEL_VERSION}. Never throws. */

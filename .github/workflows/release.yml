@@ -3,13 +3,15 @@
 # DRY-RUN BY DEFAULT. Builds, changelogs, SBOMs, checksums; optionally tags.
 #
 # Inputs: `component` (server|web|python|java|go|rust|swift|dart|all —
-# `all` fans out via matrix), `bump` (patch|minor|major — computed from the component's
+# `all` fans out via matrix over every component except swift, which stays out
+# of `all` until the Swift mirror exists; a staging `component=swift` is
+# refused in `validate`), `bump` (patch|minor|major — computed from the component's
 # OWN current manifest version by tools/release/version.sh; there is no
 # free-text `version` input anymore), `channel` (staging|production),
 # `dry_run` (default true).
 #
 # Staging identity is a VERSION SUFFIX, not an npm dist-tag: a staging
-# release is `X.Y.Z-staging.N` (N read from the ecosystem's registry by
+# release is `X.Y.Z-rc.N` (python `X.Y.ZrcN`; N read from the ecosystem's registry by
 # tools/release/version.sh — never a local file, so two operators releasing
 # from different branches both see the true next N). A dist-tag is a mutable
 # pointer — the same bytes can be staging today and production tomorrow, and
@@ -32,19 +34,26 @@
 # STAGING PUBLISH (authorized 2026-07-27): npm (server) + TestPyPI + Go
 # proxy warm are enabled only when dry_run=false AND channel=staging AND the
 # matching component is selected. Requires trusted publishers / secrets (see
-# RELEASE.md).
+# RELEASE.md). Python staging moved from TestPyPI to PyPI on 2026-10-09: an
+# `X.Y.ZrcN` goes to pypi.org with the production token, on environment
+# `release`; pip skips it unless the requirement pins it.
+#
+# Every publish job runs `version.sh check-stamp` after `apply`: it fails
+# unless the stamped artifact calls the channel this run was dispatched on.
 #
 # STAGING PUBLISH SCOPE EXTENDED (2026-08-21): npm for `web` (identical
 # OIDC trusted-publish mechanism as the already-authorized `server`) and a
 # rust `cargo publish --dry-run` (packages + validates only; never uploads —
 # see below) were added to the same dry_run=false AND channel=staging gate.
 #
-# rust and swift have no staging registry at all (crates.io has no TestPyPI
-# equivalent, and yanking is not deletion — a real staging publish would
+# rust and swift have no staging registry at all (crates.io has no staging
+# index, and yanking is not deletion — a real staging publish would
 # spend the version permanently): rust staging stops at
 # `cargo publish --dry-run` plus the git tag; go staging (and production)
 # resolve from the git tag alone. swift publishes by pushing sdks/swift to a
-# mirror repository and tagging it there (publish-swift-mirror, decision D5).
+# mirror repository and tagging it there (publish-swift-mirror, decision D5);
+# it is out of `all` and of every rc cut until that mirror and
+# SWIFT_MIRROR_DEPLOY_KEY exist (RELEASE.md "Company-side provisioning").
 #
 # dart (ADR-0011, added 2026-09-02 during the dart-sdk implementation
 # work — NOT a separate human authorization; flag for a human to confirm)
@@ -56,11 +65,13 @@
 # publish until automated publishing is enabled for the package on pub.dev,
 # so this fails closed by construction.
 #
-# Production PyPI is enabled via channel=production (component=python) and also
-# via the dedicated tag-triggered workflow publish-python.yml (python/v*).
-# Maven Central is enabled via channel staging/production (component=java) and
-# via publish-java.yml (tag java/v*) — requires MAVEN_CENTRAL_* and
-# MAVEN_GPG_* secrets. Missing secrets fail closed.
+# PyPI is enabled via channel staging/production (component=python), and
+# Maven Central via channel staging/production (component=java) — the latter
+# requires MAVEN_CENTRAL_* and MAVEN_GPG_* secrets. Missing secrets fail
+# closed. This workflow's dispatch is the only routine publish path: the
+# tag-push triggers of publish-python.yml (python/v*) and publish-java.yml
+# (java/v*) are retired; both remain dispatch-only manual recovery paths for a
+# plain version.
 # rust production (`cargo publish`) requires CARGO_REGISTRY_TOKEN — missing
 # fails closed the same way.
 # Production npm (dist-tag latest, both server and web) was HARD-DISABLED
@@ -73,10 +84,11 @@
 # Two GitHub environments: `release` (production — keeps the required-
 # reviewer gate) and `release-staging` (staging — no reviewer gate; exists so
 # a workflow bug can never reach production secrets from a staging run).
-# Java is the one exception: Maven Central Portal has no separate staging
-# registry or credentials, so publish-maven stays on `environment: release`
-# for BOTH channels (autoPublish is what actually differs by channel there)
-# — see RELEASE.md.
+# Java and Python are the two exceptions: an rc publishes to the production
+# registry itself (Maven Central, autoPublish=true on both channels; pypi.org),
+# which has no separate staging credentials, so publish-maven and publish-pypi
+# run on `environment: release` and a Java or Python staging run needs the
+# `release` reviewer approval — see RELEASE.md.
 #
 # Tag convention (org): <component>/v<semver>
 #   server -> server/v0.1.0   (renamed from `node` — see below)
@@ -111,7 +123,7 @@ on:
         options: [patch, minor, major]
         default: patch
       channel:
-        description: 'Distribution channel (staging = version suffix -staging.N / TestPyPI / cargo --dry-run / Maven staging)'
+        description: 'Distribution channel (staging = version suffix -rc.N (Python rcN) / PyPI / Maven Central / cargo --dry-run)'
         required: true
         type: choice
         options: [staging, production]
@@ -140,10 +152,18 @@ jobs:
         id: compute
         env:
           COMPONENT: ${{ inputs.component }}
+          CHANNEL: ${{ inputs.channel }}
         run: |
           if [ "$COMPONENT" = all ]; then
-            component_list='["server","web","python","java","go","rust","swift","dart"]'
+            # swift returns to this list when the Swift mirror and
+            # SWIFT_MIRROR_DEPLOY_KEY exist (RELEASE.md "Company-side
+            # provisioning"); until then publish-swift-mirror fails closed.
+            component_list='["server","web","python","java","go","rust","dart"]'
           else
+            if [ "$COMPONENT" = swift ] && [ "$CHANNEL" = staging ]; then
+              echo "::error::Swift is excluded from rc cuts until the Swift mirror exists (RELEASE.md, O4)"
+              exit 1
+            fi
             component_list="[\"$COMPONENT\"]"
           fi
           echo "components=$component_list" >> "$GITHUB_OUTPUT"
@@ -325,6 +345,14 @@ jobs:
   # green. Matrixed the same way `build` is, since each component gets its
   # own tag; reads the version/tag computed by build's matching leg from the
   # release-info-<component> artifact rather than recomputing it.
+  #
+  # Rust, Dart and Swift are consumed straight from this tag (Rust and Dart
+  # staging builds have no registry upload; Swift is tag-only), so their tag
+  # points at a detached release commit carrying the applied version and
+  # stamp (`version.sh release-commit`), never at the unstamped checkout.
+  # Only the tag is pushed; main is untouched. The other components tag the
+  # checkout: Go's tag is its version, and server/web/python/java consumers
+  # use the registry artifact, stamped in its publish job.
   # =========================================================================
   tag:
     name: create + push release tag (${{ matrix.component }})
@@ -335,6 +363,9 @@ jobs:
       matrix:
         component: ${{ fromJson(needs.validate.outputs.components) }}
     runs-on: ubuntu-latest
+    # The same environment the channel's publish jobs use, so a release tag
+    # (for go, the whole release) passes the same gate as the publish.
+    environment: ${{ inputs.channel == 'production' && 'release' || 'release-staging' }}
     permissions:
       contents: write
     steps:
@@ -353,10 +384,20 @@ jobs:
         # re-create this tag locally with `git tag -s` or enable gitsign here.
         env:
           TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.version.outputs.release_version }}
+          COMPONENT: ${{ matrix.component }}
+          CHANNEL: ${{ inputs.channel }}
         run: |
           git config user.name "fireweave-release-bot"
           git config user.email "releases@fireweave.ai"
-          git tag -a "$TAG" -m "Release ${TAG} (channel: ${{ inputs.channel }})"
+          TARGET=HEAD
+          case "$COMPONENT" in
+            rust|dart|swift)
+              TARGET="$(tools/release/version.sh release-commit "$COMPONENT" "$RELEASE_VERSION")"
+              tools/release/version.sh check-stamp "$COMPONENT" "$CHANNEL"
+              ;;
+          esac
+          git tag -a "$TAG" "$TARGET" -m "Release ${TAG} (channel: ${CHANNEL})"
           git push origin "refs/tags/${TAG}"
 
   # =========================================================================
@@ -416,6 +457,14 @@ jobs:
           fi
       - name: Apply computed version
         run: tools/release/version.sh apply server "${{ steps.version.outputs.release_version }}"
+      - name: Check the stamped channel before publishing
+        run: tools/release/version.sh check-stamp server "${{ inputs.channel }}"
+      - name: Run the build-info test against the stamped tree
+        working-directory: sdks/node
+        run: |
+          npm ci
+          npm run build
+          npx tsx --test test/unit/start-build-info.test.ts
       - name: Build and publish @fireweaveai/server-sdk
         working-directory: sdks/node
         env:
@@ -466,12 +515,17 @@ jobs:
           fi
       - name: Apply computed version
         run: tools/release/version.sh apply web "${{ steps.version.outputs.release_version }}"
+      - name: Check the stamped channel before publishing
+        run: tools/release/version.sh check-stamp web "${{ inputs.channel }}"
       - name: Install workspace dependencies (bun — see comment above)
         working-directory: sdks/web
         run: bun install --frozen-lockfile
       - name: Build @fireweaveai/web-sdk (bun — see comment above)
         working-directory: sdks/web
         run: bun run build
+      - name: Run the build-info test against the stamped tree
+        working-directory: sdks/web
+        run: bun test ./test/unit/start-build-info.test.ts
       - name: Publish @fireweaveai/web-sdk (npm — OIDC trusted publisher)
         working-directory: sdks/web
         env:
@@ -486,8 +540,9 @@ jobs:
   # needs bun (see publish-npm-web's comment) while server does not.
   #
   # `dist_tag` comes from version.sh compute, which already resolves to
-  # `latest` for channel=production and `next` for staging (version.sh:497-501)
-  # — the tag is never hardcoded here, so the two channels cannot drift.
+  # `latest` for channel=production and `next` for staging (cmd_compute's
+  # dist_tag case in version.sh) — the tag is never hardcoded here, so the two
+  # channels cannot drift.
   #
   # environment: release — same gate as every other production publish job, so
   # adding required reviewers to that environment covers npm too. NOTE: the npm
@@ -563,6 +618,14 @@ jobs:
           )"
       - name: Apply computed version
         run: tools/release/version.sh apply server "${{ steps.version.outputs.release_version }}"
+      - name: Check the stamped channel before publishing
+        run: tools/release/version.sh check-stamp server "${{ inputs.channel }}"
+      - name: Run the build-info test against the stamped tree
+        working-directory: sdks/node
+        run: |
+          npm ci
+          npm run build
+          npx tsx --test test/unit/start-build-info.test.ts
       - name: Build and publish @fireweaveai/server-sdk
         working-directory: sdks/node
         env:
@@ -648,12 +711,17 @@ jobs:
           )"
       - name: Apply computed version
         run: tools/release/version.sh apply web "${{ steps.version.outputs.release_version }}"
+      - name: Check the stamped channel before publishing
+        run: tools/release/version.sh check-stamp web "${{ inputs.channel }}"
       - name: Install workspace dependencies (bun — see comment above)
         working-directory: sdks/web
         run: bun install --frozen-lockfile
       - name: Build @fireweaveai/web-sdk (bun — see comment above)
         working-directory: sdks/web
         run: bun run build
+      - name: Run the build-info test against the stamped tree
+        working-directory: sdks/web
+        run: bun test ./test/unit/start-build-info.test.ts
       - name: Publish @fireweaveai/web-sdk (npm — OIDC trusted publisher)
         working-directory: sdks/web
         env:
@@ -663,13 +731,16 @@ jobs:
           npm publish --provenance --access public --tag "$DIST_TAG"
 
   publish-pypi:
-    name: publish TestPyPI (staging)
+    name: publish PyPI (staging rc)
     needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'python') }}
     runs-on: ubuntu-latest
-    environment: release-staging
+    # An rc goes to pypi.org itself (X.Y.ZrcN; pip skips it unless pinned), so
+    # this job holds the production token and runs on `release`, behind its
+    # reviewer gate — see the header comment and RELEASE.md.
+    environment: release
     permissions:
-      id-token: write # optional OIDC; token path uses TEST_PYPI_API_TOKEN
+      id-token: write # optional OIDC; token path uses PYPI_API_TOKEN
       contents: read
     steps:
       - uses: actions/checkout@v5
@@ -680,12 +751,12 @@ jobs:
       - name: Load computed release version
         id: version
         run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
-      - name: Require TEST_PYPI_API_TOKEN
+      - name: Require PYPI_API_TOKEN
         env:
-          TEST_PYPI_API_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          if [ -z "${TEST_PYPI_API_TOKEN:-}" ]; then
-            echo "::error::TEST_PYPI_API_TOKEN secret is missing (set on environment 'release-staging')"
+          if [ -z "${PYPI_API_TOKEN:-}" ]; then
+            echo "::error::PYPI_API_TOKEN secret is missing (set on environment 'release')"
             exit 1
           fi
       - uses: actions/setup-python@v6
@@ -693,16 +764,18 @@ jobs:
           python-version: '3.14'
       - name: Apply computed version
         run: tools/release/version.sh apply python "${{ steps.version.outputs.release_version }}"
+      - name: Check the stamped channel before publishing
+        run: tools/release/version.sh check-stamp python "${{ inputs.channel }}"
       - name: Build sdist + wheel
         run: |
           python -m pip install build
           python -m build --outdir dist/ sdks/python
-      - name: Publish to TestPyPI
+      - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          repository-url: https://test.pypi.org/legacy/
           packages-dir: dist/
-          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          verbose: true
 
   publish-pypi-production:
     name: publish PyPI (production)
@@ -727,6 +800,8 @@ jobs:
           python-version: '3.14'
       - name: Apply computed version
         run: tools/release/version.sh apply python "${{ steps.version.outputs.release_version }}"
+      - name: Check the stamped channel before publishing
+        run: tools/release/version.sh check-stamp python "${{ inputs.channel }}"
       - name: Build sdist + wheel
         run: |
           python -m pip install --upgrade pip build
@@ -744,9 +819,9 @@ jobs:
     if: ${{ inputs.dry_run == false && contains(fromJson(needs.validate.outputs.components), 'java') }}
     runs-on: ubuntu-latest
     # Stays on `release` for BOTH channels: Maven Central Portal has no
-    # separate staging registry or credential set (autoPublish=false is what
-    # makes a staging deploy non-final, not a different secret) — see
-    # RELEASE.md and the header comment above.
+    # separate staging registry or credential set, and both channels publish
+    # to Central with autoPublish=true (decision D4, reaffirmed 2026-10-09 as
+    # O3) — see RELEASE.md and the header comment above.
     environment: release
     permissions:
       contents: read
@@ -797,13 +872,17 @@ jobs:
         # of repeating the invocation inline keeps one implementation of "how
         # java's manifest gets written," exercised by version.test.sh.
         run: tools/release/version.sh apply java "${{ steps.version.outputs.release_version }}"
+      - name: Check the stamped channel before publishing
+        run: tools/release/version.sh check-stamp java "${{ inputs.channel }}"
       - name: Sign + deploy
         working-directory: sdks/java
-        # Both channels publish (decision D4, ADR-0012): a staging run deploys
-        # X.Y.Z-staging.N, which Maven resolves only when asked for exactly, so an
-        # app can opt into the staging channel by version and the start profile's
-        # channel rule (spec/start-profile.md SP-13) sees "-staging.". The guard
-        # keeps a staging run from ever publishing a plain release version.
+        # Both channels publish to Central with autoPublish=true (decision D4,
+        # ADR-0012; reaffirmed 2026-10-09 as O3): a staging run deploys
+        # X.Y.Z-rc.N, and the start profile's channel rule (spec/start-profile.md
+        # SP-13) sees "-rc.". An rc sorts below its own release, but Maven
+        # ranges, Gradle dynamic versions and Central's <latest>/<release>
+        # include it — an accepted risk recorded in RELEASE.md. The guard keeps
+        # a staging run from ever publishing anything but an rc.
         env:
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
@@ -812,8 +891,8 @@ jobs:
           CHANNEL: ${{ inputs.channel }}
         run: |
           case "$CHANNEL:$RELEASE_VERSION" in
-            staging:*-staging.*|production:*) ;;
-            *) echo "::error::staging must publish an X.Y.Z-staging.N version, got '$RELEASE_VERSION'"; exit 1 ;;
+            staging:*-rc.*|production:*) ;;
+            *) echo "::error::staging must publish an X.Y.Z-rc.N version, got '$RELEASE_VERSION'"; exit 1 ;;
           esac
           mvn -B -ntp -Prelease -DskipTests deploy \
             -Dcentral.autoPublish=true \
@@ -851,6 +930,8 @@ jobs:
           fi
       - name: Stamp the Swift build info for this version
         run: tools/release/version.sh apply swift "${{ steps.version.outputs.release_version }}"
+      - name: Check the stamped channel before publishing
+        run: tools/release/version.sh check-stamp swift "${{ inputs.channel }}"
       - name: Push sdks/swift to the mirror and tag it
         env:
           SWIFT_MIRROR_DEPLOY_KEY: ${{ secrets.SWIFT_MIRROR_DEPLOY_KEY }}
@@ -972,6 +1053,8 @@ jobs:
           # apply() rewrites Cargo.toml only; refresh Cargo.lock so --locked
           # does not fail on the package's own version field.
           (cd sdks/rust && cargo check --quiet)
+      - name: Check the stamped channel before publishing
+        run: tools/release/version.sh check-stamp rust "${{ inputs.channel }}"
       - name: cargo publish --dry-run (packages + validates only — never uploads)
         # No staging registry exists for crates.io (unlike TestPyPI) and
         # yanking is not deletion, so a real staging publish would spend the
@@ -1011,6 +1094,8 @@ jobs:
         run: |
           tools/release/version.sh apply rust "${{ steps.version.outputs.release_version }}"
           (cd sdks/rust && cargo check --quiet)
+      - name: Check the stamped channel before publishing
+        run: tools/release/version.sh check-stamp rust "${{ inputs.channel }}"
       - name: Publish to crates.io
         working-directory: sdks/rust
         env:
@@ -1037,6 +1122,13 @@ jobs:
           sdk: stable
       - name: Apply computed version
         run: tools/release/version.sh apply dart "${{ steps.version.outputs.release_version }}"
+      - name: Check the stamped channel before publishing
+        run: tools/release/version.sh check-stamp dart "${{ inputs.channel }}"
+      - name: Run the build-info test against the stamped tree
+        working-directory: sdks/dart
+        run: |
+          dart pub get
+          dart test test/start_build_info_test.dart
       - name: dart pub publish --dry-run (validates only — never uploads)
         # No staging registry exists for pub.dev (same situation as
         # crates.io) and a published version can only be retracted, never
@@ -1048,7 +1140,7 @@ jobs:
         # --ignore-warnings is required the same way cargo's --allow-dirty
         # is: `version.sh apply` rewrites pubspec.yaml in the workspace
         # (dirty tree), and package CHANGELOG.md does not list every
-        # -staging.N. Those are warnings; without --ignore-warnings dart
+        # -rc.N. Those are warnings; without --ignore-warnings dart
         # pub exits 65. (--force cannot be combined with --dry-run.)
         working-directory: sdks/dart
         run: |
@@ -1088,6 +1180,13 @@ jobs:
           fi
       - name: Apply computed version
         run: tools/release/version.sh apply dart "${{ steps.version.outputs.release_version }}"
+      - name: Check the stamped channel before publishing
+        run: tools/release/version.sh check-stamp dart "${{ inputs.channel }}"
+      - name: Run the build-info test against the stamped tree
+        working-directory: sdks/dart
+        run: |
+          dart pub get
+          dart test test/start_build_info_test.dart
       - name: Publish to pub.dev
         working-directory: sdks/dart
         run: |
