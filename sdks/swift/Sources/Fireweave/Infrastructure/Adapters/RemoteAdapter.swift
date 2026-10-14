@@ -221,7 +221,8 @@ public final class FireweaveRemoteAdapter: ControlPointsBackendAdapter, @uncheck
 
     var result: PrefetchResult = [:]
     for item in decisions {
-      guard let obj = item.objectValue, let controlPointKey = obj["controlPointKey"]?.stringValue else { continue }
+      guard let obj = item.objectValue, let controlPointKey = obj["controlPointKey"]?.stringValue
+      else { continue }
       // "found: false" on the wire means genuinely unknown to the
       // backend — leave the key OUT of the batch entirely (this
       // adapter's `missReason` is `nil`, so an absent key resolves to

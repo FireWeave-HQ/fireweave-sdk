@@ -22,7 +22,8 @@ public struct FireweaveLocalControlPoint: Sendable, Equatable, ExpressibleByBool
   }
 
   /// `defineControlPoints(["new-checkout": .local(true)])`.
-  public static func local(_ value: Bool, description: String? = nil) -> FireweaveLocalControlPoint {
+  public static func local(_ value: Bool, description: String? = nil) -> FireweaveLocalControlPoint
+  {
     FireweaveLocalControlPoint(localValue: value, description: description)
   }
 }
@@ -44,7 +45,9 @@ public typealias FireweaveLocalControlPoints = [String: FireweaveLocalControlPoi
 /// Every key is checked with the core's control point key rule. A bad key
 /// stops a debug build here, where it was typed; `startFireweave` rejects it
 /// with a Configuration error naming the key in every build.
-public func defineControlPoints(_ controlPoints: FireweaveLocalControlPoints) -> FireweaveLocalControlPoints {
+public func defineControlPoints(_ controlPoints: FireweaveLocalControlPoints)
+  -> FireweaveLocalControlPoints
+{
   if case .failure(let error) = normalizeControlPoints(controlPoints) {
     assertionFailure(error.message)
   }
@@ -52,7 +55,9 @@ public func defineControlPoints(_ controlPoints: FireweaveLocalControlPoints) ->
 }
 
 /// Checks every key with the core's control point key rule, in key order.
-func normalizeControlPoints(_ controlPoints: FireweaveLocalControlPoints) -> Result<FireweaveLocalControlPoints, FireweaveError> {
+func normalizeControlPoints(_ controlPoints: FireweaveLocalControlPoints) -> Result<
+  FireweaveLocalControlPoints, FireweaveError
+> {
   for key in controlPoints.keys.sorted() {
     if case .failure(let problem) = validateControlPointKey(key) {
       return .failure(

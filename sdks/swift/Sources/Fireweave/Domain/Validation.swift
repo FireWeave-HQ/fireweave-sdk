@@ -50,15 +50,18 @@ private func hasControlCharacters(_ key: String) -> Bool {
 public func validateControlPointKey(_ key: String) -> Validated {
   if key.isEmpty {
     return .failure(
-      FireweaveError(kind: .controlPointNotFound, message: "control point key must be a non-empty string"))
+      FireweaveError(
+        kind: .controlPointNotFound, message: "control point key must be a non-empty string"))
   }
   if key.count > maxControlPointKeyLength {
     return .failure(
-      FireweaveError(kind: .controlPointNotFound, message: "control point key exceeds maximum length"))
+      FireweaveError(
+        kind: .controlPointNotFound, message: "control point key exceeds maximum length"))
   }
   if hasControlCharacters(key) {
     return .failure(
-      FireweaveError(kind: .controlPointNotFound, message: "control point key contains control characters"))
+      FireweaveError(
+        kind: .controlPointNotFound, message: "control point key contains control characters"))
   }
   return .success(())
 }

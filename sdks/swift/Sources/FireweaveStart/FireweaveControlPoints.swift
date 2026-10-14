@@ -216,7 +216,9 @@ struct FallbackReader: Sendable {
 /// The core runtime's error decision: the caller's default, reason `ERROR`,
 /// and the error's kind, OpenFeature code and redacted message.
 func errorDecision(_ defaultValue: JSONValue, _ error: FireweaveError) -> Decision {
-  var metadata: ControlPointMetadata = [controlPointMetadataErrorKindKey: .string(error.kind.rawValue)]
+  var metadata: ControlPointMetadata = [
+    controlPointMetadataErrorKindKey: .string(error.kind.rawValue)
+  ]
   if error.kind == .controlPointNotFound && error.quotaLimited {
     metadata["fireweave.quotaLimited"] = .bool(true)
   }

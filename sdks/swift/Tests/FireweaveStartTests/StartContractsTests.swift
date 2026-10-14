@@ -272,7 +272,8 @@ private func runInstanceKey(_ when: CaseInput) -> Outcome {
 private func runDefineFlags(_ when: CaseInput) -> Outcome {
   var controlPoints: FireweaveLocalControlPoints = [:]
   for (key, flag) in when.controlPoints ?? [:] {
-    controlPoints[key] = FireweaveLocalControlPoint(localValue: flag.local, description: flag.description)
+    controlPoints[key] = FireweaveLocalControlPoint(
+      localValue: flag.local, description: flag.description)
   }
   switch normalizeControlPoints(controlPoints) {
   case .failure(let error):

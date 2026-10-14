@@ -222,7 +222,8 @@ enum Runner {
       let requested = when["domain"]?.stringValue
       var actual: JSONValue = .object([:])
       for (name, domainGiven) in domains {
-        let adapter = InMemoryAdapter.from(flagsJSON: domainGiven["controlPoints"]?.objectValue ?? [:])
+        let adapter = InMemoryAdapter.from(
+          flagsJSON: domainGiven["controlPoints"]?.objectValue ?? [:])
         let runtime = FireweaveRuntime(adapter: adapter)
         await provisionState(runtime, domainGiven["providerState"]?.stringValue)
         if name == requested {
