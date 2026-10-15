@@ -24,7 +24,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [main]
 
 permissions:
   contents: read
@@ -45,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['20', '24'] # minimum supported (engines >=20.20) + latest stable LTS
+        node: ['20.20.0', '24'] # minimum supported (engines >=20.20) + latest stable LTS
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -118,7 +118,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        deno: ['v2.x', 'canary']
+        deno: ['v2.x'] # nightly Deno runs weekly in deno-canary.yml, not on pull requests
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -182,7 +182,7 @@ jobs:
           node-version: '24'
       - name: Install workspace dependencies
         working-directory: sdks/web
-        run: bun install
+        run: bun install --frozen-lockfile
       - name: Typecheck (src + tests)
         working-directory: sdks/web
         run: bun run typecheck
@@ -533,7 +533,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: '20' # examples must work at the minimum supported version
+          node-version: '20.20.0' # examples must work at the minimum supported version
       - uses: actions/setup-python@v6
         with:
           python-version: '3.10'
@@ -592,8 +592,33 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
       - name: npm pack / python -m build / go mod verify / mvn package
         run: bash scripts/build-all.sh
+      - name: Web package dry run (never publish)
+        working-directory: sdks/web
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+          npm pack --pack-destination "${{ github.workspace }}/build/packages"
+      - name: Rust package dry run (never publish)
+        working-directory: sdks/rust
+        run: |
+          cargo package --locked
+          cp target/package/*.crate "${{ github.workspace }}/build/packages/"
+      - name: Refresh checksums (includes web and rust)
+        working-directory: build/packages
+        run: |
+          : > SHA256SUMS
+          for f in *; do
+            [ "$f" = "SHA256SUMS" ] && continue
+            sha256sum "$f" >> SHA256SUMS
+          done
       - name: Upload package artifacts (dry run — NOT published)
         uses: actions/upload-artifact@v5
         with:

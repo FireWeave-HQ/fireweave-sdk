@@ -1,0 +1,13 @@
+title = "Fireweave gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Sample keys in tests, error-redaction fixtures, and the fake CI bearer. Not live credentials."
+paths = [
+  '''sdks/swift/Tests/.*''',
+  '''sdks/dart/test/.*''',
+  '''contracts/errors\.json''',
+]
+regexes = ['''project-api-key_ci''']

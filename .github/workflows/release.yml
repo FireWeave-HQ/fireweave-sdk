@@ -22,10 +22,10 @@
 # would publish `--tag latest`; the tag is now pure syntax to dodge that
 # footgun, not the channel signal.
 #
-# `verify` (build + test + conformance, the full scripts/{build,test,
-# conformance}-all.sh suite — see that job's own comment for why it is not
-# matrixed per component) sits between build and every publish-* job so a
-# release cannot publish without the gates running. The release tag itself
+# `verify` (language tests + shared behavior tests — see that job's own
+# comment for why it is not matrixed per component) sits between build and
+# every publish-* job so a release cannot publish without the gates running.
+# The release tag itself
 # is pushed by a dedicated `tag` job that also needs `verify` (I7 fix — a
 # tag push living inside `build` could previously race `verify` or outrun a
 # failure), and every publish-* job needs `tag` too, preserving the
@@ -274,22 +274,18 @@ jobs:
           if-no-files-found: error
 
   # =========================================================================
-  # VERIFY — the gate the plan calls out as missing: "today a release can
-  # publish without running the gates." Runs build + test + conformance for
-  # EVERY language via the existing scripts/{build,test,conformance}-all.sh
-  # entry points (the same ones a human runs locally per RELEASE.md), rather
-  # than reinventing a component-scoped variant of them.
+  # VERIFY — sits between build and every publish so a release cannot
+  # publish without tests. scripts/test-all.sh covers node, python, go,
+  # java, and the offline examples. The steps after it cover rust, swift,
+  # dart, and web, which that script does not. Secret scan and dependency
+  # bugs stay in security.yml.
   #
-  # Deliberately NOT matrixed over component: all three scripts already test
-  # every ecosystem in one pass (conformance-all.sh in particular is the
-  # 65x7 cross-language differential gate — it means nothing run against a
-  # single language). Matrixing this job would just rerun the identical
-  # full-repo suite once per selected component for no additional coverage.
-  # It runs once per dispatch — including dry runs — so a dry run also
-  # proves the gates are green, not only a real publish attempt.
+  # Deliberately NOT matrixed over component. The shared behavior test
+  # means nothing run against a single language. It runs once per dispatch,
+  # including dry runs.
   # =========================================================================
   verify:
-    name: verify (build + test + conformance — full suite, all languages)
+    name: verify (all SDK tests and shared behavior tests)
     needs: validate
     runs-on: ubuntu-latest
     steps:
@@ -321,11 +317,33 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - name: Build all package artifacts (dry-run)
         run: bash scripts/build-all.sh
-      - name: Run the full test suite (node/python/go/java + offline examples)
+      - name: Node, Python, Go, Java, and offline examples
         run: bash scripts/test-all.sh
+      - name: Rust tests
+        working-directory: sdks/rust
+        run: cargo test --locked
+      - name: Swift format and tests
+        working-directory: sdks/swift
+        run: |
+          find Sources Tests -name '*.swift' -print0 | xargs -0 swift format lint --strict
+          swift test
+      - name: Dart tests
+        working-directory: sdks/dart
+        run: |
+          dart pub get
+          dart test
+          dart test -p chrome
+      - name: Web tests
+        working-directory: sdks/web
+        run: |
+          bun install --frozen-lockfile
+          bun run test
       - name: Cross-language conformance (65x8 differential gate)
         run: bash scripts/conformance-all.sh
       - name: Publish comparator summary
