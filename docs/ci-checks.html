@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Which CI checks are valid</title>
+  <style>
+    :root {
+      --ink: #1c1917;
+      --muted: #57534e;
+      --line: #e7e5e4;
+      --paper: #fafaf9;
+      --card: #ffffff;
+      --ok: #166534;
+      --ok-bg: #f0fdf4;
+      --bad: #991b1b;
+      --bad-bg: #fef2f2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font: 17px/1.5 "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+    }
+    main { max-width: 44rem; margin: 0 auto; padding: 3rem 1.25rem 4rem; }
+    h1 { font-size: 2rem; line-height: 1.15; font-weight: 600; margin: 0 0 0.75rem; }
+    h2 { font-size: 1.3rem; margin: 2.4rem 0 0.5rem; }
+    p { margin: 0.5rem 0; }
+    .lede { color: var(--muted); }
+    ul { margin: 0.3rem 0 0; padding-left: 1.15rem; }
+    li { margin: 0.55rem 0; }
+    .tag {
+      display: inline-block;
+      font: 600 0.72rem/1 ui-sans-serif, system-ui, sans-serif;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 0.15rem 0.4rem;
+      border-radius: 999px;
+    }
+    .ok { color: var(--ok); background: var(--ok-bg); }
+    .bad { color: var(--bad); background: var(--bad-bg); }
+    code {
+      font: 0.86em ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      background: #f5f5f4;
+      padding: 0.05em 0.3em;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Which CI checks are valid</h1>
+    <p class="lede">A check is valid when it fails for a real problem. The fixes below are on this branch, not on <code>main</code> yet.</p>
+
+    <h2>Valid — keep them</h2>
+    <ul>
+      <li><strong>Node 24, Bun, Deno 2.x, Web, Go, Java, Rust, Dart.</strong> Each builds that SDK and runs its tests. Bun and Deno only smoke-test the Node package, because they cannot run the full Node suite.</li>
+      <li><strong>Swift line length.</strong> Real failure: lines over 100 characters. The formatter wrapped them. That commit is on this branch.</li>
+      <li><strong>Python unused imports.</strong> Valid. Passes on current <code>main</code>. Older pull requests failed on three unused imports in <code>test_control_points.py</code>. Those imports are already gone.</li>
+      <li><strong>Languages agree, fake server, examples, docs links, workflow file check, license check.</strong> Each tests one real thing.</li>
+      <li><strong>Package build for Node, Python, Go, and Java.</strong> Valid. Does not publish. Web and Rust dry runs are now in the same job.</li>
+      <li><strong>rustls.</strong> Valid. The Rust HTTP client <code>ureq</code> ships it. The lockfile is now 0.23.45. Do not merge pull request #19 as it stands; that bump sits on an older branch.</li>
+    </ul>
+
+    <h2>Fixed on this branch</h2>
+    <ul>
+      <li><strong>CI now runs on <code>main</code>.</strong> Both workflow files watched <code>master</code>. Pushes to <code>main</code> never started CI or Security. They now watch <code>main</code>.</li>
+      <li><strong>Secret scan still runs, and test strings no longer fail it.</strong> <code>gitleaks.toml</code> allows Swift tests, Dart tests, <code>contracts/errors.json</code>, and the fake key <code>project-api-key_ci</code>. A real key outside those paths still fails. The same scan, including old commits, now reports no leaks.</li>
+      <li><strong>Deno nightly is gone.</strong> Deno 2.x stays on every pull request. There is no weekly Deno job.</li>
+      <li><strong>Node 20.20.0 is the oldest Node job.</strong> The setting <code>20</code> was installing the newest 20.x. The Node job and the examples job now install 20.20.0, which is the floor the package states.</li>
+      <li><strong>New-dependency check fails if it cannot look.</strong> If GitHub’s compare API is down, that job used to log a warning and pass. It now fails.</li>
+      <li><strong>Web install uses the lockfile publish uses.</strong> The pull-request job runs <code>bun install --frozen-lockfile</code>.</li>
+      <li><strong>Release verify runs the language tests it used to skip.</strong> Besides Node, Python, Go, Java, and the examples, it now runs Rust, Swift (including the line-length check), Dart, and Web. Secret scan and dependency bugs stay in the Security workflow.</li>
+      <li><strong>Web and Rust get a package dry run on pull requests.</strong> Nothing is published. Dart already had its own. Swift still has no package dry run on pull requests, because a Swift release is a mirror push, not a package file.</li>
+    </ul>
+
+    <h2>Not changed <span class="tag bad">Support choice</span></h2>
+    <ul>
+      <li><strong>Go 1.25.13.</strong> This is the oldest Go the module allows, not a library the SDK ships. The bug list treats it as if every user builds with exactly that Go. Raising it to 1.26.9 would drop 1.25. That was not done. No second Go bug scanner was added.</li>
+    </ul>
+
+    <h2>Do not</h2>
+    <ul>
+      <li>Do not add another Go bug scanner.</li>
+      <li>Do not add a second Swift style tool.</li>
+      <li>Do not turn the secret scan off.</li>
+    </ul>
+  </main>
+</body>
+</html>

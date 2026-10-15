@@ -55,7 +55,8 @@ struct StartLifecycleTests {
     let log = LogCollector()
     let handle = server()
     let controlPoints: FireweaveLocalControlPoints = ["new-checkout": true, "old-banner": false]
-    try handle.core.start(FireweaveStartOptions(controlPoints: controlPoints, mode: .local, log: log.sink))
+    try handle.core.start(
+      FireweaveStartOptions(controlPoints: controlPoints, mode: .local, log: log.sink))
 
     // Answered synchronously, whether or not the client is installed yet.
     let first = handle.controlPoints.getBooleanDetails("new-checkout", default: false)
@@ -93,7 +94,10 @@ struct StartLifecycleTests {
 
     let localLine = "[fireweave:local] Local mode (startFireweave(mode: .local))"
     #expect(log.count(containing: localLine) == 1)
-    #expect(log.count(containing: "\"unknown\" is not in your control points (FireweaveLocalControlPoints.swift)") == 1)
+    #expect(
+      log.count(
+        containing: "\"unknown\" is not in your control points (FireweaveLocalControlPoints.swift)")
+        == 1)
     await handle.shutdown()
   }
 
@@ -157,7 +161,8 @@ struct StartLifecycleTests {
 
   @Test func anIdenticalSecondStartIsANoOpAndADifferentOneThrows() async throws {
     let handle = server()
-    let options = FireweaveStartOptions(controlPoints: ["a": true], mode: .local, log: LogCollector().sink)
+    let options = FireweaveStartOptions(
+      controlPoints: ["a": true], mode: .local, log: LogCollector().sink)
     try handle.core.start(options)
     try handle.core.start(options)
 
@@ -207,7 +212,8 @@ struct StartLifecycleTests {
   @Test func shutdownThenRestartWithAnyConfiguration() async throws {
     let log = LogCollector()
     let handle = server()
-    try handle.core.start(FireweaveStartOptions(controlPoints: ["a": true], mode: .local, log: log.sink))
+    try handle.core.start(
+      FireweaveStartOptions(controlPoints: ["a": true], mode: .local, log: log.sink))
     await handle.ready()
     await handle.shutdown()
 

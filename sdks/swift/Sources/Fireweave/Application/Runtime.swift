@@ -318,7 +318,9 @@ public final class FireweaveRuntime: @unchecked Sendable {
     // only `InMemoryAdapter`'s fixture input carries, and it applies the
     // gate before constructing the `AdapterResolution` this reads (same
     // fix rust's task-12 review round applied to its own runtime).
-    if let vendorControlPointId = resolution.vendorControlPointId, let reasonCode = resolution.reasonCode {
+    if let vendorControlPointId = resolution.vendorControlPointId,
+      let reasonCode = resolution.reasonCode
+    {
       metadata["fireweave.vendorControlPointId"] = .number(Double(vendorControlPointId))
       metadata["fireweave.reasonCode"] = .string(reasonCode)
     }
@@ -423,7 +425,9 @@ public final class FireweaveRuntime: @unchecked Sendable {
 
   private static func errorDecision(_ defaultValue: JSONValue, _ error: FireweaveError) -> Decision
   {
-    var metadata: ControlPointMetadata = [controlPointMetadataErrorKindKey: .string(error.kind.rawValue)]
+    var metadata: ControlPointMetadata = [
+      controlPointMetadataErrorKindKey: .string(error.kind.rawValue)
+    ]
     if error.kind == .controlPointNotFound && error.quotaLimited {
       metadata["fireweave.quotaLimited"] = .bool(true)
     }

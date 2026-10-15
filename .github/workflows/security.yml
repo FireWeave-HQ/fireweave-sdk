@@ -18,7 +18,7 @@ name: Security
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [main]
   schedule:
     - cron: '17 6 * * 1' # weekly re-scan so new advisories surface without a push
 
@@ -49,7 +49,7 @@ jobs:
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           sudo install /tmp/gitleaks /usr/local/bin/gitleaks
       - name: Scan repository history
-        run: gitleaks git --redact --no-banner --verbose .
+        run: gitleaks git --config gitleaks.toml --redact --no-banner --verbose .
 
   dependency-review:
     name: dependency review (PR diff)
@@ -60,9 +60,9 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v5
-      # The compare API 404s on this repo even though SBOM/dependency-graph works
-      # (org/repo feature gap). Probe first so CI stays green; osv-scan + licenses
-      # still gate supply-chain. When compare becomes available, this job hard-fails.
+      # A non-200 from the compare API used to skip the review and leave the
+      # job green. The review is the point of this job, so an unavailable
+      # compare fails the job.
       - name: Probe dependency-graph compare API
         id: depgraph
         env:
@@ -80,9 +80,10 @@ jobs:
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::dependency-graph/compare returned HTTP ${code}; skipping dependency-review-action (SBOM still available; osv-scan + license jobs remain required)."
+            echo "::error::dependency-graph/compare returned HTTP ${code}; dependency review did not run."
             head -c 500 /tmp/depgraph-compare.json || true
             echo
+            exit 1
           fi
       - name: Dependency review
         if: steps.depgraph.outputs.available == 'true'

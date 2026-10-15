@@ -81,12 +81,14 @@ struct StartFailureTests {
   @Test func anAppConflictingStartIsLoggedAndKeepsTheFirst() async throws {
     let log = LogCollector()
     let handle = app()
-    try handle.core.start(FireweaveStartOptions(controlPoints: ["a": true], mode: .local, log: log.sink))
+    try handle.core.start(
+      FireweaveStartOptions(controlPoints: ["a": true], mode: .local, log: log.sink))
     let changed = FireweaveStartOptions(controlPoints: ["a": false], mode: .local)
     let thrown = startError { try handle.core.start(changed) }
     #expect(thrown == nil)
     #expect(handle.controlPoints.getBooleanValue("a", default: false))
-    #expect(log.count(containing: "different configuration (controlPoints). Keeping the first one") == 1)
+    #expect(
+      log.count(containing: "different configuration (controlPoints). Keeping the first one") == 1)
     await handle.shutdown()
   }
 
