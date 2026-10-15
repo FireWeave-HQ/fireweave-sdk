@@ -118,7 +118,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        deno: ['v2.x'] # nightly Deno runs weekly in deno-canary.yml, not on pull requests
+        deno: ['v2.x']
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

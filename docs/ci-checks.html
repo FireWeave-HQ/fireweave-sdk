@@ -67,7 +67,7 @@
     <ul>
       <li><strong>CI now runs on <code>main</code>.</strong> Both workflow files watched <code>master</code>. Pushes to <code>main</code> never started CI or Security. They now watch <code>main</code>.</li>
       <li><strong>Secret scan still runs, and test strings no longer fail it.</strong> <code>gitleaks.toml</code> allows Swift tests, Dart tests, <code>contracts/errors.json</code>, and the fake key <code>project-api-key_ci</code>. A real key outside those paths still fails. The same scan, including old commits, now reports no leaks.</li>
-      <li><strong>Deno nightly is off pull requests.</strong> Deno 2.x stays on every pull request. The nightly runs weekly in <code>deno-canary.yml</code>.</li>
+      <li><strong>Deno nightly is gone.</strong> Deno 2.x stays on every pull request. There is no weekly Deno job.</li>
       <li><strong>Node 20.20.0 is the oldest Node job.</strong> The setting <code>20</code> was installing the newest 20.x. The Node job and the examples job now install 20.20.0, which is the floor the package states.</li>
       <li><strong>New-dependency check fails if it cannot look.</strong> If GitHub’s compare API is down, that job used to log a warning and pass. It now fails.</li>
       <li><strong>Web install uses the lockfile publish uses.</strong> The pull-request job runs <code>bun install --frozen-lockfile</code>.</li>
