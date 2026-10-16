@@ -41,13 +41,13 @@ jobs:
   # ---------------------------------------------------------------- node
   node:
     name: node (Node ${{ matrix.node }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
         node: ['20.20.0', '24'] # minimum supported (engines >=20.20) + latest stable LTS
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
@@ -80,13 +80,13 @@ jobs:
   # the cross-runtime smoke under Bun.
   bun:
     name: bun (${{ matrix.bun }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
         bun: ['1.2.0', 'latest'] # minimum supported + current
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
@@ -114,13 +114,13 @@ jobs:
   # no npm resolution.
   deno:
     name: deno (${{ matrix.deno }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
         deno: ['v2.x']
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
@@ -169,9 +169,9 @@ jobs:
   # small Playwright suite over exactly those invariants.
   web:
     name: web (bun)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -196,13 +196,13 @@ jobs:
   # ---------------------------------------------------------------- python
   python:
     name: python (${{ matrix.python }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
         python: ['3.10', '3.14'] # minimum supported + latest stable
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
@@ -227,13 +227,13 @@ jobs:
   # ---------------------------------------------------------------- go
   go:
     name: go (${{ matrix.go }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
         go: ['1.26.9', 'stable'] # go.mod minimum + latest stable
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go }}
@@ -269,13 +269,13 @@ jobs:
   # ---------------------------------------------------------------- java
   java:
     name: java (JDK ${{ matrix.java }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
         java: ['11', '25'] # release target (compiler.release=11) + latest LTS
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -288,13 +288,13 @@ jobs:
   # ---------------------------------------------------------------- rust
   rust:
     name: rust (${{ matrix.rust }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
         rust: ['1.85.0', 'stable'] # Cargo.toml rust-version minimum + latest stable
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
@@ -325,13 +325,13 @@ jobs:
   # --------------------------------------------------------------- swift
   swift:
     name: swift (${{ matrix.swift }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
         swift: ['6.0.3', '6.2.1'] # Package.swift swift-tools-version floor + newest patch known to setup-swift@v2
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: swift-actions/setup-swift@v2
         with:
           swift-version: ${{ matrix.swift }}
@@ -379,13 +379,13 @@ jobs:
   # transport on both web compilers without a browser at all.
   dart:
     name: dart (Dart ${{ matrix.dart }})
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
         dart: ['3.8.3', 'stable'] # pubspec.yaml sdk floor (^3.8.0) + latest stable
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: ${{ matrix.dart }}
@@ -422,9 +422,9 @@ jobs:
   # -------------------------------------------- cross-language differential
   differential:
     name: cross-language differential (comparator)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
@@ -488,9 +488,9 @@ jobs:
   # ---------------------------------------------------------- integration
   integration:
     name: integration (test-server stub)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
@@ -528,9 +528,9 @@ jobs:
   # -------------------------------------------------------------- examples
   examples:
     name: examples (offline)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-node@v5
         with:
           node-version: '20.20.0' # examples must work at the minimum supported version
@@ -572,9 +572,9 @@ jobs:
   # ---------------------------------------------------------- package dry runs
   package-dry-run:
     name: package build dry runs (never publish)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
@@ -629,9 +629,9 @@ jobs:
   # ------------------------------------------------------------- docs links
   docs-links:
     name: docs link check (internal links)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       # --offline: verify every local file/anchor link in Markdown resolves.
       # External URLs are deliberately not checked in CI (flaky/nondeterministic).
       - uses: lycheeverse/lychee-action@v2
@@ -642,9 +642,9 @@ jobs:
   # ----------------------------------------------------------- workflow lint
   actionlint:
     name: actionlint (workflow self-check)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - name: Run actionlint
         run: |
           bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash)

@@ -43,12 +43,12 @@ jobs:
   publish:
     name: test, sign, and publish to Maven Central
     if: ${{ github.event_name != 'pull_request' }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
 
       - name: Resolve version
         id: ver
