@@ -144,7 +144,7 @@ defaults:
 jobs:
   validate:
     name: validate inputs
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       components: ${{ steps.compute.outputs.components }}
     steps:
@@ -176,12 +176,12 @@ jobs:
       fail-fast: false
       matrix:
         component: ${{ fromJson(needs.validate.outputs.components) }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       id-token: write      # build provenance attestation
       attestations: write  # build provenance attestation
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
         with:
           fetch-depth: 0 # full history for changelog + tag ancestry
       - uses: actions/setup-node@v5
@@ -287,9 +287,9 @@ jobs:
   verify:
     name: verify (all SDK tests and shared behavior tests)
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
@@ -380,14 +380,14 @@ jobs:
       fail-fast: false
       matrix:
         component: ${{ fromJson(needs.validate.outputs.components) }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # The same environment the channel's publish jobs use, so a release tag
     # (for go, the whole release) passes the same gate as the publish.
     environment: ${{ inputs.channel == 'production' && 'release' || 'release-staging' }}
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/download-artifact@v5
         with:
           name: release-info-${{ matrix.component }}
@@ -448,13 +448,13 @@ jobs:
     name: publish npm (staging → server-sdk, dist-tag next)
     needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'server') }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release-staging
     permissions:
       id-token: write # npm OIDC trusted publishing — no NPM_TOKEN secret needed once provisioned
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/download-artifact@v5
         with:
           name: release-info-server
@@ -497,13 +497,13 @@ jobs:
     name: publish npm (staging → web-sdk, dist-tag next)
     needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'web') }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release-staging
     permissions:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/download-artifact@v5
         with:
           name: release-info-web
@@ -569,13 +569,13 @@ jobs:
     name: publish npm production (server-sdk, dist-tag latest)
     needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'server') }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release
     permissions:
       id-token: write # npm OIDC trusted publishing — no NPM_TOKEN secret
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/download-artifact@v5
         with:
           name: release-info-server
@@ -658,13 +658,13 @@ jobs:
     name: publish npm production (web-sdk, dist-tag latest)
     needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'web') }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release
     permissions:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/download-artifact@v5
         with:
           name: release-info-web
@@ -752,7 +752,7 @@ jobs:
     name: publish PyPI (staging rc)
     needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'python') }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # An rc goes to pypi.org itself (X.Y.ZrcN; pip skips it unless pinned), so
     # this job holds the production token and runs on `release`, behind its
     # reviewer gate — see the header comment and RELEASE.md.
@@ -761,7 +761,7 @@ jobs:
       id-token: write # optional OIDC; token path uses PYPI_API_TOKEN
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/download-artifact@v5
         with:
           name: release-info-python
@@ -799,13 +799,13 @@ jobs:
     name: publish PyPI (production)
     needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'python') }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release
     permissions:
       id-token: write # optional OIDC; token path uses PYPI_API_TOKEN
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/download-artifact@v5
         with:
           name: release-info-python
@@ -835,7 +835,7 @@ jobs:
     name: publish Maven Central (Central Publisher Portal)
     needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && contains(fromJson(needs.validate.outputs.components), 'java') }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # Stays on `release` for BOTH channels: Maven Central Portal has no
     # separate staging registry or credential set, and both channels publish
     # to Central with autoPublish=true (decision D4, reaffirmed 2026-10-09 as
@@ -844,7 +844,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/download-artifact@v5
         with:
           name: release-info-java
@@ -927,10 +927,10 @@ jobs:
     name: push the Swift mirror (SwiftPM)
     needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && contains(fromJson(needs.validate.outputs.components), 'swift') }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: ${{ inputs.channel == 'production' && 'release' || 'release-staging' }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/download-artifact@v5
         with:
           name: release-info-swift
@@ -979,7 +979,7 @@ jobs:
     name: warm Go module proxy (staging)
     needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'go') }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release-staging
     steps:
       - uses: actions/download-artifact@v5
@@ -1018,7 +1018,7 @@ jobs:
     name: verify + warm Go module proxy (production)
     needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'go') }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release
     steps:
       - uses: actions/download-artifact@v5
@@ -1051,10 +1051,10 @@ jobs:
     name: cargo publish --dry-run (staging — no crates.io upload)
     needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'rust') }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release-staging
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/download-artifact@v5
         with:
           name: release-info-rust
@@ -1086,10 +1086,10 @@ jobs:
     name: publish crates.io (production)
     needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'rust') }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/download-artifact@v5
         with:
           name: release-info-rust
@@ -1124,10 +1124,10 @@ jobs:
     name: dart pub publish --dry-run (staging — no pub.dev upload)
     needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'dart') }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release-staging
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/download-artifact@v5
         with:
           name: release-info-dart
@@ -1169,13 +1169,13 @@ jobs:
     name: publish pub.dev (production)
     needs: [validate, build, verify, tag]
     if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'dart') }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release
     permissions:
       id-token: write # pub.dev automated publishing (OIDC) — no long-lived token; setup-dart exchanges it
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/download-artifact@v5
         with:
           name: release-info-dart

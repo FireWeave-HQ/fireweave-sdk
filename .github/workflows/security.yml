@@ -37,9 +37,9 @@ env:
 jobs:
   gitleaks:
     name: secret scan (gitleaks)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
         with:
           fetch-depth: 0 # scan full history, not just the tip
       - name: Install gitleaks (pinned)
@@ -54,12 +54,12 @@ jobs:
   dependency-review:
     name: dependency review (PR diff)
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       # A non-200 from the compare API used to skip the review and leave the
       # job green. The review is the point of this job, so an unavailable
       # compare fails the job.
@@ -100,9 +100,9 @@ jobs:
 
   osv-scan:
     name: vulnerability scan (osv-scanner)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-python@v6
         with:
           python-version: '3.14'
@@ -137,9 +137,9 @@ jobs:
 
   licenses:
     name: license allowlist (flag copyleft)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v5
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
