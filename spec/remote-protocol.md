@@ -26,10 +26,7 @@ Never send PostHog `phc_` / `phs_` / `phx_` keys on this path.
 
 Optional later: `GET /v1/control-points/definitions` for local-eval parity.
 
-**Version 3 (ADR-0013).** The control-point names above are the wire from 3.0.0. fw-server also
-serves `POST /v1/flags/evaluate` with the 2.x field names (`flagKeys`, `flagKey`, `flagMetadata`)
-and accepts `events[].flagKey` on `/v1/capture`, as thin aliases, until no supported SDK version
-calls them. A 3.x SDK never sends the old names.
+**Version 3 (ADR-0013).** The control-point names above are the wire.
 
 ## Two identity paths
 

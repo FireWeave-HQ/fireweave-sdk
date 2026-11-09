@@ -9,22 +9,11 @@ pub(crate) const ENV_URL: &str = "FIREWEAVE_URL";
 pub(crate) const ENV_ENVIRONMENT: &str = "FIREWEAVE_ENV";
 pub(crate) const ENV_INSTANCE_ID: &str = "FIREWEAVE_INSTANCE_ID";
 
-/// Legacy names written by the scaffolded harness. Read only when the
-/// replacement is unset, with one warning per name, for the whole 2.x line
-/// (`docs/versioning.md`: documented configuration is removed only in a
-/// major).
-pub(crate) const LEGACY_KEY_NAMES: [&str; 1] = ["FW_PROJECT_API_KEY"];
-pub(crate) const LEGACY_URL_NAMES: [&str; 2] = ["FW_API_URL", "FW_ATTEST_URL"];
-
 /// Read after `StartOptions.environment` and `FIREWEAVE_ENV`. `NODE_ENV` is
 /// not a Rust convention and `ENV`/`RUST_ENV` are not read: only names an
 /// operator sets on purpose select a mode. `cfg!(debug_assertions)` is never
 /// consulted, because debug builds get deployed.
 pub(crate) const ENVIRONMENT_FALLBACKS: [&str; 1] = ["APP_ENV"];
-
-/// Read only to explain a start error: the scaffolded harness's `FW_ENV` is
-/// no longer honoured.
-pub(crate) const RETIRED_ENVIRONMENT_NAME: &str = "FW_ENV";
 
 /// Environment names that mean "local development" when no key is set.
 /// Compared trimmed and case-insensitively.

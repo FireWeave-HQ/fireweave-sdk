@@ -107,12 +107,6 @@ void main() {
     expect([b, s, n, o, d1, d2, d3, d4, d5], hasLength(9));
   });
 
-  test('the flags alias is gone (ADR-0013)', () {
-    expect(namespace['removedAlias'], 'flags');
-    final source = File('lib/src/application/client.dart').readAsStringSync();
-    expect(source.contains(' get flags '), isFalse);
-  });
-
   test('registerTarget exists with local mode recorded-and-traced', () async {
     final entries = (client['methods'] as List).cast<Map<Object?, Object?>>();
     final entry = entries.firstWhere((m) => m['name'] == 'registerTarget');

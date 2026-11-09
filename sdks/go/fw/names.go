@@ -12,22 +12,10 @@ const (
 	envInstanceID  = "FIREWEAVE_INSTANCE_ID"
 )
 
-// Legacy names written by the scaffolded harness. Read only when the
-// replacement is unset, with one warning per name, for the whole v2 line
-// (docs/versioning.md: documented configuration is removed only in a major).
-var (
-	legacyKeyNames = []string{"FW_PROJECT_API_KEY"}
-	legacyURLNames = []string{"FW_API_URL", "FW_ATTEST_URL"}
-)
-
 // environmentFallbacks are read after Options.Environment and FIREWEAVE_ENV.
 // NODE_ENV is not a Go convention and ENV/GO_ENV are not read (see the build
 // plan's Go section): only names an operator sets on purpose select a mode.
 var environmentFallbacks = []string{"APP_ENV"}
-
-// retiredEnvironmentName is read only to explain a start error: the
-// scaffolded harness's FW_ENV is no longer honoured.
-const retiredEnvironmentName = "FW_ENV"
 
 // devEnvironments are the environment names that mean "local development"
 // when no key is set. Compared trimmed and case-insensitively.

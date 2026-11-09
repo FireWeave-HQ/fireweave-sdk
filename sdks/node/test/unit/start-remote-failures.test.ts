@@ -63,16 +63,11 @@ describe('SP-27: a refused key is visible', () => {
     assert.equal(keyLines().length, 1);
   });
 
-  it('names the actual source: a start({ key }) option or the legacy FW_PROJECT_API_KEY', async () => {
+  it('names the actual source: a start({ key }) option', async () => {
     start({ key: KEY, url: URL_, env: {}, log, fetch: scripted(403).fetch });
     await read();
     assert.match(keyLines().at(-1)!, /refused the key from start\(\{ key \}\) .*\(HTTP 403\)/);
     assert.equal(fw.status().lastErrorKind, 'Authorization');
-    await resetForTests();
-    lines = [];
-    start({ env: { FW_PROJECT_API_KEY: KEY, FIREWEAVE_URL: URL_ }, log, fetch: scripted(401).fetch });
-    await read();
-    assert.ok(keyLines().some((l) => /rejected the key from FW_PROJECT_API_KEY/.test(l)));
     assert.doesNotMatch(lines.join('\n'), /sp27secretvalue/);
   });
 

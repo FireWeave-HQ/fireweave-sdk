@@ -58,7 +58,7 @@ function runResolve(c: Case): Outcome {
   const options = (c.when.options ?? {}) as Record<string, string>;
   const env = (c.when.env ?? {}) as Record<string, string>;
   const channel = (c.when.channel ?? 'production') as 'production' | 'staging';
-  const known = new Set(['FIREWEAVE_KEY', 'FIREWEAVE_URL', 'FIREWEAVE_ENV', 'APP_ENV', 'NODE_ENV', 'FW_PROJECT_API_KEY', 'FW_API_URL', 'FW_ATTEST_URL']);
+  const known = new Set(['FIREWEAVE_KEY', 'FIREWEAVE_URL', 'FIREWEAVE_ENV', 'APP_ENV', 'NODE_ENV']);
   try {
     const r = resolveStart(
       { mode: options.mode, environment: options.environment, url: options.url, key: options.key },

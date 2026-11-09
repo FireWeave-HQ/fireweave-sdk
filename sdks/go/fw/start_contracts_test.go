@@ -93,7 +93,6 @@ func loadStartFixtures(t *testing.T) []startFixture {
 // (contracts/start/README.md "Comparing results").
 var startKnownNames = map[string]bool{
 	"FIREWEAVE_KEY": true, "FIREWEAVE_URL": true, "FIREWEAVE_ENV": true, "APP_ENV": true,
-	"FW_PROJECT_API_KEY": true, "FW_API_URL": true, "FW_ATTEST_URL": true,
 }
 
 // normaliseStartSource maps an SDK source onto the suite's vocabulary:

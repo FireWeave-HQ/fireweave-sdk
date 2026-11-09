@@ -9,9 +9,9 @@ import Foundation
 //
 // Precedence for every value: the `startFireweave` option, then the source
 // for the profile (Info.plist for an app, the process environment for a
-// server), then a legacy name with one warning, then the default. Empty and
-// whitespace-only values count as unset. Messages name the option, variable
-// or Info.plist key at fault, never its value.
+// server), then the default. Empty and whitespace-only values count as
+// unset. Messages name the option, variable or Info.plist key at fault,
+// never its value.
 
 /// Why a mode was chosen: the `mode` option, a key that was found, or a
 /// development environment name.
@@ -58,7 +58,7 @@ struct ResolvedStart: Sendable {
   /// Set when an environment name chose local mode.
   var environment: String?
   var environmentSource: String?
-  /// Lines to log once each: legacy names, an ignored key.
+  /// Lines to log once each: a retired Info.plist key, an ignored key.
   var warnings: [String] = []
 }
 
@@ -110,13 +110,7 @@ func resolveStart(
 
   if options.mode == .local {
     // The key is ignored. Look only to say so.
-    var ignored: [String] = []
-    let found = pick(
-      option: options.key,
-      optionLabel: StartNames.keyOption,
-      origins: keySources,
-      warnings: &ignored
-    )
+    let found = pick(option: options.key, optionLabel: StartNames.keyOption, origins: keySources)
     if let found {
       warnings.append(
         "[fireweave] startFireweave(mode: .local) ignores the key from \(found.source);"
@@ -134,20 +128,14 @@ func resolveStart(
     )
   }
 
-  let key = pick(
-    option: options.key,
-    optionLabel: StartNames.keyOption,
-    origins: keySources,
-    warnings: &warnings
-  )
+  let key = pick(option: options.key, optionLabel: StartNames.keyOption, origins: keySources)
   if let key {
     try checkKeyFamily(key, profile: profile)
     let endpoint = try resolveEndpoint(
       options.url,
       profile: profile,
       lookups: lookups,
-      channel: channel,
-      warnings: &warnings
+      channel: channel
     )
     return ResolvedStart(
       profile: profile,
@@ -193,51 +181,24 @@ private struct Origin {
   var name: String
   /// How messages and `FireweaveStatus` name it.
   var label: String
-  /// Set for a legacy name: the name that replaces it.
-  var replacement: String?
   var lookup: @Sendable (String) -> String?
 }
 
-private func envOrigin(
-  _ name: String,
-  _ lookups: StartLookups,
-  replacing replacement: String? = nil
-) -> Origin {
-  Origin(name: name, label: name, replacement: replacement, lookup: lookups.env)
+private func envOrigin(_ name: String, _ lookups: StartLookups) -> Origin {
+  Origin(name: name, label: name, lookup: lookups.env)
 }
 
-private func plistOrigin(
-  _ name: String,
-  _ lookups: StartLookups,
-  replacing replacement: String? = nil
-) -> Origin {
-  Origin(
-    name: name,
-    label: "Info.plist " + name,
-    replacement: replacement,
-    lookup: lookups.infoPlist
-  )
+private func plistOrigin(_ name: String, _ lookups: StartLookups) -> Origin {
+  Origin(name: name, label: "Info.plist " + name, lookup: lookups.infoPlist)
 }
 
-/// The first set value among the option and `origins`, in order. A legacy
-/// origin adds one warning naming its replacement.
-private func pick(
-  option: String?,
-  optionLabel: String,
-  origins: [Origin],
-  warnings: inout [String]
-) -> Sourced? {
+/// The first set value among the option and `origins`, in order.
+private func pick(option: String?, optionLabel: String, origins: [Origin]) -> Sourced? {
   if let value = nonBlank(option) {
     return Sourced(value: value, source: optionLabel)
   }
   for origin in origins {
     guard let value = nonBlank(origin.lookup(origin.name)) else { continue }
-    if let replacement = origin.replacement {
-      warnings.append(
-        "[fireweave] \(origin.label) is a legacy name and will stop being read in the next"
-          + " major version (v3). Rename it to \(replacement); the value does not change."
-      )
-    }
     return Sourced(value: value, source: origin.label)
   }
   return nil
@@ -250,25 +211,16 @@ private func keyOrigins(_ profile: FireweaveProfile, _ lookups: StartLookups) ->
   case .app:
     return [plistOrigin(StartNames.browserKey, lookups)]
   case .server:
-    let legacy = StartNames.legacyServerKeyNames.map { name in
-      envOrigin(name, lookups, replacing: StartNames.serverKey)
-    }
-    return [envOrigin(StartNames.serverKey, lookups)] + legacy
+    return [envOrigin(StartNames.serverKey, lookups)]
   }
 }
 
 private func urlOrigins(_ profile: FireweaveProfile, _ lookups: StartLookups) -> [Origin] {
   switch profile {
   case .app:
-    let legacy = StartNames.legacyPlistURLNames.map { name in
-      plistOrigin(name, lookups, replacing: StartNames.url)
-    }
-    return [plistOrigin(StartNames.url, lookups)] + legacy
+    return [plistOrigin(StartNames.url, lookups)]
   case .server:
-    let legacy = StartNames.legacyURLNames.map { name in
-      envOrigin(name, lookups, replacing: StartNames.url)
-    }
-    return [envOrigin(StartNames.url, lookups)] + legacy
+    return [envOrigin(StartNames.url, lookups)]
   }
 }
 
@@ -289,13 +241,7 @@ private func resolveEnvironment(
       envOrigin(StartNames.environmentFallback, lookups),
     ]
   }
-  var unused: [String] = []
-  let found = pick(
-    option: option,
-    optionLabel: StartNames.environmentOption,
-    origins: origins,
-    warnings: &unused
-  )
+  let found = pick(option: option, optionLabel: StartNames.environmentOption, origins: origins)
   if let found { return found }
   if profile == .app && lookups.isDebugBuild {
     return Sourced(value: "development", source: "a debug build (FIREWEAVE_START_DEBUG)")
@@ -473,14 +419,12 @@ private func resolveEndpoint(
   _ option: String?,
   profile: FireweaveProfile,
   lookups: StartLookups,
-  channel: FireweaveChannel,
-  warnings: inout [String]
+  channel: FireweaveChannel
 ) throws -> Endpoint {
   let picked = pick(
     option: option,
     optionLabel: StartNames.urlOption,
-    origins: urlOrigins(profile, lookups),
-    warnings: &warnings
+    origins: urlOrigins(profile, lookups)
   )
   guard let picked else {
     return Endpoint(

@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Removed — BREAKING: the start profile reads only `FIREWEAVE_*` names
+
+- `FW_PROJECT_API_KEY`, `FW_API_URL` and `FW_ATTEST_URL` are no longer read as fallbacks for `FIREWEAVE_KEY` and `FIREWEAVE_URL`, in every SDK. A deploy that sets only the old name now fails at start; rename it to `FIREWEAVE_KEY` (the value does not change). The core API (`initFireweave`) is unaffected: it reads no environment variables.
+- Python: `control_points.get_integer_value` is removed; use `get_number_value`.
+- The per-SDK READMEs now carry only the quick start; the 2.x upgrade notes are gone.
+
 ### Changed — BREAKING: the wire and the public names say control point; 3.0.0 for all eight SDKs ([ADR-0013](docs/adr/0013-control-point-wire.md))
 
 - Evaluate calls `POST /v1/control-points/evaluate` with `controlPointKeys`; decisions carry `controlPointKey` and `controlPointMetadata`; capture and signal events (node, web) carry `controlPointKey`. fw-server keeps the 2.x route and names as aliases for 2.x SDKs.

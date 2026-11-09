@@ -8,7 +8,7 @@
  * exposures, signals, capabilities discovery and guardrails are out of v1;
  * this client MUST NOT expose them (conformance/surface/control-points.surface.json
  * "mustNotExpose"). The dynamic `invokeCapability` dispatcher survives
- * unchanged; the `flags` alias is gone (ADR-0013).
+ * unchanged.
  *
  * One divergence from the server SDK, and it is intentional: `controlPoints.*`
  * is SYNCHRONOUS here and promise-returning on the server. That follows from

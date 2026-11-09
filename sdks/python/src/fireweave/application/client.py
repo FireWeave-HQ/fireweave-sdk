@@ -5,7 +5,6 @@ degrade instead of raising.
 
 from __future__ import annotations
 
-import warnings
 from dataclasses import dataclass
 from typing import Any, FrozenSet, Optional
 
@@ -42,8 +41,7 @@ def _failure(err: FireweaveError, degraded: bool = False) -> ExtensionResult:
 
 class _ControlPointsNamespace:
     """Typed evaluation helpers — the nine methods (spec/control-points.md
-    "The nine methods"), as ``client.control_points``. The ``client.flags``
-    alias was removed in 3.0.0 (ADR-0013).
+    "The nine methods"), as ``client.control_points``.
     """
 
     def __init__(self, runtime: FireweaveRuntime) -> None:
@@ -108,21 +106,6 @@ class _ControlPointsNamespace:
     ) -> Decision:
         return self.evaluate(control_point_key, FlagType.OBJECT, default, context)
 
-    def get_integer_value(self, control_point_key: str, default: int, context: Optional[EvaluationContext] = None) -> int:
-        """Deprecated alias of :meth:`get_number_value`.
-
-        spec/control-points.md fixed the method as **number**, not integer
-        (`Decision.value` is `jsonValue`) — python's pre-v1 surface exposed
-        `get_integer_value` with no object variant at all
-        (conformance/surface/control-points.surface.json). Kept as a
-        deprecated, fully-supported alias rather than removed: it emits one
-        `DeprecationWarning` per process (see `_note_deprecated_get_integer_value`)
-        and delegates to `get_number_value` — no behavior change beyond the
-        warning.
-        """
-        _note_deprecated_get_integer_value()
-        return self.get_number_value(control_point_key, default, context)
-
 
 # Names invoke_capability will dispatch instead of degrading with
 # UnsupportedCapability. Empty in v1: releases, exposures, signals,
@@ -130,28 +113,6 @@ class _ControlPointsNamespace:
 # (spec/control-points.md) and MUST NOT be exposed, so a cut namespace's
 # capability string resolves exactly like any other unknown string.
 SUPPORTED_CAPABILITIES: FrozenSet[str] = frozenset()
-
-# One notice per process. A per-call warning on a server SDK becomes log spam
-# at request volume, which is how deprecation notices get suppressed
-# wholesale and then ignored. Unconditional (no env gate): the SDK reads no
-# environment variables (spec/modes.md "The SDK reads no environment
-# variables", unscoped).
-_get_integer_value_warned = False
-
-
-def _note_deprecated_get_integer_value() -> None:
-    global _get_integer_value_warned
-    if _get_integer_value_warned:
-        return
-    _get_integer_value_warned = True
-    warnings.warn(
-        "control_points.get_integer_value has been renamed to "
-        "control_points.get_number_value (spec/control-points.md: number, "
-        "not integer). The old name remains fully supported — no migration "
-        "is required.",
-        DeprecationWarning,
-        stacklevel=3,
-    )
 
 
 class FireweaveClient:

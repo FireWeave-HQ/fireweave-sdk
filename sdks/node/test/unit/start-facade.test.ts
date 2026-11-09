@@ -17,7 +17,7 @@ const log = (line: string): void => {
 
 const savedEnv = { ...process.env };
 const clearProcessEnv = (): void => {
-  for (const name of ['FIREWEAVE_KEY', 'FIREWEAVE_URL', 'FIREWEAVE_ENV', 'APP_ENV', 'NODE_ENV', 'FW_PROJECT_API_KEY', 'FW_API_URL', 'FW_ATTEST_URL']) {
+  for (const name of ['FIREWEAVE_KEY', 'FIREWEAVE_URL', 'FIREWEAVE_ENV', 'APP_ENV', 'NODE_ENV']) {
     delete process.env[name];
   }
 };

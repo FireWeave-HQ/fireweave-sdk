@@ -90,8 +90,7 @@ func (c *Client) InvokeCapability(capability string, args map[string]any) *domai
 // ControlPoints is the typed evaluation surface — the nine methods
 // (spec/control-points.md "The nine methods"), Go-cased per
 // conformance/surface/control-points.surface.json. Documented as
-// Client.ControlPoints(). The Client.Flags() alias was removed in 3.0.0
-// (ADR-0013).
+// Client.ControlPoints().
 type ControlPoints struct {
 	c *Client
 }

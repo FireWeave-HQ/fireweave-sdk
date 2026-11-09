@@ -88,13 +88,6 @@ describe('fireweave() Vite plugin: config', () => {
     );
   });
 
-  it('a retired harness name is explained, never read', async () => {
-    const { p, lines } = plugin({ VITE_FW_PROJECT_API_KEY: 'project-api-key_old12345' });
-    const config = injected(await p.config({}, { command: 'serve', mode: 'development' }));
-    assert.equal(config['key'], undefined);
-    assert.ok(lines.some((l) => l.includes('VITE_FW_PROJECT_API_KEY is not read')));
-  });
-
   it('never injects FIREWEAVE_KEY', async () => {
     const { p } = plugin({ FIREWEAVE_KEY: 'project-api-key_server1234', FIREWEAVE_ENV: 'development' });
     const result = await p.config({}, { command: 'serve', mode: 'development' });

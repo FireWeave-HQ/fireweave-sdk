@@ -49,7 +49,7 @@ const lifecycleGate = (runtime: FireweaveRuntime): FireweaveError | undefined =>
  * — errors surface as ERROR decisions, exactly like the OpenFeature path.
  *
  * "Control point" is the Fireweave product noun (ADR-0007), on the wire too
- * from 3.0.0 (ADR-0013).
+ * (ADR-0013).
  */
 export class ControlPointsApi {
   private readonly runtime: FireweaveRuntime;

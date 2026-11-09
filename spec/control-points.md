@@ -20,8 +20,6 @@ Every SDK exposes the surface under a namespace named `controlPoints`, cased for
 language: `controlPoints` (TS, Java, Swift, Dart), `control_points` (Python, Rust),
 `ControlPoints` (Go).
 
-There is no `flags` alias: 3.0.0 removed it (ADR-0013).
-
 ## The nine methods
 
 | Method | Returns | Notes |

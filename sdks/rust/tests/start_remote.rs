@@ -226,16 +226,12 @@ fn ctx(key: &str) -> EvaluationContext {
 }
 
 fn with_process_env<R>(pairs: &[(&str, &str)], f: impl FnOnce() -> R) -> R {
-    const NAMES: [&str; 9] = [
+    const NAMES: [&str; 5] = [
         "FIREWEAVE_KEY",
         "FIREWEAVE_URL",
         "FIREWEAVE_ENV",
         "FIREWEAVE_INSTANCE_ID",
         "APP_ENV",
-        "FW_PROJECT_API_KEY",
-        "FW_API_URL",
-        "FW_ATTEST_URL",
-        "FW_ENV",
     ];
     let saved: Vec<(&str, Option<std::ffi::OsString>)> =
         NAMES.iter().map(|n| (*n, std::env::var_os(n))).collect();
@@ -318,39 +314,6 @@ fn remote_start_evaluates_over_the_wire_and_ignores_flag_values() {
     start::shutdown();
     let d = cp.get_boolean_details("fw-bool-on", false, Some(&ctx("user-1")));
     assert_eq!(d.error_kind, Some(ErrorKind::AlreadyClosed));
-}
-
-#[test]
-fn remote_start_from_the_environment_with_a_legacy_key() {
-    let (_g, rec) = fresh();
-    let key = "project-api-key_legacy";
-    let stub = Stub::start(key);
-    let url_with_slash = format!("{}/", stub.url);
-    let options = || StartOptions {
-        env: Some(env_map([
-            ("FW_PROJECT_API_KEY", key),
-            ("FIREWEAVE_URL", url_with_slash.as_str()),
-        ])),
-        log: Some(rec.sink()),
-        ..Default::default()
-    };
-
-    start::start(options()).unwrap();
-    assert!(start::control_points().get_boolean_value("fw-bool-on", false, Some(&ctx("u"))));
-    let s = start::status();
-    assert_eq!(s.key_source.as_deref(), Some("FW_PROJECT_API_KEY"));
-    assert_eq!(s.endpoint_source.as_deref(), Some("FIREWEAVE_URL"));
-
-    // The legacy warning is logged once per process, even across a restart.
-    start::shutdown();
-    start::start(options()).unwrap();
-    assert_eq!(
-        rec.count("FW_PROJECT_API_KEY is a legacy name"),
-        1,
-        "{:?}",
-        rec.lines()
-    );
-    assert!(rec.lines().iter().all(|l| !l.contains(key)));
 }
 
 #[test]

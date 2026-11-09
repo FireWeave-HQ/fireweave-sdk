@@ -99,9 +99,6 @@ const decision = await client.controlPoints.evaluate('new-checkout', 'boolean', 
 check('control point evaluates to true', decision.value === true, `got ${decision.value}`);
 check('decision carries TARGETING_MATCH', decision.reason === 'TARGETING_MATCH', decision.reason);
 
-// --- the flags alias is gone (ADR-0013) ------------------------------------
-check('client.flags is gone', !('flags' in client));
-
 // --- invokeCapability (v1's only extension-style surface) -------------------
 // SUPPORTED_CAPABILITIES is frozen empty in v1 (releases/exposures/signals/
 // capabilities discovery are all cut, ADR-0010): every capability string

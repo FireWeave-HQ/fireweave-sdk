@@ -192,11 +192,14 @@
       }
     },
     {
-      "name": "fw-env-is-not-read",
+      "name": "fw-names-are-not-read",
       "when": {
         "operation": "resolve",
         "env": {
-          "FW_ENV": "development"
+          "FW_ENV": "development",
+          "FW_PROJECT_API_KEY": "project-api-key_contracttest01",
+          "FW_API_URL": "https://fw.example.com",
+          "FW_ATTEST_URL": "https://fw.example.com"
         }
       },
       "expect": {

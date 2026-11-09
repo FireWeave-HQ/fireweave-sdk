@@ -125,7 +125,7 @@ func TestTheFlagsAliasIsGone(t *testing.T) {
 	}
 	c := testClient(t)
 	if _, ok := reflect.TypeOf(c).MethodByName("Flags"); ok {
-		t.Fatal("Client.Flags() was removed in 3.0.0 (ADR-0013)")
+		t.Fatal("Client.Flags() must not exist: the surface descriptor lists flags as removedAlias")
 	}
 }
 

@@ -13,8 +13,7 @@ import java.util.function.Function;
  * everything from the environment. Immutable.
  *
  * <p>Each value resolves as: the option here, then the {@code FIREWEAVE_*} variable, then the
- * legacy {@code FW_*} name (one warning), then the default. Empty and whitespace-only values count
- * as unset, options included.
+ * default. Empty and whitespace-only values count as unset, options included.
  *
  * <pre>{@code
  * Fw.start(StartOptions.builder().controlPoints(FireweaveControlPoints.CONTROL_POINTS).build());

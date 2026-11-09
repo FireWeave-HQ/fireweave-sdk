@@ -5,7 +5,7 @@ package fw
 // unit-tested through resolve alone (node: src/start/resolve.ts).
 //
 // Precedence for every value: explicit Options field, then the FIREWEAVE_*
-// variable, then the legacy FW_* name (one warning), then the default.
+// variable, then the default.
 // Lookups are lazy: a source is read only if every earlier source was unset.
 
 import (
@@ -60,7 +60,7 @@ type resolved struct {
 	channel       Channel
 	sdkVersion    string
 
-	// Lines to log once each: legacy names, an ignored key.
+	// Lines to log once each: an ignored key.
 	warnings []string
 }
 
@@ -70,21 +70,13 @@ type sourced struct {
 }
 
 // pick returns the first non-empty of: the option, then each env name in
-// order, then each legacy name (adding one warning naming its replacement).
-func pick(option, optionName string, names, legacy []string, lookup lookupFunc, warnings *[]string, replacement string) (sourced, bool) {
+// order.
+func pick(option, optionName string, names []string, lookup lookupFunc) (sourced, bool) {
 	if v := strings.TrimSpace(option); v != "" {
 		return sourced{value: v, source: optionName}, true
 	}
 	for _, name := range names {
 		if v := lookup(name); v != "" {
-			return sourced{value: v, source: name}, true
-		}
-	}
-	for _, name := range legacy {
-		if v := lookup(name); v != "" {
-			if warnings != nil {
-				*warnings = append(*warnings, "[fireweave] "+name+" is a legacy name and will stop being read in the next major version (v3). Rename it to "+replacement+"; the value does not change.")
-			}
 			return sourced{value: v, source: name}, true
 		}
 	}
@@ -113,8 +105,8 @@ func checkKeyFamily(key, source string) *fireweave.Error {
 // resolveURL picks the endpoint. The default is this build's channel host,
 // which the core's default allowlist already admits; an override gets an
 // allowlist of its own host plus loopback.
-func resolveURL(opts Options, lookup lookupFunc, build buildInfo, warnings *[]string) (u, source string, hosts []string, err *fireweave.Error) {
-	picked, ok := pick(opts.URL, "Options.URL", []string{envURL}, legacyURLNames, lookup, warnings, envURL)
+func resolveURL(opts Options, lookup lookupFunc, build buildInfo) (u, source string, hosts []string, err *fireweave.Error) {
+	picked, ok := pick(opts.URL, "Options.URL", []string{envURL}, lookup)
 	if !ok {
 		return channelURLs[build.channel], "SDK channel (" + string(build.channel) + ")", nil, nil
 	}
@@ -145,8 +137,8 @@ func isLoopback(host string) bool {
 	return false
 }
 
-func resolveKey(opts Options, lookup lookupFunc, warnings *[]string) (sourced, bool, *fireweave.Error) {
-	picked, ok := pick(opts.Key, "Options.Key", []string{envKey}, legacyKeyNames, lookup, warnings, envKey)
+func resolveKey(opts Options, lookup lookupFunc) (sourced, bool, *fireweave.Error) {
+	picked, ok := pick(opts.Key, "Options.Key", []string{envKey}, lookup)
 	if !ok {
 		return sourced{}, false, nil
 	}
@@ -172,7 +164,7 @@ func echoable(value string) bool {
 	return true
 }
 
-func noKeyError(env sourced, found bool, lookup lookupFunc) *fireweave.Error {
+func noKeyError(env sourced, found bool) *fireweave.Error {
 	var where string
 	switch {
 	case !found:
@@ -182,11 +174,7 @@ func noKeyError(env sourced, found bool, lookup lookupFunc) *fireweave.Error {
 	default:
 		where = "the environment name from " + env.source + " is not a development name"
 	}
-	retired := ""
-	if !found && lookup(retiredEnvironmentName) != "" {
-		retired = " " + retiredEnvironmentName + " is no longer read; rename it to " + envEnvironment + "."
-	}
-	return configError(envKey + " is not set and " + where + ". Set " + envKey + " to the project's server key, or for local development set " + envEnvironment + " to development or pass Options.Mode fw.ModeLocal." + retired)
+	return configError(envKey + " is not set and " + where + ". Set " + envKey + " to the project's server key, or for local development set " + envEnvironment + " to development or pass Options.Mode fw.ModeLocal.")
 }
 
 // resolve applies the start profile's rules to opts.
@@ -205,14 +193,14 @@ func resolve(opts Options, lookup lookupFunc, build buildInfo) (resolved, *firew
 
 	if mode == ModeLocal {
 		// The key is ignored. Look only to warn.
-		if src, ok := pick(opts.Key, "Options.Key", []string{envKey}, legacyKeyNames, lookup, nil, envKey); ok {
+		if src, ok := pick(opts.Key, "Options.Key", []string{envKey}, lookup); ok {
 			r.warnings = append(r.warnings, `[fireweave] Options.Mode "local" ignores the key from `+src.source+"; nothing is sent to fw-server.")
 		}
 		r.mode, r.modeSource = ModeLocal, modeSourceOption
 		return r, nil
 	}
 
-	key, hasKey, kerr := resolveKey(opts, lookup, &r.warnings)
+	key, hasKey, kerr := resolveKey(opts, lookup)
 	if kerr != nil {
 		return resolved{}, kerr
 	}
@@ -222,7 +210,7 @@ func resolve(opts Options, lookup lookupFunc, build buildInfo) (resolved, *firew
 	}
 
 	if hasKey {
-		u, source, hosts, uerr := resolveURL(opts, lookup, build, &r.warnings)
+		u, source, hosts, uerr := resolveURL(opts, lookup, build)
 		if uerr != nil {
 			return resolved{}, uerr
 		}
@@ -235,11 +223,11 @@ func resolve(opts Options, lookup lookupFunc, build buildInfo) (resolved, *firew
 		return r, nil
 	}
 
-	env, found := pick(opts.Environment, "Options.Environment", append([]string{envEnvironment}, environmentFallbacks...), nil, lookup, nil, envEnvironment)
+	env, found := pick(opts.Environment, "Options.Environment", append([]string{envEnvironment}, environmentFallbacks...), lookup)
 	if found && devEnvironments[strings.ToLower(env.value)] {
 		r.mode, r.modeSource = ModeLocal, modeSourceEnvironment
 		r.environment, r.environmentSource = env.value, env.source
 		return r, nil
 	}
-	return resolved{}, noKeyError(env, found, lookup)
+	return resolved{}, noKeyError(env, found)
 }

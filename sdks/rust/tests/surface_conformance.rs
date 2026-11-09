@@ -56,8 +56,6 @@ struct SurfaceMethod {
 #[derive(Deserialize)]
 struct Namespace {
     casing: BTreeMap<String, String>,
-    #[serde(rename = "removedAlias")]
-    removed_alias: String,
 }
 
 #[derive(Deserialize)]
@@ -181,21 +179,6 @@ fn details_returns_a_decision_value_returns_the_bare_value() {
     assert!(!value);
     assert!(!details.value.as_bool().unwrap());
     assert!(!details.reason.is_empty());
-}
-
-#[test]
-fn the_flags_alias_is_gone() {
-    let d = load_descriptor();
-    assert_eq!(d.namespace.removed_alias, "flags");
-    // Rust cannot ask at run time whether a method exists, so read the source.
-    let client_rs = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/application/client.rs"),
-    )
-    .expect("read src/application/client.rs");
-    assert!(
-        !client_rs.contains("pub fn flags("),
-        "client.flags() was removed in 3.0.0 (ADR-0013)"
-    );
 }
 
 #[test]

@@ -49,8 +49,7 @@ class StartContractsTest {
 
     /** Variable names a source may carry; anything else is an option (README "Comparing results"). */
     private static final Set<String> KNOWN_NAMES = new HashSet<>(Arrays.asList(
-            "FIREWEAVE_KEY", "FIREWEAVE_URL", "FIREWEAVE_ENV", "APP_ENV",
-            "FW_PROJECT_API_KEY", "FW_API_URL", "FW_ATTEST_URL"));
+            "FIREWEAVE_KEY", "FIREWEAVE_URL", "FIREWEAVE_ENV", "APP_ENV"));
 
     private static List<JsonNode> fixtures;
     private static List<ObjectNode> results;

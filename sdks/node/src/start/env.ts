@@ -56,7 +56,7 @@ export function processEnv(): EnvReader {
 
 /**
  * A reader that never throws, for values only needed to word a warning or an
- * error (for example "FW_ENV is no longer read").
+ * error (for example the key a local start ignores).
  */
 export function quiet(read: EnvReader): EnvReader {
   return (name) => {

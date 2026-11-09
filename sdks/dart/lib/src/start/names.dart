@@ -25,18 +25,6 @@ const String instanceIdVariable = 'FIREWEAVE_INSTANCE_ID';
 /// container's own `HOSTNAME` (and a test's env map) decides.
 const String hostNameVariable = 'HOSTNAME';
 
-/// Legacy key name written by the scaffolded harness. Read by the server
-/// profile only when [serverKeyVariable] is unset, with one warning, for all
-/// of 2.x.
-const List<String> legacyKeyNames = <String>['FW_PROJECT_API_KEY'];
-
-/// Legacy endpoint names, read like [legacyKeyNames].
-const List<String> legacyUrlNames = <String>['FW_API_URL', 'FW_ATTEST_URL'];
-
-/// The harness's environment name. Never read for its value: the server
-/// profile only looks at it to explain a boot error.
-const String retiredEnvironmentName = 'FW_ENV';
-
 /// Environment names that mean "local development" when no key is set.
 /// Compared trimmed and case-insensitively.
 const Set<String> devEnvironments = <String>{

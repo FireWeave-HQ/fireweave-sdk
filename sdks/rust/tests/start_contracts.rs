@@ -56,15 +56,7 @@ fn load_fixtures() -> Vec<Value> {
 }
 
 /// Variable names a source may carry as-is (README "Comparing results").
-const KNOWN_NAMES: [&str; 7] = [
-    "FIREWEAVE_KEY",
-    "FIREWEAVE_URL",
-    "FIREWEAVE_ENV",
-    "APP_ENV",
-    "FW_PROJECT_API_KEY",
-    "FW_API_URL",
-    "FW_ATTEST_URL",
-];
+const KNOWN_NAMES: [&str; 4] = ["FIREWEAVE_KEY", "FIREWEAVE_URL", "FIREWEAVE_ENV", "APP_ENV"];
 
 /// Variable names stay, any `StartOptions.*` field is `option`, the default
 /// endpoint is `channel`, no key is `none`.
@@ -445,7 +437,6 @@ fixture_tests! {
     start_flags => "start-flags",
     start_instance_key => "start-instance-key",
     start_key_families_server => "start-key-families-server",
-    start_legacy_names => "start-legacy-names",
     start_mode_rule => "start-mode-rule",
 }
 

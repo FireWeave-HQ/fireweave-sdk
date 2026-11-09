@@ -22,7 +22,7 @@ from fireweave.start import define_control_points
 from fireweave.start._build_info import channel_for_version
 from fireweave.start._env import env_from_mapping
 from fireweave.start._instance import derive_instance_key
-from fireweave.start._names import ENV, ENVIRONMENT_FALLBACKS, LEGACY_ENV
+from fireweave.start._names import ENV, ENVIRONMENT_FALLBACKS
 from fireweave.start._resolve import resolve_start
 
 LANG = "python"
@@ -31,9 +31,7 @@ CONTRACTS_DIR = _SDK_DIR.parents[1] / "contracts" / "start"
 REPORT_PATH = _SDK_DIR / "conformance" / "compatibility-report.start.python.json"
 
 #: Variable names stay as they are when sources are normalised.
-KNOWN_NAMES = frozenset(
-    [ENV["key"], ENV["url"], ENV["environment"], *ENVIRONMENT_FALLBACKS, *LEGACY_ENV["key"], *LEGACY_ENV["url"]]
-)
+KNOWN_NAMES = frozenset([ENV["key"], ENV["url"], ENV["environment"], *ENVIRONMENT_FALLBACKS])
 
 
 def _load_fixtures() -> List[Dict[str, Any]]:
