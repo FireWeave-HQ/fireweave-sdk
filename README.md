@@ -166,7 +166,7 @@ func main() {
 <dependency>
   <groupId>ai.fireweave</groupId>
   <artifactId>fireweave-sdk</artifactId>
-  <version>2.3.0</version>
+  <version>3.0.0</version>
 </dependency>
 ```
 
@@ -245,7 +245,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```bash
 # Not on a registry yet: clone next to your package
-git clone --branch swift/v2.2.0 https://github.com/FireWeave-HQ/fireweave-sdk
+git clone https://github.com/FireWeave-HQ/fireweave-sdk
 ```
 
 ```swift
