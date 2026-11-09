@@ -16,13 +16,6 @@ export const BUILD_ENV = Object.freeze({
 /** Fallback environment name after FIREWEAVE_ENV, at build time. */
 export const ENVIRONMENT_FALLBACK = 'APP_ENV';
 
-/**
- * Names the scaffolded harness used for the browser key. They held a project
- * (server-family) key, which the start profile refuses, so they are detected
- * only to explain what to set instead.
- */
-export const RETIRED_KEY_NAMES: readonly string[] = Object.freeze(['VITE_FW_PROJECT_API_KEY', 'PUBLIC_FW_PROJECT_API_KEY']);
-
 /** Server secrets the Vite plugin looks for in output chunks. Never injected, never printed. */
 export const SERVER_KEY_NAMES: readonly string[] = Object.freeze(['FIREWEAVE_KEY', 'FW_PROJECT_API_KEY']);
 

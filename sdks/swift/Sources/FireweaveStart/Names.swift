@@ -7,25 +7,17 @@ enum StartNames {
   static let serverKey = "FIREWEAVE_KEY"
   static let url = "FIREWEAVE_URL"
   static let environment = "FIREWEAVE_ENV"
-  /// Read after `FIREWEAVE_ENV` on the server profile. `FW_ENV` is not read.
+  /// Read after `FIREWEAVE_ENV` on the server profile.
   static let environmentFallback = "APP_ENV"
   static let instanceId = "FIREWEAVE_INSTANCE_ID"
   /// Read before the POSIX host name, as the Node SDK does, so one host
   /// gives one instance key in every SDK.
   static let hostName = "HOSTNAME"
 
-  /// Names the scaffolded harness wrote. Read only when the replacement is
-  /// unset, with one warning each, for the whole 2.x line.
-  static let legacyServerKeyNames = ["FW_PROJECT_API_KEY"]
-  static let legacyURLNames = ["FW_API_URL", "FW_ATTEST_URL"]
-
   // App profile: Info.plist values, normally `$(SETTING)` from an xcconfig.
 
   /// The browser key (`fw_public_…`).
   static let browserKey = "FIREWEAVE_BROWSER_KEY"
-  /// The scaffolded harness's endpoint key. Read only when FIREWEAVE_URL is
-  /// unset, with one warning.
-  static let legacyPlistURLNames = ["FWApiUrl"]
   /// The scaffolded harness's key. It held a server-family key, which must
   /// never ship inside an app, so it is never used: it is detected only to
   /// say so.

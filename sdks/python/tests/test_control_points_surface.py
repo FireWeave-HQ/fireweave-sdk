@@ -91,11 +91,6 @@ def test_every_method_matches_the_descriptors_arity_exactly():
     assert offenders == [], f"arity mismatches: {'; '.join(offenders)}"
 
 
-def test_the_flags_alias_is_gone():
-    fw = client()
-    assert not hasattr(fw, "flags")
-
-
 def test_details_returns_a_decision_value_returns_the_bare_value():
     fw = client()
     value = fw.control_points.get_boolean_value("absent", False)

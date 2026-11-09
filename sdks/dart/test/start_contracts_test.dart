@@ -33,9 +33,6 @@ const Set<String> knownNames = <String>{
   'FIREWEAVE_URL',
   'FIREWEAVE_ENV',
   'APP_ENV',
-  'FW_PROJECT_API_KEY',
-  'FW_API_URL',
-  'FW_ATTEST_URL',
 };
 
 Directory contractsDir() {

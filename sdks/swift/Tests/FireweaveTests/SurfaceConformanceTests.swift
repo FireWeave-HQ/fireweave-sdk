@@ -24,7 +24,6 @@ private struct SurfaceMethod: Decodable {
 
 private struct Namespace: Decodable {
   let casing: [String: String]
-  let removedAlias: String
 }
 
 private struct ClientSection: Decodable {
@@ -107,16 +106,6 @@ struct SurfaceConformanceTests {
     let _: Decision = cp.getObjectDetails("k", default: .null, context: ctx)
     let _: Decision = cp.evaluate(
       "k", type: .boolean, default: .bool(false), context: ctx, options: EvaluateOptions())
-  }
-
-  @Test func theFlagsAliasIsGone() throws {
-    let d = try loadDescriptor()
-    #expect(d.namespace.removedAlias == "flags")
-    // Swift cannot ask at run time whether a property exists, so read the source.
-    let client = ArchitectureGuardTests.packageRoot()
-      .appendingPathComponent("Sources/Fireweave/Application/Client.swift")
-    let source = try String(contentsOf: client, encoding: .utf8)
-    #expect(!source.contains("public var flags:"))
   }
 
   @Test func registerTargetExistsWithLocalModeRecordedAndTraced() async throws {

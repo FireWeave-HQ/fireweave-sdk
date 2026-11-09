@@ -339,13 +339,6 @@ class TestStatus:
         status = fw.status()
         assert status.state == "unstarted" and status.mode is None and status.started_by is None
 
-    def test_a_legacy_key_name_warns_once_and_never_prints_the_value(self):
-        lines = []
-        start(env={"FW_PROJECT_API_KEY": KEY}, log=lines.append, transport=remote_transport([]))
-        assert fw.status().key_source == "FW_PROJECT_API_KEY"
-        assert len([line for line in lines if "legacy name" in line]) == 1
-        assert not any("SENTINEL" in line for line in lines)
-
 
 class TestInstanceKey:
     def test_the_option_wins(self):

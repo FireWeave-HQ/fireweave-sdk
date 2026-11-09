@@ -29,18 +29,18 @@ trust). Its build-time values come from a build helper (web: the `fireweave()` V
 
 ## 2. Names
 
-| Setting | Option | Server variable | Client build value | Legacy name (server, warns once) |
-| --- | --- | --- | --- | --- |
-| key | `key` | `FIREWEAVE_KEY` | `FIREWEAVE_BROWSER_KEY` | `FW_PROJECT_API_KEY` |
-| endpoint | `url` | `FIREWEAVE_URL` | `FIREWEAVE_URL` | `FW_API_URL`, then `FW_ATTEST_URL` |
-| environment name | `environment` | `FIREWEAVE_ENV`, then `APP_ENV` | `FIREWEAVE_ENV` | — |
-| instance id | `instanceId` (`instance_id`) | `FIREWEAVE_INSTANCE_ID` | — | — |
-| local values | `controlPoints` (`control_points`) | — | — | — |
-| mode override | `mode` | — | — | — |
+| Setting | Option | Server variable | Client build value |
+| --- | --- | --- | --- |
+| key | `key` | `FIREWEAVE_KEY` | `FIREWEAVE_BROWSER_KEY` |
+| endpoint | `url` | `FIREWEAVE_URL` | `FIREWEAVE_URL` |
+| environment name | `environment` | `FIREWEAVE_ENV`, then `APP_ENV` | `FIREWEAVE_ENV` |
+| instance id | `instanceId` (`instance_id`) | `FIREWEAVE_INSTANCE_ID` | — |
+| local values | `controlPoints` (`control_points`) | — | — |
+| mode override | `mode` | — | — |
 
 Option spellings follow each language's convention (`instance_id` in Python and Rust,
-`InstanceID` in Go). `FW_ENV` is **not** read; an SDK MAY mention it in the missing-key error
-when it is set. **[SP-2]**
+`InstanceID` in Go). No other name is read: `FW_PROJECT_API_KEY`, `FW_API_URL`, `FW_ATTEST_URL`
+and `FW_ENV` are ignored. **[SP-2]**
 
 Language-conventional environment-name fallbacks after `APP_ENV` are allowed and listed here:
 Node reads `NODE_ENV`; web build helpers read `APP_ENV` and, outside Vite, `NODE_ENV`; the web
@@ -49,8 +49,7 @@ build. **[SP-3]**
 
 ## 3. Precedence and blank values
 
-Every setting resolves as: explicit option → the profile's variable or build value → the legacy
-name (server only, with one warning naming the legacy variable and its replacement) → the
+Every setting resolves as: explicit option → the profile's variable or build value → the
 default. A source is consulted only when every earlier one is unset. **[SP-4]**
 
 An empty or whitespace-only value counts as **unset** at every step, and values are trimmed.

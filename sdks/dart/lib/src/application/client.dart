@@ -47,8 +47,7 @@ class ExtensionResult {
 const Set<String> _supportedCapabilities = <String>{};
 
 /// Typed evaluation helpers — the nine methods (`spec/control-points.md`
-/// "The nine methods"), reached as `client.controlPoints`. The
-/// `client.flags` alias was removed in 3.0.0 (ADR-0013).
+/// "The nine methods"), reached as `client.controlPoints`.
 ///
 /// Every method here is SYNCHRONOUS ("web's shape, not node's") —
 /// [evaluate] is a pure cache read (`FireweaveRuntime.evaluate`), never an

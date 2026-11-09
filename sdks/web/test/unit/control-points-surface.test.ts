@@ -92,11 +92,6 @@ test('every method matches the descriptor\'s arity exactly (conformance/surface/
   assert.deepEqual(offenders, [], `arity mismatches: ${offenders.join('; ')}`);
 });
 
-test('the flags alias is gone (ADR-0013)', async () => {
-  const fw = await readyClient();
-  assert.equal('flags' in fw, false);
-});
-
 test('*Details returns a Decision, *Value returns the bare value', async () => {
   const fw = await readyClient();
 

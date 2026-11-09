@@ -55,7 +55,7 @@ Only the fields present in `expect` are checked.
 | Field | Rule |
 | --- | --- |
 | `mode`, `modeSource`, `url`, `environment`, `value`, `channel` | Exact (`url` after the SDK's own trailing-slash trim). |
-| `keySource`, `urlSource`, `environmentSource` | **Normalised** first: a variable or build-value name stays as it is (`FIREWEAVE_KEY`, `FW_API_URL`, `FIREWEAVE_BROWSER_KEY`); any option source becomes `option`; the default endpoint becomes `channel`; no key becomes `none`. |
+| `keySource`, `urlSource`, `environmentSource` | **Normalised** first: a variable or build-value name stays as it is (`FIREWEAVE_KEY`, `FIREWEAVE_URL`, `FIREWEAVE_BROWSER_KEY`); any option source becomes `option`; the default endpoint becomes `channel`; no key becomes `none`. |
 | `allowedHosts` | `null` means the SDK passes no allowlist (the core default applies). A list is compared as a **set**. |
 | `error` | The resolver signals a configuration fault — by throwing the core's Configuration error (servers) or by returning a failure (client profiles that never throw). `mentions`: each name appears in the error message. `mustNotMention`: none appears (this is how "never echo a key" is pinned). |
 | `warnings` | Over all warning lines the resolution produced: each `mention` name appears in at least one line; no `mustNotMention` name appears in any line. |

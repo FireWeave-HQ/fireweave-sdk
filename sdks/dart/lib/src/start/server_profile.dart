@@ -94,46 +94,10 @@ const Duration defaultServerRefreshInterval = Duration(seconds: 30);
   () => _clean(read(hostNameVariable)) ?? _clean(osHostName()),
 );
 
-/// First non-empty of: the option, then each name, then each legacy name
-/// (adding one warning naming its replacement to [warnings]).
-Sourced? _pick(
-  String? option,
-  String optionName,
-  List<String> names,
-  List<String> legacy,
-  EnvLookup read,
-  List<String> warnings,
-  String replacement,
-) {
-  final fromOption = sourced(option, optionName);
-  if (fromOption != null) {
-    return fromOption;
-  }
-  for (final name in names) {
-    final value = sourced(read(name), name);
-    if (value != null) {
-      return value;
-    }
-  }
-  for (final name in legacy) {
-    final value = sourced(read(name), name);
-    if (value != null) {
-      warnings.add(
-        '[fireweave] $name is a legacy name and will stop being read in the '
-        'next major version. Rename it to $replacement; the value does not '
-        'change.',
-      );
-      return value;
-    }
-  }
-  return null;
-}
-
 /// The server profile's resolution, pure: the options, then [read] (the
-/// process environment's stand-in), then the legacy names, then the
-/// defaults, handed to [resolvePolicy]. [channel] stands in for this build's
-/// release channel. No I/O and no globals; [startServer] is this plus the
-/// singleton.
+/// process environment's stand-in), then the defaults, handed to
+/// [resolvePolicy]. [channel] stands in for this build's release channel. No
+/// I/O and no globals; [startServer] is this plus the singleton.
 PolicyResult resolveServerStart({
   required Map<String, LocalControlPoint> controlPoints,
   required EnvLookup read,
@@ -143,58 +107,31 @@ PolicyResult resolveServerStart({
   String? environment,
   String? url,
   String? key,
-}) {
-  String? lookup(String name) => _clean(read(name));
-  final keyWarnings = <String>[];
-  final urlWarnings = <String>[];
-  final pickedKey = _pick(
-    key,
-    'Fireweave.start(key:)',
-    const <String>[serverKeyVariable],
-    legacyKeyNames,
-    lookup,
-    keyWarnings,
-    serverKeyVariable,
-  );
-  final pickedUrl = _pick(
-    url,
-    'Fireweave.start(url:)',
-    const <String>[urlVariable],
-    legacyUrlNames,
-    lookup,
-    urlWarnings,
-    urlVariable,
-  );
-  final pickedEnvironment = _pick(
-    environment,
-    'Fireweave.start(environment:)',
-    const <String>[environmentVariable, serverEnvironmentFallback],
-    const <String>[],
-    lookup,
-    <String>[],
-    environmentVariable,
-  );
-  return resolvePolicy(
-    PolicyInput(
-      profile: StartProfile.server,
-      mode: mode,
-      key: pickedKey,
-      url: pickedUrl,
-      environment: pickedEnvironment,
-      controlPoints: controlPoints,
-      channel: channel,
-      sdkVersion: sdkVersion,
-      environmentChecked:
-          'Fireweave.start(environment:), $environmentVariable and '
-          '$serverEnvironmentFallback',
-      retiredEnvironmentSet: lookup(retiredEnvironmentName) != null,
-      // Legacy-name warnings only matter for a value that is used.
-      warnings: mode == Mode.local
-          ? const <String>[]
-          : <String>[...keyWarnings, if (pickedKey != null) ...urlWarnings],
-    ),
-  );
-}
+}) => resolvePolicy(
+  PolicyInput(
+    profile: StartProfile.server,
+    mode: mode,
+    key: firstOf(<Sourced?>[
+      sourced(key, 'Fireweave.start(key:)'),
+      sourced(read(serverKeyVariable), serverKeyVariable),
+    ]),
+    url: firstOf(<Sourced?>[
+      sourced(url, 'Fireweave.start(url:)'),
+      sourced(read(urlVariable), urlVariable),
+    ]),
+    environment: firstOf(<Sourced?>[
+      sourced(environment, 'Fireweave.start(environment:)'),
+      sourced(read(environmentVariable), environmentVariable),
+      sourced(read(serverEnvironmentFallback), serverEnvironmentFallback),
+    ]),
+    controlPoints: controlPoints,
+    channel: channel,
+    sdkVersion: sdkVersion,
+    environmentChecked:
+        'Fireweave.start(environment:), $environmentVariable and '
+        '$serverEnvironmentFallback',
+  ),
+);
 
 /// Start the server profile.
 Future<void> startServer({
@@ -309,9 +246,8 @@ abstract final class Fireweave {
   ///
   /// Each value resolves as: the option, then the process environment
   /// (`FIREWEAVE_KEY`, `FIREWEAVE_URL`, `FIREWEAVE_ENV` then `APP_ENV`,
-  /// `FIREWEAVE_INSTANCE_ID`), then the legacy `FW_PROJECT_API_KEY` /
-  /// `FW_API_URL` / `FW_ATTEST_URL` with one warning, then the default.
-  /// Empty values count as unset. [env] replaces the process environment
+  /// `FIREWEAVE_INSTANCE_ID`), then the default. Empty values count as
+  /// unset. [env] replaces the process environment
   /// (tests).
   ///
   /// [mode] wins when given. Otherwise a key means remote; no key and a

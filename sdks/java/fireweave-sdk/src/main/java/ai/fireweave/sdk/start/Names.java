@@ -25,22 +25,10 @@ final class Names {
     static final String ENV_HOSTNAME = "HOSTNAME";
 
     /**
-     * Legacy names written by the scaffolded harness. Read only when the replacement is unset,
-     * with one warning per name, for the whole 2.x line (docs/versioning.md: documented
-     * configuration is removed only in a major).
-     */
-    static final List<String> LEGACY_KEY_NAMES = Collections.singletonList("FW_PROJECT_API_KEY");
-    static final List<String> LEGACY_URL_NAMES =
-            Collections.unmodifiableList(Arrays.asList("FW_API_URL", "FW_ATTEST_URL"));
-
-    /**
      * Read after StartOptions.environment and FIREWEAVE_ENV. NODE_ENV is not a Java convention:
      * only names an operator sets on purpose select a mode.
      */
     static final List<String> ENVIRONMENT_FALLBACKS = Collections.singletonList("APP_ENV");
-
-    /** Read only to explain a start error: the scaffolded harness's FW_ENV is no longer honoured. */
-    static final String RETIRED_ENVIRONMENT_NAME = "FW_ENV";
 
     /** Environment names that mean "local development" when no key is set (trimmed, any case). */
     static final Set<String> DEV_ENVIRONMENTS = Collections.unmodifiableSet(

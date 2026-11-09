@@ -71,7 +71,7 @@ func fresh(t *testing.T) (*recorder, *slog.Logger) {
 // start profile reads (empty counts as unset).
 func clearProcessEnv(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{"FIREWEAVE_KEY", "FIREWEAVE_URL", "FIREWEAVE_ENV", "FIREWEAVE_INSTANCE_ID", "APP_ENV", "FW_PROJECT_API_KEY", "FW_API_URL", "FW_ATTEST_URL", "FW_ENV"} {
+	for _, name := range []string{"FIREWEAVE_KEY", "FIREWEAVE_URL", "FIREWEAVE_ENV", "FIREWEAVE_INSTANCE_ID", "APP_ENV"} {
 		t.Setenv(name, "")
 	}
 }
@@ -160,6 +160,19 @@ func TestASecondIdenticalStartIsANoOp(t *testing.T) {
 	_, log := fresh(t)
 	mustStart(t, Options{ControlPoints: testControlPoints, Env: devEnv, Log: log})
 	mustStart(t, Options{ControlPoints: testControlPoints, Env: devEnv, Log: log})
+}
+
+func TestAStartWarningIsLoggedOncePerProcessAcrossARestart(t *testing.T) {
+	rec, log := fresh(t)
+	opts := Options{ControlPoints: testControlPoints, Mode: ModeLocal, Env: envMap(map[string]string{"FIREWEAVE_KEY": testKey}), Log: log}
+	mustStart(t, opts)
+	if err := Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	mustStart(t, opts)
+	if n := rec.count("ignores the key from FIREWEAVE_KEY"); n != 1 {
+		t.Fatalf("warning logged %d times:\n%s", n, rec.all())
+	}
 }
 
 func TestASecondStartWithDifferentFlagsIsAConflict(t *testing.T) {

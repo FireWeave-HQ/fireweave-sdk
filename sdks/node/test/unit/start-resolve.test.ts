@@ -93,8 +93,9 @@ describe('mode: inference when mode is not set', () => {
     assert.match(message, /no environment name is set/);
   });
 
-  it('points at FIREWEAVE_ENV when only the retired FW_ENV is set', () => {
-    assert.match(configMessage(() => resolveStart({}, env({ FW_ENV: 'dev' }), PROD)), /FW_ENV is no longer read/);
+  it('FW_* names are not read', () => {
+    const fw = env({ FW_ENV: 'dev', FW_PROJECT_API_KEY: KEY, FW_API_URL: 'https://b.example.com', FW_ATTEST_URL: 'https://c.example.com' });
+    assert.match(configMessage(() => resolveStart({}, fw, PROD)), /FIREWEAVE_KEY is not set/);
   });
 
   it('empty and whitespace values count as unset', () => {
@@ -124,16 +125,10 @@ describe('endpoint: inferred from the SDK channel, overridable', () => {
     assert.deepEqual(r.allowedHosts, ['flags.example.com', 'localhost', '127.0.0.1', '::1']);
   });
 
-  it('FIREWEAVE_URL beats the channel and the legacy names', () => {
-    const r = resolveStart({}, env({ FIREWEAVE_KEY: KEY, FIREWEAVE_URL: 'https://a.example.com', FW_API_URL: 'https://b.example.com' }), PROD);
+  it('FIREWEAVE_URL beats the channel', () => {
+    const r = resolveStart({}, env({ FIREWEAVE_KEY: KEY, FIREWEAVE_URL: 'https://a.example.com' }), PROD);
     assert.equal(r.url, 'https://a.example.com');
     assert.equal(r.warnings.length, 0);
-  });
-
-  it('legacy FW_API_URL and FW_ATTEST_URL are read with a warning', () => {
-    const r = resolveStart({}, env({ FIREWEAVE_KEY: KEY, FW_ATTEST_URL: 'https://c.example.com' }), PROD);
-    assert.equal(r.url, 'https://c.example.com');
-    assert.match(r.warnings.join('\n'), /FW_ATTEST_URL is a legacy name.*FIREWEAVE_URL/);
   });
 
   it('http is allowed on localhost only, and the message never echoes the URL', () => {
@@ -157,12 +152,6 @@ describe('key: resolved, family-checked, overridable', () => {
     const r = resolveStart({ key: KEY }, noEnvAfterKey(), PROD);
     assert.equal(r.key, KEY);
     assert.equal(r.keySource, 'start({ key })');
-  });
-
-  it('legacy FW_PROJECT_API_KEY is read with a warning', () => {
-    const r = resolveStart({}, env({ FW_PROJECT_API_KEY: KEY }), PROD);
-    assert.equal(r.keySource, 'FW_PROJECT_API_KEY');
-    assert.match(r.warnings.join('\n'), /FW_PROJECT_API_KEY is a legacy name.*FIREWEAVE_KEY/);
   });
 
   it('a browser key is rejected without printing it', () => {
@@ -199,7 +188,7 @@ describe('controlPoints', () => {
 /** Key from the option: the resolver must not need to read FIREWEAVE_KEY or the env name. */
 function noEnvAfterKey(): EnvReader {
   return (name) => {
-    if (name === 'FIREWEAVE_URL' || name === 'FW_API_URL' || name === 'FW_ATTEST_URL') return undefined;
+    if (name === 'FIREWEAVE_URL') return undefined;
     throw new Error(`unexpected env read: ${name}`);
   };
 }

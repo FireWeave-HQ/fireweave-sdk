@@ -46,7 +46,7 @@ func noEnvAfterKey(t *testing.T) lookupFunc {
 	return func(name string) string {
 		t.Helper()
 		switch name {
-		case envURL, "FW_API_URL", "FW_ATTEST_URL":
+		case envURL:
 			return ""
 		}
 		t.Fatalf("unexpected env read: %s", name)
@@ -183,8 +183,9 @@ func TestResolveNoKeyAndNoEnvironmentFailsClosed(t *testing.T) {
 	assertContains(t, msg, "no environment name is set (checked Options.Environment, FIREWEAVE_ENV and APP_ENV)")
 }
 
-func TestResolvePointsAtFireweaveEnvWhenOnlyFwEnvIsSet(t *testing.T) {
-	assertContains(t, configMessage(t, Options{}, env(map[string]string{"FW_ENV": "dev"}), prodBuild), "FW_ENV is no longer read; rename it to FIREWEAVE_ENV")
+func TestResolveFwNamesAreNotRead(t *testing.T) {
+	msg := configMessage(t, Options{}, env(map[string]string{"FW_ENV": "dev", "FW_PROJECT_API_KEY": testKey, "FW_API_URL": "https://b.example.com"}), prodBuild)
+	assertContains(t, msg, "FIREWEAVE_KEY is not set and no environment name is set")
 }
 
 func TestResolveEmptyAndWhitespaceCountAsUnset(t *testing.T) {
@@ -242,30 +243,6 @@ func TestResolveURLOptionWinsAndTheAllowlistFollowsIt(t *testing.T) {
 	}
 }
 
-func TestResolveFireweaveURLBeatsTheLegacyNames(t *testing.T) {
-	r := mustResolve(t, Options{}, env(map[string]string{"FIREWEAVE_KEY": testKey, "FIREWEAVE_URL": "https://a.example.com", "FW_API_URL": "https://b.example.com"}), prodBuild)
-	if r.url != "https://a.example.com" || len(r.warnings) != 0 {
-		t.Fatalf("url = %q warnings = %v", r.url, r.warnings)
-	}
-}
-
-func TestResolveLegacyURLNamesAreReadWithAWarning(t *testing.T) {
-	r := mustResolve(t, Options{}, env(map[string]string{"FIREWEAVE_KEY": testKey, "FW_ATTEST_URL": "https://c.example.com"}), prodBuild)
-	if r.url != "https://c.example.com" || r.urlSource != "FW_ATTEST_URL" {
-		t.Fatalf("url = %q from %q", r.url, r.urlSource)
-	}
-	if len(r.warnings) != 1 {
-		t.Fatalf("warnings = %v, want exactly one", r.warnings)
-	}
-	assertContains(t, r.warnings[0], "FW_ATTEST_URL is a legacy name")
-	assertContains(t, r.warnings[0], "Rename it to FIREWEAVE_URL")
-
-	r = mustResolve(t, Options{}, env(map[string]string{"FIREWEAVE_KEY": testKey, "FW_API_URL": "https://b.example.com", "FW_ATTEST_URL": "https://c.example.com"}), prodBuild)
-	if r.url != "https://b.example.com" {
-		t.Fatalf("FW_API_URL must beat FW_ATTEST_URL, got %q", r.url)
-	}
-}
-
 func TestResolveHTTPIsAllowedOnLoopbackOnly(t *testing.T) {
 	for _, u := range []string{"http://127.0.0.1:3001", "http://localhost:3001", "http://[::1]:3001"} {
 		if r := mustResolve(t, Options{Key: testKey, URL: u}, noEnv(t), prodBuild); r.url != u {
@@ -299,22 +276,6 @@ func TestResolveKeyOptionBeatsFireweaveKey(t *testing.T) {
 	}
 }
 
-func TestResolveFireweaveKeyBeatsTheLegacyName(t *testing.T) {
-	r := mustResolve(t, Options{}, env(map[string]string{"FIREWEAVE_KEY": testKey, "FW_PROJECT_API_KEY": "project-api-key_old"}), prodBuild)
-	if r.key != testKey || r.keySource != "FIREWEAVE_KEY" || len(r.warnings) != 0 {
-		t.Fatalf("key source = %q warnings = %v", r.keySource, r.warnings)
-	}
-}
-
-func TestResolveLegacyProjectKeyIsReadWithAWarning(t *testing.T) {
-	r := mustResolve(t, Options{}, env(map[string]string{"FW_PROJECT_API_KEY": testKey}), prodBuild)
-	if r.keySource != "FW_PROJECT_API_KEY" || r.mode != ModeRemote {
-		t.Fatalf("key source = %q mode = %s", r.keySource, r.mode)
-	}
-	assertContains(t, strings.Join(r.warnings, "\n"), "FW_PROJECT_API_KEY is a legacy name")
-	assertContains(t, strings.Join(r.warnings, "\n"), "Rename it to FIREWEAVE_KEY")
-}
-
 func TestResolveABrowserKeyIsRejectedWithoutPrintingIt(t *testing.T) {
 	msg := configMessage(t, Options{}, env(map[string]string{"FIREWEAVE_KEY": "fw_public_secretvalue"}), prodBuild)
 	assertContains(t, msg, "The key from FIREWEAVE_KEY is a browser key")
@@ -332,15 +293,6 @@ func TestResolveVendorOrgAndCLIKeysAreRejected(t *testing.T) {
 		assertContains(t, msg, "organisation or CLI token")
 		assertNotContains(t, msg, "secretvalue")
 	}
-}
-
-// The core redactor scrubs values, never a variable name, so a legacy key
-// source is named directly in an error.
-func TestResolveALegacyKeySourceIsNamedInAnError(t *testing.T) {
-	msg := configMessage(t, Options{}, env(map[string]string{"FW_PROJECT_API_KEY": "fw_public_secretvalue"}), prodBuild)
-	assertContains(t, msg, "The key from FW_PROJECT_API_KEY is a browser key")
-	assertNotContains(t, msg, "[REDACTED]")
-	assertNotContains(t, msg, "secretvalue")
 }
 
 // ---------------------------------------------------------------- controlPoints

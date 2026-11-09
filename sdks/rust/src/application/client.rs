@@ -41,8 +41,7 @@ fn failure(err: FireweaveError, degraded: bool) -> ExtensionResult {
 const SUPPORTED_CAPABILITIES: &[&str] = &[];
 
 /// Typed evaluation helpers — the nine methods (`spec/control-points.md`
-/// "The nine methods"), as `client.control_points`. The `client.flags()`
-/// alias was removed in 3.0.0 (ADR-0013).
+/// "The nine methods"), as `client.control_points`.
 pub struct ControlPointsNamespace {
     runtime: Arc<FireweaveRuntime>,
 }

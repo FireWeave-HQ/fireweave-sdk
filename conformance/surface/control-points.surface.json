@@ -21,7 +21,7 @@
     { "name": "getBooleanValue",   "returns": "boolean",  "args": ["key", "default", "context?"] },
     { "name": "getStringValue",    "returns": "string",   "args": ["key", "default", "context?"] },
     { "name": "getNumberValue",    "returns": "number",   "args": ["key", "default", "context?"],
-      "$comment": "number, NOT integer. python currently exposes get_integer_value — that is the drift this row catches." },
+      "$comment": "number, NOT integer." },
     { "name": "getObjectValue",    "returns": "json",     "args": ["key", "default", "context?"],
       "$comment": "REQUIRED. python has no object variant today." },
     { "name": "getBooleanDetails", "returns": "Decision", "args": ["key", "default", "context?"] },

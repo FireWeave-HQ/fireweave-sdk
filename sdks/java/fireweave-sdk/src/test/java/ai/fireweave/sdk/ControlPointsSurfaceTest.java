@@ -98,15 +98,6 @@ class ControlPointsSurfaceTest {
     }
 
     @Test
-    void theFlagsAliasIsGone() throws Exception {
-        JsonNode namespace = descriptor().get("namespace");
-        assertEquals("flags", namespace.get("removedAlias").asText());
-        for (Method m : FireweaveClient.class.getMethods()) {
-            assertFalse(m.getName().equals("flags"), "flags() was removed in 3.0.0 (ADR-0013)");
-        }
-    }
-
-    @Test
     void detailsReturnsADecisionValueReturnsTheBareValue() throws Exception {
         FireweaveClient fw = client();
         boolean value = fw.controlPoints().getBooleanValue("absent", false,

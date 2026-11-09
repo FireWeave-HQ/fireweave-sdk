@@ -19,11 +19,7 @@ private let knownSourceNames: Set<String> = [
   "FIREWEAVE_URL",
   "FIREWEAVE_ENV",
   "APP_ENV",
-  "FW_PROJECT_API_KEY",
-  "FW_API_URL",
-  "FW_ATTEST_URL",
   "FIREWEAVE_BROWSER_KEY",
-  "FWApiUrl",
 ]
 
 /// How the app profile labels an Info.plist source (`Info.plist NAME`).

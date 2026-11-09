@@ -73,17 +73,13 @@ fn ctx(key: &str) -> EvaluationContext {
 /// Every variable the start profile reads, cleared (or set from `pairs`)
 /// for the duration of `f`, then restored.
 fn with_process_env<R>(pairs: &[(&str, &str)], f: impl FnOnce() -> R) -> R {
-    const NAMES: [&str; 10] = [
+    const NAMES: [&str; 6] = [
         "FIREWEAVE_KEY",
         "FIREWEAVE_URL",
         "FIREWEAVE_ENV",
         "FIREWEAVE_INSTANCE_ID",
         "APP_ENV",
         "NODE_ENV",
-        "FW_PROJECT_API_KEY",
-        "FW_API_URL",
-        "FW_ATTEST_URL",
-        "FW_ENV",
     ];
     let saved: Vec<(&str, Option<std::ffi::OsString>)> =
         NAMES.iter().map(|n| (*n, std::env::var_os(n))).collect();

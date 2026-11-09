@@ -6,7 +6,7 @@
  *   POST /v1/capture
  *   POST /v1/targets/register
  *
- * Auth: Authorization: Bearer <FW_PROJECT_API_KEY> (project-api-key_…).
+ * Auth: Authorization: Bearer <project key> (project-api-key_…).
  * Which backend fw-server forwards to is fw-server's concern: no vendor SDK,
  * key, or host ever enters the application process.
  *

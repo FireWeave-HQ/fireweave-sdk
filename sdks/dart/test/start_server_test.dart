@@ -135,15 +135,17 @@ void main() {
       },
     );
 
-    test('FW_ENV is not read; the error says to rename it', () async {
+    test('the FW_* names are not read', () async {
       await expectLater(
         Fireweave.start(
-          env: <String, String>{'FW_ENV': 'development'},
+          env: <String, String>{
+            'FW_ENV': 'development',
+            'FW_PROJECT_API_KEY': key,
+            'FW_API_URL': url,
+          },
           log: log.call,
         ),
-        throwsConfiguration(
-          contains('FW_ENV is no longer read; rename it to FIREWEAVE_ENV'),
-        ),
+        throwsConfiguration(contains('FIREWEAVE_KEY is not set')),
       );
     });
 
@@ -213,41 +215,6 @@ void main() {
       );
       expect(fw.status.mode, Mode.local);
     });
-
-    test(
-      'legacy names are read with one warning each, after the new ones',
-      () async {
-        await Fireweave.start(
-          env: <String, String>{'FW_PROJECT_API_KEY': key, 'FW_API_URL': url},
-          transport: transport,
-          log: log.call,
-        );
-        expect(fw.status.keySource, 'FW_PROJECT_API_KEY');
-        expect(fw.status.endpointSource, 'FW_API_URL');
-        expect(
-          log.containing('FW_PROJECT_API_KEY is a legacy name'),
-          hasLength(1),
-        );
-        expect(log.containing('Rename it to FIREWEAVE_KEY'), hasLength(1));
-        expect(log.containing('FW_API_URL is a legacy name'), hasLength(1));
-        await Fireweave.debugResetForTests();
-
-        log = LogCapture();
-        await Fireweave.start(
-          env: <String, String>{
-            'FIREWEAVE_KEY': key,
-            'FW_PROJECT_API_KEY': 'project-api-key_legacy',
-            'FW_ATTEST_URL': 'https://attest.example.com',
-          },
-          transport: transport,
-          log: log.call,
-        );
-        expect(fw.status.keySource, 'FIREWEAVE_KEY');
-        expect(fw.status.endpointSource, 'FW_ATTEST_URL');
-        expect(log.containing('FW_PROJECT_API_KEY'), isEmpty);
-        expect(log.containing('FW_ATTEST_URL is a legacy name'), hasLength(1));
-      },
-    );
 
     test(
       'Mode.local ignores a key with one warning; Mode.remote needs one',

@@ -69,31 +69,15 @@ struct ServerResolveTests {
     #expect(config.keySource == "startFireweave(key:)")
   }
 
-  @Test func blankValuesAreUnsetAndLegacyNamesWarn() throws {
+  @Test func blankValuesAreUnsetAndTheFWNamesAreNotRead() throws {
     let env = [
       "FIREWEAVE_KEY": "   ",
+      "FW_ENV": "development",
       "FW_PROJECT_API_KEY": testProjectKey,
-      "FW_API_URL": "https://flags.example.com/",
+      "FW_API_URL": "https://flags.example.com",
     ]
-    let config = try resolve(env: env)
-    #expect(config.key == testProjectKey)
-    #expect(config.keySource == "FW_PROJECT_API_KEY")
-    #expect(config.url == "https://flags.example.com")
-    #expect(config.urlSource == "FW_API_URL")
-    #expect(config.warnings.count == 2)
-    let keyWarning = config.warnings.first { $0.contains("FW_PROJECT_API_KEY is a legacy name") }
-    #expect(keyWarning?.contains("Rename it to FIREWEAVE_KEY") == true)
-  }
-
-  @Test func fireweaveURLBeatsTheLegacyNames() throws {
-    let env = [
-      "FIREWEAVE_KEY": testProjectKey,
-      "FIREWEAVE_URL": "https://flags.example.com",
-      "FW_ATTEST_URL": "https://old.example.com",
-    ]
-    let config = try resolve(env: env)
-    #expect(config.urlSource == "FIREWEAVE_URL")
-    #expect(config.warnings.isEmpty)
+    let error = try #require(failure(env: env))
+    #expect(error.message.contains("FIREWEAVE_KEY is not set"))
   }
 
   @Test func explicitLocalIgnoresAKeyWithOneWarning() throws {
@@ -160,10 +144,6 @@ struct ServerResolveTests {
     #expect(error.kind == .configuration)
     #expect(error.message.contains("FIREWEAVE_KEY is not set"))
     #expect(error.message.contains("no environment name is set"))
-  }
-
-  @Test func fwEnvIsNotRead() throws {
-    #expect(failure(env: ["FW_ENV": "development"]) != nil)
   }
 
   @Test func aDebugBuildDoesNotMakeAServerLocal() throws {
@@ -319,15 +299,13 @@ struct AppResolveTests {
     #expect(warned)
   }
 
-  @Test func theEndpointComesFromInfoPlistAndTheLegacyNameWarns() throws {
+  @Test func theEndpointComesFromInfoPlist() throws {
     let plist = [
       "FIREWEAVE_BROWSER_KEY": testBrowserKey,
-      "FWApiUrl": "https://flags.example.com",
+      "FIREWEAVE_URL": "https://flags.example.com",
     ]
     let config = try resolve(profile: .app, plist: plist)
     #expect(config.url == "https://flags.example.com")
-    #expect(config.urlSource == "Info.plist FWApiUrl")
-    let warned = config.warnings.contains { $0.contains("Info.plist FWApiUrl is a legacy name") }
-    #expect(warned)
+    #expect(config.urlSource == "Info.plist FIREWEAVE_URL")
   }
 }

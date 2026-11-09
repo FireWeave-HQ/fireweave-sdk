@@ -27,8 +27,7 @@ public struct ExtensionResult: Sendable, Equatable {
 private let supportedCapabilities: Set<String> = []
 
 /// Typed evaluation helpers — the nine methods (`spec/control-points.md`
-/// "The nine methods"), reached as `FireweaveClient.controlPoints`. The
-/// `flags` alias was removed in 3.0.0 (ADR-0013).
+/// "The nine methods"), reached as `FireweaveClient.controlPoints`.
 ///
 /// Every method here is SYNCHRONOUS (Phase 6 controller ruling: "web's
 /// shape, not node's") — `evaluate` is a pure cache read

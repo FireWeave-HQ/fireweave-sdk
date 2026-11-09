@@ -19,8 +19,7 @@ import java.util.regex.Pattern;
  * {@link #resolve} alone (node: src/start/resolve.ts, go: fw/resolve.go).
  *
  * <p>Precedence for every value: explicit option, then the {@code FIREWEAVE_*} variable, then the
- * legacy {@code FW_*} name (one warning), then the default. Lookups are lazy: a source is read
- * only if every earlier source was unset.
+ * default. Lookups are lazy: a source is read only if every earlier source was unset.
  */
 final class StartResolver {
 
@@ -76,7 +75,7 @@ final class StartResolver {
         SdkChannel channel;
         String sdkVersion;
 
-        /** Lines to log once each: legacy names, an ignored key. */
+        /** Lines to log once each: an ignored key. */
         final List<String> warnings = new ArrayList<>();
 
         @Override
@@ -103,8 +102,7 @@ final class StartResolver {
         Mode mode = opts.mode();
         if (mode == Mode.LOCAL) {
             // The key is ignored. Look only to warn.
-            Sourced ignored = pick(opts.key(), "StartOptions.key", Collections.singletonList(Names.ENV_KEY),
-                    Names.LEGACY_KEY_NAMES, lookup, null, Names.ENV_KEY);
+            Sourced ignored = pick(opts.key(), "StartOptions.key", Collections.singletonList(Names.ENV_KEY), lookup);
             if (ignored != null) {
                 r.warnings.add("[fireweave] StartOptions.mode(LOCAL) ignores the key from " + ignored.source
                         + "; nothing is sent to fw-server.");
@@ -114,7 +112,7 @@ final class StartResolver {
             return r;
         }
 
-        Sourced key = resolveKey(opts, lookup, r.warnings);
+        Sourced key = resolveKey(opts, lookup);
         if (mode == Mode.REMOTE && key == null) {
             throw configError("StartOptions.mode(REMOTE) needs a key. Set " + Names.ENV_KEY
                     + " or pass StartOptions.key.");
@@ -132,8 +130,7 @@ final class StartResolver {
         List<String> envNames = new ArrayList<>();
         envNames.add(Names.ENV_ENVIRONMENT);
         envNames.addAll(Names.ENVIRONMENT_FALLBACKS);
-        Sourced env = pick(opts.environment(), "StartOptions.environment", envNames,
-                Collections.<String>emptyList(), lookup, null, Names.ENV_ENVIRONMENT);
+        Sourced env = pick(opts.environment(), "StartOptions.environment", envNames, lookup);
         if (env != null && Names.DEV_ENVIRONMENTS.contains(env.value.toLowerCase(Locale.ROOT))) {
             r.mode = Mode.LOCAL;
             r.modeSource = MODE_SOURCE_ENVIRONMENT;
@@ -141,15 +138,11 @@ final class StartResolver {
             r.environmentSource = env.source;
             return r;
         }
-        throw noKeyError(env, lookup);
+        throw noKeyError(env);
     }
 
-    /**
-     * The first non-empty of: the option, then each variable in order, then each legacy name
-     * (adding one warning naming its replacement). Null when every source is unset.
-     */
-    static Sourced pick(String option, String optionName, List<String> names, List<String> legacy,
-                        Function<String, String> lookup, List<String> warnings, String replacement) {
+    /** The first non-empty of: the option, then each variable in order. Null when every source is unset. */
+    static Sourced pick(String option, String optionName, List<String> names, Function<String, String> lookup) {
         String fromOption = StartEnv.trim(option);
         if (!fromOption.isEmpty()) {
             return new Sourced(fromOption, optionName);
@@ -157,16 +150,6 @@ final class StartResolver {
         for (String name : names) {
             String v = StartEnv.trim(lookup.apply(name));
             if (!v.isEmpty()) {
-                return new Sourced(v, name);
-            }
-        }
-        for (String name : legacy) {
-            String v = StartEnv.trim(lookup.apply(name));
-            if (!v.isEmpty()) {
-                if (warnings != null) {
-                    warnings.add("[fireweave] " + name + " is a legacy name and will stop being read in the next "
-                            + "major version (3.0.0). Rename it to " + replacement + "; the value does not change.");
-                }
                 return new Sourced(v, name);
             }
         }
@@ -193,9 +176,8 @@ final class StartResolver {
         return null;
     }
 
-    private static Sourced resolveKey(StartOptions opts, Function<String, String> lookup, List<String> warnings) {
-        Sourced picked = pick(opts.key(), "StartOptions.key", Collections.singletonList(Names.ENV_KEY),
-                Names.LEGACY_KEY_NAMES, lookup, warnings, Names.ENV_KEY);
+    private static Sourced resolveKey(StartOptions opts, Function<String, String> lookup) {
+        Sourced picked = pick(opts.key(), "StartOptions.key", Collections.singletonList(Names.ENV_KEY), lookup);
         if (picked == null) {
             return null;
         }
@@ -211,8 +193,7 @@ final class StartResolver {
      * allowlist already admits; an override gets an allowlist of its own host plus loopback.
      */
     private static void resolveUrl(StartOptions opts, Function<String, String> lookup, Resolved r) {
-        Sourced picked = pick(opts.url(), "StartOptions.url", Collections.singletonList(Names.ENV_URL),
-                Names.LEGACY_URL_NAMES, lookup, r.warnings, Names.ENV_URL);
+        Sourced picked = pick(opts.url(), "StartOptions.url", Collections.singletonList(Names.ENV_URL), lookup);
         if (picked == null) {
             r.url = Names.channelUrl(r.channel);
             r.urlSource = "SDK channel (" + r.channel + ")";
@@ -270,7 +251,7 @@ final class StartResolver {
         return !value.startsWith("project-api-key_") && !value.startsWith("fw_");
     }
 
-    private static FireweaveException noKeyError(Sourced env, Function<String, String> lookup) {
+    private static FireweaveException noKeyError(Sourced env) {
         String where;
         if (env == null) {
             where = "no environment name is set (checked StartOptions.environment, " + Names.ENV_ENVIRONMENT
@@ -281,14 +262,9 @@ final class StartResolver {
         } else {
             where = "the environment name from " + env.source + " is not a development name";
         }
-        String retired = "";
-        if (!StartEnv.trim(lookup.apply(Names.RETIRED_ENVIRONMENT_NAME)).isEmpty()) {
-            retired = " " + Names.RETIRED_ENVIRONMENT_NAME + " is no longer read; rename it to "
-                    + Names.ENV_ENVIRONMENT + ".";
-        }
         return configError(Names.ENV_KEY + " is not set and " + where + ". Set " + Names.ENV_KEY
                 + " to the project's server key, or for local development set " + Names.ENV_ENVIRONMENT
-                + " to development or pass StartOptions.mode(Mode.LOCAL)." + retired);
+                + " to development or pass StartOptions.mode(Mode.LOCAL).");
     }
 
     static FireweaveException configError(String message) {

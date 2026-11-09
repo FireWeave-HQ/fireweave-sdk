@@ -102,7 +102,7 @@ final class ResolvedStart {
   final SdkChannel channel;
   final String sdkVersion;
 
-  /// Lines to log once each: legacy names, an ignored key.
+  /// Lines to log once each: an ignored key.
   final List<String> warnings;
 
   /// fw-server host name only: never a path, a query or userinfo.
@@ -151,8 +151,6 @@ final class PolicyInput {
     this.key,
     this.url,
     this.environment,
-    this.retiredEnvironmentSet = false,
-    this.warnings = const <String>[],
   });
 
   final StartProfile profile;
@@ -166,13 +164,6 @@ final class PolicyInput {
 
   /// Where an environment name was looked for, for the missing-key message.
   final String environmentChecked;
-
-  /// The retired `FW_ENV` is set (server only): the missing-key message says
-  /// to rename it.
-  final bool retiredEnvironmentSet;
-
-  /// Warnings already produced while reading the sources (legacy names).
-  final List<String> warnings;
 }
 
 PolicyFailure _fail(String reason, String variable, String message) =>
@@ -316,12 +307,7 @@ bool _echoable(String value) =>
     !value.startsWith(serverKeyPrefix) &&
     !value.startsWith('fw_');
 
-PolicyResult _remote(
-  PolicyInput input,
-  Sourced key,
-  String modeSource,
-  List<String> warnings,
-) {
+PolicyResult _remote(PolicyInput input, Sourced key, String modeSource) {
   final problem = _checkKey(input.profile, key);
   if (problem != null) {
     return problem;
@@ -342,7 +328,6 @@ PolicyResult _remote(
       controlPoints: input.controlPoints,
       channel: input.channel,
       sdkVersion: input.sdkVersion,
-      warnings: List<String>.unmodifiable(warnings),
     ),
   );
 }
@@ -355,17 +340,10 @@ PolicyResult _remote(
 /// trimmed, any case) means local; anything else fails closed, so a missing
 /// key never turns into silent local evaluation in production.
 PolicyResult resolvePolicy(PolicyInput input) {
-  final warnings = <String>[...input.warnings];
   final keyVariable = input.profile.keyVariable;
   final key = input.key;
 
   if (input.mode == Mode.local) {
-    if (key != null) {
-      warnings.add(
-        '[fireweave] Mode.local ignores the key from ${key.source}; nothing '
-        'is sent to fw-server.',
-      );
-    }
     return PolicyOk(
       ResolvedStart(
         mode: Mode.local,
@@ -374,7 +352,11 @@ PolicyResult resolvePolicy(PolicyInput input) {
         controlPoints: input.controlPoints,
         channel: input.channel,
         sdkVersion: input.sdkVersion,
-        warnings: List<String>.unmodifiable(warnings),
+        warnings: List<String>.unmodifiable(<String>[
+          if (key != null)
+            '[fireweave] Mode.local ignores the key from ${key.source}; '
+                'nothing is sent to fw-server.',
+        ]),
       ),
     );
   }
@@ -388,11 +370,11 @@ PolicyResult resolvePolicy(PolicyInput input) {
             'Fireweave.start(key:).',
       );
     }
-    return _remote(input, key, 'option', warnings);
+    return _remote(input, key, 'option');
   }
 
   if (key != null) {
-    return _remote(input, key, 'key', warnings);
+    return _remote(input, key, 'key');
   }
 
   final environment = input.environment;
@@ -408,7 +390,6 @@ PolicyResult resolvePolicy(PolicyInput input) {
         controlPoints: input.controlPoints,
         channel: input.channel,
         sdkVersion: input.sdkVersion,
-        warnings: List<String>.unmodifiable(warnings),
       ),
     );
   }
@@ -425,10 +406,6 @@ PolicyResult resolvePolicy(PolicyInput input) {
         'the environment name from ${environment.source} is not a '
         'development name';
   }
-  final retired = environment == null && input.retiredEnvironmentSet
-      ? ' $retiredEnvironmentName is no longer read; rename it to '
-            '$environmentVariable.'
-      : '';
   final fix = switch (input.profile) {
     StartProfile.client =>
       'Set $keyVariable to a browser key ($browserKeyPrefix…) with '
@@ -443,6 +420,6 @@ PolicyResult resolvePolicy(PolicyInput input) {
   return _fail(
     'missing-key',
     keyVariable,
-    '$keyVariable is not set and $where. $fix$retired',
+    '$keyVariable is not set and $where. $fix',
   );
 }

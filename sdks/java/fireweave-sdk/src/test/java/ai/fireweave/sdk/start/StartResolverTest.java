@@ -78,28 +78,9 @@ class StartResolverTest {
     }
 
     @Test
-    void theLegacyKeyNameIsReadWithOneWarningNamingItsReplacement() {
-        StartResolver.Resolved r = resolve(StartOptions.defaults(), env("FW_PROJECT_API_KEY", KEY));
-        assertEquals(Mode.REMOTE, r.mode);
-        assertEquals("FW_PROJECT_API_KEY", r.keySource);
-        assertEquals(1, r.warnings.size());
-        assertTrue(r.warnings.get(0).contains("FW_PROJECT_API_KEY is a legacy name"), r.warnings.get(0));
-        assertTrue(r.warnings.get(0).contains("Rename it to FIREWEAVE_KEY"), r.warnings.get(0));
-        assertEquals(Redaction.sanitize(r.warnings.get(0)), r.warnings.get(0));
-    }
-
-    @Test
-    void theNewKeyNameWinsOverTheLegacyOneWithoutAWarning() {
-        StartResolver.Resolved r = resolve(StartOptions.defaults(),
-                env("FIREWEAVE_KEY", KEY, "FW_PROJECT_API_KEY", "project-api-key_legacy"));
-        assertEquals(KEY, r.key);
-        assertTrue(r.warnings.isEmpty());
-    }
-
-    @Test
     void emptyAndWhitespaceValuesCountAsUnsetOptionsIncluded() {
         StartResolver.Resolved r = resolve(opts().key("   ").environment(" ").build(),
-                env("FIREWEAVE_KEY", "", "FW_PROJECT_API_KEY", " \t", "FIREWEAVE_ENV", "  ", "APP_ENV", " test "));
+                env("FIREWEAVE_KEY", " \t", "FIREWEAVE_ENV", "  ", "APP_ENV", " test "));
         assertEquals(Mode.LOCAL, r.mode);
         assertEquals("APP_ENV", r.environmentSource);
         assertEquals("test", r.environment);
@@ -145,7 +126,6 @@ class StartResolverTest {
         FireweaveException e = fails(StartOptions.defaults(), env());
         assertTrue(e.getMessage().startsWith("FIREWEAVE_KEY is not set and no environment name is set"), e.getMessage());
         assertTrue(e.getMessage().contains("checked StartOptions.environment, FIREWEAVE_ENV and APP_ENV"), e.getMessage());
-        assertFalse(e.getMessage().contains("FW_ENV is no longer read"), e.getMessage());
     }
 
     @Test
@@ -163,9 +143,10 @@ class StartResolverTest {
     }
 
     @Test
-    void fwEnvIsNotReadButIsMentionedInTheError() {
-        FireweaveException e = fails(StartOptions.defaults(), env("FW_ENV", "development"));
-        assertTrue(e.getMessage().contains("FW_ENV is no longer read; rename it to FIREWEAVE_ENV."), e.getMessage());
+    void fwNamesAreNotRead() {
+        FireweaveException e = fails(StartOptions.defaults(), env("FW_ENV", "development",
+                "FW_PROJECT_API_KEY", KEY, "FW_API_URL", "https://b.example.com", "FW_ATTEST_URL", "https://c.example.com"));
+        assertTrue(e.getMessage().startsWith("FIREWEAVE_KEY is not set and no environment name is set"), e.getMessage());
     }
 
     @Test
@@ -236,21 +217,10 @@ class StartResolverTest {
     }
 
     @Test
-    void theUrlOptionWinsThenFireweaveUrlThenTheLegacyNamesInOrder() {
-        Map<String, String> all = env("FIREWEAVE_KEY", KEY, "FIREWEAVE_URL", "https://a.example.com",
-                "FW_API_URL", "https://b.example.com", "FW_ATTEST_URL", "https://c.example.com");
+    void theUrlOptionWinsOverFireweaveUrl() {
+        Map<String, String> all = env("FIREWEAVE_KEY", KEY, "FIREWEAVE_URL", "https://a.example.com");
         assertEquals("StartOptions.url", resolve(opts().url("https://o.example.com").build(), all).urlSource);
         assertEquals("FIREWEAVE_URL", resolve(StartOptions.defaults(), all).urlSource);
-
-        StartResolver.Resolved legacy = resolve(StartOptions.defaults(),
-                env("FIREWEAVE_KEY", KEY, "FW_API_URL", "https://b.example.com", "FW_ATTEST_URL", "https://c.example.com"));
-        assertEquals("FW_API_URL", legacy.urlSource);
-        assertEquals(1, legacy.warnings.size());
-        assertTrue(legacy.warnings.get(0).contains("Rename it to FIREWEAVE_URL"), legacy.warnings.get(0));
-
-        StartResolver.Resolved attest = resolve(StartOptions.defaults(),
-                env("FIREWEAVE_KEY", KEY, "FW_ATTEST_URL", "https://c.example.com"));
-        assertEquals("FW_ATTEST_URL", attest.urlSource);
     }
 
     @Test
@@ -268,8 +238,8 @@ class StartResolverTest {
     @Test
     void invalidEndpointsNameTheirSourceNeverTheValue() {
         for (String bad : Arrays.asList("not a url", "ftp://fw.example.com", "https://", "fw.example.com")) {
-            FireweaveException e = fails(StartOptions.defaults(), env("FIREWEAVE_KEY", KEY, "FW_API_URL", bad));
-            assertTrue(e.getMessage().contains("The endpoint from FW_API_URL is not a valid URL."), bad + ": " + e.getMessage());
+            FireweaveException e = fails(StartOptions.defaults(), env("FIREWEAVE_KEY", KEY, "FIREWEAVE_URL", bad));
+            assertTrue(e.getMessage().contains("The endpoint from FIREWEAVE_URL is not a valid URL."), bad + ": " + e.getMessage());
         }
         for (String bad : Arrays.asList("https://user:pw@fw.example.com", "https://fw.example.com?x=1",
                 "https://fw.example.com#frag")) {
@@ -303,9 +273,6 @@ class StartResolverTest {
             FireweaveException e = fails(StartOptions.defaults(), env("FIREWEAVE_KEY", value));
             assertTrue(e.getMessage().contains("The key from FIREWEAVE_KEY " + row[1]), value + ": " + e.getMessage());
             assertFalse(e.getMessage().contains(value), "the value is never echoed: " + e.getMessage());
-
-            FireweaveException legacy = fails(StartOptions.defaults(), env("FW_PROJECT_API_KEY", value));
-            assertTrue(legacy.getMessage().contains("The key from FW_PROJECT_API_KEY " + row[1]), legacy.getMessage());
 
             FireweaveException option = fails(opts().key(value).build(), env());
             assertTrue(option.getMessage().contains("The key from StartOptions.key " + row[1]), option.getMessage());

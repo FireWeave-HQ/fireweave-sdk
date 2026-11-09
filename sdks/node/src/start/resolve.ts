@@ -4,7 +4,7 @@
  * through `resolveStart` alone.
  *
  * Precedence for every value: explicit start() option, then FIREWEAVE_* env,
- * then the legacy FW_* name (one warning), then the default. Reads are lazy:
+ * then the default. Reads are lazy:
  * a source is read only if every earlier source was unset, so an explicit
  * option never touches the environment (which matters on Deno).
  */
@@ -17,9 +17,7 @@ import {
   DEV_ENVIRONMENTS,
   ENV,
   ENVIRONMENT_FALLBACKS,
-  LEGACY_ENV,
   LOOPBACK_HOSTS,
-  RETIRED_ENVIRONMENT_NAME,
 } from './names.js';
 
 export type StartMode = 'remote' | 'local';
@@ -55,7 +53,7 @@ export interface ResolvedStart {
   readonly controlPoints: ControlPointMap;
   readonly channel: SdkChannel;
   readonly sdkVersion: string;
-  /** Lines to log once each: legacy names, ignored keys. */
+  /** Lines to log once each: ignored keys. */
   readonly warnings: readonly string[];
 }
 
@@ -78,24 +76,12 @@ function pick(
   option: string | undefined,
   optionName: string,
   names: readonly string[],
-  legacy: readonly string[],
   read: EnvReader,
-  warnings: string[],
-  replacement: string,
 ): Sourced | undefined {
   if (option !== undefined) return { value: option, source: `start({ ${optionName} })` };
   for (const name of names) {
     const value = read(name);
     if (value !== undefined) return { value, source: name };
-  }
-  for (const name of legacy) {
-    const value = read(name);
-    if (value !== undefined) {
-      warnings.push(
-        `[fireweave] ${name} is a legacy name and will stop being read in 3.0.0. Rename it to ${replacement}; the value does not change.`,
-      );
-      return { value, source: name };
-    }
   }
   return undefined;
 }
@@ -123,16 +109,8 @@ function checkKeyFamily(key: string, source: string): void {
   }
 }
 
-function resolveUrl(input: ResolveInput, read: EnvReader, build: BuildInfo, warnings: string[]) {
-  const picked = pick(
-    optionString(input.url, 'url'),
-    'url',
-    [ENV.url],
-    LEGACY_ENV.url,
-    read,
-    warnings,
-    ENV.url,
-  );
+function resolveUrl(input: ResolveInput, read: EnvReader, build: BuildInfo) {
+  const picked = pick(optionString(input.url, 'url'), 'url', [ENV.url], read);
   if (picked === undefined) {
     // The channel host is in DEFAULT_ALLOWED_HOSTS, so no custom allowlist.
     return { url: CHANNEL_URLS[build.channel], urlSource: `SDK channel (${build.channel})` };
@@ -155,33 +133,22 @@ function resolveUrl(input: ResolveInput, read: EnvReader, build: BuildInfo, warn
   return { url, urlSource: picked.source, allowedHosts };
 }
 
-function resolveKey(input: ResolveInput, read: EnvReader, warnings: string[]): Sourced | undefined {
-  const picked = pick(optionString(input.key, 'key'), 'key', [ENV.key], LEGACY_ENV.key, read, warnings, ENV.key);
+function resolveKey(input: ResolveInput, read: EnvReader): Sourced | undefined {
+  const picked = pick(optionString(input.key, 'key'), 'key', [ENV.key], read);
   if (picked !== undefined) checkKeyFamily(picked.value, picked.source);
   return picked;
 }
 
 function resolveEnvironment(input: ResolveInput, read: EnvReader): Sourced | undefined {
-  return pick(
-    optionString(input.environment, 'environment'),
-    'environment',
-    [ENV.environment, ...ENVIRONMENT_FALLBACKS],
-    [],
-    read,
-    [],
-    ENV.environment,
-  );
+  return pick(optionString(input.environment, 'environment'), 'environment', [ENV.environment, ...ENVIRONMENT_FALLBACKS], read);
 }
 
-function noKeyError(env: Sourced | undefined, read: EnvReader): FireweaveError {
+function noKeyError(env: Sourced | undefined): FireweaveError {
   const where = env === undefined
     ? 'no environment name is set (checked the environment option, FIREWEAVE_ENV, APP_ENV and NODE_ENV)'
     : `the environment is '${env.value}' (from ${env.source}), which is not a development name`;
-  const retired = env === undefined && quiet(read)(RETIRED_ENVIRONMENT_NAME) !== undefined
-    ? ` FW_ENV is no longer read; rename it to FIREWEAVE_ENV.`
-    : '';
   return configError(
-    `[fireweave] ${ENV.key} is not set and ${where}. Set ${ENV.key} to the project's server key, or for local development set FIREWEAVE_ENV=development or call start({ mode: 'local' }).${retired}`,
+    `[fireweave] ${ENV.key} is not set and ${where}. Set ${ENV.key} to the project's server key, or for local development set FIREWEAVE_ENV=development or call start({ mode: 'local' }).`,
   );
 }
 
@@ -207,7 +174,7 @@ export function resolveStart(input: ResolveInput, read: EnvReader, build: BuildI
     return { ...base, mode: 'local', modeSource: 'option', keySource: 'none', warnings };
   }
 
-  const key = resolveKey(input, read, warnings);
+  const key = resolveKey(input, read);
 
   if (input.mode === 'remote') {
     if (key === undefined) {
@@ -215,11 +182,11 @@ export function resolveStart(input: ResolveInput, read: EnvReader, build: BuildI
         `[fireweave] start({ mode: 'remote' }) needs a key. Set ${ENV.key} or pass start({ key }).`,
       );
     }
-    return { ...base, mode: 'remote', modeSource: 'option', ...resolveUrl(input, read, build, warnings), key: key.value, keySource: key.source, warnings };
+    return { ...base, mode: 'remote', modeSource: 'option', ...resolveUrl(input, read, build), key: key.value, keySource: key.source, warnings };
   }
 
   if (key !== undefined) {
-    return { ...base, mode: 'remote', modeSource: 'key', ...resolveUrl(input, read, build, warnings), key: key.value, keySource: key.source, warnings };
+    return { ...base, mode: 'remote', modeSource: 'key', ...resolveUrl(input, read, build), key: key.value, keySource: key.source, warnings };
   }
 
   const env = resolveEnvironment(input, read);
@@ -234,14 +201,10 @@ export function resolveStart(input: ResolveInput, read: EnvReader, build: BuildI
       warnings,
     };
   }
-  throw noKeyError(env, read);
+  throw noKeyError(env);
 }
 
 function resolveKeyQuietly(input: ResolveInput, read: EnvReader): string | undefined {
   if (typeof input.key === 'string' && input.key.trim() !== '') return 'start({ key })';
-  const safe = quiet(read);
-  for (const name of [ENV.key, ...LEGACY_ENV.key]) {
-    if (safe(name) !== undefined) return name;
-  }
-  return undefined;
+  return quiet(read)(ENV.key) !== undefined ? ENV.key : undefined;
 }

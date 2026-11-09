@@ -63,7 +63,7 @@ export interface PluginDeps {
   readonly log?: (line: string) => void;
 }
 
-const ENV_PREFIXES = ['FIREWEAVE_', ENVIRONMENT_FALLBACK, 'VITE_FW_', 'PUBLIC_FW_'];
+const ENV_PREFIXES = ['FIREWEAVE_', ENVIRONMENT_FALLBACK];
 const SERVER_KEY_PATTERN = /project-api-key_[A-Za-z0-9_-]{8,}/;
 
 async function viteLoadEnv(): Promise<LoadEnv> {

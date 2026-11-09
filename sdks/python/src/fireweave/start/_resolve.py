@@ -3,15 +3,15 @@ config out. No I/O, no globals, no logging: every rule here is unit-tested
 through :func:`resolve_start` alone.
 
 Precedence for every value: explicit ``start()`` option, then FIREWEAVE_*
-env, then the legacy FW_* name (one warning), then the default. Reads are
-lazy: a source is read only if every earlier source was unset.
+env, then the default. Reads are lazy: a source is read only if every
+earlier source was unset.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
+from typing import Any, Dict, Literal, Optional, Sequence, Tuple
 from urllib.parse import urlparse
 
 from fireweave import ConfigurationError, assert_host_allowed
@@ -23,9 +23,7 @@ from ._names import (
     DEV_ENVIRONMENTS,
     ENV,
     ENVIRONMENT_FALLBACKS,
-    LEGACY_ENV,
     LOOPBACK_HOSTS,
-    RETIRED_ENVIRONMENT_NAME,
 )
 
 StartMode = Literal["remote", "local"]
@@ -53,7 +51,7 @@ class ResolvedStart:
     #: Set when the environment name was consulted (no key, no mode option).
     environment: Optional[str] = None
     environment_source: Optional[str] = None
-    #: Lines to log once each: legacy names, an ignored key.
+    #: Lines to log once each: an ignored key.
     warnings: Tuple[str, ...] = ()
 
 
@@ -75,29 +73,13 @@ def _option_string(value: Any, name: str) -> Optional[str]:
     return value.strip() or None
 
 
-def _pick(
-    option: Optional[str],
-    option_name: str,
-    names: Sequence[str],
-    legacy: Sequence[str],
-    read: EnvReader,
-    warnings: List[str],
-    replacement: str,
-) -> Optional[_Sourced]:
-    """First non-empty of: the option, then each env name, then each legacy name."""
+def _pick(option: Optional[str], option_name: str, names: Sequence[str], read: EnvReader) -> Optional[_Sourced]:
+    """First non-empty of: the option, then each env name."""
     if option is not None:
         return _Sourced(option, f"start({option_name}=...)")
     for name in names:
         value = read(name)
         if value is not None:
-            return _Sourced(value, name)
-    for name in legacy:
-        value = read(name)
-        if value is not None:
-            warnings.append(
-                f"[fireweave] {name} is a legacy name and will stop being read in 3.0.0. "
-                f"Rename it to {replacement}; the value does not change."
-            )
             return _Sourced(value, name)
     return None
 
@@ -123,8 +105,8 @@ def _check_key_family(key: str, source: str) -> None:
         )
 
 
-def _resolve_url(url_option: Optional[str], read: EnvReader, channel: str, warnings: List[str]) -> Dict[str, Any]:
-    picked = _pick(url_option, "url", [ENV["url"]], LEGACY_ENV["url"], read, warnings, ENV["url"])
+def _resolve_url(url_option: Optional[str], read: EnvReader, channel: str) -> Dict[str, Any]:
+    picked = _pick(url_option, "url", [ENV["url"]], read)
     if picked is None:
         # Both channel hosts are in the core's DEFAULT_ALLOWED_HOSTS, so no
         # custom allowlist is passed.
@@ -148,28 +130,23 @@ def _resolve_url(url_option: Optional[str], read: EnvReader, channel: str, warni
     return {"url": url, "url_source": picked.source, "allowed_hosts": allowed}
 
 
-def _resolve_key(key_option: Optional[str], read: EnvReader, warnings: List[str]) -> Optional[_Sourced]:
-    picked = _pick(key_option, "key", [ENV["key"]], LEGACY_ENV["key"], read, warnings, ENV["key"])
+def _resolve_key(key_option: Optional[str], read: EnvReader) -> Optional[_Sourced]:
+    picked = _pick(key_option, "key", [ENV["key"]], read)
     if picked is not None:
         _check_key_family(picked.value, picked.source)
     return picked
 
 
-def _no_key_error(env: Optional[_Sourced], read: EnvReader) -> ConfigurationError:
+def _no_key_error(env: Optional[_Sourced]) -> ConfigurationError:
     names = [ENV["environment"], *ENVIRONMENT_FALLBACKS]
     checked = ", ".join(names[:-1]) + f" and {names[-1]}" if len(names) > 1 else names[0]
     if env is None:
         where = f"no environment name is set (checked the environment option, {checked})"
     else:
         where = f"the environment is {env.value!r} (from {env.source}), which is not a development name"
-    retired = (
-        f" {RETIRED_ENVIRONMENT_NAME} is no longer read; rename it to {ENV['environment']}."
-        if env is None and read(RETIRED_ENVIRONMENT_NAME) is not None
-        else ""
-    )
     return _config_error(
         f"[fireweave] {ENV['key']} is not set and {where}. Set {ENV['key']} to the project's server key, "
-        f"or for local development set {ENV['environment']}=development or call start(mode='local').{retired}"
+        f"or for local development set {ENV['environment']}=development or call start(mode='local')."
     )
 
 
@@ -189,7 +166,6 @@ def resolve_start(
     Raises ConfigurationError (init_fatal) naming the option or variable at
     fault, never its value.
     """
-    warnings: List[str] = []
     normalized = normalize_control_points(control_points)
     base: Dict[str, Any] = {"control_points": normalized, "channel": channel, "sdk_version": sdk_version}
 
@@ -201,34 +177,32 @@ def resolve_start(
 
     if mode == "local":
         # The key is ignored. Look only to warn.
-        ignored = "start(key=...)" if key_option is not None else next(
-            (name for name in (ENV["key"], *LEGACY_ENV["key"]) if read(name) is not None), None
+        ignored = "start(key=...)" if key_option is not None else (ENV["key"] if read(ENV["key"]) is not None else None)
+        warnings = (
+            (f"[fireweave] start(mode='local') ignores the key from {ignored}; nothing is sent to fw-server.",)
+            if ignored is not None
+            else ()
         )
-        if ignored is not None:
-            warnings.append(
-                f"[fireweave] start(mode='local') ignores the key from {ignored}; nothing is sent to fw-server."
-            )
-        return ResolvedStart(mode="local", mode_source="option", key_source="none", warnings=tuple(warnings), **base)
+        return ResolvedStart(mode="local", mode_source="option", key_source="none", warnings=warnings, **base)
 
-    picked_key = _resolve_key(key_option, read, warnings)
+    picked_key = _resolve_key(key_option, read)
 
     if mode == "remote" or picked_key is not None:
         if picked_key is None:
             raise _config_error(
                 f"[fireweave] start(mode='remote') needs a key. Set {ENV['key']} or pass start(key=...)."
             )
-        endpoint = _resolve_url(url_option, read, channel, warnings)
+        endpoint = _resolve_url(url_option, read, channel)
         return ResolvedStart(
             mode="remote",
             mode_source="option" if mode == "remote" else "key",
             key=picked_key.value,
             key_source=picked_key.source,
-            warnings=tuple(warnings),
             **endpoint,
             **base,
         )
 
-    env = _pick(environment_option, "environment", [ENV["environment"], *ENVIRONMENT_FALLBACKS], [], read, [], "")
+    env = _pick(environment_option, "environment", [ENV["environment"], *ENVIRONMENT_FALLBACKS], read)
     if env is not None and env.value.lower() in DEV_ENVIRONMENTS:
         return ResolvedStart(
             mode="local",
@@ -236,7 +210,6 @@ def resolve_start(
             key_source="none",
             environment=env.value,
             environment_source=env.source,
-            warnings=tuple(warnings),
             **base,
         )
-    raise _no_key_error(env, read)
+    raise _no_key_error(env)

@@ -5,7 +5,7 @@
  * the page would.
  */
 import { SDK_CHANNEL } from '../src/start/build-info.js';
-import { BUILD_ENV, RETIRED_KEY_NAMES } from '../src/start/names.js';
+import { BUILD_ENV } from '../src/start/names.js';
 import { firstOf, resolvePolicy, sourced, type InjectedConfig, type PolicyConfig, type Sourced } from '../src/start/policy.js';
 
 /** A variable read at build time: its value and a source label for logs (never the value). */
@@ -40,14 +40,6 @@ export function resolveBuild(
     ...environmentNames.map((name) => lookup(name)),
     extraEnvironment,
   );
-  const warnings: string[] = [];
-  if (key === undefined) {
-    for (const name of RETIRED_KEY_NAMES) {
-      if (lookup(name) !== undefined) {
-        warnings.push(`[fireweave] ${name} is not read by the start profile: it held a server-family key. Create a browser key (fw_public_…) and set ${keyVariable}.`);
-      }
-    }
-  }
   const checked = [`fireweave({ environment })`, ...environmentNames, ...(extraEnvironment !== undefined ? [extraEnvironment.source] : [])].join(', ');
   const policy = resolvePolicy({ key, url, environment, channel: SDK_CHANNEL, keyVariable, environmentChecked: checked });
   if (!policy.ok) throw new Error(policy.message);
@@ -58,7 +50,7 @@ export function resolveBuild(
     ...(url !== undefined ? { url: url.value, urlSource: url.source } : {}),
     ...(environment !== undefined ? { environment: environment.value, environmentSource: environment.source } : {}),
   };
-  return { config, injected, warnings: [...warnings, ...policy.warnings] };
+  return { config, injected, warnings: policy.warnings };
 }
 
 /** One summary line for build output. Names sources, never values. */

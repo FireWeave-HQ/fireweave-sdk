@@ -31,18 +31,13 @@ def simple_flags():
     }
 
 
-#: Every variable the start profile reads, including the ones it reads only
-#: to word an error. Cleared around start-profile tests so a contributor
+#: Every variable the start profile reads. Cleared around start-profile tests so a contributor
 #: shell holding FIREWEAVE_KEY cannot turn them remote.
 START_PROFILE_ENV_NAMES = (
     "FIREWEAVE_KEY",
     "FIREWEAVE_URL",
     "FIREWEAVE_ENV",
     "FIREWEAVE_INSTANCE_ID",
-    "FW_PROJECT_API_KEY",
-    "FW_API_URL",
-    "FW_ATTEST_URL",
-    "FW_ENV",
     "APP_ENV",
 )
 

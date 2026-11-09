@@ -103,32 +103,6 @@ func TestRemoteStartEvaluatesOverTheWireAndIgnoresFlagValues(t *testing.T) {
 	}
 }
 
-func TestRemoteStartFromTheEnvironmentWithALegacyKey(t *testing.T) {
-	rec, log := fresh(t)
-	key := "project-api-key_legacy"
-	srv := newStub(t, key)
-	vars := envMap(map[string]string{"FW_PROJECT_API_KEY": key, "FIREWEAVE_URL": srv.URL + "/"})
-
-	mustStart(t, Options{Env: vars, Log: log})
-	if !ControlPoints().GetBooleanValue("fw-bool-on", false, For("user-1")) {
-		t.Fatal("the legacy key must still work")
-	}
-	if s := Status(); s.KeySource != "FW_PROJECT_API_KEY" || s.EndpointSource != "FIREWEAVE_URL" {
-		t.Fatalf("status = %+v", s)
-	}
-	// The warning is logged once per process, even across a restart.
-	if err := Shutdown(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	mustStart(t, Options{Env: vars, Log: log})
-	if n := rec.count("FW_PROJECT_API_KEY is a legacy name"); n != 1 {
-		t.Fatalf("legacy warning logged %d times:\n%s", n, rec.all())
-	}
-	if err := Shutdown(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestARejectedKeyNeverFailsARead(t *testing.T) {
 	_, log := fresh(t)
 	srv := newStub(t, "project-api-key_right")

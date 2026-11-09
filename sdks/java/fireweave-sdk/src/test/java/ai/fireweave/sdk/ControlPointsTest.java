@@ -46,12 +46,6 @@ final class ControlPointsTest {
     }
 
     @Test
-    void theFlagsAliasIsGone() {
-        assertTrue(java.util.Arrays.stream(FireweaveClient.class.getMethods())
-                .noneMatch(m -> m.getName().equals("flags")), "flags() was removed in 3.0.0 (ADR-0013)");
-    }
-
-    @Test
     void typedHelpersReturnDefaultsForMissingKeys() {
         EvaluationContext ctx = EvaluationContext.builder().targetingKey("user_42").build();
         assertEquals("fallback", client.controlPoints().getStringValue("missing", "fallback", ctx));

@@ -19,8 +19,7 @@ import java.util.Set;
  * framework, no statics.
  *
  * <h2>Evaluation</h2>
- * The namespace is {@link #controlPoints()} (ADR-0007). The {@code flags()} alias was removed
- * in 3.0.0 (ADR-0013).
+ * The namespace is {@link #controlPoints()} (ADR-0007).
  *
  * <h2>Thread-safety</h2>
  * Fully thread-safe: evaluation delegates to {@link FireweaveRuntime}. {@link #registerTarget}

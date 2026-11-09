@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"reflect"
 	"testing"
 
 	"github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3/domain"
@@ -16,13 +15,6 @@ func readyClient(t *testing.T) *Client {
 		}
 		return domain.Decision{ControlPointKey: req.ControlPointKey, Value: req.DefaultValue, Reason: domain.ReasonDefault}
 	}}))
-}
-
-func TestTheFlagsAliasIsGone(t *testing.T) {
-	c := readyClient(t)
-	if _, ok := reflect.TypeOf(c).MethodByName("Flags"); ok {
-		t.Fatal("Client.Flags() was removed in 3.0.0 (ADR-0013)")
-	}
 }
 
 func TestControlPointsGetBooleanValueAndDetails(t *testing.T) {

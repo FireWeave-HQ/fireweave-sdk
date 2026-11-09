@@ -4,8 +4,7 @@
 //! `fw/resolve.go`).
 //!
 //! Precedence for every value: explicit `StartOptions` field, then the
-//! `FIREWEAVE_*` variable, then the legacy `FW_*` name (one warning), then
-//! the default. Lookups are lazy: a source is read only if every earlier
+//! `FIREWEAVE_*` variable, then the default. Lookups are lazy: a source is read only if every earlier
 //! source was unset.
 
 use crate::{is_loopback_hostname, FireweaveError, Mode};
@@ -13,8 +12,8 @@ use crate::{is_loopback_hostname, FireweaveError, Mode};
 use super::channel::Channel;
 use super::control_points::LocalControlPoints;
 use super::names::{
-    DEV_ENVIRONMENTS, ENVIRONMENT_FALLBACKS, ENV_ENVIRONMENT, ENV_KEY, ENV_URL, LEGACY_KEY_NAMES,
-    LEGACY_URL_NAMES, LOOPBACK_HOSTS, OPT_ENVIRONMENT, OPT_KEY, OPT_URL, RETIRED_ENVIRONMENT_NAME,
+    DEV_ENVIRONMENTS, ENVIRONMENT_FALLBACKS, ENV_ENVIRONMENT, ENV_KEY, ENV_URL, LOOPBACK_HOSTS,
+    OPT_ENVIRONMENT, OPT_KEY, OPT_URL,
 };
 use super::options::StartOptions;
 
@@ -57,7 +56,7 @@ pub(crate) struct Resolved {
     pub(crate) channel: Channel,
     pub(crate) sdk_version: String,
 
-    /// Lines to log once each: legacy names, an ignored key.
+    /// Lines to log once each: an ignored key.
     pub(crate) warnings: Vec<String>,
 }
 
@@ -70,16 +69,12 @@ pub(crate) fn config_error(message: impl AsRef<str>) -> FireweaveError {
     FireweaveError::configuration(message, true)
 }
 
-/// The first set value of: the option, then each env name in order, then
-/// each legacy name (adding one warning naming its replacement).
+/// The first set value of: the option, then each env name in order.
 fn pick(
     option: Option<&str>,
     option_name: &str,
     names: &[&str],
-    legacy: &[&str],
     lookup: &dyn Fn(&str) -> Option<String>,
-    warnings: Option<&mut Vec<String>>,
-    replacement: &str,
 ) -> Option<Sourced> {
     if let Some(v) = option.map(str::trim).filter(|v| !v.is_empty()) {
         return Some(Sourced {
@@ -89,19 +84,6 @@ fn pick(
     }
     for name in names {
         if let Some(value) = lookup(name) {
-            return Some(Sourced {
-                value,
-                source: (*name).to_string(),
-            });
-        }
-    }
-    for name in legacy {
-        if let Some(value) = lookup(name) {
-            if let Some(warnings) = warnings {
-                warnings.push(format!(
-                    "[fireweave] {name} is a legacy name and will stop being read in the next major version (3.0). Rename it to {replacement}; the value does not change."
-                ));
-            }
             return Some(Sourced {
                 value,
                 source: (*name).to_string(),
@@ -119,10 +101,8 @@ fn is_vendor_key(value: &str) -> bool {
     b.len() >= 4 && b[0] == b'p' && b[1] == b'h' && b[2].is_ascii_lowercase() && b[3] == b'_'
 }
 
-/// Runs before any request. Messages name the source, never the value.
-/// (The core's redactor blanks only `FW_PROJECT_API_KEY=`/`:` assignments,
-/// so naming that variable as a source survives it; the tests pin that
-/// every message is a fixed point of `redact_secrets`.)
+/// Runs before any request. Messages name the source, never the value (the
+/// tests pin that every message is a fixed point of `redact_secrets`).
 pub(crate) fn key_family_error(key: &str, source: &str) -> Option<FireweaveError> {
     let message = if key.starts_with("fw_public_") {
         format!("The key from {source} is a browser key (fw_public_…). Server apps need a project key (project-api-key_…) from Project settings, API keys.")
@@ -185,17 +165,8 @@ fn resolve_url(
     options: &StartOptions,
     lookup: &dyn Fn(&str) -> Option<String>,
     build: &BuildInfo,
-    warnings: &mut Vec<String>,
 ) -> Result<ResolvedUrl, FireweaveError> {
-    let Some(picked) = pick(
-        options.url.as_deref(),
-        OPT_URL,
-        &[ENV_URL],
-        &LEGACY_URL_NAMES,
-        lookup,
-        Some(warnings),
-        ENV_URL,
-    ) else {
+    let Some(picked) = pick(options.url.as_deref(), OPT_URL, &[ENV_URL], lookup) else {
         let url = build.channel.default_url().to_string();
         let host = parse_url(&url).map(|(_, h)| h).unwrap_or_default();
         return Ok(ResolvedUrl {
@@ -235,17 +206,8 @@ fn resolve_url(
 fn resolve_key(
     options: &StartOptions,
     lookup: &dyn Fn(&str) -> Option<String>,
-    warnings: &mut Vec<String>,
 ) -> Result<Option<Sourced>, FireweaveError> {
-    let Some(picked) = pick(
-        options.key.as_deref(),
-        OPT_KEY,
-        &[ENV_KEY],
-        &LEGACY_KEY_NAMES,
-        lookup,
-        Some(warnings),
-        ENV_KEY,
-    ) else {
+    let Some(picked) = pick(options.key.as_deref(), OPT_KEY, &[ENV_KEY], lookup) else {
         return Ok(None);
     };
     if let Some(err) = key_family_error(&picked.value, &picked.source) {
@@ -273,10 +235,7 @@ fn environment_names() -> Vec<&'static str> {
     names
 }
 
-fn no_key_error(
-    environment: Option<&Sourced>,
-    lookup: &dyn Fn(&str) -> Option<String>,
-) -> FireweaveError {
+fn no_key_error(environment: Option<&Sourced>) -> FireweaveError {
     let where_ = match environment {
         None => format!(
             "no environment name is set (checked {OPT_ENVIRONMENT}, {})",
@@ -291,13 +250,8 @@ fn no_key_error(
             env.source
         ),
     };
-    let retired = if environment.is_none() && lookup(RETIRED_ENVIRONMENT_NAME).is_some() {
-        format!(" {RETIRED_ENVIRONMENT_NAME} is no longer read; rename it to {ENV_ENVIRONMENT}.")
-    } else {
-        String::new()
-    };
     config_error(format!(
-        "{ENV_KEY} is not set and {where_}. Set {ENV_KEY} to the project's server key, or for local development set {ENV_ENVIRONMENT} to development or pass StartOptions.mode Some(Mode::Local).{retired}"
+        "{ENV_KEY} is not set and {where_}. Set {ENV_KEY} to the project's server key, or for local development set {ENV_ENVIRONMENT} to development or pass StartOptions.mode Some(Mode::Local)."
     ))
 }
 
@@ -333,15 +287,7 @@ pub(crate) fn resolve(
 
     if options.mode == Some(Mode::Local) {
         // The key is ignored. Look only to warn.
-        if let Some(src) = pick(
-            options.key.as_deref(),
-            OPT_KEY,
-            &[ENV_KEY],
-            &LEGACY_KEY_NAMES,
-            lookup,
-            None,
-            ENV_KEY,
-        ) {
+        if let Some(src) = pick(options.key.as_deref(), OPT_KEY, &[ENV_KEY], lookup) {
             r.warnings.push(format!(
                 "[fireweave] StartOptions.mode Local ignores the key from {}; nothing is sent to fw-server.",
                 src.source
@@ -350,7 +296,7 @@ pub(crate) fn resolve(
         return Ok(r);
     }
 
-    let key = resolve_key(options, lookup, &mut r.warnings)?;
+    let key = resolve_key(options, lookup)?;
 
     let Some(key) = key else {
         if options.mode == Some(Mode::Remote) {
@@ -362,10 +308,7 @@ pub(crate) fn resolve(
             options.environment.as_deref(),
             OPT_ENVIRONMENT,
             &environment_names(),
-            &[],
             lookup,
-            None,
-            ENV_ENVIRONMENT,
         );
         return match environment {
             Some(env) if is_dev_environment(&env.value) => {
@@ -374,11 +317,11 @@ pub(crate) fn resolve(
                 r.environment_source = Some(env.source);
                 Ok(r)
             }
-            other => Err(no_key_error(other.as_ref(), lookup)),
+            other => Err(no_key_error(other.as_ref())),
         };
     };
 
-    let url = resolve_url(options, lookup, build, &mut r.warnings)?;
+    let url = resolve_url(options, lookup, build)?;
     r.mode = Mode::Remote;
     r.mode_source = if options.mode == Some(Mode::Remote) {
         MODE_SOURCE_OPTION
@@ -611,16 +554,22 @@ mod tests {
             msg.contains("checked StartOptions.environment, FIREWEAVE_ENV, APP_ENV"),
             "{msg}"
         );
-        assert!(!msg.contains("FW_ENV is no longer read"), "{msg}");
     }
 
     #[test]
-    fn points_at_fireweave_env_when_only_fw_env_is_set() {
-        let msg = config_message(&opts(), &env(&[("FW_ENV", "development")]), &prod());
-        assert!(
-            msg.contains("FW_ENV is no longer read; rename it to FIREWEAVE_ENV."),
-            "{msg}"
+    fn retired_fw_names_are_not_read() {
+        let msg = config_message(
+            &opts(),
+            &env(&[
+                ("FW_ENV", "development"),
+                ("FW_PROJECT_API_KEY", TEST_KEY),
+                ("FW_API_URL", "https://api.example.com"),
+                ("FW_ATTEST_URL", "https://attest.example.com"),
+            ]),
+            &prod(),
         );
+        assert!(msg.contains("FIREWEAVE_KEY is not set"), "{msg}");
+        assert!(msg.contains("no environment name is set"), "{msg}");
     }
 
     #[test]
@@ -716,46 +665,6 @@ mod tests {
     }
 
     #[test]
-    fn fireweave_url_beats_the_legacy_names() {
-        let r = ok(
-            &opts(),
-            &env(&[
-                ("FIREWEAVE_KEY", TEST_KEY),
-                ("FIREWEAVE_URL", "https://new.example.com"),
-                ("FW_API_URL", "https://old.example.com"),
-            ]),
-        );
-        assert_eq!(r.url.as_deref(), Some("https://new.example.com"));
-        assert!(r.warnings.is_empty());
-    }
-
-    #[test]
-    fn legacy_url_names_are_read_in_order_with_a_warning() {
-        let r = ok(
-            &opts(),
-            &env(&[
-                ("FIREWEAVE_KEY", TEST_KEY),
-                ("FW_API_URL", "https://api.example.com"),
-                ("FW_ATTEST_URL", "https://attest.example.com"),
-            ]),
-        );
-        assert_eq!(r.url.as_deref(), Some("https://api.example.com"));
-        assert_eq!(r.url_source.as_deref(), Some("FW_API_URL"));
-        assert_eq!(r.warnings.len(), 1);
-        assert!(r.warnings[0].contains("FW_API_URL is a legacy name"));
-        assert!(r.warnings[0].contains("Rename it to FIREWEAVE_URL"));
-
-        let r = ok(
-            &opts(),
-            &env(&[
-                ("FIREWEAVE_KEY", TEST_KEY),
-                ("FW_ATTEST_URL", "https://attest.example.com"),
-            ]),
-        );
-        assert_eq!(r.url_source.as_deref(), Some("FW_ATTEST_URL"));
-    }
-
-    #[test]
     fn http_is_allowed_on_loopback_only() {
         for url in [
             "http://localhost:3000",
@@ -838,32 +747,7 @@ mod tests {
         };
         let _ = ok(&o, &lookup);
         let reads = reads.into_inner();
-        assert_eq!(reads, vec!["FIREWEAVE_URL", "FW_API_URL", "FW_ATTEST_URL"]);
-    }
-
-    #[test]
-    fn fireweave_key_beats_the_legacy_name() {
-        let r = ok(
-            &opts(),
-            &env(&[
-                ("FIREWEAVE_KEY", TEST_KEY),
-                ("FW_PROJECT_API_KEY", "project-api-key_old"),
-            ]),
-        );
-        assert_eq!(r.key.as_deref(), Some(TEST_KEY));
-        assert_eq!(r.key_source, "FIREWEAVE_KEY");
-        assert!(r.warnings.is_empty());
-    }
-
-    #[test]
-    fn the_legacy_project_key_is_read_with_a_warning() {
-        let r = ok(&opts(), &env(&[("FW_PROJECT_API_KEY", TEST_KEY)]));
-        assert_eq!(r.mode, Mode::Remote);
-        assert_eq!(r.key_source, "FW_PROJECT_API_KEY");
-        assert_eq!(r.warnings.len(), 1);
-        assert!(r.warnings[0].contains("FW_PROJECT_API_KEY is a legacy name"));
-        assert!(r.warnings[0].contains("Rename it to FIREWEAVE_KEY"));
-        assert!(!r.warnings[0].contains(TEST_KEY));
+        assert_eq!(reads, vec!["FIREWEAVE_URL"]);
     }
 
     #[test]
@@ -904,20 +788,6 @@ mod tests {
         assert!(!is_vendor_key("phC_x"));
         assert!(!is_vendor_key("phc"));
         assert!(!is_vendor_key("ph"));
-    }
-
-    #[test]
-    fn the_legacy_key_source_stays_legible_in_an_error() {
-        let msg = config_message(
-            &opts(),
-            &env(&[("FW_PROJECT_API_KEY", "fw_public_secretvalue")]),
-            &prod(),
-        );
-        assert!(
-            msg.contains("The key from FW_PROJECT_API_KEY is a browser key"),
-            "{msg}"
-        );
-        assert!(!msg.contains("[REDACTED]"), "{msg}");
     }
 
     #[test]
