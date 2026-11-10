@@ -45,6 +45,15 @@ npm run test:integration
 npm run conformance
 ```
 
+### Server and web: both packages (ES module + CommonJS twin)
+
+`sdks/node` and `sdks/web` each publish an ES module package and a CommonJS twin built from the same source ([ADR-0014](docs/adr/0014-commonjs-twin-packages.md)). Any change to either SDK must pass the twin gate too:
+
+```bash
+cd sdks/web && bun install && bun run verify   # the web SDK's own checks
+scripts/verify-twins.sh all                   # or: node | web
+```
+
 ### Python (`sdks/python`, Python ≥ 3.10)
 
 ```bash
@@ -94,6 +103,7 @@ node examples/node/index.mjs
 
 - [ ] All commits signed off (DCO).
 - [ ] Unit tests + conformance pass for every language you touched.
+- [ ] Node/web changes: `scripts/verify-twins.sh` passes for both packages (ES module and CommonJS twin).
 - [ ] New behavior is covered by tests (and by a contract fixture if it is cross-language behavior).
 - [ ] No secrets in code, tests, fixtures, or error messages (`phc_`/`phs_`/`phx_` keys, bearer tokens — see `contracts/errors.md` redaction rules).
 - [ ] Public API changes: docs updated (`docs/`), and parity plan for the other languages stated in the PR description.

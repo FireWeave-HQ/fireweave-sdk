@@ -29,6 +29,8 @@ npm install @fireweaveai/server-sdk
 # bun add @fireweaveai/server-sdk  ·  deno add npm:@fireweaveai/server-sdk
 ```
 
+CommonJS project that cannot load ES modules (Jest's default config, TypeScript `node10`/`node16` output)? See [Module formats](docs/module-formats.md).
+
 ```ts
 import { initFireweave } from '@fireweaveai/server-sdk';
 

@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added — CommonJS twins: `@fireweaveai/server-sdk-cjs` and `@fireweaveai/web-sdk-cjs` ([ADR-0014](docs/adr/0014-commonjs-twin-packages.md))
+
+- Each ES module package now has a CommonJS twin, built from the same source at the same version, with the same import paths. The ES module packages do not change.
+- Use a twin only for CommonJS toolchains that cannot load ES modules: Jest's default config, TypeScript compiling to CommonJS with `node10`/`node16` resolution (the NestJS 10 starter), Node 21.x and 22.0–22.11, and a Vite 5 CommonJS config. Install the server twin under the ES module name so imports stay the same: `npm install @fireweaveai/server-sdk@npm:@fireweaveai/server-sdk-cjs@<version>`. Routing for people and installers: [docs/module-formats.md](docs/module-formats.md).
+- ES modules remain the long-term format; the twins will be retired in a future major, announced at least one minor release ahead.
+- `scripts/verify-twins.sh` checks both packages of each SDK (manifest, exports, the conformance suite against the twin, Jest, TypeScript, Bun, Deno, browser stubs) in CI and before every publish.
+
 ### Removed — BREAKING: the start profile reads only `FIREWEAVE_*` names
 
 - `FW_PROJECT_API_KEY`, `FW_API_URL` and `FW_ATTEST_URL` are no longer read as fallbacks for `FIREWEAVE_KEY` and `FIREWEAVE_URL`, in every SDK. A deploy that sets only the old name now fails at start; rename it to `FIREWEAVE_KEY` (the value does not change). The core API (`initFireweave`) is unaffected: it reads no environment variables.
