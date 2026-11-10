@@ -111,4 +111,4 @@ These are not reasons to pick a twin; tell the user, or write the setting:
 
 ## For SDK contributors
 
-Every change to `sdks/node` or `sdks/web` ships in both packages. Run `scripts/verify-twins.sh` before calling a change done; see [AGENTS.md](../AGENTS.md).
+Every change to `sdks/node` or `sdks/web` ships in both packages. Run `tools/typescript/twins/verify-twins.sh` before calling a change done; see [AGENTS.md](../AGENTS.md).

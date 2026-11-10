@@ -11,7 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Each ES module package now has a CommonJS twin, built from the same source at the same version, with the same import paths. The ES module packages do not change.
 - Use a twin only for CommonJS toolchains that cannot load ES modules: Jest's default config, TypeScript compiling to CommonJS with `node10`/`node16` resolution (the NestJS 10 starter), Node 21.x and 22.0–22.11, and a Vite 5 CommonJS config. Install the server twin under the ES module name so imports stay the same: `npm install @fireweaveai/server-sdk@npm:@fireweaveai/server-sdk-cjs@<version>`. Routing for people and installers: [docs/module-formats.md](docs/module-formats.md).
 - ES modules remain the long-term format; the twins will be retired in a future major, announced at least one minor release ahead.
-- `scripts/verify-twins.sh` checks both packages of each SDK (manifest, exports, the conformance suite against the twin, Jest, TypeScript, Bun, Deno, browser stubs) in CI and before every publish.
+- `tools/typescript/twins/verify-twins.sh` checks both packages of each SDK (manifest, exports, the conformance suite against the twin, Jest, TypeScript, Bun, Deno, browser stubs) in CI and before every publish.
 
 ### Removed — BREAKING: the start profile reads only `FIREWEAVE_*` names
 

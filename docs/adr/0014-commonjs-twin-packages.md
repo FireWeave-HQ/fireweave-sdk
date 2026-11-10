@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-11-10
-- **Scope:** `sdks/node`, `sdks/web`, `scripts/`, `tools/twins/`, `.github/workflows/ci.yml`, `.github/workflows/release.yml`
+- **Scope:** `sdks/node`, `sdks/web`, `tools/typescript/twins/`, `.github/workflows/ci.yml`, `.github/workflows/release.yml`
 - **Related:** ADR-0008 (multi-runtime support), ADR-0009 (browser control points), ADR-0012 (start profile)
 
 ## Context and Problem Statement
@@ -33,14 +33,14 @@ on 2026-11-10, these projects still could not:
 Option 3. `@fireweaveai/server-sdk-cjs` and `@fireweaveai/web-sdk-cjs` are published beside the
 ESM packages:
 
-- **Same source, no source change.** `scripts/build-cjs-twin.mjs` compiles the package's own
+- **Same source, no source change.** `tools/typescript/twins/build-cjs-twin.mjs` compiles the package's own
   sources with its own tsconfigs, staged under a `"type":"commonjs"` scope, into
   `<pkg>/build/cjs`. The twin's `package.json` is generated from the ESM one: same version,
   `exports`, `engines` and peers, plus `typesVersions` so `node10` resolves the subpaths. No file
   is written for the twin by hand, and nothing in `src/` exists for it.
 - **One release.** A twin ships at its ESM package's version, from the same stamped tree, tag
   and publish job. The twin publishes first, so a failed run can be re-run.
-- **One gate.** `scripts/verify-twins.sh` (checks T1–T8, `tools/twins/verify.mjs`) builds and
+- **One gate.** `tools/typescript/twins/verify-twins.sh` (checks T1–T8, `tools/typescript/twins/verify.mjs`) builds and
   packs both packages and fails unless they match: manifest, exported names, the conformance
   suite run against the twin, and the consumers in the table above. It runs in CI (`twins` job),
   in the release `verify` job, and (its dependency-free checks) inside each publish job.
@@ -60,7 +60,7 @@ The twins are a bridge, not a second product line:
   1. At least one minor release before, the CHANGELOG announces it and each twin's latest
      version is `npm deprecate`d with a message pointing to the ESM package.
   2. The major release stops building and publishing the twins and removes
-     `scripts/build-cjs-twin.mjs`, `tools/twins/` and the `twins` CI job.
+     `tools/typescript/twins/build-cjs-twin.mjs`, `tools/typescript/twins/` and the `twins` CI job.
   3. Published twin versions stay installable; the ESM packages are unaffected.
 
 ## Consequences

@@ -99,7 +99,7 @@ The workflow always produces (as a CI artifact, never a registry upload):
 Between `build` and every `publish-*` job sits **`verify`**: the full
 `scripts/{build,test,conformance}-all.sh` suite (every language, the same
 65×8 cross-language differential gate CI runs) and the twin gate
-(`scripts/verify-twins.sh all`, ADR-0014) — a release cannot publish
+(`tools/typescript/twins/verify-twins.sh all`, ADR-0014) — a release cannot publish
 without these gates passing, dry run or not.
 
 ## Versioning: `tools/release/version.sh`
@@ -367,7 +367,7 @@ silently skips or falls back to an unauthenticated attempt.
    For `@fireweaveai/server-sdk-cjs` and `@fireweaveai/web-sdk-cjs`:
    1. Build the package first (`cd sdks/node && npm ci && npm run build`, or
       `cd sdks/web && bun install && bun run build`), then the twin from the repo root
-      (`node scripts/build-cjs-twin.mjs sdks/node tsconfig.json`,
+      (`node tools/typescript/twins/build-cjs-twin.mjs sdks/node tsconfig.json`,
       or `sdks/web tsconfig.json tsconfig.node.json:build`). Set `version` in
       `sdks/<node|web>/build/cjs/package.json` to `0.0.0-reserve.0`, and run
       `npm publish sdks/<node|web>/build/cjs --access public --tag reserve`.
@@ -413,5 +413,5 @@ scripts/build-all.sh                       # node/python/go/java package dry run
 tools/release/changelog.sh server 0.1.0    # changelog preview to stdout
 tools/release/version.sh compute server patch staging   # read -> bump -> compute, no writes
 bash tools/release/version.test.sh         # offline unit tests for version.sh
-scripts/test-all.sh && scripts/conformance-all.sh && scripts/verify-twins.sh all   # the main gates of the `verify` job
+scripts/test-all.sh && scripts/conformance-all.sh && tools/typescript/twins/verify-twins.sh all   # the main gates of the `verify` job
 ```

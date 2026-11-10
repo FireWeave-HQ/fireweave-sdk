@@ -31,7 +31,7 @@ fw_section "node: build + npm pack (dry-run packaging)"
 (cd "$FW_ROOT/sdks/node" && npm run --silent build)
 (cd "$FW_ROOT/sdks/node" && npm pack --pack-destination "$OUT_DIR")
 # The CommonJS twin (ADR-0014), built from the same tree.
-node "$FW_ROOT/scripts/build-cjs-twin.mjs" "$FW_ROOT/sdks/node" tsconfig.json
+node "$FW_ROOT/tools/typescript/twins/build-cjs-twin.mjs" "$FW_ROOT/sdks/node" tsconfig.json
 (cd "$FW_ROOT/sdks/node/build/cjs" && npm pack --pack-destination "$OUT_DIR")
 
 # ---------- Python: python -m build ----------

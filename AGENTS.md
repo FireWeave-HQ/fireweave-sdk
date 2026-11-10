@@ -7,7 +7,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) first; this file adds the rules agents m
 `sdks/node` publishes `@fireweaveai/server-sdk` (ES module) and `@fireweaveai/server-sdk-cjs`
 (CommonJS). `sdks/web` publishes `@fireweaveai/web-sdk` (ES module) and
 `@fireweaveai/web-sdk-cjs` (CommonJS). Each twin is built from the same source by
-`scripts/build-cjs-twin.mjs`, at the same version
+`tools/typescript/twins/build-cjs-twin.mjs`, at the same version
 ([ADR-0014](docs/adr/0014-commonjs-twin-packages.md)). Which project gets which package:
 [docs/module-formats.md](docs/module-formats.md).
 
@@ -18,8 +18,8 @@ in BOTH packages. There is no ESM-only change.
 
 1. Run the package's own checks: `cd sdks/node && npm run verify`, or
    `cd sdks/web && bun run verify`.
-2. Run the twin gate for every package you touched: `scripts/verify-twins.sh node`,
-   `scripts/verify-twins.sh web`, or `scripts/verify-twins.sh all`.
+2. Run the twin gate for every package you touched: `tools/typescript/twins/verify-twins.sh node`,
+   `tools/typescript/twins/verify-twins.sh web`, or `tools/typescript/twins/verify-twins.sh all`.
 3. Paste both results into the PR's Verification section. A red gate blocks the change. Fix
    the code or the build; never weaken, skip or exempt a gate check.
 

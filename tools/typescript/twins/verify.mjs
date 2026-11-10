@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // The twin gate (ADR-0014, docs/module-formats.md).
 //
-//   node tools/twins/verify.mjs [node|web|all] [--publish]   (or scripts/verify-twins.sh)
+//   node tools/typescript/twins/verify.mjs [node|web|all] [--publish]   (or tools/typescript/twins/verify-twins.sh)
 //
 // Builds each ESM SDK package and its CommonJS twin from the working tree, packs
-// both, installs the tarballs into a scratch project under tools/twins/.work/,
+// both, installs the tarballs into a scratch project under tools/typescript/twins/.work/,
 // and checks that the two packages match and that the twin works for the
 // consumers it exists for. Exit 1 if any check fails. Nothing outside build/
-// and tools/twins/.work/ is written.
+// and tools/typescript/twins/.work/ is written.
 //
 // --publish runs only the checks that need no third-party tools (T1, T8, T2,
 // T3, the T4 smoke). release.yml uses it inside the publish jobs, which hold
@@ -37,7 +37,7 @@ import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(HERE, '..', '..');
+const ROOT = resolve(HERE, '..', '..', '..');
 const BIN = join(HERE, 'node_modules', '.bin');
 const WORK = join(HERE, '.work');
 
@@ -67,11 +67,11 @@ const publishMode = args.includes('--publish');
 const target = args.find((a) => !a.startsWith('--')) ?? 'all';
 const keys = target === 'all' ? Object.keys(PACKAGES) : [target];
 if (!keys.every((k) => k in PACKAGES)) {
-  console.error('usage: node tools/twins/verify.mjs [node|web|all] [--publish]');
+  console.error('usage: node tools/typescript/twins/verify.mjs [node|web|all] [--publish]');
   process.exit(2);
 }
 if (!publishMode && !existsSync(BIN)) {
-  console.error('tools/twins has no node_modules: run `npm ci` in tools/twins (scripts/verify-twins.sh does).');
+  console.error('tools/typescript/twins has no node_modules: run `npm ci` in tools/typescript/twins (tools/typescript/twins/verify-twins.sh does).');
   process.exit(2);
 }
 
@@ -136,7 +136,7 @@ async function verify(key) {
   // T1 build
   if (!check('T1', 'build', () => {
     run(p.build[0], p.build[1], { cwd: p.dir });
-    run(process.execPath, [join(ROOT, 'scripts', 'build-cjs-twin.mjs'), p.dir, ...p.twin], { cwd: ROOT });
+    run(process.execPath, [join(HERE, 'build-cjs-twin.mjs'), p.dir, ...p.twin], { cwd: ROOT });
   })) return;
 
   const esm = JSON.parse(readFileSync(join(p.dir, 'package.json'), 'utf8'));

@@ -4,17 +4,17 @@
 # exists for. Run it before saying a change to sdks/node or sdks/web is done,
 # and before every publish (release.yml runs it). See docs/module-formats.md.
 #
-# Usage: scripts/verify-twins.sh [node|web|all] [--publish]   (default: all)
+# Usage: tools/typescript/twins/verify-twins.sh [node|web|all] [--publish]   (default: all)
 #   --publish  only the checks that need no third-party tools (release.yml's
 #              publish jobs, which hold an npm token, use it)
 
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../../../scripts/lib.sh"
 
 TARGET="${1:-all}"
 MODE="${2:-}"
 case "$TARGET" in
   node|web|all) ;;
-  *) fw_die "usage: scripts/verify-twins.sh [node|web|all] [--publish]" ;;
+  *) fw_die "usage: tools/typescript/twins/verify-twins.sh [node|web|all] [--publish]" ;;
 esac
 case "$MODE" in
   ""|--publish) ;;
@@ -34,10 +34,10 @@ if [ "$TARGET" != "node" ]; then
     (cd "$FW_ROOT/sdks/web" && bun install --frozen-lockfile)
   fi
 fi
-if [ -z "$MODE" ] && [ ! -d "$FW_ROOT/tools/twins/node_modules" ]; then
+if [ -z "$MODE" ] && [ ! -d "$FW_ROOT/tools/typescript/twins/node_modules" ]; then
   fw_section "twin gate: installing its pinned tools"
-  (cd "$FW_ROOT/tools/twins" && npm ci --no-audit --no-fund)
+  (cd "$FW_ROOT/tools/typescript/twins" && npm ci --no-audit --no-fund)
 fi
 
 fw_section "twin gate: $TARGET"
-node "$FW_ROOT/tools/twins/verify.mjs" "$TARGET" ${MODE:+"$MODE"}
+node "$FW_ROOT/tools/typescript/twins/verify.mjs" "$TARGET" ${MODE:+"$MODE"}

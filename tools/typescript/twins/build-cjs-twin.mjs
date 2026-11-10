@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Build the CommonJS twin of an ESM SDK package (ADR-0014).
 //
-//   node scripts/build-cjs-twin.mjs <pkgDir> <tsconfig>[:<outSubdir>] ...
-//   node scripts/build-cjs-twin.mjs sdks/node tsconfig.json
-//   node scripts/build-cjs-twin.mjs sdks/web tsconfig.json tsconfig.node.json:build
+//   node tools/typescript/twins/build-cjs-twin.mjs <pkgDir> <tsconfig>[:<outSubdir>] ...
+//   node tools/typescript/twins/build-cjs-twin.mjs sdks/node tsconfig.json
+//   node tools/typescript/twins/build-cjs-twin.mjs sdks/web tsconfig.json tsconfig.node.json:build
 //
 // Writes <pkgDir>/build/cjs: a complete, packable package named <name>-cjs, at
 // the ESM package's version, compiled from the same sources. Nothing under
@@ -15,7 +15,7 @@ import { join, resolve } from 'node:path';
 
 const [pkgArg, ...projects] = process.argv.slice(2);
 if (!pkgArg || projects.length === 0) {
-  console.error('usage: node scripts/build-cjs-twin.mjs <pkgDir> <tsconfig>[:<outSubdir>] ...');
+  console.error('usage: node tools/typescript/twins/build-cjs-twin.mjs <pkgDir> <tsconfig>[:<outSubdir>] ...');
   process.exit(2);
 }
 const pkgDir = resolve(pkgArg);

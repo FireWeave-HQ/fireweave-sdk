@@ -106,7 +106,7 @@
 # CommonJS twins (ADR-0014): `@fireweaveai/server-sdk-cjs` and
 # `@fireweaveai/web-sdk-cjs` are built from the same stamped tree as their ESM
 # package and published by the same jobs, twin first, after the twin gate
-# (scripts/verify-twins.sh) passes on the exact files being published. They
+# (tools/typescript/twins/verify-twins.sh) passes on the exact files being published. They
 # share the ESM package's version, tag and dist-tag; there is no separate
 # component. Each twin's npm Trusted Publisher must permit both environments.
 #
@@ -355,7 +355,7 @@ jobs:
         with:
           deno-version: v2.x
       - name: Twin gate (ESM + CommonJS packages, ADR-0014)
-        run: bash scripts/verify-twins.sh all
+        run: bash tools/typescript/twins/verify-twins.sh all
       - name: Cross-language conformance (65x8 differential gate)
         run: bash scripts/conformance-all.sh
       - name: Publish comparator summary
@@ -373,8 +373,8 @@ jobs:
         env:
           NODE_ENV: test
         run: |
-          (cd tools/twins/.work/node/sandbox && node smoke.cjs)
-          (cd tools/twins/.work/web/sandbox && node smoke.cjs)
+          (cd tools/typescript/twins/.work/node/sandbox && node smoke.cjs)
+          (cd tools/typescript/twins/.work/web/sandbox && node smoke.cjs)
       - uses: actions/setup-node@v5
         with:
           node-version: '22.11.0'
@@ -382,8 +382,8 @@ jobs:
         env:
           NODE_ENV: test
         run: |
-          (cd tools/twins/.work/node/sandbox && node smoke.cjs)
-          (cd tools/twins/.work/web/sandbox && node smoke.cjs)
+          (cd tools/typescript/twins/.work/node/sandbox && node smoke.cjs)
+          (cd tools/typescript/twins/.work/web/sandbox && node smoke.cjs)
 
   # =========================================================================
   # TAG — split out from `build` (I7 fix). `build` and `verify` both only
@@ -527,7 +527,7 @@ jobs:
           DIST_TAG: ${{ steps.version.outputs.dist_tag }}
         run: |
           npm install -g npm@latest
-          bash scripts/verify-twins.sh node --publish
+          bash tools/typescript/twins/verify-twins.sh node --publish
           V="$(node -p "require('./sdks/node/build/cjs/package.json').version")"
           if npm view "@fireweaveai/server-sdk-cjs@$V" version >/dev/null 2>&1; then
             echo "@fireweaveai/server-sdk-cjs@$V is already on npm; skipping (re-run after a failed ESM publish)"
@@ -607,7 +607,7 @@ jobs:
           DIST_TAG: ${{ steps.version.outputs.dist_tag }}
         run: |
           npm install -g npm@latest
-          bash scripts/verify-twins.sh web --publish
+          bash tools/typescript/twins/verify-twins.sh web --publish
           V="$(node -p "require('./sdks/web/build/cjs/package.json').version")"
           if npm view "@fireweaveai/web-sdk-cjs@$V" version >/dev/null 2>&1; then
             echo "@fireweaveai/web-sdk-cjs@$V is already on npm; skipping (re-run after a failed ESM publish)"
@@ -726,7 +726,7 @@ jobs:
           DIST_TAG: ${{ steps.version.outputs.dist_tag }}
         run: |
           npm install -g npm@latest
-          bash scripts/verify-twins.sh node --publish
+          bash tools/typescript/twins/verify-twins.sh node --publish
           V="$(node -p "require('./sdks/node/build/cjs/package.json').version")"
           if npm view "@fireweaveai/server-sdk-cjs@$V" version >/dev/null 2>&1; then
             echo "@fireweaveai/server-sdk-cjs@$V is already on npm; skipping (re-run after a failed ESM publish)"
@@ -841,7 +841,7 @@ jobs:
           DIST_TAG: ${{ steps.version.outputs.dist_tag }}
         run: |
           npm install -g npm@latest
-          bash scripts/verify-twins.sh web --publish
+          bash tools/typescript/twins/verify-twins.sh web --publish
           V="$(node -p "require('./sdks/web/build/cjs/package.json').version")"
           if npm view "@fireweaveai/web-sdk-cjs@$V" version >/dev/null 2>&1; then
             echo "@fireweaveai/web-sdk-cjs@$V is already on npm; skipping (re-run after a failed ESM publish)"
