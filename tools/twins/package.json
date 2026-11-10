@@ -1,0 +1,17 @@
+{
+  "name": "fireweave-twin-gate",
+  "private": true,
+  "description": "The twin gate (ADR-0014): checks that each ESM SDK package and its CommonJS twin match and that both work for the consumers they exist for. Never published.",
+  "type": "module",
+  "scripts": {
+    "verify": "node verify.mjs"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
+    "@types/node": "24.13.3",
+    "esbuild": "0.25.12",
+    "jest": "30.5.2",
+    "jest-environment-jsdom": "30.5.2",
+    "typescript": "5.9.3"
+  }
+}

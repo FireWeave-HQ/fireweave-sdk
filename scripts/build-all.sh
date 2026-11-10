@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Package build DRY RUNS for all four SDKs — never publishes anything.
-#   - Node:   npm run build + npm pack (tarball)
+#   - Node:   npm run build + npm pack (tarball), plus the CommonJS twin
 #   - Python: python -m build (sdist + wheel)
 #   - Go:     go build ./... + go mod verify (modules ship via VCS tags; the
 #             module zip is produced by the Go proxy from the tag, so the
@@ -30,6 +30,9 @@ fw_node_deps
 fw_section "node: build + npm pack (dry-run packaging)"
 (cd "$FW_ROOT/sdks/node" && npm run --silent build)
 (cd "$FW_ROOT/sdks/node" && npm pack --pack-destination "$OUT_DIR")
+# The CommonJS twin (ADR-0014), built from the same tree.
+node "$FW_ROOT/scripts/build-cjs-twin.mjs" "$FW_ROOT/sdks/node" tsconfig.json
+(cd "$FW_ROOT/sdks/node/build/cjs" && npm pack --pack-destination "$OUT_DIR")
 
 # ---------- Python: python -m build ----------
 fw_python_venv

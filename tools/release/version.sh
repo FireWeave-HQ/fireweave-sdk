@@ -467,7 +467,12 @@ registry_versions() {
   local component="$1" channel="$2"
   case "$component" in
     server|web)
-      npm_versions "$(component_npm_package "$component")"
+      # The CommonJS twin (<pkg>-cjs, ADR-0014) shares this version line, so a
+      # version either package has spent is spent for both: a re-run after a
+      # twin-only partial publish must move on, never reuse the version.
+      local pkg
+      pkg="$(component_npm_package "$component")"
+      { npm_versions "$pkg" && npm_versions "$pkg-cjs"; } | awk '!seen[$0]++'
       ;;
     python)
       pypi_versions "https://pypi.org" fireweave
