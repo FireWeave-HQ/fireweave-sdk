@@ -65,10 +65,7 @@
 # PyPI is enabled via channel staging/production (component=python), and
 # Maven Central via channel staging/production (component=java) — the latter
 # requires MAVEN_CENTRAL_* and MAVEN_GPG_* secrets. Missing secrets fail
-# closed. This workflow's dispatch is the only routine publish path: the
-# tag-push triggers of publish-python.yml (python/v*) and publish-java.yml
-# (java/v*) are retired; both remain dispatch-only manual recovery paths for a
-# plain version.
+# closed. This workflow's dispatch is the only publish path.
 # rust production (`cargo publish`) requires CARGO_REGISTRY_TOKEN — missing
 # fails closed the same way.
 # Production npm (dist-tag latest, both server and web) was HARD-DISABLED
