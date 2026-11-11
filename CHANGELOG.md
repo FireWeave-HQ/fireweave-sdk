@@ -117,8 +117,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - New `version.sh check-stamp <component> <channel>`: every publish job checks the stamped workspace's channel after `apply` and before publishing.
 - Rust, Dart and Swift tags point at a detached release commit carrying the applied version and stamp (`version.sh release-commit`), so a build from the tag calls the right channel.
 - The tag-push publish paths of `publish-java.yml` (`java/v*`) and `publish-python.yml` (`python/v*`) are retired; both are dispatch-only manual recovery for a plain version, and `release.yml` is the publish path.
-- Swift is not in rc cuts (`all` omits it) until its mirror exists.
-- New `publish-swift-mirror` job pushes `sdks/swift` to a mirror repository with a root `Package.swift` and plain semver tags, which SwiftPM can resolve. It fails closed until the mirror and its deploy key are provisioned (`.github/RELEASE.md`).
+- Swift installs straight from this repository: `.package(url: "https://github.com/FireWeave-HQ/fireweave-sdk", from: "X.Y.Z")`. A root `Package.swift` points the `Fireweave` and `FireweaveStart` products into `sdks/swift`, and each Swift release pushes a plain `X.Y.Z` tag next to `swift/vX.Y.Z` (ADR-0012, Amendment 2026-11-11). Swift is in `all` and in rc cuts; no mirror repository or deploy key is needed.
 
 ### Fixed
 

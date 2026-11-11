@@ -77,8 +77,10 @@ struct ArchitectureGuardTests {
 
 @Suite("Architecture guard")
 struct ArchitectureGuardSuite {
-  @Test func packageManifestDeclaresZeroDependencies() throws {
-    let manifestPath = ArchitectureGuardTests.packageRoot().appendingPathComponent("Package.swift")
+  // The SDK's own manifest, and the repository-root one SwiftPM consumers resolve.
+  @Test(arguments: ["Package.swift", "../../Package.swift"])
+  func packageManifestDeclaresZeroDependencies(relativePath: String) throws {
+    let manifestPath = ArchitectureGuardTests.packageRoot().appendingPathComponent(relativePath)
     let contents = try String(contentsOf: manifestPath, encoding: .utf8)
     // The TOP-LEVEL `dependencies:` argument to `Package(...)` — the one
     // that names EXTERNAL package dependencies — must be `[]`. Per-target

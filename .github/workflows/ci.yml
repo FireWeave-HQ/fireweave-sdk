@@ -387,10 +387,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        swift: ['6.0.3', '6.2.1'] # Package.swift swift-tools-version floor + newest patch known to setup-swift@v2
+        swift: ['6.0.3', '6.4.2'] # Package.swift swift-tools-version floor + latest release
     steps:
       - uses: useblacksmith/checkout@v1
-      - uses: swift-actions/setup-swift@v2
+      # In-repo action: official swift.org tarball, signature verified, no keyserver refresh.
+      - uses: ./.github/actions/setup-swift
         with:
           swift-version: ${{ matrix.swift }}
       - name: swift-format lint (built-in `swift format`, no separate config)
@@ -402,6 +403,8 @@ jobs:
       - name: swift test (unit + architecture/surface guards)
         working-directory: sdks/swift
         run: swift test
+      - name: swift build from the repository root (the manifest SwiftPM consumers resolve)
+        run: swift build
       - name: Conformance runner (per-version sanity; differential job is the gate)
         # No `--` before --contracts: `swift run`'s own arguments are
         # `[<options>] [<executable>] [<arguments>...]` with no `--`
@@ -503,10 +506,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-      - uses: swift-actions/setup-swift@v2
+      - uses: ./.github/actions/setup-swift
         with:
-          # 6.2.1 is the newest patch known to setup-swift@v2 (6.3.x is not listed).
-          swift-version: '6.2.1'
+          swift-version: '6.4.2'
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
