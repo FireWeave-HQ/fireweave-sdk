@@ -23,8 +23,7 @@ results.*.json
 # sdks/dart's resolved dev-dependency lock. Not committed, on purpose:
 # Dart convention for a library package, and the CI matrix (Dart 3.8 floor +
 # stable) resolves `test`/`lints` per leg — a committed lock would pin one
-# leg's resolution and fail the other. security.yml regenerates it in-job
-# before osv-scanner reads it (python's "export the resolved set" pattern).
+# leg's resolution and fail the other.
 sdks/dart/pubspec.lock
 
 # Compiled Go example binary (`go build` output in examples/go/)
