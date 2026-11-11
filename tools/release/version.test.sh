@@ -211,6 +211,15 @@ assert_eq "rust staging with crates.io 3.1.0-rc.2 -> 3.1.0-rc.3" \
   "3.1.0-rc.3" "$(printf '%s\n' "$out_rust_minor" | sed -n 's/^release_version=//p')"
 rm -rf "$scratch_rust"
 
+# --------------------------------- dart staging counter reads pub.dev AND its tags
+# Same as rust: rcs go to pub.dev since 2026-11-11, earlier rcs exist only as tags.
+pub_versions() { printf '3.0.0\n3.1.0-rc.2\n'; }
+remote_tag_versions() { printf '3.0.0-rc.1\n3.1.0-rc.1\n'; }
+assert_eq "registry_versions dart staging reads pub.dev and the dart tags" \
+  "$(printf '3.0.0\n3.1.0-rc.2\n3.0.0-rc.1\n3.1.0-rc.1')" "$(real_registry_versions dart staging)"
+assert_eq "registry_versions dart production still reads pub.dev" \
+  "$(printf '3.0.0\n3.1.0-rc.2')" "$(real_registry_versions dart production)"
+
 # ---------------------------------------------- end-to-end compute(), network stubbed
 # Prove the registry query is a genuinely swappable seam: override it with a
 # fixed, in-memory stub (no curl/npm/git ever invoked) and confirm cmd_compute
