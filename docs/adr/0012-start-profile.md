@@ -242,3 +242,13 @@ same trade made for PyPI and Maven Central on 2026-10-09. Each rc is permanent (
 deletion). Cargo selects an rc only when a requirement names a pre-release, and such an app calls
 the staging fw-server. The rc counter reads crates.io and the `rust/v` tags together, because
 earlier rcs exist only as tags. Accepted by the owner on 2026-11-11.
+
+## Amendment (2026-11-11): Dart publishes from its tag
+
+pub.dev accepts a GitHub Actions publish only from a workflow running on a tag that matches
+`dart/v{{version}}` (a `push` or `workflow_dispatch` event), so `release.yml` could never publish
+Dart itself. The `tag` job now pushes `dart/vX.Y.Z` on the stamped release commit and dispatches
+`publish-dart.yml` on it, which publishes through `dart-lang/setup-dart`'s publish workflow in
+environment `release`. Both channels publish: staging rcs go to pub.dev, where a version can only
+be retracted, and `dart pub` selects an rc only when asked. The two Dart publish jobs in
+`release.yml` are removed. Accepted by the owner on 2026-11-11.

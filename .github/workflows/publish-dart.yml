@@ -1,0 +1,46 @@
+# Publish the Dart SDK (`fireweave`) to pub.dev.
+#
+# pub.dev accepts a GitHub Actions publish only from a workflow running on a tag
+# that matches its tag pattern (`dart/v{{version}}`), started by a tag push or a
+# workflow_dispatch; both events are enabled on pub.dev (.github/RELEASE.md,
+# "Company-side provisioning"). release.yml's `tag` job pushes dart/vX.Y.Z on the
+# stamped release commit and dispatches this workflow on it, because a tag pushed
+# with GITHUB_TOKEN starts no workflow. To retry a failed publish, dispatch this
+# workflow on the existing dart/vX.Y.Z tag.
+name: Publish Dart (pub.dev)
+
+on:
+  push:
+    tags: ['dart/v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: tag matches pubspec.yaml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Require a dart/vX.Y.Z tag that equals pubspec.yaml's version
+        run: |
+          case "$GITHUB_REF" in
+            refs/tags/dart/v*) ;;
+            *) echo "::error::run this on a dart/vX.Y.Z tag, not $GITHUB_REF"; exit 1 ;;
+          esac
+          want="${GITHUB_REF#refs/tags/dart/v}"
+          have="$(sed -n 's/^version: *//p' sdks/dart/pubspec.yaml)"
+          if [ "$want" != "$have" ]; then
+            echo "::error::tag says $want but sdks/dart/pubspec.yaml says $have"
+            exit 1
+          fi
+
+  publish:
+    needs: check
+    permissions:
+      id-token: write # pub.dev automated publishing (OIDC); no token secret
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
+    with:
+      working-directory: sdks/dart
+      environment: release

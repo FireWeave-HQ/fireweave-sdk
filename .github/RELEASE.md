@@ -22,6 +22,8 @@ has no staging registry, and a published version can only be retracted, never
 deleted) plus the git tag; production publishes to pub.dev via pub.dev's own
 OIDC "automated publishing" on `environment: release`, which pub.dev rejects
 until it is enabled for the package (fail-closed; see "Registries").
+Superseded on 2026-11-11: Dart publishes from its tag through
+`publish-dart.yml` on both channels (see "Tags follow publishes").
 
 Status (2026-10-09, owner decisions O1–O10): **staging builds are `X.Y.Z-rc.N`**
 (Python `X.Y.ZrcN`) from 3.0.0 on, and `-staging.N` is no longer a staging
@@ -64,7 +66,7 @@ at one computed semver. Trigger
 **`all` is not only a build-time convenience — with `dry_run=false` and
 `channel=staging` it fires every staging publish job at once, unattended**
 (both npm packages, the Go proxy warm, the rust crates.io rc, and the
-dart `dart pub publish --dry-run`): `release-staging` carries no
+dart pub.dev rc): `release-staging` carries no
 required-reviewer gate, so selecting `all` there is the same as approving all
 of them in one click, not just requesting seven builds. The Python (PyPI) and
 Java (Maven Central) rc publishes run on `release` and still wait for its
@@ -166,10 +168,14 @@ history); that is the accepted cost of not running a mirror repository.
 **Tags follow publishes.** The `tag` job runs after the registry publish jobs and tags a
 component only when its own publish jobs succeeded or were skipped, so a failed publish
 leaves no tag and a re-run computes the same version. Go and Swift have no publish job:
-their tag is the release. Dart's `publish-pub-production` cannot succeed from this
-workflow (pub.dev accepts only tag-push-triggered publishes), so a Dart production
-version is published by hand: `tools/release/version.sh apply dart X.Y.Z`, then
-`dart pub publish` from `sdks/dart`, then push `dart/vX.Y.Z` on that commit.
+their tag is the release. **Dart publishes from its tag:** pub.dev accepts a GitHub
+Actions publish only from a workflow running on a tag that matches `dart/v{{version}}`,
+so the `tag` job pushes `dart/vX.Y.Z` on the stamped release commit and dispatches
+[`publish-dart.yml`](workflows/publish-dart.yml) on it (a tag pushed with
+`GITHUB_TOKEN` starts no workflow; a dispatch does). That workflow checks the tag
+against `pubspec.yaml` and publishes with `dart-lang/setup-dart`'s publish workflow in
+environment `release`. Its result shows in its own run, not the release run; to retry
+a failed publish, dispatch `publish-dart.yml` on the existing `dart/vX.Y.Z` tag.
 
 ### Signed tags
 
@@ -198,7 +204,7 @@ signing into the workflow.
 | Java | Maven Central | groupId `ai.fireweave` | Published from `release.yml` on both channels (staging `X.Y.Z-rc.N`); fails closed without secrets. |
 | Rust | crates.io | `fireweave` | Publish via **`CARGO_REGISTRY_TOKEN`** GitHub secret (environment `release`), from `release.yml` on both channels: staging uploads `X.Y.Z-rc.N`, production the plain version. |
 | Swift | this repository (`https://github.com/FireWeave-HQ/fireweave-sdk`) | `.package(url:, from:)`, products `Fireweave` and `FireweaveStart` | No package registry; SwiftPM resolves the root `Package.swift` at the plain `X.Y.Z` tag the `tag` job pushes. No credentials. |
-| Dart | pub.dev | `fireweave` | Publish via pub.dev **automated publishing** (OIDC — no token secret; `dart-lang/setup-dart` exchanges the GitHub id-token). Must be enabled on pub.dev for the package, bound to this repository, `release.yml`, and the `release` environment; until then pub.dev rejects the publish. No staging registry exists — see "Pre-release channels". |
+| Dart | pub.dev | `fireweave` | Publish via pub.dev **automated publishing** (OIDC — no token secret; `dart-lang/setup-dart` exchanges the GitHub id-token). Published by `publish-dart.yml` on the `dart/vX.Y.Z` tag, on both channels (staging `X.Y.Z-rc.N`). Must be enabled on pub.dev for the package (provisioning below); until then pub.dev rejects the publish. |
 
 ## Pre-release channels
 
@@ -226,7 +232,7 @@ that tag is now pure syntax, not the channel signal:
 | crates.io (rust) | publish `X.Y.Z-rc.N` to crates.io (`publish-cargo`, since 2026-11-11), then the git tag on a release commit carrying the version (see "Release commits"). crates.io has no staging index, so each rc is permanent (yank is not deletion); see "Pre-releases on production registries" | fresh `channel: production` run computes the plain `X.Y.Z` and runs `cargo publish` for real (`CARGO_REGISTRY_TOKEN`) |
 | Go | tag `sdks/go/vX.Y.Z-rc.N` (`go get` will not auto-select a prerelease tag); optional proxy warm | tag the final `sdks/go/vX.Y.Z` |
 | Swift | the `tag` job pushes `swift/vX.Y.Z-rc.N` and the plain `X.Y.Z-rc.N` on the release commit (`BuildInfo.swift` stamped `staging`). SwiftPM's `from:` ranges skip pre-releases, so a staging app pins `exact: "X.Y.Z-rc.N"` | fresh `channel: production` run tags `swift/vX.Y.Z` and the plain `X.Y.Z` |
-| pub.dev (dart) | **no publish at all** — `dart pub publish --dry-run` proves `X.Y.Z-rc.N` packages cleanly, plus the git tag (on a release commit carrying the stamp, see "Release commits"). pub.dev has no staging registry, and a published version can only be retracted (within 7 days) — never deleted — so an actual staging upload would spend the version permanently. | fresh `channel: production` run computes the plain `X.Y.Z` and runs `dart pub publish --force` for real (OIDC automated publishing) |
+| pub.dev (dart) | publish `X.Y.Z-rc.N` to pub.dev from the `dart/vX.Y.Z-rc.N` tag (`publish-dart.yml`, since 2026-11-11). pub.dev has no staging registry; a version can only be retracted (within 7 days), never deleted. `dart pub` prefers stable versions, so `^3.0.0` never selects an rc | fresh `channel: production` run tags the plain `X.Y.Z` and `publish-dart.yml` publishes it |
 
 ### Pre-releases on production registries (accepted risk)
 
@@ -297,8 +303,8 @@ staging run wherever a separate staging credential exists:
 
 | Environment | Used by | Secrets | Required reviewers |
 | --- | --- | --- | --- |
-| `release` | `publish-npm-server-production`, `publish-npm-web-production`, `publish-pypi` (staging rc) and `publish-pypi-production`, `publish-maven` and `publish-cargo` (BOTH channels — see below), `publish-pub-production` | `PYPI_API_TOKEN`, `MAVEN_CENTRAL_USERNAME`/`_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`/`_PASSPHRASE`, `CARGO_REGISTRY_TOKEN` (the two npm jobs and pub.dev need no secret — OIDC) | **Yes** — this is the gate that must stay a human approval |
-| `release-staging` | `publish-npm`, `publish-npm-web`, `publish-go`, `publish-pub` | none (npm/go/pub-dry-run need no secret — OIDC or none) | No |
+| `release` | `publish-npm-server-production`, `publish-npm-web-production`, `publish-pypi` (staging rc) and `publish-pypi-production`, `publish-maven` and `publish-cargo` (BOTH channels — see below) | `PYPI_API_TOKEN`, `MAVEN_CENTRAL_USERNAME`/`_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`/`_PASSPHRASE`, `CARGO_REGISTRY_TOKEN` (the two npm jobs and pub.dev need no secret — OIDC) | **Yes** — this is the gate that must stay a human approval |
+| `release-staging` | `publish-npm`, `publish-npm-web`, `publish-go` | none (npm/go need no secret — OIDC or none) | No |
 
 The `tag` job runs on `release` for a production run and on
 `release-staging` for a staging run. `TEST_PYPI_API_TOKEN` is retired: no
@@ -345,9 +351,10 @@ silently skips or falls back to an unauthenticated attempt.
    requires an initial human publish before automated publishing can be
    configured), then on the package's **Admin** tab enable **Automated
    publishing** from GitHub Actions with repository `FireWeave-HQ/fireweave-sdk`,
-   tag pattern `dart/v{{version}}`, and **require the GitHub Actions
-   environment** `release`. No token secret is involved; the `release`
-   environment's required reviewers remain the human gate.
+   tag pattern `dart/v{{version}}`, **both events enabled** (`push` and
+   `workflow_dispatch`: the release dispatches `publish-dart.yml` on the tag), and
+   **require the GitHub Actions environment** `release`. No token secret is
+   involved; the `release` environment's required reviewers remain the human gate.
 2. **GitHub repo settings**: allow GitHub Actions to create and approve
    attestations (for `actions/attest-build-provenance`); create the two
    protected environments described above (`release` with required
