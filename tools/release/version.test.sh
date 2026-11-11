@@ -190,15 +190,14 @@ assert_eq "java staging with tags 3.0.0-staging.1 and 3.0.0-rc.1 -> 3.0.0-rc.2" 
   "3.0.0-rc.2" "$(printf '%s\n' "$out_java" | sed -n 's/^release_version=//p')"
 rm -rf "$scratch_java"
 
-# ------------------------------------------- rust staging counter reads its tags
-# crates.io never receives a staging upload, so it never holds an rc: a counter
-# read from it restarts at 1 on every run and the second rc's tag push
-# collides. The crates.io stub holds only releases; the tags hold rc.1.
-crates_versions() { printf '2.2.0\n'; }
+# ------------------------------- rust staging counter reads crates.io AND its tags
+# rcs go to crates.io since 2026-11-11, but earlier rcs exist only as tags, so
+# the counter reads both. The crates.io stub holds 3.1.0-rc.2; the tags rc.1.
+crates_versions() { printf '2.2.0\n3.1.0-rc.2\n'; }
 remote_tag_versions() { printf '2.2.0\n3.0.0-staging.1\n3.0.0-rc.1\n'; }
-assert_eq "registry_versions rust staging reads the rust tags" \
-  "$(printf '2.2.0\n3.0.0-staging.1\n3.0.0-rc.1')" "$(real_registry_versions rust staging)"
-assert_eq "registry_versions rust production still reads crates.io" "2.2.0" "$(real_registry_versions rust production)"
+assert_eq "registry_versions rust staging reads crates.io and the rust tags" \
+  "$(printf '2.2.0\n3.1.0-rc.2\n3.0.0-staging.1\n3.0.0-rc.1')" "$(real_registry_versions rust staging)"
+assert_eq "registry_versions rust production still reads crates.io" "$(printf '2.2.0\n3.1.0-rc.2')" "$(real_registry_versions rust production)"
 scratch_rust="$(mktemp -d)"
 mkdir -p "$scratch_rust/sdks/rust"
 printf '[package]\nname = "fireweave"\nversion = "2.2.0"\n' > "$scratch_rust/sdks/rust/Cargo.toml"
@@ -206,6 +205,10 @@ out_rust="$(cmd_compute rust major staging --manifest-root "$scratch_rust")"
 assert_eq "rust staging with tag rust/v3.0.0-rc.1 -> 3.0.0-rc.2" \
   "3.0.0-rc.2" "$(printf '%s\n' "$out_rust" | sed -n 's/^release_version=//p')"
 assert_eq "rust staging tag" "rust/v3.0.0-rc.2" "$(printf '%s\n' "$out_rust" | sed -n 's/^tag=//p')"
+printf '[package]\nname = "fireweave"\nversion = "3.0.0"\n' > "$scratch_rust/sdks/rust/Cargo.toml"
+out_rust_minor="$(cmd_compute rust minor staging --manifest-root "$scratch_rust")"
+assert_eq "rust staging with crates.io 3.1.0-rc.2 -> 3.1.0-rc.3" \
+  "3.1.0-rc.3" "$(printf '%s\n' "$out_rust_minor" | sed -n 's/^release_version=//p')"
 rm -rf "$scratch_rust"
 
 # ---------------------------------------------- end-to-end compute(), network stubbed

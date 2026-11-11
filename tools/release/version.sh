@@ -479,7 +479,8 @@ registry_versions() {
       ;;
     rust)
       if [ "$channel" = staging ]; then
-        remote_tag_versions "$(component_tag_prefix "$component")"
+        # rcs go to crates.io since 2026-11-11; earlier rcs exist only as tags.
+        { crates_versions fireweave && remote_tag_versions "$(component_tag_prefix "$component")"; } | awk '!seen[$0]++'
       else
         crates_versions fireweave
       fi
