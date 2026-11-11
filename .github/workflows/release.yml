@@ -516,7 +516,8 @@ jobs:
     name: publish npm (staging → server-sdk, dist-tag next)
     needs: [validate, build, verify]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'server') }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # npm accepts --provenance only from GitHub-hosted runners (E422 on Blacksmith).
+    runs-on: ubuntu-latest
     environment: release-staging
     permissions:
       id-token: write # npm OIDC trusted publishing — no NPM_TOKEN secret needed once provisioned
@@ -584,7 +585,8 @@ jobs:
     name: publish npm (staging → web-sdk, dist-tag next)
     needs: [validate, build, verify]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'web') }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # npm accepts --provenance only from GitHub-hosted runners (E422 on Blacksmith).
+    runs-on: ubuntu-latest
     environment: release-staging
     permissions:
       id-token: write
@@ -675,7 +677,8 @@ jobs:
     name: publish npm production (server-sdk, dist-tag latest)
     needs: [validate, build, verify]
     if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'server') }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # npm accepts --provenance only from GitHub-hosted runners (E422 on Blacksmith).
+    runs-on: ubuntu-latest
     environment: release
     permissions:
       id-token: write # npm OIDC trusted publishing — no NPM_TOKEN secret
@@ -783,7 +786,8 @@ jobs:
     name: publish npm production (web-sdk, dist-tag latest)
     needs: [validate, build, verify]
     if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'web') }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # npm accepts --provenance only from GitHub-hosted runners (E422 on Blacksmith).
+    runs-on: ubuntu-latest
     environment: release
     permissions:
       id-token: write
