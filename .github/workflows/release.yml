@@ -1066,7 +1066,9 @@ jobs:
   publish-go:
     name: warm Go module proxy (staging)
     needs: [validate, build, verify, tag]
-    if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'go') }}
+    # !cancelled(): `tag` needs publish jobs that are skipped on most runs, and a skip
+    # propagates down the chain unless the condition says otherwise.
+    if: ${{ !cancelled() && needs.tag.result == 'success' && inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'go') }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release-staging
     steps:
@@ -1105,7 +1107,9 @@ jobs:
   publish-go-production:
     name: verify + warm Go module proxy (production)
     needs: [validate, build, verify, tag]
-    if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'go') }}
+    # !cancelled(): `tag` needs publish jobs that are skipped on most runs, and a skip
+    # propagates down the chain unless the condition says otherwise.
+    if: ${{ !cancelled() && needs.tag.result == 'success' && inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'go') }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release
     steps:
