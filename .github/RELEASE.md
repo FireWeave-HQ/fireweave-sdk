@@ -46,7 +46,12 @@ retired).
 component runs `publish-npm-server-production` / `publish-npm-web-production`
 on environment `release`, publishing `--tag latest` via the same OIDC trusted
 publisher staging already uses. **The npm Trusted Publisher for each package
-must permit the `release` environment**. **Maven Central** is
+must permit the `release` environment**. The CommonJS twins
+(`@fireweaveai/server-sdk-cjs`, `@fireweaveai/web-sdk-cjs`,
+[ADR-0014](../docs/adr/0014-commonjs-twin-packages.md)) ride the same four npm
+jobs: each job runs the twin gate's publish checks on the stamped tree, then
+publishes the twin, then the ES module package, at the same version and
+dist-tag. **Maven Central** is
 wired through `release.yml` (`component=java`) using the Central Publisher
 Portal plugin; [`publish-java.yml`](workflows/publish-java.yml) is a
 dispatch-only manual recovery path for a plain version (its `java/v*`
@@ -93,7 +98,8 @@ The workflow always produces (as a CI artifact, never a registry upload):
 
 Between `build` and every `publish-*` job sits **`verify`**: the full
 `scripts/{build,test,conformance}-all.sh` suite (every language, the same
-65×8 cross-language differential gate CI runs) — a release cannot publish
+65×8 cross-language differential gate CI runs) and the twin gate
+(`tools/typescript/twins/verify-twins.sh all`, ADR-0014) — a release cannot publish
 without these gates passing, dry run or not.
 
 ## Versioning: `tools/release/version.sh`
@@ -187,6 +193,8 @@ signing into the workflow.
 | --- | --- | --- | --- |
 | server (npm) | npmjs.com | `@fireweaveai/server-sdk` | Publish via **OIDC trusted publishing** (no long-lived `NPM_TOKEN`). |
 | web (npm) | npmjs.com | `@fireweaveai/web-sdk` | Publish via **OIDC trusted publishing**. |
+| server, CommonJS twin (npm) | npmjs.com | `@fireweaveai/server-sdk-cjs` | Same job, version and dist-tag as `@fireweaveai/server-sdk`, published first. **OIDC trusted publishing**; needs its own Trusted Publisher (provisioning below). |
+| web, CommonJS twin (npm) | npmjs.com | `@fireweaveai/web-sdk-cjs` | Same job, version and dist-tag as `@fireweaveai/web-sdk`, published first. **OIDC trusted publishing**; needs its own Trusted Publisher (provisioning below). |
 | Python | pypi.org | `fireweave` | Publish via **`PYPI_API_TOKEN`** GitHub secret (environment `release`) with `pypa/gh-action-pypi-publish`, from `release.yml` on both channels: staging uploads `X.Y.ZrcN`, production the plain version. `publish-python.yml` is dispatch-only manual recovery for a plain version. |
 | Go | proxy.golang.org | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3` | No registry credentials — "publishing" is pushing the `sdks/go/v*` tag on the public repo; the proxy picks it up. **Major ≥ 2 requires the `/vN` module-path suffix, e.g. `/v3`** (Go modules rule); the git tag prefix stays `sdks/go/`. |
 | Java | Maven Central | groupId `ai.fireweave` | Published from `release.yml` on both channels (staging `X.Y.Z-rc.N`); fails closed without secrets. `publish-java.yml` is dispatch-only manual recovery for a plain version. |
@@ -354,6 +362,27 @@ silently skips or falls back to an unauthenticated attempt.
 4. **Signing**: bot GPG key or gitsign for signed tags (above).
 5. **Branch/tag protection**: protect `main` and `*/v*` tags so only the
    release workflow/owners can push tags.
+6. **npm CommonJS twins** (ADR-0014): npm offers Trusted Publisher setup only on
+   a package that exists, so a scope maintainer creates each name once by hand.
+   For `@fireweaveai/server-sdk-cjs` and `@fireweaveai/web-sdk-cjs`:
+   1. Build the package first (`cd sdks/node && npm ci && npm run build`, or
+      `cd sdks/web && bun install && bun run build`), then the twin from the repo root
+      (`node tools/typescript/twins/build-cjs-twin.mjs sdks/node tsconfig.json`,
+      or `sdks/web tsconfig.json tsconfig.node.json:build`). Set `version` in
+      `sdks/<node|web>/build/cjs/package.json` to `0.0.0-reserve.0`, and run
+      `npm publish sdks/<node|web>/build/cjs --access public --tag reserve`.
+   2. `npm deprecate <name>@0.0.0-reserve.0 "placeholder — install a released version"`.
+   3. On the package's npm **Settings → Trusted Publisher**, add GitHub Actions with
+      repository `FireWeave-HQ/fireweave-sdk`, workflow `release.yml`, and both
+      environments, `release-staging` and `release` (two entries), exactly as for
+      the ES module package.
+   4. Run a staging release (`dry_run=false`) and check that `npm view <name> dist-tags`
+      shows the same `next` as the ES module package. `reserve` (and, because npm
+      points `latest` at a package's first version, `latest`) stay on the
+      placeholder until the first production release; installers always pin a
+      version or range, never a bare twin name.
+   5. After the first production release, `npm dist-tag rm <name> reserve` and check
+      that `latest` matches the ES module package's.
 
 ## Rollback
 
@@ -362,7 +391,7 @@ Publishing is append-only almost everywhere; **prefer publishing a fixed
 
 | Ecosystem | Rollback reality |
 | --- | --- |
-| npm | `npm unpublish` only within 72h and subject to policy; otherwise `npm deprecate @fireweaveai/server-sdk@<ver> "broken — use <ver+1>"` (or `web-sdk`) and repoint `latest`: `npm dist-tag add @fireweaveai/server-sdk@<good> latest`. |
+| npm | `npm unpublish` only within 72h and subject to policy; otherwise `npm deprecate @fireweaveai/server-sdk@<ver> "broken — use <ver+1>"` (or `web-sdk`) and repoint `latest`: `npm dist-tag add @fireweaveai/server-sdk@<good> latest`. Do the same for the CommonJS twin (`server-sdk-cjs`, `web-sdk-cjs`) at the same versions, so the two stay in step. |
 | PyPI | Cannot re-upload a yanked version's file names. Use `yank` (pip stops selecting it by default) via the project UI/API, then release a fixed version. |
 | Maven Central | Published artifacts are **immutable and cannot be removed**. Staged (not yet released) deployments can be dropped in the portal. Only fix-forward. |
 | crates.io | Cannot delete a published version. `cargo yank` stops it from being selected by new lockfiles (existing `Cargo.lock` files are unaffected); publish a fixed version. |
@@ -384,5 +413,5 @@ scripts/build-all.sh                       # node/python/go/java package dry run
 tools/release/changelog.sh server 0.1.0    # changelog preview to stdout
 tools/release/version.sh compute server patch staging   # read -> bump -> compute, no writes
 bash tools/release/version.test.sh         # offline unit tests for version.sh
-scripts/test-all.sh && scripts/conformance-all.sh   # full release gate (same as the `verify` job)
+scripts/test-all.sh && scripts/conformance-all.sh && tools/typescript/twins/verify-twins.sh all   # the main gates of the `verify` job
 ```

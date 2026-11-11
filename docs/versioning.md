@@ -31,6 +31,14 @@ The canonical data model in `spec/` carries its own version, currently **0.1.0**
 2. Post-1.0, deprecated surfaces keep working for **at least one minor release** before removal in the next major.
 3. Behavior deprecations (e.g. changing an adapter default like exposure emission) get a transition flag where feasible.
 
+## CommonJS twins
+
+`@fireweaveai/server-sdk-cjs` and `@fireweaveai/web-sdk-cjs` are public packages under the same promise as their ES module packages ([ADR-0014](adr/0014-commonjs-twin-packages.md)):
+
+- A twin always ships at its ES module package's version, from the same release; there is no twin-only version.
+- Its public API is the ES module package's public API.
+- Retiring the twins is a breaking change: announced at least one minor release ahead (CHANGELOG and `npm deprecate`), done in a major. ES modules are the long-term format.
+
 ## Dependency-update policy
 
 | Dependency | Policy |

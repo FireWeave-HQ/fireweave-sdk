@@ -103,6 +103,13 @@
 #   go     -> sdks/go/v0.1.0   (Go REQUIRES the tag to equal the module
 #                               subdirectory path; see RELEASE.md)
 #
+# CommonJS twins (ADR-0014): `@fireweaveai/server-sdk-cjs` and
+# `@fireweaveai/web-sdk-cjs` are built from the same stamped tree as their ESM
+# package and published by the same jobs, twin first, after the twin gate
+# (tools/typescript/twins/verify-twins.sh) passes on the exact files being published. They
+# share the ESM package's version, tag and dist-tag; there is no separate
+# component. Each twin's npm Trusted Publisher must permit both environments.
+#
 # `node` -> `server` rename: the npm package is `@fireweaveai/server-sdk`
 # (renamed from `@fireweaveai/sdk` in an earlier task); its directory stays
 # `sdks/node`. The tag prefix changes from `node/v` to `server/v`.
@@ -344,6 +351,11 @@ jobs:
         run: |
           bun install --frozen-lockfile
           bun run test
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Twin gate (ESM + CommonJS packages, ADR-0014)
+        run: bash tools/typescript/twins/verify-twins.sh all
       - name: Cross-language conformance (65x8 differential gate)
         run: bash scripts/conformance-all.sh
       - name: Publish comparator summary
@@ -352,6 +364,26 @@ jobs:
           if [ -f build/conformance/summary.md ]; then
             cat build/conformance/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
+      # Last, because they switch Node: the twins' require() smoke on the engines
+      # floor and on 22.11.0, which cannot require() an ES module (same as ci.yml).
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '20.20.0'
+      - name: require() the twins on Node 20.20.0
+        env:
+          NODE_ENV: test
+        run: |
+          (cd tools/typescript/twins/.work/node/sandbox && node smoke.cjs)
+          (cd tools/typescript/twins/.work/web/sandbox && node smoke.cjs)
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.11.0'
+      - name: require() the twins on Node 22.11.0 (no require(esm))
+        env:
+          NODE_ENV: test
+        run: |
+          (cd tools/typescript/twins/.work/node/sandbox && node smoke.cjs)
+          (cd tools/typescript/twins/.work/web/sandbox && node smoke.cjs)
 
   # =========================================================================
   # TAG — split out from `build` (I7 fix). `build` and `verify` both only
@@ -483,6 +515,25 @@ jobs:
           npm ci
           npm run build
           npx tsx --test test/unit/start-build-info.test.ts
+      - name: Gate and publish @fireweaveai/server-sdk-cjs (ADR-0014; the twin goes first)
+        # The twin publishes BEFORE the ESM package: assert_production_version_free
+        # (version.sh) checks only the ESM name, so if the ESM package went first
+        # and this step then failed, a re-run would be refused and that version
+        # would never get a twin. With the twin first, a re-run skips it here
+        # and retries the ESM publish. --publish: the checks that need no
+        # third-party tools, on the stamped files about to be published (this
+        # job holds an npm OIDC token; the full gate ran in `verify`).
+        env:
+          DIST_TAG: ${{ steps.version.outputs.dist_tag }}
+        run: |
+          npm install -g npm@latest
+          bash tools/typescript/twins/verify-twins.sh node --publish
+          V="$(node -p "require('./sdks/node/build/cjs/package.json').version")"
+          if npm view "@fireweaveai/server-sdk-cjs@$V" version >/dev/null 2>&1; then
+            echo "@fireweaveai/server-sdk-cjs@$V is already on npm; skipping (re-run after a failed ESM publish)"
+          else
+            npm publish sdks/node/build/cjs --provenance --access public --tag "$DIST_TAG"
+          fi
       - name: Build and publish @fireweaveai/server-sdk
         working-directory: sdks/node
         env:
@@ -544,6 +595,25 @@ jobs:
       - name: Run the build-info test against the stamped tree
         working-directory: sdks/web
         run: bun test ./test/unit/start-build-info.test.ts
+      - name: Gate and publish @fireweaveai/web-sdk-cjs (ADR-0014; the twin goes first)
+        # The twin publishes BEFORE the ESM package: assert_production_version_free
+        # (version.sh) checks only the ESM name, so if the ESM package went first
+        # and this step then failed, a re-run would be refused and that version
+        # would never get a twin. With the twin first, a re-run skips it here
+        # and retries the ESM publish. --publish: the checks that need no
+        # third-party tools, on the stamped files about to be published (this
+        # job holds an npm OIDC token; the full gate ran in `verify`).
+        env:
+          DIST_TAG: ${{ steps.version.outputs.dist_tag }}
+        run: |
+          npm install -g npm@latest
+          bash tools/typescript/twins/verify-twins.sh web --publish
+          V="$(node -p "require('./sdks/web/build/cjs/package.json').version")"
+          if npm view "@fireweaveai/web-sdk-cjs@$V" version >/dev/null 2>&1; then
+            echo "@fireweaveai/web-sdk-cjs@$V is already on npm; skipping (re-run after a failed ESM publish)"
+          else
+            npm publish sdks/web/build/cjs --provenance --access public --tag "$DIST_TAG"
+          fi
       - name: Publish @fireweaveai/web-sdk (npm — OIDC trusted publisher)
         working-directory: sdks/web
         env:
@@ -644,6 +714,25 @@ jobs:
           npm ci
           npm run build
           npx tsx --test test/unit/start-build-info.test.ts
+      - name: Gate and publish @fireweaveai/server-sdk-cjs (ADR-0014; the twin goes first)
+        # The twin publishes BEFORE the ESM package: assert_production_version_free
+        # (version.sh) checks only the ESM name, so if the ESM package went first
+        # and this step then failed, a re-run would be refused and that version
+        # would never get a twin. With the twin first, a re-run skips it here
+        # and retries the ESM publish. --publish: the checks that need no
+        # third-party tools, on the stamped files about to be published (this
+        # job holds an npm OIDC token; the full gate ran in `verify`).
+        env:
+          DIST_TAG: ${{ steps.version.outputs.dist_tag }}
+        run: |
+          npm install -g npm@latest
+          bash tools/typescript/twins/verify-twins.sh node --publish
+          V="$(node -p "require('./sdks/node/build/cjs/package.json').version")"
+          if npm view "@fireweaveai/server-sdk-cjs@$V" version >/dev/null 2>&1; then
+            echo "@fireweaveai/server-sdk-cjs@$V is already on npm; skipping (re-run after a failed ESM publish)"
+          else
+            npm publish sdks/node/build/cjs --provenance --access public --tag "$DIST_TAG"
+          fi
       - name: Build and publish @fireweaveai/server-sdk
         working-directory: sdks/node
         env:
@@ -740,6 +829,25 @@ jobs:
       - name: Run the build-info test against the stamped tree
         working-directory: sdks/web
         run: bun test ./test/unit/start-build-info.test.ts
+      - name: Gate and publish @fireweaveai/web-sdk-cjs (ADR-0014; the twin goes first)
+        # The twin publishes BEFORE the ESM package: assert_production_version_free
+        # (version.sh) checks only the ESM name, so if the ESM package went first
+        # and this step then failed, a re-run would be refused and that version
+        # would never get a twin. With the twin first, a re-run skips it here
+        # and retries the ESM publish. --publish: the checks that need no
+        # third-party tools, on the stamped files about to be published (this
+        # job holds an npm OIDC token; the full gate ran in `verify`).
+        env:
+          DIST_TAG: ${{ steps.version.outputs.dist_tag }}
+        run: |
+          npm install -g npm@latest
+          bash tools/typescript/twins/verify-twins.sh web --publish
+          V="$(node -p "require('./sdks/web/build/cjs/package.json').version")"
+          if npm view "@fireweaveai/web-sdk-cjs@$V" version >/dev/null 2>&1; then
+            echo "@fireweaveai/web-sdk-cjs@$V is already on npm; skipping (re-run after a failed ESM publish)"
+          else
+            npm publish sdks/web/build/cjs --provenance --access public --tag "$DIST_TAG"
+          fi
       - name: Publish @fireweaveai/web-sdk (npm — OIDC trusted publisher)
         working-directory: sdks/web
         env:

@@ -22,6 +22,7 @@
 - [ ] **DCO**: every commit is signed off (`git commit -s`; `Signed-off-by:` matches the author). *This is a hard requirement — no CLA, but no unsigned commits.*
 - [ ] **Tests**: unit tests pass for every language touched, and new behavior is covered by tests.
 - [ ] **Conformance**: the `contracts/` suite passes for every language touched (`npm run conformance` / `pytest` + `run_conformance.py` / `go run ./cmd/conformance` / `mvn install`). Any new skip uses `skipped-with-documented-limitation` in the fixture itself.
+- [ ] **Both packages** (Node/web only): `tools/typescript/twins/verify-twins.sh` passes, so the ES module package and its CommonJS twin both work ([ADR-0014](../docs/adr/0014-commonjs-twin-packages.md)).
 - [ ] **Cross-language parity**: public-API/behavior changes either land for all languages or the PR description states the parity plan.
 - [ ] **No secrets**: no real API keys (`phc_`/`phs_`/`phx_`), tokens, or PII in code, tests, fixtures, or error messages.
 - [ ] **No vendor types** leaked into any public API surface.

@@ -11,6 +11,10 @@
 # runs the cross-runtime smoke (see the bun job comment); Deno runs a typecheck
 # plus the cross-runtime smoke (see the deno job comment).
 #
+# Module formats (ADR-0014): server-sdk and web-sdk each also publish a
+# CommonJS twin (`-cjs`) built from the same source. The twins job runs the
+# twin gate (tools/typescript/twins/verify-twins.sh) on every change.
+#
 # Lint policy (matches the code as written — no invented configs):
 #   node   : tsc --noEmit only (no eslint/prettier config exists)
 #   python : ruff --select F (pyflakes-level; no ruff/black config exists),
@@ -192,6 +196,60 @@ jobs:
       - name: Web conformance (contracts/web)
         working-directory: sdks/web
         run: bun run conformance
+
+  # ---------------------------------------------------------------- twins
+  # The twin gate (ADR-0014, docs/module-formats.md): each ESM package and its
+  # CommonJS twin are built, packed and installed, then checked for the same
+  # manifest, the same exports and the same behaviour (the conformance suites
+  # run against the twins), and against the consumers the twins exist for:
+  # Jest, TypeScript node16/nodenext/node10, Bun, Deno, browser bundles.
+  #
+  # The last two steps re-run the require() smoke on Node 20.20.0 (the engines
+  # floor) and 22.11.0, which engines admits but which cannot require() an ES
+  # module: the twin has to work there, because that is part of why it exists.
+  twins:
+    name: twins (ESM + CommonJS gate)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: useblacksmith/checkout@v1
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            sdks/node/package-lock.json
+            tools/typescript/twins/package-lock.json
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Install dependencies (server, web, gate tools)
+        run: |
+          (cd sdks/node && npm ci)
+          (cd sdks/web && bun install --frozen-lockfile)
+          (cd tools/typescript/twins && npm ci --no-audit --no-fund)
+      - name: Twin gate (server + web)
+        run: bash tools/typescript/twins/verify-twins.sh all
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '20.20.0'
+      - name: require() the twins on Node 20.20.0
+        env:
+          NODE_ENV: test
+        run: |
+          (cd tools/typescript/twins/.work/node/sandbox && node smoke.cjs)
+          (cd tools/typescript/twins/.work/web/sandbox && node smoke.cjs)
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.11.0'
+      - name: require() the twins on Node 22.11.0 (no require(esm))
+        env:
+          NODE_ENV: test
+        run: |
+          (cd tools/typescript/twins/.work/node/sandbox && node smoke.cjs)
+          (cd tools/typescript/twins/.work/web/sandbox && node smoke.cjs)
 
   # ---------------------------------------------------------------- python
   python:
@@ -606,6 +664,8 @@ jobs:
           bun install --frozen-lockfile
           bun run build
           npm pack --pack-destination "${{ github.workspace }}/build/packages"
+          node ../../tools/typescript/twins/build-cjs-twin.mjs . tsconfig.json tsconfig.node.json:build
+          (cd build/cjs && npm pack --pack-destination "${{ github.workspace }}/build/packages")
       - name: Rust package dry run (never publish)
         working-directory: sdks/rust
         run: |

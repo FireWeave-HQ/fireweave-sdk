@@ -124,6 +124,23 @@ assert_eq "manifest: dart" "sdks/dart/pubspec.yaml" "$(component_manifest dart)"
 assert_eq "tag prefix: dart matches org convention" "dart" "$(component_tag_prefix dart)"
 assert_fail "unknown component is rejected" component_manifest bogus
 
+# ------------------------------- server/web read the ESM package AND its twin
+# ADR-0014: @fireweaveai/<x>-sdk-cjs shares the version line, so a version only
+# the twin holds (a partial publish) still counts as spent.
+npm_versions() {
+  case "$1" in
+    @fireweaveai/server-sdk) printf '3.0.0\n3.1.0-rc.1\n' ;;
+    @fireweaveai/server-sdk-cjs) printf '3.1.0-rc.1\n3.1.0-rc.2\n' ;;
+    *) echo "test stub: unexpected npm package '$1'" >&2; return 2 ;;
+  esac
+}
+assert_eq "registry_versions server = ESM versions plus twin-only versions" \
+  "$(printf '3.0.0\n3.1.0-rc.1\n3.1.0-rc.2')" "$(real_registry_versions server staging)"
+assert_fail "registry_versions web fails when a lookup fails (no silent empty list)" real_registry_versions web staging
+# Restore the real npm_versions (and every other function) for the rest of the file.
+source "$HERE/version.sh"
+eval "$(declare -f registry_versions | sed '1s/^registry_versions/real_registry_versions/')"
+
 # ------------------------------------------- python staging counter reads PyPI
 # Python staging builds go to pypi.org as X.Y.ZrcN; no other Python index is
 # read. Stub one layer below the seam: pypi_versions answers only for pypi.org

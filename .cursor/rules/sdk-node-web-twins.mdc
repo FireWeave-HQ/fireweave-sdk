@@ -1,0 +1,20 @@
+---
+description: The server and web SDKs ship an ES module package and a CommonJS twin; every change must pass the twin gate
+globs: sdks/node/**,sdks/web/**,tools/typescript/twins/**
+alwaysApply: false
+---
+
+# Server and web SDKs: two packages each
+
+`sdks/node` publishes `@fireweaveai/server-sdk` and `@fireweaveai/server-sdk-cjs`; `sdks/web`
+publishes `@fireweaveai/web-sdk` and `@fireweaveai/web-sdk-cjs`. The `-cjs` twins are built from
+the same source by `tools/typescript/twins/build-cjs-twin.mjs` (ADR-0014). Every change here ships in both.
+
+Before saying a change is done, committing, or opening a PR:
+
+1. `cd sdks/node && npm run verify` or `cd sdks/web && bun run verify`.
+2. `tools/typescript/twins/verify-twins.sh node|web|all` for every package touched.
+3. Paste both results into the PR. A red gate blocks the change; never weaken or skip a check.
+
+Never edit `build/cjs/` or a twin manifest by hand. No top-level `await`, `import.meta`,
+`export =` or ESM-only runtime dependency. Full rules: [AGENTS.md](../../AGENTS.md).

@@ -10,6 +10,10 @@ The Node SDK (`@fireweaveai/server-sdk`) uses no Node built-in modules and no No
 | Bun | 1.2 | cross-runtime smoke on 1.2 and latest | use `bun test`, not `bun <file>`, for suites written against `node:test` |
 | Deno | 2.0 | typecheck + cross-runtime smoke on `v2.x` and canary | install via the `npm:` specifier |
 
+## Module formats
+
+`@fireweaveai/server-sdk` is an ES module. Plain `require()` of it works on Node 20.20+ and 22.12+, and in Bun and Deno. For CommonJS toolchains that cannot load it (Jest's default config, TypeScript `node10`/`node16` output, Node 21.x and 22.0–22.11) there is a CommonJS twin, `@fireweaveai/server-sdk-cjs`, built from the same source. Which one a project gets: [Module formats](module-formats.md). Bun and Deno always use the ES module package.
+
 ## What makes it portable
 
 One Node-ism was removed in 2.1, which would have worked on Node and Bun and failed only on Deno:
