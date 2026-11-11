@@ -30,15 +30,11 @@ TestPyPI to **PyPI**; Java staging publishes `X.Y.Z-rc.N` to **Maven
 Central**. Swift installs straight from this repository (root `Package.swift`,
 plain `X.Y.Z` tags; ADR-0012, Amendment 2026-11-11) and is in `all` and rc
 cuts like the others. Both registries' pre-release risks are accepted in writing (see
-"Pre-releases on production registries"). The tag-push triggers of
-`publish-java.yml` and `publish-python.yml` are retired: `release.yml`
-dispatch is the only routine publish path.
+"Pre-releases on production registries"). `release.yml` dispatch is the only
+publish path (the old `publish-java.yml` and `publish-python.yml` are deleted).
 
 **Production PyPI** is enabled for `fireweave` via `release.yml` with
 `component=python`, `channel=production`, `dry_run=false`.
-[`publish-python.yml`](workflows/publish-python.yml) is a dispatch-only manual
-recovery path for a plain version (its `python/v*` tag-push trigger is
-retired).
 
 **Production npm** (`latest`, both `@fireweaveai/server-sdk` and
 `@fireweaveai/web-sdk`) is **enabled** as of 2026-09-09 — that date is the
@@ -54,9 +50,7 @@ jobs: each job runs the twin gate's publish checks on the stamped tree, then
 publishes the twin, then the ES module package, at the same version and
 dist-tag. **Maven Central** is
 wired through `release.yml` (`component=java`) using the Central Publisher
-Portal plugin; [`publish-java.yml`](workflows/publish-java.yml) is a
-dispatch-only manual recovery path for a plain version (its `java/v*`
-tag-push trigger is retired). Missing secrets fail closed rather than publishing a
+Portal plugin. Missing secrets fail closed rather than publishing a
 broken artifact. **crates.io** production publish requires
 `CARGO_REGISTRY_TOKEN` — same fail-closed behavior.
 
@@ -119,8 +113,8 @@ does this release actually carry." Two subcommands:
   the rc spelling is refused. Prints `key=value` lines; never writes anything.
 - `version.sh apply <component> <release-version>` — writes an
   ALREADY-COMPUTED version into the component's manifest (no bump math, no
-  network). go/swift are a documented no-op — the git tag already pushed by
-  `build` is the version record.
+  network). go/swift are a documented no-op — the git tag the `tag` job pushes is
+  the version record.
 - `version.sh check-stamp <component> <channel>` — run after `apply` in every
   publish job: fails unless the stamped workspace calls `<channel>` (the
   build-info stamp for server/web/dart/swift; the manifest or tag version
@@ -169,6 +163,14 @@ identity that `version.sh` and `changelog.sh` read. **The plain `X.Y.Z` /
 an unprefixed tag. Consumers clone the whole repository (every SDK and its
 history); that is the accepted cost of not running a mirror repository.
 
+**Tags follow publishes.** The `tag` job runs after the registry publish jobs and tags a
+component only when its own publish jobs succeeded or were skipped, so a failed publish
+leaves no tag and a re-run computes the same version. Go and Swift have no publish job:
+their tag is the release. Dart's `publish-pub-production` cannot succeed from this
+workflow (pub.dev accepts only tag-push-triggered publishes), so a Dart production
+version is published by hand: `tools/release/version.sh apply dart X.Y.Z`, then
+`dart pub publish` from `sdks/dart`, then push `dart/vX.Y.Z` on that commit.
+
 ### Signed tags
 
 Org convention is a **signed** annotated tag. GitHub-hosted runners have no
@@ -191,9 +193,9 @@ signing into the workflow.
 | web (npm) | npmjs.com | `@fireweaveai/web-sdk` | Publish via **OIDC trusted publishing**. |
 | server, CommonJS twin (npm) | npmjs.com | `@fireweaveai/server-sdk-cjs` | Same job, version and dist-tag as `@fireweaveai/server-sdk`, published first. **OIDC trusted publishing**; needs its own Trusted Publisher (provisioning below). |
 | web, CommonJS twin (npm) | npmjs.com | `@fireweaveai/web-sdk-cjs` | Same job, version and dist-tag as `@fireweaveai/web-sdk`, published first. **OIDC trusted publishing**; needs its own Trusted Publisher (provisioning below). |
-| Python | pypi.org | `fireweave` | Publish via **`PYPI_API_TOKEN`** GitHub secret (environment `release`) with `pypa/gh-action-pypi-publish`, from `release.yml` on both channels: staging uploads `X.Y.ZrcN`, production the plain version. `publish-python.yml` is dispatch-only manual recovery for a plain version. |
+| Python | pypi.org | `fireweave` | Publish via **`PYPI_API_TOKEN`** GitHub secret (environment `release`) with `pypa/gh-action-pypi-publish`, from `release.yml` on both channels: staging uploads `X.Y.ZrcN`, production the plain version. |
 | Go | proxy.golang.org | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3` | No registry credentials — "publishing" is pushing the `sdks/go/v*` tag on the public repo; the proxy picks it up. **Major ≥ 2 requires the `/vN` module-path suffix, e.g. `/v3`** (Go modules rule); the git tag prefix stays `sdks/go/`. |
-| Java | Maven Central | groupId `ai.fireweave` | Published from `release.yml` on both channels (staging `X.Y.Z-rc.N`); fails closed without secrets. `publish-java.yml` is dispatch-only manual recovery for a plain version. |
+| Java | Maven Central | groupId `ai.fireweave` | Published from `release.yml` on both channels (staging `X.Y.Z-rc.N`); fails closed without secrets. |
 | Rust | crates.io | `fireweave` | Publish via **`CARGO_REGISTRY_TOKEN`** GitHub secret (environment `release`). No staging registry exists — see "Pre-release channels". |
 | Swift | this repository (`https://github.com/FireWeave-HQ/fireweave-sdk`) | `.package(url:, from:)`, products `Fireweave` and `FireweaveStart` | No package registry; SwiftPM resolves the root `Package.swift` at the plain `X.Y.Z` tag the `tag` job pushes. No credentials. |
 | Dart | pub.dev | `fireweave` | Publish via pub.dev **automated publishing** (OIDC — no token secret; `dart-lang/setup-dart` exchanges the GitHub id-token). Must be enabled on pub.dev for the package, bound to this repository, `release.yml`, and the `release` environment; until then pub.dev rejects the publish. No staging registry exists — see "Pre-release channels". |

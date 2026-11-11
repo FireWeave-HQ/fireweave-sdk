@@ -230,3 +230,6 @@ tags, so this repository now meets both rules itself:
 Install: `.package(url: "https://github.com/FireWeave-HQ/fireweave-sdk", from: "X.Y.Z")`, with
 `.product(name: "FireweaveStart", package: "fireweave-sdk")`. The root manifest has not yet been
 resolved from GitHub by a real app; the first Swift release with a plain tag is that check.
+
+Also on 2026-11-11: the dispatch-only `publish-java.yml` and `publish-python.yml` (see "One publish
+path" above) are deleted; `release.yml` is the only publish path.

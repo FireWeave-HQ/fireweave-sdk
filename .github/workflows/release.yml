@@ -26,8 +26,10 @@
 # The release tag itself
 # is pushed by a dedicated `tag` job that also needs `verify` (I7 fix — a
 # tag push living inside `build` could previously race `verify` or outrun a
-# failure), and every publish-* job needs `tag` too, preserving the
-# pre-existing ordering where no publish step could start before the tag.
+# failure). Registry publishes run BEFORE the tag: the `tag` job needs every
+# registry publish-* job and tags a component only when its own publishes
+# succeeded or were skipped, so a failed publish never leaves a tag behind.
+# Only the Go proxy warm jobs run after the tag (they resolve it).
 #
 # STAGING PUBLISH (authorized 2026-07-27): npm (server) + TestPyPI + Go
 # proxy warm are enabled only when dry_run=false AND channel=staging AND the
@@ -65,10 +67,7 @@
 # PyPI is enabled via channel staging/production (component=python), and
 # Maven Central via channel staging/production (component=java) — the latter
 # requires MAVEN_CENTRAL_* and MAVEN_GPG_* secrets. Missing secrets fail
-# closed. This workflow's dispatch is the only routine publish path: the
-# tag-push triggers of publish-python.yml (python/v*) and publish-java.yml
-# (java/v*) are retired; both remain dispatch-only manual recovery paths for a
-# plain version.
+# closed. This workflow's dispatch is the only publish path.
 # rust production (`cargo publish`) requires CARGO_REGISTRY_TOKEN — missing
 # fails closed the same way.
 # Production npm (dist-tag latest, both server and web) was HARD-DISABLED
@@ -393,11 +392,31 @@ jobs:
   # Only the tag is pushed; main is untouched. The other components tag the
   # checkout: Go's tag is its version, and server/web/python/java consumers
   # use the registry artifact, stamped in its publish job.
+  #
+  # Runs AFTER the registry publish jobs: a component is tagged only when its
+  # own publish jobs succeeded or were skipped (the first step checks), so a
+  # failed publish never strands a tag that blocks the re-run.
   # =========================================================================
   tag:
     name: create + push release tag (${{ matrix.component }})
-    needs: [validate, build, verify]
-    if: ${{ inputs.dry_run == false }}
+    needs:
+      - validate
+      - build
+      - verify
+      - publish-npm
+      - publish-npm-web
+      - publish-npm-server-production
+      - publish-npm-web-production
+      - publish-pypi
+      - publish-pypi-production
+      - publish-maven
+      - publish-cargo
+      - publish-cargo-production
+      - publish-pub
+      - publish-pub-production
+    # Runs when another component's publish failed, so this component can still
+    # be tagged; the first step refuses when this component's own publish did not succeed.
+    if: ${{ !cancelled() && inputs.dry_run == false && needs.validate.result == 'success' && needs.build.result == 'success' && needs.verify.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:
@@ -409,6 +428,29 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Require this component's publish to have succeeded
+        # A tag marks a release that exists. A failed or cancelled publish
+        # leaves no tag behind, so a re-run computes the same version again.
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          case "$COMPONENT" in
+            server) jobs="publish-npm publish-npm-server-production" ;;
+            web) jobs="publish-npm-web publish-npm-web-production" ;;
+            python) jobs="publish-pypi publish-pypi-production" ;;
+            java) jobs="publish-maven" ;;
+            rust) jobs="publish-cargo publish-cargo-production" ;;
+            dart) jobs="publish-pub publish-pub-production" ;;
+            *) jobs="" ;; # go, swift: the tag is the release
+          esac
+          for job in $jobs; do
+            result="$(jq -r --arg job "$job" '.[$job].result' <<<"$NEEDS")"
+            case "$result" in
+              success|skipped) ;;
+              *) echo "::error::$job finished '$result'; not tagging $COMPONENT"; exit 1 ;;
+            esac
+          done
       - uses: useblacksmith/checkout@v1
       - uses: actions/download-artifact@v5
         with:
@@ -458,32 +500,30 @@ jobs:
   #   both server and web, dist-tag `latest`, environment `release`.
   # - Production PyPI / Maven / crates.io: gated on channel=production,
   #   dry_run=false, and the matching secret — missing secrets fail closed.
-  # - go / swift: no publish job beyond the tag the `tag` job already
+  # - go / swift: no publish job beyond the tag the `tag` job
   #   pushed — both ecosystems resolve purely from git tags, for staging AND
   #   production (go additionally gets an optional proxy warm on staging).
   #
-  # Every job below needs `tag` (in addition to `build`/`verify`) and
-  # downloads its own release-info-<component> artifact (uploaded by build's
-  # matching matrix leg) instead of recomputing the version: build already
-  # queried the registry once; a publish job re-querying afterwards would —
-  # for go/java/swift specifically, whose "registry" is the git tag list
-  # itself — see the tag the `tag` job just pushed and double-count.
-  # Reusing the one computed value sidesteps that for every ecosystem
-  # uniformly, and needing `tag` preserves the pre-fix ordering where no
-  # publish step could start before the release tag existed.
+  # Every registry job below needs only `build`/`verify` and runs BEFORE
+  # `tag`; the Go proxy warm jobs need `tag`. Each downloads its own
+  # release-info-<component> artifact (uploaded by build's matching matrix
+  # leg) instead of recomputing the version: build already queried the
+  # registry once, and for go/java/swift, whose "registry" is the git tag
+  # list, a later query would see a newly pushed tag and double-count.
   # =========================================================================
 
   publish-npm:
     name: publish npm (staging → server-sdk, dist-tag next)
-    needs: [validate, build, verify, tag]
+    needs: [validate, build, verify]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'server') }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # npm accepts --provenance only from GitHub-hosted runners (E422 on Blacksmith).
+    runs-on: ubuntu-latest
     environment: release-staging
     permissions:
       id-token: write # npm OIDC trusted publishing — no NPM_TOKEN secret needed once provisioned
       contents: read
     steps:
-      - uses: useblacksmith/checkout@v1
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
         with:
           name: release-info-server
@@ -543,15 +583,16 @@ jobs:
 
   publish-npm-web:
     name: publish npm (staging → web-sdk, dist-tag next)
-    needs: [validate, build, verify, tag]
+    needs: [validate, build, verify]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'web') }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # npm accepts --provenance only from GitHub-hosted runners (E422 on Blacksmith).
+    runs-on: ubuntu-latest
     environment: release-staging
     permissions:
       id-token: write
       contents: read
     steps:
-      - uses: useblacksmith/checkout@v1
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
         with:
           name: release-info-web
@@ -634,15 +675,16 @@ jobs:
   # Trusted Publisher for each package must permit this environment.
   publish-npm-server-production:
     name: publish npm production (server-sdk, dist-tag latest)
-    needs: [validate, build, verify, tag]
+    needs: [validate, build, verify]
     if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'server') }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # npm accepts --provenance only from GitHub-hosted runners (E422 on Blacksmith).
+    runs-on: ubuntu-latest
     environment: release
     permissions:
       id-token: write # npm OIDC trusted publishing — no NPM_TOKEN secret
       contents: read
     steps:
-      - uses: useblacksmith/checkout@v1
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
         with:
           name: release-info-server
@@ -742,15 +784,16 @@ jobs:
 
   publish-npm-web-production:
     name: publish npm production (web-sdk, dist-tag latest)
-    needs: [validate, build, verify, tag]
+    needs: [validate, build, verify]
     if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'web') }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # npm accepts --provenance only from GitHub-hosted runners (E422 on Blacksmith).
+    runs-on: ubuntu-latest
     environment: release
     permissions:
       id-token: write
       contents: read
     steps:
-      - uses: useblacksmith/checkout@v1
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
         with:
           name: release-info-web
@@ -855,7 +898,7 @@ jobs:
 
   publish-pypi:
     name: publish PyPI (staging rc)
-    needs: [validate, build, verify, tag]
+    needs: [validate, build, verify]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'python') }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     # An rc goes to pypi.org itself (X.Y.ZrcN; pip skips it unless pinned), so
@@ -902,7 +945,7 @@ jobs:
 
   publish-pypi-production:
     name: publish PyPI (production)
-    needs: [validate, build, verify, tag]
+    needs: [validate, build, verify]
     if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'python') }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release
@@ -938,7 +981,7 @@ jobs:
 
   publish-maven:
     name: publish Maven Central (Central Publisher Portal)
-    needs: [validate, build, verify, tag]
+    needs: [validate, build, verify]
     if: ${{ inputs.dry_run == false && contains(fromJson(needs.validate.outputs.components), 'java') }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     # Stays on `release` for BOTH channels: Maven Central Portal has no
@@ -1095,7 +1138,7 @@ jobs:
 
   publish-cargo:
     name: cargo publish --dry-run (staging — no crates.io upload)
-    needs: [validate, build, verify, tag]
+    needs: [validate, build, verify]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'rust') }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release-staging
@@ -1123,14 +1166,14 @@ jobs:
         # No staging registry exists for crates.io (unlike TestPyPI) and
         # yanking is not deletion, so a real staging publish would spend the
         # version permanently. --dry-run proves the package is publishable
-        # without spending anything; the git tag (already pushed by the `tag`
-        # job, which this job needs) IS this release's staging artifact.
+        # without spending anything; the git tag (pushed by the `tag` job
+        # once this job succeeds) IS this release's staging artifact.
         working-directory: sdks/rust
         run: cargo publish --dry-run --locked --allow-dirty
 
   publish-cargo-production:
     name: publish crates.io (production)
-    needs: [validate, build, verify, tag]
+    needs: [validate, build, verify]
     if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'rust') }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release
@@ -1168,7 +1211,7 @@ jobs:
 
   publish-pub:
     name: dart pub publish --dry-run (staging — no pub.dev upload)
-    needs: [validate, build, verify, tag]
+    needs: [validate, build, verify]
     if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'dart') }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release-staging
@@ -1198,8 +1241,8 @@ jobs:
         # crates.io) and a published version can only be retracted, never
         # deleted, so a real staging publish would spend the version
         # permanently. --dry-run proves the package is publishable without
-        # spending anything; the git tag (already pushed by the `tag` job,
-        # which this job needs) IS this release's staging artifact.
+        # spending anything; the git tag (pushed by the `tag` job once
+        # this job succeeds) IS this release's staging artifact.
         #
         # --ignore-warnings is required the same way cargo's --allow-dirty
         # is: `version.sh apply` rewrites pubspec.yaml in the workspace
@@ -1213,7 +1256,7 @@ jobs:
 
   publish-pub-production:
     name: publish pub.dev (production)
-    needs: [validate, build, verify, tag]
+    needs: [validate, build, verify]
     if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'dart') }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release
