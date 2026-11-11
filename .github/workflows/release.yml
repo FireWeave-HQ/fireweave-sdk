@@ -43,14 +43,13 @@
 #
 # STAGING PUBLISH SCOPE EXTENDED (2026-08-21): npm for `web` (identical
 # OIDC trusted-publish mechanism as the already-authorized `server`) and a
-# rust `cargo publish --dry-run` (packages + validates only; never uploads —
-# see below) were added to the same dry_run=false AND channel=staging gate.
+# rust `cargo publish --dry-run` (replaced on 2026-11-11 by a real crates.io
+# rc publish — see below) were added to the same dry_run=false AND channel=staging gate.
 #
-# rust and swift have no staging registry at all (crates.io has no staging
-# index, and yanking is not deletion — a real staging publish would
-# spend the version permanently): rust staging stops at
-# `cargo publish --dry-run` plus the git tag; go staging (and production)
-# resolve from the git tag alone, and so does swift: SwiftPM reads the
+# rust staging publishes X.Y.Z-rc.N to crates.io itself since 2026-11-11
+# (crates.io has no staging index; a version is permanent, and Cargo picks an
+# rc only when asked for it explicitly — ADR-0012, Amendment 2026-11-11).
+# go staging (and production) resolve from the git tag alone, and so does swift: SwiftPM reads the
 # repository-root Package.swift at a plain `X.Y.Z` tag, which the `tag` job
 # pushes next to swift/vX.Y.Z (ADR-0012, Amendment 2026-11-11).
 #
@@ -219,8 +218,8 @@ jobs:
         # package-dry-run job runs) — left as-is here rather than reinvented.
         # Two pre-existing, out-of-scope-for-this-task consequences, noted
         # in task-14-report.md: (1) it does not package rust or swift at all
-        # (rust's own release-worthy "build" step is `cargo publish
-        # --dry-run` in publish-cargo instead; swift has no packaging step,
+        # (rust's own release-worthy "build" step is `cargo publish` in
+        # publish-cargo instead; swift has no packaging step,
         # ever — see the header comment); (2) on an `all` component fan-out
         # this reruns the full 4-ecosystem build once per matrix leg.
         run: bash scripts/build-all.sh
@@ -411,7 +410,6 @@ jobs:
       - publish-pypi-production
       - publish-maven
       - publish-cargo
-      - publish-cargo-production
       - publish-pub
       - publish-pub-production
     # Runs when another component's publish failed, so this component can still
@@ -440,7 +438,7 @@ jobs:
             web) jobs="publish-npm-web publish-npm-web-production" ;;
             python) jobs="publish-pypi publish-pypi-production" ;;
             java) jobs="publish-maven" ;;
-            rust) jobs="publish-cargo publish-cargo-production" ;;
+            rust) jobs="publish-cargo" ;;
             dart) jobs="publish-pub publish-pub-production" ;;
             *) jobs="" ;; # go, swift: the tag is the release
           esac
@@ -494,12 +492,13 @@ jobs:
   # - Staging, when dry_run=false and channel=staging (two DIFFERENT dates —
   #   see the file header for the full split, not restated here):
   #     - authorized 2026-07-27: npm server, TestPyPI, Go proxy warm.
-  #     - scope extended 2026-08-21: npm web, rust `cargo publish --dry-run`.
+  #     - scope extended 2026-08-21: npm web, rust `cargo publish --dry-run`
+  #       (since 2026-11-11 a real crates.io rc publish).
   #   Requires trusted publishers / secrets (RELEASE.md).
   # - Production npm: ENABLED 2026-09-09 (the second written authorization),
   #   both server and web, dist-tag `latest`, environment `release`.
-  # - Production PyPI / Maven / crates.io: gated on channel=production,
-  #   dry_run=false, and the matching secret — missing secrets fail closed.
+  # - PyPI / Maven / crates.io: both channels (an rc on staging), gated on
+  #   dry_run=false and the matching secret — missing secrets fail closed.
   # - go / swift: no publish job beyond the tag the `tag` job
   #   pushed — both ecosystems resolve purely from git tags, for staging AND
   #   production (go additionally gets an optional proxy warm on staging).
@@ -1067,7 +1066,9 @@ jobs:
   publish-go:
     name: warm Go module proxy (staging)
     needs: [validate, build, verify, tag]
-    if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'go') }}
+    # !cancelled(): `tag` needs publish jobs that are skipped on most runs, and a skip
+    # propagates down the chain unless the condition says otherwise.
+    if: ${{ !cancelled() && needs.tag.result == 'success' && inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'go') }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release-staging
     steps:
@@ -1106,7 +1107,9 @@ jobs:
   publish-go-production:
     name: verify + warm Go module proxy (production)
     needs: [validate, build, verify, tag]
-    if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'go') }}
+    # !cancelled(): `tag` needs publish jobs that are skipped on most runs, and a skip
+    # propagates down the chain unless the condition says otherwise.
+    if: ${{ !cancelled() && needs.tag.result == 'success' && inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'go') }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release
     steps:
@@ -1136,45 +1139,14 @@ jobs:
             exit 1
           fi
 
+  # Both channels, like publish-maven: staging uploads X.Y.Z-rc.N, production
+  # the plain version. A crates.io version is permanent (yank is not deletion);
+  # Cargo selects an rc only when a dependency asks for it explicitly
+  # (ADR-0012, Amendment 2026-11-11: Rust release candidates on crates.io).
   publish-cargo:
-    name: cargo publish --dry-run (staging — no crates.io upload)
+    name: publish crates.io (${{ inputs.channel }})
     needs: [validate, build, verify]
-    if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'rust') }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    environment: release-staging
-    steps:
-      - uses: useblacksmith/checkout@v1
-      - uses: actions/download-artifact@v5
-        with:
-          name: release-info-rust
-          path: release-info
-      - name: Load computed release version
-        id: version
-        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-      - name: Apply computed version
-        run: |
-          tools/release/version.sh apply rust "${{ steps.version.outputs.release_version }}"
-          # apply() rewrites Cargo.toml only; refresh Cargo.lock so --locked
-          # does not fail on the package's own version field.
-          (cd sdks/rust && cargo check --quiet)
-      - name: Check the stamped channel before publishing
-        run: tools/release/version.sh check-stamp rust "${{ inputs.channel }}"
-      - name: cargo publish --dry-run (packages + validates only — never uploads)
-        # No staging registry exists for crates.io (unlike TestPyPI) and
-        # yanking is not deletion, so a real staging publish would spend the
-        # version permanently. --dry-run proves the package is publishable
-        # without spending anything; the git tag (pushed by the `tag` job
-        # once this job succeeds) IS this release's staging artifact.
-        working-directory: sdks/rust
-        run: cargo publish --dry-run --locked --allow-dirty
-
-  publish-cargo-production:
-    name: publish crates.io (production)
-    needs: [validate, build, verify]
-    if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'rust') }}
+    if: ${{ inputs.dry_run == false && contains(fromJson(needs.validate.outputs.components), 'rust') }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release
     steps:

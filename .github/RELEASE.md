@@ -10,8 +10,8 @@ proxy warm — only when `workflow_dispatch` has `dry_run=false` and
 Status (2026-08-21): staging publish SCOPE EXTENDED to also cover npm for
 `@fireweaveai/web-sdk` (dist-tag `next` — identical OIDC trusted-publish
 mechanism as the already-authorized `server-sdk`) and a rust
-`cargo publish --dry-run` (packages + validates only; no crates.io upload —
-see "Pre-release channels"), under the same `dry_run=false` /
+`cargo publish --dry-run`, replaced on 2026-11-11 by a real crates.io
+`X.Y.Z-rc.N` publish (see "Pre-release channels"), under the same `dry_run=false` /
 `channel=staging` gate.
 
 Status (2026-09-02, during the dart-sdk implementation work — **not** a
@@ -63,7 +63,7 @@ at one computed semver. Trigger
 
 **`all` is not only a build-time convenience — with `dry_run=false` and
 `channel=staging` it fires every staging publish job at once, unattended**
-(both npm packages, the Go proxy warm, the rust `cargo --dry-run`, and the
+(both npm packages, the Go proxy warm, the rust crates.io rc, and the
 dart `dart pub publish --dry-run`): `release-staging` carries no
 required-reviewer gate, so selecting `all` there is the same as approving all
 of them in one click, not just requesting seven builds. The Python (PyPI) and
@@ -196,7 +196,7 @@ signing into the workflow.
 | Python | pypi.org | `fireweave` | Publish via **`PYPI_API_TOKEN`** GitHub secret (environment `release`) with `pypa/gh-action-pypi-publish`, from `release.yml` on both channels: staging uploads `X.Y.ZrcN`, production the plain version. |
 | Go | proxy.golang.org | `github.com/FireWeave-HQ/fireweave-sdk/sdks/go/v3` | No registry credentials — "publishing" is pushing the `sdks/go/v*` tag on the public repo; the proxy picks it up. **Major ≥ 2 requires the `/vN` module-path suffix, e.g. `/v3`** (Go modules rule); the git tag prefix stays `sdks/go/`. |
 | Java | Maven Central | groupId `ai.fireweave` | Published from `release.yml` on both channels (staging `X.Y.Z-rc.N`); fails closed without secrets. |
-| Rust | crates.io | `fireweave` | Publish via **`CARGO_REGISTRY_TOKEN`** GitHub secret (environment `release`). No staging registry exists — see "Pre-release channels". |
+| Rust | crates.io | `fireweave` | Publish via **`CARGO_REGISTRY_TOKEN`** GitHub secret (environment `release`), from `release.yml` on both channels: staging uploads `X.Y.Z-rc.N`, production the plain version. |
 | Swift | this repository (`https://github.com/FireWeave-HQ/fireweave-sdk`) | `.package(url:, from:)`, products `Fireweave` and `FireweaveStart` | No package registry; SwiftPM resolves the root `Package.swift` at the plain `X.Y.Z` tag the `tag` job pushes. No credentials. |
 | Dart | pub.dev | `fireweave` | Publish via pub.dev **automated publishing** (OIDC — no token secret; `dart-lang/setup-dart` exchanges the GitHub id-token). Must be enabled on pub.dev for the package, bound to this repository, `release.yml`, and the `release` environment; until then pub.dev rejects the publish. No staging registry exists — see "Pre-release channels". |
 
@@ -223,14 +223,14 @@ that tag is now pure syntax, not the channel signal:
 | npm (server, web) | publish `X.Y.Z-rc.N`, `--tag next` (`npm install @fireweaveai/server-sdk@next`, which records `^X.Y.Z-rc.N`; re-run it to move to a newer rc) | fresh `channel: production` run computes the plain `X.Y.Z`, published `--tag latest` |
 | PyPI | upload `X.Y.ZrcN` (PEP 440 release candidate) to **PyPI**, environment `release`. pip, uv, poetry and pipenv ignore it unless the requirement pins it exactly (`pip install fireweave==X.Y.ZrcN`), so `pip install fireweave` keeps the latest final release | `release.yml` with `channel: production` only (the `python/v*` tag push is retired) |
 | Maven | publish `X.Y.Z-rc.N` to Maven Central (`autoPublish=true`; decision D4, ADR-0012, reaffirmed 2026-10-09). The workflow refuses a staging run whose version lacks `-rc.`. Each rc is permanent on Central, and a Maven range or Gradle dynamic version can resolve it (see "Pre-releases on production registries") | fresh `channel: production` run publishes the plain `X.Y.Z` |
-| crates.io (rust) | **no publish at all** — `cargo publish --dry-run` proves `X.Y.Z-rc.N` packages cleanly, plus the git tag (on a release commit carrying the version, see "Release commits"). crates.io has no TestPyPI equivalent, and yanking is not deletion, so an actual staging upload would spend the version permanently. | fresh `channel: production` run computes the plain `X.Y.Z` and runs `cargo publish` for real (`CARGO_REGISTRY_TOKEN`) |
+| crates.io (rust) | publish `X.Y.Z-rc.N` to crates.io (`publish-cargo`, since 2026-11-11), then the git tag on a release commit carrying the version (see "Release commits"). crates.io has no staging index, so each rc is permanent (yank is not deletion); see "Pre-releases on production registries" | fresh `channel: production` run computes the plain `X.Y.Z` and runs `cargo publish` for real (`CARGO_REGISTRY_TOKEN`) |
 | Go | tag `sdks/go/vX.Y.Z-rc.N` (`go get` will not auto-select a prerelease tag); optional proxy warm | tag the final `sdks/go/vX.Y.Z` |
 | Swift | the `tag` job pushes `swift/vX.Y.Z-rc.N` and the plain `X.Y.Z-rc.N` on the release commit (`BuildInfo.swift` stamped `staging`). SwiftPM's `from:` ranges skip pre-releases, so a staging app pins `exact: "X.Y.Z-rc.N"` | fresh `channel: production` run tags `swift/vX.Y.Z` and the plain `X.Y.Z` |
 | pub.dev (dart) | **no publish at all** — `dart pub publish --dry-run` proves `X.Y.Z-rc.N` packages cleanly, plus the git tag (on a release commit carrying the stamp, see "Release commits"). pub.dev has no staging registry, and a published version can only be retracted (within 7 days) — never deleted — so an actual staging upload would spend the version permanently. | fresh `channel: production` run computes the plain `X.Y.Z` and runs `dart pub publish --force` for real (OIDC automated publishing) |
 
 ### Pre-releases on production registries (accepted risk)
 
-Java and Python rc builds live on the same registries as releases, so
+Java, Python and Rust rc builds live on the same registries as releases, so
 something other than an exact pin can reach them:
 
 - **Java (Maven Central).** `X.Y.Z-rc.N` sorts below its own release, but
@@ -241,10 +241,14 @@ something other than an exact pin can reach them:
 - **Python (PyPI).** `X.Y.ZrcN` is reachable by `pip install --pre`, a
   pre-release specifier (`>=3.0.0rc1`, `~=3.0.0rc1`) or uv
   `--prerelease allow`.
+- **Rust (crates.io, since 2026-11-11).** Cargo selects `X.Y.Z-rc.N` only when
+  the requirement names a pre-release (`=3.1.0-rc.1`, `^3.1.0-rc.1`); `"3"` or
+  `"3.1"` never does. A requirement like `^3.1.0-rc.1` also accepts later rcs.
 
 Either way the app gets an rc, which calls the **staging** fw-server, and the
 version is permanent (a PyPI version can be yanked, never reused; a Central
-version cannot be removed). Accepted by the owner on 2026-10-09 (O3, O5).
+version cannot be removed; a crates.io version can only be yanked). Accepted
+by the owner on 2026-10-09 (O3, O5), and for Rust on 2026-11-11.
 Users who want production write an exact plain version; the FireWeave
 installer always writes exact versions and never a range.
 
@@ -293,8 +297,8 @@ staging run wherever a separate staging credential exists:
 
 | Environment | Used by | Secrets | Required reviewers |
 | --- | --- | --- | --- |
-| `release` | `publish-npm-server-production`, `publish-npm-web-production`, `publish-pypi` (staging rc) and `publish-pypi-production`, `publish-maven` (BOTH channels — see below), `publish-cargo-production`, `publish-pub-production` | `PYPI_API_TOKEN`, `MAVEN_CENTRAL_USERNAME`/`_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`/`_PASSPHRASE`, `CARGO_REGISTRY_TOKEN` (the two npm jobs and pub.dev need no secret — OIDC) | **Yes** — this is the gate that must stay a human approval |
-| `release-staging` | `publish-npm`, `publish-npm-web`, `publish-go`, `publish-cargo`, `publish-pub` | none (npm/go/cargo-dry-run/pub-dry-run need no secret — OIDC or none) | No |
+| `release` | `publish-npm-server-production`, `publish-npm-web-production`, `publish-pypi` (staging rc) and `publish-pypi-production`, `publish-maven` and `publish-cargo` (BOTH channels — see below), `publish-pub-production` | `PYPI_API_TOKEN`, `MAVEN_CENTRAL_USERNAME`/`_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`/`_PASSPHRASE`, `CARGO_REGISTRY_TOKEN` (the two npm jobs and pub.dev need no secret — OIDC) | **Yes** — this is the gate that must stay a human approval |
+| `release-staging` | `publish-npm`, `publish-npm-web`, `publish-go`, `publish-pub` | none (npm/go/pub-dry-run need no secret — OIDC or none) | No |
 
 The `tag` job runs on `release` for a production run and on
 `release-staging` for a staging run. `TEST_PYPI_API_TOKEN` is retired: no
@@ -332,7 +336,7 @@ having a second credential set to protect. The compute guard and
 If either job runs before its secret exists, it fails closed with an
 explicit `::error::` naming the missing secret and the environment it
 belongs on (see `publish-pypi`'s "Require PYPI_API_TOKEN" step and
-`publish-cargo-production`'s "Require CARGO_REGISTRY_TOKEN" step) — it never
+`publish-cargo`'s "Require CARGO_REGISTRY_TOKEN" step) — it never
 silently skips or falls back to an unauthenticated attempt.
 
 ## Company-side provisioning required

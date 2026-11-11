@@ -233,3 +233,12 @@ resolved from GitHub by a real app; the first Swift release with a plain tag is 
 
 Also on 2026-11-11: the dispatch-only `publish-java.yml` and `publish-python.yml` (see "One publish
 path" above) are deleted; `release.yml` is the only publish path.
+
+## Amendment (2026-11-11): Rust release candidates on crates.io
+
+A Rust staging build now publishes `X.Y.Z-rc.N` to crates.io (`publish-cargo`, both channels,
+environment `release`) instead of stopping at `cargo publish --dry-run` plus the git tag, the
+same trade made for PyPI and Maven Central on 2026-10-09. Each rc is permanent (yank is not
+deletion). Cargo selects an rc only when a requirement names a pre-release, and such an app calls
+the staging fw-server. The rc counter reads crates.io and the `rust/v` tags together, because
+earlier rcs exist only as tags. Accepted by the owner on 2026-11-11.
