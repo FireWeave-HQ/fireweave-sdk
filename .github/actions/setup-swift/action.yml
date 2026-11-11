@@ -1,0 +1,17 @@
+name: Set up Swift
+description: >-
+  Installs a Swift release for Ubuntu 24.04 from download.swift.org and verifies its
+  signature with the keys swift.org publishes. Replaces swift-actions/setup-swift, whose
+  mandatory keyserver.ubuntu.com refresh fails the whole job whenever that keyserver is down.
+inputs:
+  swift-version:
+    description: Swift release to install, for example 6.4.2
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Install Swift ${{ inputs.swift-version }}
+      shell: bash
+      env:
+        SWIFT_VERSION: ${{ inputs.swift-version }}
+      run: bash "$GITHUB_ACTION_PATH/install.sh"
