@@ -113,8 +113,8 @@ does this release actually carry." Two subcommands:
   the rc spelling is refused. Prints `key=value` lines; never writes anything.
 - `version.sh apply <component> <release-version>` — writes an
   ALREADY-COMPUTED version into the component's manifest (no bump math, no
-  network). go/swift are a documented no-op — the git tag already pushed by
-  `build` is the version record.
+  network). go/swift are a documented no-op — the git tag the `tag` job pushes is
+  the version record.
 - `version.sh check-stamp <component> <channel>` — run after `apply` in every
   publish job: fails unless the stamped workspace calls `<channel>` (the
   build-info stamp for server/web/dart/swift; the manifest or tag version
@@ -162,6 +162,14 @@ identity that `version.sh` and `changelog.sh` read. **The plain `X.Y.Z` /
 `vX.Y.Z` namespace therefore belongs to Swift:** no other component may adopt
 an unprefixed tag. Consumers clone the whole repository (every SDK and its
 history); that is the accepted cost of not running a mirror repository.
+
+**Tags follow publishes.** The `tag` job runs after the registry publish jobs and tags a
+component only when its own publish jobs succeeded or were skipped, so a failed publish
+leaves no tag and a re-run computes the same version. Go and Swift have no publish job:
+their tag is the release. Dart's `publish-pub-production` cannot succeed from this
+workflow (pub.dev accepts only tag-push-triggered publishes), so a Dart production
+version is published by hand: `tools/release/version.sh apply dart X.Y.Z`, then
+`dart pub publish` from `sdks/dart`, then push `dart/vX.Y.Z` on that commit.
 
 ### Signed tags
 
