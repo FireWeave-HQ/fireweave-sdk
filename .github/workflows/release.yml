@@ -55,13 +55,12 @@
 #
 # dart (ADR-0011, added 2026-09-02 during the dart-sdk implementation
 # work — NOT a separate human authorization; flag for a human to confirm)
-# takes rust's shape exactly: pub.dev has no staging registry either and a
-# published version can only be retracted, never deleted, so staging stops
-# at `dart pub publish --dry-run` plus the git tag. Production publishes to
-# pub.dev via pub.dev's own OIDC "automated publishing" (id-token: write,
-# environment `release`) — there is no token secret; pub.dev rejects the
-# publish until automated publishing is enabled for the package on pub.dev,
-# so this fails closed by construction.
+# publishes to pub.dev on both channels since 2026-11-11 (publish-pub), as a
+# Google Cloud service account: pub.dev's own GitHub Actions publishing accepts
+# only a workflow running on a tag, and this workflow runs on main. GitHub OIDC
+# is exchanged through Workload Identity Federation for a Google ID token for
+# https://pub.dev, so there is no token secret; without the two
+# PUB_DEV_* repository variables the job fails closed.
 #
 # PyPI is enabled via channel staging/production (component=python), and
 # Maven Central via channel staging/production (component=java) — the latter
@@ -411,7 +410,6 @@ jobs:
       - publish-maven
       - publish-cargo
       - publish-pub
-      - publish-pub-production
     # Runs when another component's publish failed, so this component can still
     # be tagged; the first step refuses when this component's own publish did not succeed.
     if: ${{ !cancelled() && inputs.dry_run == false && needs.validate.result == 'success' && needs.build.result == 'success' && needs.verify.result == 'success' }}
@@ -439,7 +437,7 @@ jobs:
             python) jobs="publish-pypi publish-pypi-production" ;;
             java) jobs="publish-maven" ;;
             rust) jobs="publish-cargo" ;;
-            dart) jobs="publish-pub publish-pub-production" ;;
+            dart) jobs="publish-pub" ;;
             *) jobs="" ;; # go, swift: the tag is the release
           esac
           for job in $jobs; do
@@ -1181,60 +1179,22 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: cargo publish --locked --allow-dirty
 
+  # Both channels, like publish-cargo: staging uploads X.Y.Z-rc.N, production the
+  # plain version. pub.dev's own GitHub Actions publishing accepts only a workflow
+  # running on a tag, and this one runs on main, so it authenticates as a Google
+  # Cloud service account instead: GitHub OIDC -> Workload Identity Federation ->
+  # a Google ID token for https://pub.dev (no long-lived secret). A pub.dev version
+  # can only be retracted; `dart pub` selects an rc only when asked for one
+  # (ADR-0012, Amendment 2026-11-11: Dart through a Google service account).
   publish-pub:
-    name: dart pub publish --dry-run (staging — no pub.dev upload)
+    name: publish pub.dev (${{ inputs.channel }})
     needs: [validate, build, verify]
-    if: ${{ inputs.dry_run == false && inputs.channel == 'staging' && contains(fromJson(needs.validate.outputs.components), 'dart') }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    environment: release-staging
-    steps:
-      - uses: useblacksmith/checkout@v1
-      - uses: actions/download-artifact@v5
-        with:
-          name: release-info-dart
-          path: release-info
-      - name: Load computed release version
-        id: version
-        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
-      - uses: dart-lang/setup-dart@v1
-        with:
-          sdk: stable
-      - name: Apply computed version
-        run: tools/release/version.sh apply dart "${{ steps.version.outputs.release_version }}"
-      - name: Check the stamped channel before publishing
-        run: tools/release/version.sh check-stamp dart "${{ inputs.channel }}"
-      - name: Run the build-info test against the stamped tree
-        working-directory: sdks/dart
-        run: |
-          dart pub get
-          dart test test/start_build_info_test.dart
-      - name: dart pub publish --dry-run (validates only — never uploads)
-        # No staging registry exists for pub.dev (same situation as
-        # crates.io) and a published version can only be retracted, never
-        # deleted, so a real staging publish would spend the version
-        # permanently. --dry-run proves the package is publishable without
-        # spending anything; the git tag (pushed by the `tag` job once
-        # this job succeeds) IS this release's staging artifact.
-        #
-        # --ignore-warnings is required the same way cargo's --allow-dirty
-        # is: `version.sh apply` rewrites pubspec.yaml in the workspace
-        # (dirty tree), and package CHANGELOG.md does not list every
-        # -rc.N. Those are warnings; without --ignore-warnings dart
-        # pub exits 65. (--force cannot be combined with --dry-run.)
-        working-directory: sdks/dart
-        run: |
-          dart pub get
-          dart pub publish --dry-run --ignore-warnings
-
-  publish-pub-production:
-    name: publish pub.dev (production)
-    needs: [validate, build, verify]
-    if: ${{ inputs.dry_run == false && inputs.channel == 'production' && contains(fromJson(needs.validate.outputs.components), 'dart') }}
+    if: ${{ inputs.dry_run == false && contains(fromJson(needs.validate.outputs.components), 'dart') }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release
     permissions:
-      id-token: write # pub.dev automated publishing (OIDC) — no long-lived token; setup-dart exchanges it
       contents: read
+      id-token: write # GitHub OIDC for Google Workload Identity Federation
     steps:
       - uses: useblacksmith/checkout@v1
       - uses: actions/download-artifact@v5
@@ -1244,19 +1204,28 @@ jobs:
       - name: Load computed release version
         id: version
         run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
+      - name: Require the pub.dev service-account settings
+        env:
+          WIF_PROVIDER: ${{ vars.PUB_DEV_WORKLOAD_IDENTITY_PROVIDER }}
+          SERVICE_ACCOUNT: ${{ vars.PUB_DEV_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$WIF_PROVIDER" ] || [ -z "$SERVICE_ACCOUNT" ]; then
+            echo "::error::Set the PUB_DEV_WORKLOAD_IDENTITY_PROVIDER and PUB_DEV_SERVICE_ACCOUNT repository variables (.github/RELEASE.md, provisioning)."
+            exit 1
+          fi
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
-      - name: Assert OIDC preconditions
-        # pub.dev automated publishing must be enabled for `fireweave` on
-        # pub.dev (RELEASE.md provisioning) with this repository, this
-        # workflow file, and the `release` environment — otherwise the
-        # publish below is rejected by pub.dev. Fails closed either way.
-        run: |
-          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
-            echo "::error::OIDC id-token request vars absent — enable pub.dev automated publishing and permissions.id-token: write"
-            exit 1
-          fi
+      - name: Authenticate as the pub.dev service account
+        id: gcp
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.PUB_DEV_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PUB_DEV_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: https://pub.dev
+          id_token_include_email: true
+          create_credentials_file: false
       - name: Apply computed version
         run: tools/release/version.sh apply dart "${{ steps.version.outputs.release_version }}"
       - name: Check the stamped channel before publishing
@@ -1267,7 +1236,10 @@ jobs:
           dart pub get
           dart test test/start_build_info_test.dart
       - name: Publish to pub.dev
+        # setup-dart registered pub.dev to read its token from PUB_TOKEN; this
+        # step's PUB_TOKEN is the service account's ID token instead. --force
+        # skips the prompt and the warnings a stamped (dirty) tree raises.
         working-directory: sdks/dart
-        run: |
-          dart pub get
-          dart pub publish --force
+        env:
+          PUB_TOKEN: ${{ steps.gcp.outputs.id_token }}
+        run: dart pub publish --force

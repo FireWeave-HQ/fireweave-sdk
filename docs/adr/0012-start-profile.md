@@ -242,3 +242,13 @@ same trade made for PyPI and Maven Central on 2026-10-09. Each rc is permanent (
 deletion). Cargo selects an rc only when a requirement names a pre-release, and such an app calls
 the staging fw-server. The rc counter reads crates.io and the `rust/v` tags together, because
 earlier rcs exist only as tags. Accepted by the owner on 2026-11-11.
+
+## Amendment (2026-11-11): Dart publishes through a Google Cloud service account
+
+pub.dev's own GitHub Actions publishing accepts only a workflow running on a tag that matches its
+tag pattern, and `release.yml` runs on `main`, so its pub.dev job could never succeed. `publish-pub`
+now authenticates as a Google Cloud service account instead: GitHub OIDC is exchanged through
+Workload Identity Federation for a Google ID token for `https://pub.dev`, with no stored secret. It
+runs on both channels, so staging rcs reach pub.dev, where a version can only be retracted and
+`dart pub` selects an rc only when asked for one. The tag still follows the publish, and the rc
+counter reads pub.dev and the `dart/v` tags together. Accepted by the owner on 2026-11-11.

@@ -22,6 +22,8 @@ has no staging registry, and a published version can only be retracted, never
 deleted) plus the git tag; production publishes to pub.dev via pub.dev's own
 OIDC "automated publishing" on `environment: release`, which pub.dev rejects
 until it is enabled for the package (fail-closed; see "Registries").
+Superseded on 2026-11-11: `publish-pub` publishes on both channels as a Google
+Cloud service account (see "Registries" and provisioning item 1).
 
 Status (2026-10-09, owner decisions O1–O10): **staging builds are `X.Y.Z-rc.N`**
 (Python `X.Y.ZrcN`) from 3.0.0 on, and `-staging.N` is no longer a staging
@@ -64,7 +66,7 @@ at one computed semver. Trigger
 **`all` is not only a build-time convenience — with `dry_run=false` and
 `channel=staging` it fires every staging publish job at once, unattended**
 (both npm packages, the Go proxy warm, the rust crates.io rc, and the
-dart `dart pub publish --dry-run`): `release-staging` carries no
+dart pub.dev rc): `release-staging` carries no
 required-reviewer gate, so selecting `all` there is the same as approving all
 of them in one click, not just requesting seven builds. The Python (PyPI) and
 Java (Maven Central) rc publishes run on `release` and still wait for its
@@ -166,10 +168,7 @@ history); that is the accepted cost of not running a mirror repository.
 **Tags follow publishes.** The `tag` job runs after the registry publish jobs and tags a
 component only when its own publish jobs succeeded or were skipped, so a failed publish
 leaves no tag and a re-run computes the same version. Go and Swift have no publish job:
-their tag is the release. Dart's `publish-pub-production` cannot succeed from this
-workflow (pub.dev accepts only tag-push-triggered publishes), so a Dart production
-version is published by hand: `tools/release/version.sh apply dart X.Y.Z`, then
-`dart pub publish` from `sdks/dart`, then push `dart/vX.Y.Z` on that commit.
+their tag is the release.
 
 ### Signed tags
 
@@ -198,7 +197,7 @@ signing into the workflow.
 | Java | Maven Central | groupId `ai.fireweave` | Published from `release.yml` on both channels (staging `X.Y.Z-rc.N`); fails closed without secrets. |
 | Rust | crates.io | `fireweave` | Publish via **`CARGO_REGISTRY_TOKEN`** GitHub secret (environment `release`), from `release.yml` on both channels: staging uploads `X.Y.Z-rc.N`, production the plain version. |
 | Swift | this repository (`https://github.com/FireWeave-HQ/fireweave-sdk`) | `.package(url:, from:)`, products `Fireweave` and `FireweaveStart` | No package registry; SwiftPM resolves the root `Package.swift` at the plain `X.Y.Z` tag the `tag` job pushes. No credentials. |
-| Dart | pub.dev | `fireweave` | Publish via pub.dev **automated publishing** (OIDC — no token secret; `dart-lang/setup-dart` exchanges the GitHub id-token). Must be enabled on pub.dev for the package, bound to this repository, `release.yml`, and the `release` environment; until then pub.dev rejects the publish. No staging registry exists — see "Pre-release channels". |
+| Dart | pub.dev | `fireweave` | `publish-pub` on both channels (staging `X.Y.Z-rc.N`, environment `release`), authenticated as a **Google Cloud service account**: GitHub OIDC → Workload Identity Federation → a Google ID token for `https://pub.dev`. No token secret. pub.dev's own GitHub Actions publishing is not used, because it accepts only a workflow running on a tag. |
 
 ## Pre-release channels
 
@@ -226,7 +225,7 @@ that tag is now pure syntax, not the channel signal:
 | crates.io (rust) | publish `X.Y.Z-rc.N` to crates.io (`publish-cargo`, since 2026-11-11), then the git tag on a release commit carrying the version (see "Release commits"). crates.io has no staging index, so each rc is permanent (yank is not deletion); see "Pre-releases on production registries" | fresh `channel: production` run computes the plain `X.Y.Z` and runs `cargo publish` for real (`CARGO_REGISTRY_TOKEN`) |
 | Go | tag `sdks/go/vX.Y.Z-rc.N` (`go get` will not auto-select a prerelease tag); optional proxy warm | tag the final `sdks/go/vX.Y.Z` |
 | Swift | the `tag` job pushes `swift/vX.Y.Z-rc.N` and the plain `X.Y.Z-rc.N` on the release commit (`BuildInfo.swift` stamped `staging`). SwiftPM's `from:` ranges skip pre-releases, so a staging app pins `exact: "X.Y.Z-rc.N"` | fresh `channel: production` run tags `swift/vX.Y.Z` and the plain `X.Y.Z` |
-| pub.dev (dart) | **no publish at all** — `dart pub publish --dry-run` proves `X.Y.Z-rc.N` packages cleanly, plus the git tag (on a release commit carrying the stamp, see "Release commits"). pub.dev has no staging registry, and a published version can only be retracted (within 7 days) — never deleted — so an actual staging upload would spend the version permanently. | fresh `channel: production` run computes the plain `X.Y.Z` and runs `dart pub publish --force` for real (OIDC automated publishing) |
+| pub.dev (dart) | publish `X.Y.Z-rc.N` to pub.dev (`publish-pub`, since 2026-11-11), then the git tag on a release commit carrying the stamp (see "Release commits"). pub.dev has no staging registry; a version can only be retracted (within 7 days), never deleted. `dart pub` prefers stable versions, so `^3.0.0` never selects an rc | fresh `channel: production` run computes the plain `X.Y.Z` and `publish-pub` publishes it |
 
 ### Pre-releases on production registries (accepted risk)
 
@@ -297,8 +296,8 @@ staging run wherever a separate staging credential exists:
 
 | Environment | Used by | Secrets | Required reviewers |
 | --- | --- | --- | --- |
-| `release` | `publish-npm-server-production`, `publish-npm-web-production`, `publish-pypi` (staging rc) and `publish-pypi-production`, `publish-maven` and `publish-cargo` (BOTH channels — see below), `publish-pub-production` | `PYPI_API_TOKEN`, `MAVEN_CENTRAL_USERNAME`/`_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`/`_PASSPHRASE`, `CARGO_REGISTRY_TOKEN` (the two npm jobs and pub.dev need no secret — OIDC) | **Yes** — this is the gate that must stay a human approval |
-| `release-staging` | `publish-npm`, `publish-npm-web`, `publish-go`, `publish-pub` | none (npm/go/pub-dry-run need no secret — OIDC or none) | No |
+| `release` | `publish-npm-server-production`, `publish-npm-web-production`, `publish-pypi` (staging rc) and `publish-pypi-production`, `publish-maven`, `publish-cargo` and `publish-pub` (BOTH channels — see below) | `PYPI_API_TOKEN`, `MAVEN_CENTRAL_USERNAME`/`_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`/`_PASSPHRASE`, `CARGO_REGISTRY_TOKEN` (the two npm jobs and pub.dev need no secret — OIDC) | **Yes** — this is the gate that must stay a human approval |
+| `release-staging` | `publish-npm`, `publish-npm-web`, `publish-go` | none (npm/go need no secret — OIDC or none) | No |
 
 The `tag` job runs on `release` for a production run and on
 `release-staging` for a staging run. `TEST_PYPI_API_TOKEN` is retired: no
@@ -341,13 +340,22 @@ silently skips or falls back to an unauthenticated attempt.
 
 ## Company-side provisioning required
 
-1. **pub.dev**: publish the first `fireweave` version manually (pub.dev
-   requires an initial human publish before automated publishing can be
-   configured), then on the package's **Admin** tab enable **Automated
-   publishing** from GitHub Actions with repository `FireWeave-HQ/fireweave-sdk`,
-   tag pattern `dart/v{{version}}`, and **require the GitHub Actions
-   environment** `release`. No token secret is involved; the `release`
-   environment's required reviewers remain the human gate.
+1. **pub.dev through a Google Cloud service account** (the first `fireweave`
+   version, 3.0.0, was published by hand, as pub.dev requires):
+   1. In a Google Cloud project, enable the IAM Service Account Credentials API
+      and create a service account, e.g. `pub-dev-publisher`.
+   2. Create a Workload Identity pool with an OIDC provider for GitHub (issuer
+      `https://token.actions.githubusercontent.com`), mapping
+      `google.subject=assertion.sub` and `attribute.repository=assertion.repository`,
+      with the condition `assertion.repository == 'FireWeave-HQ/fireweave-sdk'`.
+   3. Grant `roles/iam.workloadIdentityUser` on the service account to
+      `principalSet://iam.googleapis.com/<pool>/attribute.repository/FireWeave-HQ/fireweave-sdk`.
+   4. On pub.dev, `fireweave` → **Admin → Automated publishing** → enable
+      **publishing with a Google Cloud Service account** and enter its email.
+   5. Set the repository variables `PUB_DEV_WORKLOAD_IDENTITY_PROVIDER`
+      (`projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>`)
+      and `PUB_DEV_SERVICE_ACCOUNT` (the email). `publish-pub` fails closed
+      without them. No secret is stored.
 2. **GitHub repo settings**: allow GitHub Actions to create and approve
    attestations (for `actions/attest-build-provenance`); create the two
    protected environments described above (`release` with required

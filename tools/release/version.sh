@@ -487,7 +487,8 @@ registry_versions() {
       ;;
     dart)
       if [ "$channel" = staging ]; then
-        remote_tag_versions "$(component_tag_prefix "$component")"
+        # rcs go to pub.dev since 2026-11-11; earlier rcs exist only as tags.
+        { pub_versions fireweave && remote_tag_versions "$(component_tag_prefix "$component")"; } | awk '!seen[$0]++'
       else
         pub_versions fireweave
       fi
