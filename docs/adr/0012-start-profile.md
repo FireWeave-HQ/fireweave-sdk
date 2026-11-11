@@ -206,3 +206,27 @@ sorts below its own release in SemVer, PEP 440, Maven and Gradle alike.
   tag alone, so those three tags point at a detached release commit carrying the applied version
   and stamp (`version.sh release-commit`), not at the unstamped checkout. `rust/v3.0.0-staging.1`
   and `dart/v3.0.0-staging.1` predate this and call production.
+
+## Amendment (2026-11-11): Swift installs from this repository
+
+Decision D5's mirror repository is withdrawn before it was ever created (accepted by the owner
+on 2026-11-11). SwiftPM reads only the manifest at a repository's root and only plain semver
+tags, so this repository now meets both rules itself:
+
+- **A root `Package.swift`** declares the `Fireweave` and `FireweaveStart` library products with
+  target paths into `sdks/swift`, the same platforms and the `FIREWEAVE_START_DEBUG` define.
+  `sdks/swift/Package.swift` stays the SDK's own manifest (conformance runner, tests). Both
+  declare zero dependencies; `ArchitectureGuardTests` checks both files, and CI builds from the
+  root as well as from `sdks/swift`.
+- **Two tags per Swift release.** The `tag` job pushes `swift/vX.Y.Z` and a plain `X.Y.Z` on the
+  same release commit, atomically. The prefixed tag stays the internal release identity
+  (`version.sh`, `changelog.sh`); the plain tag is what SwiftPM resolves. No other component may
+  use an unprefixed tag.
+- **Swift is back in `all` and in rc cuts.** A staging build is the plain `X.Y.Z-rc.N`, stamped
+  `staging`; SwiftPM's `from:` ranges skip pre-releases, so only an app that pins it exactly gets
+  it. `publish-swift-mirror` and `SWIFT_MIRROR_DEPLOY_KEY` are removed.
+- **Cost accepted:** a Swift consumer clones the whole repository, every SDK and its history.
+
+Install: `.package(url: "https://github.com/FireWeave-HQ/fireweave-sdk", from: "X.Y.Z")`, with
+`.product(name: "FireweaveStart", package: "fireweave-sdk")`. The root manifest has not yet been
+resolved from GitHub by a real app; the first Swift release with a plain tag is that check.

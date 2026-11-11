@@ -3,11 +3,9 @@
 # DRY-RUN BY DEFAULT. Builds, changelogs, SBOMs, checksums; optionally tags.
 #
 # Inputs: `component` (server|web|python|java|go|rust|swift|dart|all —
-# `all` fans out via matrix over every component except swift, which stays out
-# of `all` until the Swift mirror exists; a staging `component=swift` is
-# refused in `validate`), `bump` (patch|minor|major — computed from the component's
-# OWN current manifest version by tools/release/version.sh; there is no
-# free-text `version` input anymore), `channel` (staging|production),
+# `all` fans out via matrix over every component), `bump` (patch|minor|major —
+# computed from the component's OWN current manifest version by
+# tools/release/version.sh; there is no free-text `version` input anymore), `channel` (staging|production),
 # `dry_run` (default true).
 #
 # Staging identity is a VERSION SUFFIX, not an npm dist-tag: a staging
@@ -50,10 +48,9 @@
 # index, and yanking is not deletion — a real staging publish would
 # spend the version permanently): rust staging stops at
 # `cargo publish --dry-run` plus the git tag; go staging (and production)
-# resolve from the git tag alone. swift publishes by pushing sdks/swift to a
-# mirror repository and tagging it there (publish-swift-mirror, decision D5);
-# it is out of `all` and of every rc cut until that mirror and
-# SWIFT_MIRROR_DEPLOY_KEY exist (RELEASE.md "Company-side provisioning").
+# resolve from the git tag alone, and so does swift: SwiftPM reads the
+# repository-root Package.swift at a plain `X.Y.Z` tag, which the `tag` job
+# pushes next to swift/vX.Y.Z (ADR-0012, Amendment 2026-11-11).
 #
 # dart (ADR-0011, added 2026-09-02 during the dart-sdk implementation
 # work — NOT a separate human authorization; flag for a human to confirm)
@@ -96,8 +93,9 @@
 #   python -> python/v0.1.0
 #   java   -> java/v0.1.0
 #   rust   -> rust/v0.1.0
-#   swift  -> swift/v0.1.0   (chosen to match the org convention; see RELEASE.md
-#                             for why a bare `vX.Y.Z` buys nothing here)
+#   swift  -> swift/v0.1.0 plus a plain 0.1.0 on the same commit (SwiftPM
+#                             resolves only plain semver tags; the prefixed
+#                             one keeps version.sh/changelog.sh uniform)
 #   dart   -> dart/v0.1.0    (org convention; pub.dev resolves by version,
 #                             never by git tag, so the prefix is free)
 #   go     -> sdks/go/v0.1.0   (Go REQUIRES the tag to equal the module
@@ -162,15 +160,8 @@ jobs:
           CHANNEL: ${{ inputs.channel }}
         run: |
           if [ "$COMPONENT" = all ]; then
-            # swift returns to this list when the Swift mirror and
-            # SWIFT_MIRROR_DEPLOY_KEY exist (RELEASE.md "Company-side
-            # provisioning"); until then publish-swift-mirror fails closed.
-            component_list='["server","web","python","java","go","rust","dart"]'
+            component_list='["server","web","python","java","go","rust","swift","dart"]'
           else
-            if [ "$COMPONENT" = swift ] && [ "$CHANNEL" = staging ]; then
-              echo "::error::Swift is excluded from rc cuts until the Swift mirror exists (RELEASE.md, O4)"
-              exit 1
-            fi
             component_list="[\"$COMPONENT\"]"
           fi
           echo "components=$component_list" >> "$GITHUB_OUTPUT"
@@ -448,7 +439,14 @@ jobs:
               ;;
           esac
           git tag -a "$TAG" "$TARGET" -m "Release ${TAG} (channel: ${CHANNEL})"
-          git push origin "refs/tags/${TAG}"
+          refs=("refs/tags/${TAG}")
+          if [ "$COMPONENT" = swift ]; then
+            # SwiftPM resolves only plain semver tags (the root Package.swift).
+            git tag -a "$RELEASE_VERSION" "$TARGET" -m "fireweave Swift ${RELEASE_VERSION} (channel: ${CHANNEL})"
+            refs+=("refs/tags/${RELEASE_VERSION}")
+          fi
+          # Atomic: both Swift tags land or neither does; an existing tag is refused.
+          git push --atomic origin "${refs[@]}"
 
   # =========================================================================
   # PUBLISHING
@@ -1023,65 +1021,6 @@ jobs:
           mvn -B -ntp -Prelease -DskipTests deploy \
             -Dcentral.autoPublish=true \
             -Dcentral.waitUntil=validated
-
-  # Swift (decision D5, ADR-0012). SwiftPM resolves a package only from a
-  # repository whose ROOT holds Package.swift and whose tags are plain semver;
-  # this monorepo has neither (sdks/swift, swift/vX.Y.Z tags), so no Swift
-  # release has ever been installable. A release copies sdks/swift, with its
-  # BuildInfo.swift stamped for this version, to the mirror repository's root
-  # and tags it X.Y.Z there. Fails closed until the mirror and its deploy key
-  # exist (.github/RELEASE.md "Company-side provisioning").
-  publish-swift-mirror:
-    name: push the Swift mirror (SwiftPM)
-    needs: [validate, build, verify, tag]
-    if: ${{ inputs.dry_run == false && contains(fromJson(needs.validate.outputs.components), 'swift') }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    environment: ${{ inputs.channel == 'production' && 'release' || 'release-staging' }}
-    steps:
-      - uses: useblacksmith/checkout@v1
-      - uses: actions/download-artifact@v5
-        with:
-          name: release-info-swift
-          path: release-info
-      - name: Load computed release version
-        id: version
-        run: cat release-info/release-info.env >> "$GITHUB_OUTPUT"
-      - name: Require the mirror deploy key
-        env:
-          SWIFT_MIRROR_DEPLOY_KEY: ${{ secrets.SWIFT_MIRROR_DEPLOY_KEY }}
-        run: |
-          if [ -z "$SWIFT_MIRROR_DEPLOY_KEY" ]; then
-            echo "::error::SWIFT_MIRROR_DEPLOY_KEY is not set. Create the Swift mirror repository and its deploy key first (.github/RELEASE.md)."
-            exit 1
-          fi
-      - name: Stamp the Swift build info for this version
-        run: tools/release/version.sh apply swift "${{ steps.version.outputs.release_version }}"
-      - name: Check the stamped channel before publishing
-        run: tools/release/version.sh check-stamp swift "${{ inputs.channel }}"
-      - name: Push sdks/swift to the mirror and tag it
-        env:
-          SWIFT_MIRROR_DEPLOY_KEY: ${{ secrets.SWIFT_MIRROR_DEPLOY_KEY }}
-          MIRROR_REPO: ${{ vars.SWIFT_MIRROR_REPO || 'FireWeave-HQ/fireweave-swift' }}
-          RELEASE_VERSION: ${{ steps.version.outputs.release_version }}
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "$SWIFT_MIRROR_DEPLOY_KEY" > ~/.ssh/swift_mirror
-          chmod 600 ~/.ssh/swift_mirror
-          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
-          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/swift_mirror -o IdentitiesOnly=yes"
-          git clone --depth 1 "git@github.com:${MIRROR_REPO}.git" mirror
-          if git -C mirror ls-remote --exit-code --tags origin "refs/tags/${RELEASE_VERSION}" >/dev/null; then
-            echo "::error::${MIRROR_REPO} already has tag ${RELEASE_VERSION}; a released Swift version is never re-tagged."
-            exit 1
-          fi
-          rsync -a --delete --exclude .git sdks/swift/ mirror/
-          cp LICENSE mirror/LICENSE
-          git -C mirror config user.name "fireweave-release"
-          git -C mirror config user.email "release@fireweave.ai"
-          git -C mirror add -A
-          git -C mirror commit -m "Release ${RELEASE_VERSION} (fireweave-sdk ${GITHUB_SHA})"
-          git -C mirror tag -a "${RELEASE_VERSION}" -m "fireweave Swift ${RELEASE_VERSION}"
-          git -C mirror push origin HEAD "refs/tags/${RELEASE_VERSION}"
 
   publish-go:
     name: warm Go module proxy (staging)

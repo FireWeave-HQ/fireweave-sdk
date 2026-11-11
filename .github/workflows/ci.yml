@@ -402,6 +402,8 @@ jobs:
       - name: swift test (unit + architecture/surface guards)
         working-directory: sdks/swift
         run: swift test
+      - name: swift build from the repository root (the manifest SwiftPM consumers resolve)
+        run: swift build
       - name: Conformance runner (per-version sanity; differential job is the gate)
         # No `--` before --contracts: `swift run`'s own arguments are
         # `[<options>] [<executable>] [<arguments>...]` with no `--`
