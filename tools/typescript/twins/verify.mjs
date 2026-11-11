@@ -78,7 +78,7 @@ if (!publishMode && !existsSync(BIN)) {
 const has = (cmd) => spawnSync(cmd, ['--version'], { encoding: 'utf8' }).status === 0;
 
 /** Run a command; throw with the tail of its output when it exits non-zero. */
-function run(cmd, args, { cwd, env } = {}) {
+function run(cmd, args, { cwd, env, stdoutOnly = false } = {}) {
   const r = spawnSync(cmd, args, {
     cwd,
     env: { ...process.env, ...env },
@@ -91,7 +91,8 @@ function run(cmd, args, { cwd, env } = {}) {
     const tail = output.trim().split('\n').slice(-25).join('\n');
     throw new Error(`\`${[cmd, ...args].join(' ')}\` exited ${r.status ?? r.signal ?? r.error}\n${tail}`);
   }
-  return output;
+  // stdoutOnly: for machine-readable output, which npm warnings on stderr would corrupt.
+  return stdoutOnly ? (r.stdout ?? '') : output;
 }
 
 const lastLine = (s) => s.trim().split('\n').at(-1) ?? '';
@@ -151,7 +152,9 @@ async function verify(key) {
     rmSync(work, { recursive: true, force: true });
     mkdirSync(packs, { recursive: true });
     for (const [which, dir] of [['esm', p.dir], ['twin', join(p.dir, 'build', 'cjs')]]) {
-      const [info] = JSON.parse(run('npm', ['pack', '--json', '--pack-destination', packs], { cwd: dir }));
+      // npm 11 prints an array of packs; npm 12 an object keyed by package name.
+      const packed = JSON.parse(run('npm', ['pack', '--json', '--pack-destination', packs], { cwd: dir, stdoutOnly: true }));
+      const [info] = Array.isArray(packed) ? packed : Object.values(packed);
       tarballs[which] = join(packs, info.filename);
       const files = info.files.map((f) => f.path);
       if (which === 'twin') {
