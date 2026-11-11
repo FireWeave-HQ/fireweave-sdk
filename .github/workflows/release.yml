@@ -523,7 +523,7 @@ jobs:
       id-token: write # npm OIDC trusted publishing — no NPM_TOKEN secret needed once provisioned
       contents: read
     steps:
-      - uses: useblacksmith/checkout@v1
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
         with:
           name: release-info-server
@@ -592,7 +592,7 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: useblacksmith/checkout@v1
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
         with:
           name: release-info-web
@@ -684,7 +684,7 @@ jobs:
       id-token: write # npm OIDC trusted publishing — no NPM_TOKEN secret
       contents: read
     steps:
-      - uses: useblacksmith/checkout@v1
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
         with:
           name: release-info-server
@@ -793,7 +793,7 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: useblacksmith/checkout@v1
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
         with:
           name: release-info-web
