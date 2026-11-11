@@ -2,6 +2,6 @@
 // The start profile reads sdkChannel to choose its default fw-server host
 // (docs/adr/0012-start-profile.md).
 enum BuildInfo {
-  static let sdkVersion = "2.2.0"
-  static let sdkChannel = "production"
+  static let sdkVersion = "3.1.0-rc.1"
+  static let sdkChannel = "staging"
 }
