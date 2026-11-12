@@ -3,5 +3,5 @@
 // host (docs/adr/0012-start-profile.md). test/start_build_info_test.dart
 // pins buildSdkVersion to pubspec.yaml, so a release that forgets to stamp
 // fails CI.
-const String buildSdkVersion = '3.0.0';
+const String buildSdkVersion = '3.1.0';
 const String buildSdkChannel = 'production';
