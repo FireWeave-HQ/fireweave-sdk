@@ -44,7 +44,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 64,
-          "description": "Client-declared environment (e.g. production, staging). Recorded on the target for environment-scoped rules."
+          "description": "Accepted and ignored: it never tags the target. The calling key decides the environment: a key bound to an environment tags the target with that one, an unbound key with the project's default environment."
         },
         "properties": {
           "type": "object",

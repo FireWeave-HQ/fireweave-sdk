@@ -30,7 +30,7 @@ Percentage rollouts are computed by hashing `(flag, targetingKey)` — the key m
 | Situation | Use |
 | --- | --- |
 | Logged-in user | Your durable user ID (`user_42`) |
-| B2B / org-level ramps | The **org ID** (`org_123`) so a whole organization flips together ("sticky" org ramps). Everyone in the org shares one cohort assignment |
+| B2B / org-level ramps | The **org ID**, prefixed (`acct_123`), so a whole organization flips together ("sticky" org ramps). Everyone in the org shares one cohort assignment. The prefix matters: org ids and user ids share one id space per project, so an unprefixed org id `123` and user id `123` would be the same target |
 | Anonymous visitor | A generated ID that you **persist** (server-set cookie / session record) and reuse on every subsequent request — generate once, store, resend |
 | Batch / worker jobs | A stable job- or tenant-scoped identifier, not a per-run UUID |
 

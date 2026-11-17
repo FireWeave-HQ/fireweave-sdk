@@ -39,6 +39,8 @@ Full contract: [spec/remote-protocol.md](../spec/remote-protocol.md). Auth is `A
 - **`registerTarget(targetingKey, { properties })`** — call once per login or device provisioning with the facts that outlive a request: plan, beta membership, region, device model. fw-server stores them, and targeting rules match against them on every later evaluation.
 - **Per-request `attributes`** — override the stored properties for a single evaluation.
 
+**Only a server key's properties are trusted.** Properties registered or sent as attributes with a server key (`FW_PROJECT_API_KEY`) are stored apart from properties a browser key (`fw_public_…`, web `identify`) sends, and targeting rules match only the server key's. Anyone can read a browser key from the page and send any property with it, so treat what a browser sends as untrusted. A browser visitor matches a rule only after `identify` (or your backend's `registerTarget`) ties it to the user your backend registered; the anonymous device id is a separate target and is never merged into that user.
+
 `registerTarget` never throws. It sits in sign-in paths, and an analytics call must not break a login, so it resolves `{ ok: false, error }` instead. Retried once when the error taxonomy marks the failure retryable; a rejected payload or bad key is not retried, since it would be rejected identically. Log `ok: false` — a silently unregistered target is how targeting rules end up matching nobody.
 
 Adapters without the capability (`InMemoryAdapter`) report `UnsupportedCapability`, so a dev harness never looks registered when it is not.
