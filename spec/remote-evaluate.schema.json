@@ -31,7 +31,7 @@
         "targetingKey": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 256,
+          "maxLength": 120,
           "description": "Primary subject key for targeting (never a vendor distinct_id name)."
         },
         "attributes": {

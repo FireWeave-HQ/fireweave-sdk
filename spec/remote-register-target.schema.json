@@ -31,7 +31,7 @@
         "targetingKey": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 256,
+          "maxLength": 120,
           "description": "The target's id — the SAME value later sent as targetingKey on evaluate and capture. fw-server scopes it to the calling project; two projects using the same raw id remain distinct targets."
         },
         "kind": {
