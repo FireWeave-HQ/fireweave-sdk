@@ -31,7 +31,7 @@
         "targetingKey": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 256,
+          "maxLength": 120,
           "description": "The target's id — the SAME value later sent as targetingKey on evaluate and capture. fw-server scopes it to the calling project; two projects using the same raw id remain distinct targets."
         },
         "kind": {
@@ -44,7 +44,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 64,
-          "description": "Client-declared environment (e.g. production, staging). Recorded on the target for environment-scoped rules."
+          "description": "Accepted and ignored: it never tags the target. The calling key decides the environment: a key bound to an environment tags the target with that one, an unbound key with the project's default environment."
         },
         "properties": {
           "type": "object",

@@ -51,7 +51,7 @@
     "targetingKey": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 512,
+      "maxLength": 120,
       "description": "Optional identity for the signal. Not auto-generated."
     },
     "rolloutId": {
