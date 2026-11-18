@@ -160,6 +160,7 @@ name = "fireweave"
 version = "2.2.0"
 EOF
 PYPI_STUB="$(printf '2.1.0\n2.2.0\n')"
+remote_tag_versions() { :; } # compute also reads the tags; keep this offline
 assert_eq "registry_versions python staging reads pypi.org" "$PYPI_STUB" "$(real_registry_versions python staging)"
 out_pypi="$(cmd_compute python major staging --manifest-root "$scratch_pypi")"
 assert_eq "python staging with pypi.org holding 2.2.0 -> 3.0.0rc1" \
@@ -314,24 +315,48 @@ out_prod="$(cmd_compute server patch production --manifest-root "$scratch")"
 assert_eq "stubbed e2e: production has no staging suffix" "2.1.1" "$(printf '%s\n' "$out_prod" | sed -n 's/^release_version=//p')"
 assert_eq "stubbed e2e: production dist-tag is latest" "latest" "$(printf '%s\n' "$out_prod" | sed -n 's/^dist_tag=//p')"
 
-# ---------------------------------------------- production collision guard
-# `compute` bumps from the committed manifest and nothing writes the applied
-# version back, so a repeat production run recomputes the same number. The
-# guard has to catch that from EITHER source: an artifact on the registry, or
-# a tag on origin whose publish never landed (the server/web v2.3.0 case).
+# ------------------------------- compute bumps from the newest release it sees
+# The committed manifest (2.1.0 in $scratch) is stale: nothing writes a release
+# back to it. compute takes the highest X.Y.Z among the tags, the registry and
+# the manifest, so a release on EITHER source moves the next version on.
 
-# (a) already on the registry -> refuse.
+# (a) 2.1.1 on the registry only -> the next patch is 2.1.2.
 registry_versions() { printf '2.1.0\n2.1.1\n'; }
 remote_tag_versions() { printf '2.1.0\n'; }
-assert_fail "production refuses a version already on the registry" \
-  cmd_compute server patch production --manifest-root "$scratch"
+assert_eq "production moves past a version already on the registry" \
+  "2.1.2" "$(cmd_compute server patch production --manifest-root "$scratch" | sed -n 's/^release_version=//p')"
 
-# (b) registry clean, but the tag exists -> still refuse. This is the orphan
-#     tag left behind when a publish job is skipped or fails.
+# (b) 2.1.1 tagged only (the orphan tag a skipped publish leaves) -> 2.1.2.
 registry_versions() { printf '2.1.0\n'; }
 remote_tag_versions() { printf '2.1.0\n2.1.1\n'; }
-assert_fail "production refuses a version already tagged on origin" \
-  cmd_compute server patch production --manifest-root "$scratch"
+assert_eq "production moves past a version already tagged on origin" \
+  "2.1.2" "$(cmd_compute server patch production --manifest-root "$scratch" | sed -n 's/^release_version=//p')"
+
+# (b2) the 2026-11-18 case: manifest 3.0.0, 3.1.0 released -> 3.1.1, never
+#      3.0.1; staging carries the same base.
+registry_versions() { printf '3.0.0\n3.1.0\n3.1.0-rc.2\n'; }
+remote_tag_versions() { printf '3.0.0\n3.1.0\n'; }
+printf '{"name":"@fireweaveai/server-sdk","version":"3.0.0"}\n' > "$scratch/sdks/node/package.json"
+assert_eq "stale manifest 3.0.0 after release 3.1.0 -> production 3.1.1" \
+  "3.1.1" "$(cmd_compute server patch production --manifest-root "$scratch" | sed -n 's/^release_version=//p')"
+assert_eq "stale manifest 3.0.0 after release 3.1.0 -> staging 3.1.1-rc.1" \
+  "3.1.1-rc.1" "$(cmd_compute server patch staging --manifest-root "$scratch" | sed -n 's/^release_version=//p')"
+# A manifest ahead of every release still counts (a deliberate jump).
+printf '{"name":"@fireweaveai/server-sdk","version":"4.0.0"}\n' > "$scratch/sdks/node/package.json"
+assert_eq "a manifest ahead of the releases still sets the base" \
+  "4.0.1" "$(cmd_compute server patch production --manifest-root "$scratch" | sed -n 's/^release_version=//p')"
+printf '{"name":"@fireweaveai/server-sdk","version":"2.1.0"}\n' > "$scratch/sdks/node/package.json"
+
+# The collision guard stays as a backstop for a stale or unreachable source
+# (the tag lookup swallows network errors): a spent version is refused.
+registry_versions() { printf '2.1.0\n2.1.1\n'; }
+remote_tag_versions() { printf '2.1.0\n'; }
+assert_fail "guard refuses a version already on the registry" \
+  assert_production_version_free server 2.1.1
+registry_versions() { printf '2.1.0\n'; }
+remote_tag_versions() { printf '2.1.0\n2.1.1\n'; }
+assert_fail "guard refuses a version already tagged on origin" \
+  assert_production_version_free server 2.1.1
 
 # (c) free on both -> proceeds.
 registry_versions() { printf '2.1.0\n2.1.1-rc.4\n'; }
@@ -340,13 +365,12 @@ out_free="$(cmd_compute server patch production --manifest-root "$scratch")"
 assert_eq "production proceeds when the version is free on both sources" \
   "2.1.1" "$(printf '%s\n' "$out_free" | sed -n 's/^release_version=//p')"
 
-# (d) the guard is production-only — staging iterates N past collisions by
-#     design and must not be blocked by a base version already published.
+# (d) staging also bumps from the newest release: 2.1.1 shipped -> 2.1.2-rc.1.
 registry_versions() { printf '2.1.0\n2.1.1\n'; }
 remote_tag_versions() { printf '2.1.0\n2.1.1\n'; }
 out_stg="$(cmd_compute server patch staging --manifest-root "$scratch")"
-assert_eq "staging is unaffected by an already-published base version" \
-  "2.1.1-rc.1" "$(printf '%s\n' "$out_stg" | sed -n 's/^release_version=//p')"
+assert_eq "staging rcs follow the newest release" \
+  "2.1.2-rc.1" "$(printf '%s\n' "$out_stg" | sed -n 's/^release_version=//p')"
 
 rm -rf "$scratch"
 

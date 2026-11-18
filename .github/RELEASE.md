@@ -75,7 +75,7 @@ reviewer approval.
 | Input | Meaning |
 | --- | --- |
 | `component` | Which SDK to release (`all` fans out via matrix) |
-| `bump` | `patch` \| `minor` \| `major` — applied to the component's OWN current manifest version by `tools/release/version.sh` (any existing prerelease is stripped first; there is no free-text `version` input) |
+| `bump` | `patch` \| `minor` \| `major` — applied to the component's newest release (highest of its tags, registry and manifest) by `tools/release/version.sh` (any existing prerelease is stripped first; there is no free-text `version` input) |
 | `channel` | `staging` (default, version `X.Y.Z-rc.N`, Python `X.Y.ZrcN`) or `production` (plain `X.Y.Z`) — see pre-release channels |
 | `dry_run` | `true` (default): build/changelog/SBOM/checksums only, no tag, no attestation, no publish |
 
@@ -103,9 +103,12 @@ without these gates passing, dry run or not.
 does this release actually carry." Two subcommands:
 
 - `version.sh compute <component> <bump> <channel>` — reads the component's
-  current version (from its manifest, or, for go/swift — which carry no
-  version field — the highest existing plain `<prefix>/vX.Y.Z` tag,
-  defaulting to `0.0.0` when none exists), strips any existing prerelease,
+  newest release: the highest plain `X.Y.Z` among its `<prefix>/vX.Y.Z` tags,
+  its production registry and its committed manifest (go/swift have no
+  manifest), defaulting to `0.0.0` when there is none. No release writes its
+  version back to the manifest, so the committed number is a floor, never
+  the base: a stale manifest cannot pull a release below one already shipped.
+  It strips any existing prerelease,
   applies `<bump>`, and (channel=staging only) appends `-rc.N` (Python
   `rcN`) where `N` is the next unused rc iteration for that base, queried live
   from the component's registry (npm / pypi.org / pub.dev / `git ls-remote`
