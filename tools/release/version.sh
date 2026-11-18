@@ -502,9 +502,9 @@ registry_versions() {
 # <component> <computed production version> -> nothing, or exit 3.
 #
 # A production release must be a version nobody has seen. `compute` bumps from
-# the COMMITTED manifest, and no publish job writes the applied version back to
-# the repo — so a second production run with the same `bump` recomputes exactly
-# the same number. Unchecked, that surfaces late and expensively: the `tag` job
+# the newest release it can see, so a collision means a source it read was
+# stale or unreachable (the tag lookup swallows network errors). Unchecked,
+# that surfaces late and expensively: the `tag` job
 # dies pushing a ref that already exists, AFTER `verify` has spent the full
 # cross-language suite, and (for a component whose publish precedes nothing
 # else) potentially after a registry has already taken the artifact.
@@ -728,12 +728,21 @@ cmd_compute() {
   rel_manifest="$(component_manifest "$component")"
   [ -n "$rel_manifest" ] && manifest="$manifest_root/$rel_manifest"
 
-  local current_version
+  # The newest release: the highest X.Y.Z among the component's tags, its
+  # production registry and the committed manifest. Releases never write their
+  # version back to the manifest, so it is usually stale; taking the highest
+  # means a stale manifest can never pull the next version below one already
+  # shipped (3.0.1-rc.1 after 3.1.0, 2026-11-18). A registry lookup failure
+  # aborts here (set -e); a tag lookup failure leaves the other two sources.
+  local released current_version
+  released="$(remote_tag_versions "$(component_tag_prefix "$component")")"
+  released="$released
+$(registry_versions "$component" production)"
   if [ -n "$manifest" ]; then
-    current_version="$(read_current_version "$component" "$manifest")"
-  else
-    current_version="$(highest_plain_version "$(remote_tag_versions "$(component_tag_prefix "$component")")" || printf '0.0.0\n')"
+    released="$released
+$(semver_strip_prerelease "$(read_current_version "$component" "$manifest")")"
   fi
+  current_version="$(highest_plain_version "$released" || printf '0.0.0\n')"
 
   local base_version bumped_version
   base_version="$(semver_strip_prerelease "$current_version")"

@@ -4,7 +4,7 @@
 #
 # Inputs: `component` (server|web|python|java|go|rust|swift|dart|all —
 # `all` fans out via matrix over every component), `bump` (patch|minor|major —
-# computed from the component's OWN current manifest version by
+# applied to the component's newest release (highest of its tags, registry and manifest) by
 # tools/release/version.sh; there is no free-text `version` input anymore), `channel` (staging|production),
 # `dry_run` (default true).
 #
@@ -119,7 +119,7 @@ on:
         type: choice
         options: [server, web, python, java, go, rust, swift, dart, all]
       bump:
-        description: 'Semver bump, applied to the component''s OWN current manifest version (any existing prerelease is stripped first)'
+        description: 'Semver bump, applied to the component''s newest release: highest of its tags, registry and manifest (any existing prerelease is stripped first)'
         required: true
         type: choice
         options: [patch, minor, major]
